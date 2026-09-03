@@ -1,0 +1,24 @@
+:root {
+  --bg: #0f1115;
+  --fg: #e6e8eb;
+  --muted: #9aa4b2;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark light;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.app-shell {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 4rem 1.5rem;
+}
+
+.tagline {
+  color: var(--muted);
+}

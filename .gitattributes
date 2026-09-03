@@ -1,0 +1,12 @@
+# Line endings are a property of this repository, not of a contributor's machine.
+#
+# The tree was authored on Windows and currently holds a mix: 70 files with CRLF and 114
+# with LF. That normalises correctly today only because this machine happens to have
+# `core.autocrlf=true` set globally -- a contributor without it would commit CRLF, and the
+# Linux CI runner would then see a diff that does not exist locally.
+#
+# `text=auto` makes the normalisation a rule of the repository instead: every text file is
+# stored as LF and checked out in the platform's native form. No binary or line-ending
+# sensitive file exists in the tree (no .sh, .bat or .ps1; the only non-text artefacts are
+# ignored), so a single blanket rule is enough and no per-pattern overrides are needed.
+* text=auto

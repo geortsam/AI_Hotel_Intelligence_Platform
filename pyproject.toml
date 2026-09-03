@@ -1,0 +1,58 @@
+# Single source of tooling truth for the repository.
+#
+# Tests live at the repository root (tests/) while the application lives in backend/, so
+# pytest needs backend/ on sys.path -- that is what `pythonpath` below does. Keeping ruff,
+# mypy, pytest and coverage configured in one root file means every command runs from the
+# repository root with no directory juggling.
+
+[project]
+name = "ai-hotel-intelligence-platform"
+version = "0.1.0"
+description = "AI-powered hotel management and analytics platform"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["backend"]
+addopts = "-q --strict-markers --strict-config"
+
+[tool.coverage.run]
+source = ["backend/app"]
+omit = ["*/__init__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# The application package lives in backend/, not at the repository root, so ruff must be told
+# where first-party code starts -- otherwise `app` is sorted as a third-party import. This is
+# the same layout fact that `pythonpath = ["backend"]` gives pytest above.
+src = ["backend", "."]
+# The initial migration embeds DDL rendered by SQLAlchemy verbatim, so that the
+# migration and the models provably agree. Its formatting is the compiler's, not
+# ours, and reformatting it would break that guarantee.
+extend-exclude = ["database/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF"]
+ignore = [
+    "B008",  # FastAPI dependencies are function calls in defaults by design
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+mypy_path = "backend"
+warn_unused_configs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true

@@ -1,0 +1,60 @@
+# --- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+ENV/
+.Python
+
+# --- Testing / tooling caches ---------------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# --- Secrets (NEVER commit) ------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Databases -------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Data: payloads are ignored, documentation and manifests are tracked ---
+ml/data/raw/*
+ml/data/processed/*
+ml/data/external/*
+!ml/data/**/.gitkeep
+!ml/data/**/README.md
+
+# --- Trained model artifacts ----------------------------------------------
+# Weights are large binaries and are never committed. Evaluation records are, so a metric
+# can always be traced back to a real run.
+ml/models/**
+!ml/models/.gitkeep
+!ml/models/**/metrics.json
+
+# --- Node / frontend -------------------------------------------------------
+node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+
+# --- Notebooks -------------------------------------------------------------
+.ipynb_checkpoints/
+
+# --- Editors / OS ----------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

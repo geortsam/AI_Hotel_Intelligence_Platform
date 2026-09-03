@@ -1,0 +1,9 @@
+# AI/ML dependencies. DECLARED, NOT INSTALLED in Stage 1 -- kept in a separate file so the
+# backend image and the development environment stay lean until a stage actually trains
+# something. Install explicitly when that stage begins:
+#
+#   pip install -r ml/requirements-ml.txt
+
+pandas
+numpy
+scikit-learn

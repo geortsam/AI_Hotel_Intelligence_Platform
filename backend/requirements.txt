@@ -1,0 +1,29 @@
+# Stage 1 runtime dependencies.
+# Versions pinned to a set verified to install and run on Python 3.14.6.
+#
+# SQLAlchemy and psycopg are declared because they are part of the chosen stack, but nothing
+# imports them in Stage 1 -- there is no schema, no models and no session yet.
+#
+# Deliberately NOT here until the stage that needs them:
+#   email-validator, python-multipart.
+#   ML libraries live in ml/requirements-ml.txt so the API image stays small.
+
+fastapi==0.141.1
+starlette==1.6.0
+uvicorn[standard]==0.52.4
+pydantic==2.13.4
+pydantic-settings==2.15.0
+
+# Stage 2B: the database layer. SQLAlchemy and psycopg were declared in Stage 1;
+# alembic is added here because migrations are part of this stage.
+SQLAlchemy==2.0.52
+psycopg[binary]==3.3.4
+alembic==1.19.1
+
+# Stage 4.1: authentication.
+#   Argon2id is the Password Hashing Competition winner and OWASP's first recommendation;
+#   argon2-cffi's PasswordHasher defaults (t=3, m=64 MiB, p=4) are the tuned parameters.
+#   PyJWT signs and verifies HS256 access tokens. HS256 is symmetric, so `cryptography` is
+#   deliberately NOT pulled in -- it is only needed for the RS/ES algorithm families.
+argon2-cffi==25.1.0
+PyJWT==2.13.0

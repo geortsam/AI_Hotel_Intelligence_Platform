@@ -1,0 +1,133 @@
+# Continuous integration: the same four quality gates that guard a local stage, run on a
+# clean machine against a disposable PostgreSQL.
+#
+# Every command below is taken from the repository rather than chosen here:
+#
+#   dependencies   backend/requirements-dev.txt, which itself pulls in requirements.txt.
+#                  pyproject.toml declares no `dependencies` and no build-system, so the
+#                  project is NOT pip-installable -- there is nothing to `pip install -e`.
+#   ruff / mypy    configured in the root pyproject.toml; both are run from the root.
+#   pytest         `testpaths = ["tests"]` and `pythonpath = ["backend"]` come from the same
+#                  file, which is why no PYTHONPATH is set here.
+#   alembic        `prepend_sys_path = backend` in alembic.ini does the same job for the
+#                  migration environment, and database/migrations/env.py resolves the URL
+#                  from TEST_DATABASE_URL. No URL is stored in alembic.ini.
+#
+# ml/requirements-ml.txt is deliberately NOT installed: app/ml/timeseries.py is standard
+# library only (datetime, decimal, statistics, enum, typing), so the suite does not need
+# pandas, numpy or scikit-learn and CI stays fast.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A second push to the same branch makes the first run's result irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+
+    env:
+      # The database name MUST end in `_test`: tests/integration/conftest.py refuses to run
+      # otherwise, because the suite issues `alembic downgrade base` and TRUNCATE ... CASCADE.
+      # That guard is the reason this name is not arbitrary.
+      POSTGRES_DB: hotel_intelligence_test
+      POSTGRES_USER: postgres
+      # Not a secret. It authenticates to a container that is created for this job and
+      # destroyed with it, is reachable only from this job's network namespace, and holds
+      # nothing but tables the suite creates and drops. No application credential, and no
+      # credential of any real environment, appears anywhere in this repository.
+      POSTGRES_PASSWORD: ci-ephemeral-postgres-password
+
+    services:
+      # The three values below repeat the job-level `env` on purpose. GitHub does not expose
+      # the `env` context inside `jobs.<id>.services.*`, so `${{ env.POSTGRES_DB }}` would
+      # expand to an empty string here. Do not "de-duplicate" this block.
+      postgres:
+        # Pinned to the version the schema was developed and verified against. The exclusion
+        # constraint needs btree_gist, which the official image ships as a contrib module.
+        image: postgres:18.6
+        env:
+          POSTGRES_DB: hotel_intelligence_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-ephemeral-postgres-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hotel_intelligence_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          # The version this project is developed on. pyproject declares >=3.12 as the floor;
+          # CI runs what the developer runs, so a 3.14-only failure cannot hide behind an
+          # older interpreter.
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        # requirements-dev.txt begins with `-r requirements.txt`, so this single file
+        # installs the runtime and the tooling together.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements-dev.txt
+
+      - name: Ruff lint
+        run: python -m ruff check .
+
+      - name: Ruff format check
+        run: python -m ruff format --check .
+
+      - name: mypy
+        run: python -m mypy .
+
+      - name: Verify the migration chain
+        # `upgrade head` against an empty database runs all six migrations for real. It is
+        # not `stamp`: nothing here writes alembic_version without executing the revisions.
+        #
+        # The downgrade path is covered too, but by the suite rather than here --
+        # tests/integration/conftest.py's session-scoped engine fixture runs
+        # `downgrade base` followed by `upgrade head` before the first integration test.
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
+        run: |
+          set -euo pipefail
+          expected='0006_users_password_changed_at'
+
+          echo "--- declared head ---"
+          heads="$(python -m alembic heads 2>&1)"
+          echo "$heads"
+          echo "$heads" | grep -q "^${expected} (head)$" \
+            || { echo "::error::expected head ${expected}, got: ${heads}"; exit 1; }
+
+          echo "--- applying migrations ---"
+          python -m alembic upgrade head
+
+          echo "--- database revision ---"
+          current="$(python -m alembic current 2>&1)"
+          echo "$current"
+          echo "$current" | grep -q "${expected} (head)" \
+            || { echo "::error::database is not at ${expected}: ${current}"; exit 1; }
+
+      - name: pytest
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
+        run: python -m pytest
