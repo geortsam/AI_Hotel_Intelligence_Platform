@@ -1,0 +1,12 @@
+/*
+ * The bookings list page.
+ *
+ * Almost everything here belongs to the table, the cards or the filter bar, each of which
+ * owns its own stylesheet. What is left is the page's own loading line.
+ */
+
+.loadingNote {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}

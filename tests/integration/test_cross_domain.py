@@ -139,7 +139,8 @@ def make_property(api: TestClient, slug: str, *, rooms: int = 2) -> str:
             "max_occupancy": 3,
             "standard_occupancy": 2,
             "bed_count": 1,
-            "base_price": "120.00",
+            # Stage 4.5.23: the nights are priced from here, so this IS the nightly rate.
+            "base_price": NIGHTLY_RATE,
             "currency": "EUR",
         },
     )
@@ -182,7 +183,7 @@ def book(
             "rooms": [
                 {
                     "room_number": number,
-                    "nights": [{"stay_date": str(n), "rate": rate} for n in NIGHTS],
+                    "nights": [{"stay_date": str(n)} for n in NIGHTS],
                 }
                 for number in rooms
             ],
@@ -494,7 +495,7 @@ def test_a_rejected_booking_leaves_no_header_allocation_or_night(
             "rooms": [
                 {
                     "room_number": "999",
-                    "nights": [{"stay_date": str(n), "rate": NIGHTLY_RATE} for n in NIGHTS],
+                    "nights": [{"stay_date": str(n)} for n in NIGHTS],
                 }
             ],
         },
@@ -524,7 +525,7 @@ def test_an_overlapping_booking_leaves_the_database_unchanged(
             "rooms": [
                 {
                     "room_number": "101",
-                    "nights": [{"stay_date": str(n), "rate": NIGHTLY_RATE} for n in NIGHTS],
+                    "nights": [{"stay_date": str(n)} for n in NIGHTS],
                 }
             ],
         },
@@ -681,7 +682,7 @@ def test_no_application_precheck_replaces_the_overlap_constraint(
             "rooms": [
                 {
                     "room_number": "101",
-                    "nights": [{"stay_date": str(n), "rate": NIGHTLY_RATE} for n in NIGHTS],
+                    "nights": [{"stay_date": str(n)} for n in NIGHTS],
                 }
             ],
         },
@@ -712,7 +713,7 @@ def test_the_night_completeness_trigger_is_authoritative(
             "rooms": [
                 {
                     "room_number": "101",
-                    "nights": [{"stay_date": str(n), "rate": NIGHTLY_RATE} for n in NIGHTS[:2]],
+                    "nights": [{"stay_date": str(n)} for n in NIGHTS[:2]],
                 }
             ],
         },
@@ -1203,7 +1204,6 @@ def test_listing_does_not_issue_one_query_per_row(
                         "nights": [
                             {
                                 "stay_date": str(CHECK_IN + dt.timedelta(days=index * 4)),
-                                "rate": NIGHTLY_RATE,
                             }
                         ],
                     }

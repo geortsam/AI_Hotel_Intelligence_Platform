@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.errors import ConflictError
 from app.models import Booking, Expense, Payment, Revenue, RevenueCategory
+from app.repositories.audit import AuditRepository
 from app.repositories.finance import ExpenseCategoryRepository, RevenueCategoryRepository
 from app.schemas.finance import (
     ExpenseCategoryCreate,
@@ -37,6 +38,7 @@ from app.schemas.finance import (
     RevenueCategoryCreate,
     RevenueCategoryUpdate,
 )
+from app.services.audit import AuditTrail
 from app.services.finance import ExpenseCategoryService, RevenueCategoryService
 from tests.integration.conftest import (
     authenticated_client,
@@ -170,8 +172,7 @@ def make_booking(api: TestClient, hotel: str, *, room: str = "101") -> str:
                     {
                         "room_number": room,
                         "nights": [
-                            {"stay_date": str(CHECK_IN + dt.timedelta(days=n)), "rate": "120.00"}
-                            for n in range(3)
+                            {"stay_date": str(CHECK_IN + dt.timedelta(days=n))} for n in range(3)
                         ],
                     }
                 ],
@@ -195,13 +196,23 @@ def revenue_catalogue(session: Session) -> RevenueCategoryService:
     out-of-band maintenance that replaces those routes runs through this same service.
     Testing it here keeps that coverage rather than retiring it with the endpoint.
     """
-    return RevenueCategoryService(session, RevenueCategoryRepository(session))
+    # Stage 4.5.12 made the audit collaborator required rather than optional: a service
+    # that could be built without one could write unaudited. The real trail over the same
+    # session, so the events these writes produce are staged and committed with them.
+    return RevenueCategoryService(
+        session, RevenueCategoryRepository(session), AuditTrail(AuditRepository(session))
+    )
 
 
 @pytest.fixture
 def expense_catalogue(session: Session) -> ExpenseCategoryService:
     """The expense-category service. See :func:`revenue_catalogue`."""
-    return ExpenseCategoryService(session, ExpenseCategoryRepository(session))
+    # Stage 4.5.12 made the audit collaborator required rather than optional: a service
+    # that could be built without one could write unaudited. The real trail over the same
+    # session, so the events these writes produce are staged and committed with them.
+    return ExpenseCategoryService(
+        session, ExpenseCategoryRepository(session), AuditTrail(AuditRepository(session))
+    )
 
 
 # --- the global catalogues are read-only over HTTP ------------------------------------------------

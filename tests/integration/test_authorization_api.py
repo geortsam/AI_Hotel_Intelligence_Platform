@@ -174,8 +174,7 @@ def world(owner: TestClient, hotel: str, engine: Engine) -> World:
                 {
                     "room_number": "101",
                     "nights": [
-                        {"stay_date": str(CHECK_IN + dt.timedelta(days=n)), "rate": "120.00"}
-                        for n in range(3)
+                        {"stay_date": str(CHECK_IN + dt.timedelta(days=n))} for n in range(3)
                     ],
                 }
             ],
@@ -594,8 +593,8 @@ OPERATIONS: list[Op] = [
                 {
                     "room_number": "101",
                     "nights": [
-                        {"stay_date": "2026-10-01", "rate": "120.00"},
-                        {"stay_date": "2026-10-02", "rate": "120.00"},
+                        {"stay_date": "2026-10-01"},
+                        {"stay_date": "2026-10-02"},
                     ],
                 }
             ],

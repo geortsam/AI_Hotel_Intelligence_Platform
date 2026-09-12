@@ -1,0 +1,134 @@
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* The search field takes the slack; the status select stays its natural width. */
+.field:first-child {
+  flex: 1 1 240px;
+}
+
+.label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: var(--space-3);
+  color: var(--color-text-subtle);
+  pointer-events: none;
+}
+
+.input,
+.select {
+  height: 36px;
+  padding: 0 var(--space-3);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  width: 100%;
+  min-width: 0;
+}
+
+.input {
+  padding-left: calc(var(--space-3) * 2 + 15px);
+}
+
+.select {
+  min-width: 160px;
+  cursor: pointer;
+}
+
+/* The platform draws the open list and does not inherit the page's dark surface everywhere. */
+.select option {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.input:focus-visible,
+.select:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-color: var(--color-focus);
+}
+
+.input::placeholder {
+  color: var(--color-text-subtle);
+}
+
+.clear {
+  gap: var(--space-1);
+}
+
+.scope {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+}
+
+/* The limitation, stated in a quieter voice than the count but in the same sentence -- it
+ * qualifies the number rather than being a separate remark somebody can miss. */
+.scopeNote {
+  color: var(--color-text-subtle);
+}
+
+@media (max-width: 599px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /*
+   * Reset the row-axis basis.
+   *
+   * `flex: 1 1 240px` above sizes the search field along the MAIN axis, which is horizontal
+   * while the controls are a row. Once they stack, the main axis is vertical and the same
+   * declaration made the search field 240px TALL -- a tall empty box between the input and
+   * the status label, found by looking at a 375px screenshot rather than by reading the CSS.
+   */
+  .field:first-child {
+    flex: 0 0 auto;
+  }
+
+  .select {
+    min-width: 0;
+  }
+
+  .clear {
+    align-self: flex-start;
+  }
+}

@@ -1,0 +1,149 @@
+/*
+ * The form that creates and edits a guest.
+ *
+ * Shares its shape with the other writing screens in this console deliberately: someone who
+ * has posted a ledger line or recorded a review should not have to learn a third layout.
+ */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.intro {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+  max-width: 70ch;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* Notes span the grid: it is the one free-text field, and a one-line box beside a date
+ * picker invites one-word notes. */
+.wide {
+  grid-column: 1 / -1;
+}
+
+.label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.input,
+.select,
+.textarea {
+  padding: 0 var(--space-3);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  width: 100%;
+  min-width: 0;
+}
+
+.input,
+.select {
+  height: 36px;
+}
+
+.textarea {
+  padding: var(--space-2) var(--space-3);
+  line-height: var(--leading-normal);
+  resize: vertical;
+}
+
+.select {
+  cursor: pointer;
+}
+
+.select option {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+/* A two-letter country or language code needs no more room than that. */
+.short {
+  max-width: 8rem;
+}
+
+.input:focus-visible,
+.select:focus-visible,
+.textarea:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-color: var(--color-focus);
+}
+
+.input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.input::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
+}
+
+/* The label wraps the checkbox, so the text is part of the control's hit area and its
+ * accessible name -- no `for` needed, though one is supplied anyway. */
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 36px;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  line-height: var(--leading-normal);
+}
+
+.error {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  line-height: var(--leading-normal);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+@media (max-width: 599px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+
+  .short {
+    max-width: none;
+  }
+}

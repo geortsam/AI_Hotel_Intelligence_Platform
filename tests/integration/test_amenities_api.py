@@ -21,8 +21,10 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.errors import ConflictError, NotFoundError
 from app.models import Amenity, RoomTypeAmenity
 from app.repositories.amenity import AmenityRepository
+from app.repositories.audit import AuditRepository
 from app.schemas.amenity import AmenityCreate, AmenityResponse, AmenityUpdate
 from app.services.amenity import AmenityService
+from app.services.audit import AuditTrail
 from tests.integration.conftest import authenticated_client, requires_postgres
 
 #: One account per suite, so a failure in one cannot be caused by another's state.
@@ -97,7 +99,10 @@ def catalogue(session: Session) -> AmenityService:
     maintenance that replaces those routes runs through this same service. Testing it here
     keeps that coverage rather than retiring it with the endpoint.
     """
-    return AmenityService(session, AmenityRepository(session))
+    # Stage 4.5.12 made the audit collaborator required rather than optional: a service
+    # that could be built without one could write unaudited. The real trail over the same
+    # session, so the events these writes produce are staged and committed with them.
+    return AmenityService(session, AmenityRepository(session), AuditTrail(AuditRepository(session)))
 
 
 def make_amenity(catalogue: AmenityService, **overrides: object) -> AmenityResponse:

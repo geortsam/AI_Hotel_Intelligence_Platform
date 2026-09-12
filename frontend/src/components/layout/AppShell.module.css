@@ -1,0 +1,64 @@
+.shell {
+  min-height: 100vh;
+  display: grid;
+  /* Mobile and tablet: one column. The sidebar is a drawer laid over the content, so it
+   * takes no grid track and the content keeps the full width. */
+  grid-template-columns: 1fr;
+  grid-template-rows: var(--header-height) 1fr;
+  grid-template-areas:
+    'header'
+    'main';
+}
+
+.header {
+  grid-area: header;
+}
+
+.main {
+  grid-area: main;
+  min-width: 0; /* lets children shrink instead of forcing the page wider */
+  overflow-x: hidden;
+}
+
+/* The backdrop behind the mobile drawer. Clicking it closes the drawer. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: var(--z-drawer);
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* Sends keyboard users straight past the navigation. Off-screen until focused. */
+.skipLink {
+  position: absolute;
+  left: var(--space-4);
+  top: -100px;
+  z-index: var(--z-overlay);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  border-radius: var(--radius-md);
+  font-weight: var(--weight-medium);
+  transition: top var(--duration-fast) var(--easing);
+}
+
+.skipLink:focus {
+  top: var(--space-3);
+  text-decoration: none;
+}
+
+@media (min-width: 1024px) {
+  .shell {
+    grid-template-columns: var(--sidebar-width) 1fr;
+    grid-template-areas:
+      'sidebar header'
+      'sidebar main';
+  }
+
+  .backdrop {
+    display: none;
+  }
+}

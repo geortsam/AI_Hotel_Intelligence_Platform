@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models -- the approved 19-table schema.
+"""SQLAlchemy ORM models -- the approved 21-table schema.
 
 Importing this package registers every model on ``Base.metadata``, which is what Alembic's
 autogenerate and the test fixtures rely on. Import order matters only in that all models must
@@ -8,6 +8,7 @@ be imported before mappers are configured; the explicit re-exports below guarant
 from __future__ import annotations
 
 from app.db.base import Base
+from app.models.audit import AuditEvent, AuditEventArchive
 from app.models.booking import Booking, BookingRoom, BookingRoomNight
 from app.models.finance import Expense, ExpenseCategory, Revenue, RevenueCategory
 from app.models.guest import Guest
@@ -22,6 +23,8 @@ from app.models.user import User
 
 __all__ = [
     "Amenity",
+    "AuditEvent",
+    "AuditEventArchive",
     "Base",
     "Booking",
     "BookingRoom",

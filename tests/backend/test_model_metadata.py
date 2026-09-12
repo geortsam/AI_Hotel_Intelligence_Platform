@@ -45,6 +45,15 @@ APPROVED_TABLES = {
     "expenses",
     # analytical (1)
     "daily_hotel_metrics",
+    # Stage 4.5.12. The audit trail, added by migration 0007 and explicitly authorised. It
+    # sits in no group above because it is about none of them: it records what was done to
+    # every one of them, and to the identity tables as well.
+    "audit_events",
+    # Stage 4.5.14. The archive, added by migration 0008 and explicitly authorised. A second
+    # table rather than a column on the first, because `audit_events` is append-only: marking
+    # a row as archived would be an UPDATE, which the trigger refuses -- so the archive row
+    # itself IS the record that the event was archived.
+    "audit_events_archive",
 }
 
 

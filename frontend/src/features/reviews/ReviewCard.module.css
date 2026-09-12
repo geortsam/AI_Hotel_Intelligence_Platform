@@ -1,0 +1,154 @@
+/*
+ * One review.
+ *
+ * Cards at every width, not a table on desktop. A review body is a paragraph of prose, and a
+ * table cell holding a paragraph either clips it -- which loses the thing the page exists to
+ * show -- or makes rows so tall the table stops being scannable. The cards sit in a grid that
+ * becomes two columns on a wide screen, so the density a table would have given is recovered
+ * without cutting anyone's words in half.
+ */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  /* Cards in a row line their footers up rather than floating at different heights. */
+  height: 100%;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.identity {
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+  /* A reviewer name is user-controlled and may be one long unbroken string. */
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.marks {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.rating {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.title {
+  margin: 0;
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+/*
+ * The guest's words.
+ *
+ * `pre-wrap` keeps the line breaks a reviewer typed, which is the shape of their paragraphs
+ * and nothing more -- it is a whitespace rule, not a markup format, so no tag, entity or
+ * markdown syntax in the text is ever interpreted. `anywhere` makes a pasted URL wrap instead
+ * of widening the card past the viewport.
+ */
+.body {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  color: var(--color-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.noBody {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-style: italic;
+  color: var(--color-text-subtle);
+}
+
+.details {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+/* `display: contents` so each pair's dt/dd land in the grid's own columns. */
+.detail {
+  display: contents;
+}
+
+.detailLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.detailValue {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.absent {
+  color: var(--color-text-subtle);
+}
+
+.link {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.link:hover,
+.link:focus-visible {
+  text-decoration: underline;
+}
+
+/* Why a review has no controls, said where the controls would have been. */
+.unmoderatable {
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+}

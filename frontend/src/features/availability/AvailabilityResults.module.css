@@ -1,0 +1,188 @@
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/*
+ * The verdict.
+ *
+ * Colour is reinforcement, never the message: the headline states the answer in words, so a
+ * monochrome screen or a colour-blind reader loses nothing. The border carries the tone
+ * because a large filled block of red for "we are full that week" overstates an ordinary
+ * commercial answer.
+ */
+.verdict {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.yes {
+  border-color: var(--color-success);
+  background: var(--color-success-soft);
+}
+
+.no {
+  border-color: var(--color-warning);
+  background: var(--color-warning-soft);
+}
+
+.verdictHeadline {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+
+.verdictDetail {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-relaxed);
+  max-width: 78ch;
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-relaxed);
+  max-width: 78ch;
+}
+
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (max-width: 26rem) {
+  .list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.typeCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+
+.typeHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.typeName {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.typeMeta {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: var(--leading-relaxed);
+}
+
+.code {
+  font-family: var(--font-mono);
+  padding: 1px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+}
+
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Said in words as well as shown by the badge's tone: the shortfall is why the whole answer
+ * is what it is, and that is too important to carry on colour alone. */
+.shortfall {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  line-height: var(--leading-relaxed);
+}
+
+.roomsTitle {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+/* Room numbers wrap as chips: a long inventory stays readable and never scrolls sideways. */
+.rooms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.room {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  font-size: var(--text-sm);
+}
+
+.roomNumber {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.roomFloor {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.noRooms {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-subtle);
+}
+
+/* The thing most likely to be misunderstood about this screen, said last and said plainly. */
+.caveat {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  line-height: var(--leading-relaxed);
+  max-width: 78ch;
+}

@@ -1,5 +1,11 @@
-# Continuous integration: the same four quality gates that guard a local stage, run on a
-# clean machine against a disposable PostgreSQL.
+# Continuous integration: the quality gates that guard a local stage, run on a clean
+# machine. The backend's run against a disposable PostgreSQL; the frontend's run against
+# nothing at all.
+#
+# The two are separate jobs on purpose. They share no state -- the frontend suite is
+# jsdom-only and stubs HTTP at the `fetch` boundary -- so making one wait on the other
+# would add the backend's minutes to the frontend's feedback time and hide a frontend
+# failure behind a backend one. Run in parallel, one red run names every gate that is red.
 #
 # Every command below is taken from the repository rather than chosen here:
 #
@@ -12,6 +18,9 @@
 #   alembic        `prepend_sys_path = backend` in alembic.ini does the same job for the
 #                  migration environment, and database/migrations/env.py resolves the URL
 #                  from TEST_DATABASE_URL. No URL is stored in alembic.ini.
+#   npm            the `test`, `typecheck` and `build` scripts in frontend/package.json,
+#                  run unmodified. None is given a path, a filter or a flag that would
+#                  narrow what it covers.
 #
 # ml/requirements-ml.txt is deliberately NOT installed: app/ml/timeseries.py is standard
 # library only (datetime, decimal, statistics, enum, typing), so the suite does not need
@@ -100,8 +109,14 @@ jobs:
         run: python -m mypy .
 
       - name: Verify the migration chain
-        # `upgrade head` against an empty database runs all six migrations for real. It is
+        # `upgrade head` against an empty database runs all nine migrations for real. It is
         # not `stamp`: nothing here writes alembic_version without executing the revisions.
+        #
+        # `expected` below is pinned rather than read back from `alembic heads`: a derived
+        # value would agree with itself whatever the chain did, including growing a second
+        # head, which is the one thing this step exists to catch. The cost is that adding a
+        # migration is a two-file change -- and this line going stale when 0007-0009 landed
+        # is what made this step fail until Stage 5.18.
         #
         # The downgrade path is covered too, but by the suite rather than here --
         # tests/integration/conftest.py's session-scoped engine fixture runs
@@ -110,7 +125,7 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
         run: |
           set -euo pipefail
-          expected='0006_users_password_changed_at'
+          expected='0009_audit_booking_deleted'
 
           echo "--- declared head ---"
           heads="$(python -m alembic heads 2>&1)"
@@ -131,3 +146,64 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
         run: python -m pytest
+
+  frontend-quality-gates:
+    name: Frontend quality gates
+    runs-on: ubuntu-latest
+
+    # Deliberately no `env:` and no `services:`. The frontend suite runs in jsdom and stubs
+    # HTTP at the `fetch` boundary, so it has no reason to reach a database, a backend
+    # process or a dev server -- and this job is not given the means to. TEST_DATABASE_URL
+    # and DATABASE_URL are set only on the two steps of the other job that need them, so
+    # nothing here can read one even by mistake.
+    defaults:
+      run:
+        # Every script below lives in frontend/package.json, and the source-scan tests
+        # (`*.node.test.ts`) resolve their paths from `process.cwd()`, which vitest sets to
+        # the package root. Run from anywhere else they would scan an empty tree and pass
+        # for the wrong reason.
+        working-directory: frontend
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          # The line this project is developed on (24.21.0 locally), pinned the same way and
+          # for the same reason Python is pinned to 3.14: CI runs what the developer runs,
+          # so a version-specific failure cannot hide behind a different runtime.
+          node-version: '24'
+          # package.json declares no `packageManager` field, so setup-node's automatic npm
+          # caching does not switch itself on; asking for it explicitly is what does. The
+          # path is relative to the workspace root, NOT to `working-directory` above.
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend - Install dependencies
+        # `npm ci`, not `npm install`: it installs exactly what package-lock.json records and
+        # fails outright if package.json and the lockfile disagree, which is the property
+        # that makes a CI install reproducible. It also removes node_modules first, so a
+        # warm cache cannot satisfy a dependency the lockfile does not name.
+        run: npm ci
+
+      - name: Frontend - Tests
+        # `vitest run` -- the `run` is vitest's own non-watch mode, not a filter. No path, no
+        # `-t`, no `--changed`: every file matched by vitest.config.ts's `include`.
+        run: npm test
+
+      - name: Frontend - Typecheck
+        # Both TypeScript projects: tsconfig.json (the app, with `types: []`) and
+        # tsconfig.node.json (the vite/vitest configs and the `.node.test.ts` scanners).
+        # The second is not a subset of the first -- tsconfig.json excludes those files --
+        # so checking only one would leave real code unchecked.
+        run: npm run typecheck
+
+      - name: Frontend - Production build
+        # The shipped command, unmodified. It re-runs the typecheck, which is the previous
+        # step over again; that is accepted rather than engineered around, because the
+        # alternative is a CI-only `vite build` that is not the command anyone runs locally.
+        # The separate step above earns its place by naming the failure: a type error is
+        # reported by a step called Typecheck, not by one called Production build.
+        run: npm run build

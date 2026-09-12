@@ -1,0 +1,187 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* The way back, above the heading rather than inside it: it is navigation, not a title. */
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+.back:hover,
+.back:focus-visible {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.panelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: minmax(9rem, auto) 1fr;
+  gap: var(--space-3) var(--space-4);
+  margin: 0;
+}
+
+/* `display: contents` so each pair's dt/dd land in the grid's own columns. */
+.field {
+  display: contents;
+}
+
+.fieldLabel {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.fieldValue {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  /* A note is user-supplied and may be long and unbroken. */
+  overflow-wrap: anywhere;
+}
+
+.absent {
+  color: var(--color-text-subtle);
+}
+
+/* Free text a person typed. `pre-wrap` preserves their line breaks and interprets nothing:
+ * it is a whitespace rule, not a markup format. */
+.notes {
+  white-space: pre-wrap;
+}
+
+/*
+ * The destructive action, in its own bordered region.
+ *
+ * Set apart from the record rather than tucked into the header: a delete that cannot be
+ * undone should not sit one mis-click away from Edit -- and here it sits below the status
+ * buttons, which are the controls an operator actually reaches for all day.
+ */
+.danger {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-lg);
+}
+
+.dangerNote {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: var(--leading-relaxed);
+  max-width: 70ch;
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+}
+
+.confirmQuestion {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  line-height: var(--leading-normal);
+  max-width: 64ch;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.skeleton {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.success {
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--color-success-soft);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  line-height: var(--leading-normal);
+}
+
+.failure {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+}
+
+.failureTitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.failureDetail {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+  max-width: 70ch;
+}
+
+@media (max-width: 599px) {
+  .fields {
+    grid-template-columns: 1fr;
+    gap: var(--space-1) 0;
+  }
+
+  .field {
+    display: block;
+    margin-bottom: var(--space-3);
+  }
+}

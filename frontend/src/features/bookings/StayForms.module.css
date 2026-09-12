@@ -1,0 +1,171 @@
+/* Shared by the stay editor, the extension form and the repricing panel. */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.intro {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+  max-width: 68ch;
+}
+
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  /* A fixed basis, not `flex: 1`: a date input has a natural width and stretching it across
+   * a wide panel makes the control look like a text field. */
+  flex: 0 1 220px;
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.input {
+  height: 36px;
+  padding: 0 var(--space-3);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  width: 100%;
+  min-width: 0;
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-color: var(--color-focus);
+}
+
+.input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+/* The browser's own calendar glyph is dark-on-dark without this. */
+.input::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  line-height: var(--leading-normal);
+}
+
+.error {
+  margin: 0;
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  line-height: var(--leading-normal);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* --- repricing ------------------------------------------------------------------------ */
+
+.repricing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-top: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+.repricingHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.repricingTitle {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.repricingFacts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--space-3);
+}
+
+.repricingFacts div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.repricingFacts dt {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.repricingFacts dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.repricingNote {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  line-height: var(--leading-normal);
+  max-width: 70ch;
+}
+
+@media (max-width: 599px) {
+  .fields {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .field {
+    flex: 0 0 auto;
+  }
+
+  .repricingFacts {
+    grid-template-columns: 1fr 1fr;
+  }
+}

@@ -4,10 +4,11 @@ What only the database can prove here: that the partial unique index gives webho
 idempotency (and stays inert when there is no reference), that the biconditional CHECK
 constraints hold, and that migration 0002's ``public_id`` is unique and server-assigned.
 
-Several tests below assert behaviour the schema *permits* but a finance team might not want --
-over-refunding, refunding a refund. They are written as findings, not as endorsements: the
-brief forbade inventing financial rules, so the tests record what the frozen schema actually
-does. Each is called out in the completion report.
+Two tests below used to assert that the schema PERMITTED over-refunding and refunding a
+refund. They were written as findings rather than endorsements, because the brief at the time
+forbade inventing financial rules. Stage 4.5.8 was authorised to close both, so they now
+assert the refusal instead; the full cap, chain and currency matrix lives in
+``test_refund_integrity_api.py``.
 
 SQLite is not substituted.
 """
@@ -104,8 +105,7 @@ def build_booking(api: TestClient, slug: str = "hotel-a") -> tuple[str, str]:
                 {
                     "room_number": "101",
                     "nights": [
-                        {"stay_date": str(CHECK_IN + dt.timedelta(days=n)), "rate": "120.00"}
-                        for n in range(3)
+                        {"stay_date": str(CHECK_IN + dt.timedelta(days=n))} for n in range(3)
                     ],
                 }
             ],
@@ -478,16 +478,16 @@ def test_a_rejected_refund_leaves_nothing_behind(
     assert session.scalar(sa.select(sa.func.count()).select_from(Payment)) == 1
 
 
-# --- behaviour the schema PERMITS: recorded as findings, not endorsed -----------------------------
+# --- refund integrity: findings from earlier stages, closed in 4.5.8 -----------------------------
 
 
-def test_the_schema_permits_refunding_more_than_was_charged(
-    api: TestClient, booking_ctx: tuple[str, str]
+def test_refunding_more_than_was_charged_is_refused(
+    api: TestClient, booking_ctx: tuple[str, str], session: Session
 ) -> None:
-    """FINDING. The only amount rule is ``amount > 0``; nothing caps a refund at the charge.
+    """Was a FINDING until Stage 4.5.8: the schema permits this and the service now does not.
 
-    Asserted so the gap is visible and regression-tracked. Adding the cap would be inventing
-    a financial rule the frozen schema does not express.
+    ``amount > 0`` is still the only rule a CHECK can express -- the cap spans rows, so it
+    cannot be a constraint. The service computes it from the locked parent instead.
     """
     hotel, booking = booking_ctx
     charge = api.post(payments_url(hotel, booking), json=charge_payload(amount="50.00")).json()
@@ -497,14 +497,19 @@ def test_the_schema_permits_refunding_more_than_was_charged(
         json=charge_payload(amount="500.00", refunds_public_id=charge["public_id"]),
     )
 
-    assert response.status_code == 201
+    assert response.status_code == 409
+    assert session.scalar(sa.select(sa.func.count()).select_from(Payment)) == 1
 
 
-def test_the_schema_permits_refunding_a_refund(
-    api: TestClient, booking_ctx: tuple[str, str]
+def test_refunding_a_refund_is_refused(
+    api: TestClient, booking_ctx: tuple[str, str], session: Session
 ) -> None:
-    """FINDING. ``refunded_payment_id`` references payments(id) -- any row, including a
-    refund. The constraint is named ..._references_charge but only checks non-null."""
+    """Was a FINDING until Stage 4.5.8.
+
+    ``refunded_payment_id`` still references payments(id) -- any row, including a refund --
+    and the CHECK named ``..._references_charge`` still only tests for non-null. The service
+    is what refuses it, because a chain would give every reversal a fresh balance.
+    """
     hotel, booking = booking_ctx
     charge = api.post(payments_url(hotel, booking), json=charge_payload()).json()
     refund = api.post(
@@ -517,7 +522,8 @@ def test_the_schema_permits_refunding_a_refund(
         json=charge_payload(amount="10.00", refunds_public_id=refund["public_id"]),
     )
 
-    assert response.status_code == 201
+    assert response.status_code == 409
+    assert session.scalar(sa.select(sa.func.count()).select_from(Payment)) == 2
 
 
 # --- append-only ----------------------------------------------------------------------------------

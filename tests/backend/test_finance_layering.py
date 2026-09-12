@@ -52,7 +52,7 @@ from app.services.finance import (
     RevenueService,
 )
 from app.services.scope import HotelScopeResolver
-from tests.backend.authorization_stubs import AllowAllPolicy
+from tests.backend.authorization_stubs import AllowAllPolicy, audit_trail
 
 #: The ledger's own two collections. Matched EXACTLY rather than by path suffix: from
 #: Stage 3B.11 the intelligence domain also has a path ending "/revenue", and a suffix
@@ -333,7 +333,9 @@ def test_the_category_services_take_no_scope_resolver(service: type) -> None:
     parameters = inspect.signature(service).parameters
 
     assert "scope" not in parameters
-    assert set(parameters) == {"session", "repository"}
+    # Stage 4.5.12 added `audit`. The guard is the line above and is unchanged; the
+    # exact set is extended rather than relaxed.
+    assert set(parameters) == {"session", "repository", "audit"}
 
 
 # --- ledger scoping -------------------------------------------------------------------------------
@@ -665,14 +667,14 @@ def test_missing_hotel_is_reported_before_any_ledger_work() -> None:
 
 
 def test_missing_category_is_reported_by_name() -> None:
-    service = RevenueCategoryService(_StubSession(), _NoCategories())  # type: ignore[arg-type]
+    service = RevenueCategoryService(_StubSession(), _NoCategories(), audit_trail())  # type: ignore[arg-type]
 
     with pytest.raises(NotFoundError, match=r"Revenue category not found\."):
         service.get("NOPE")
 
 
 def test_missing_expense_category_is_reported_by_its_own_name() -> None:
-    service = ExpenseCategoryService(_StubSession(), _NoCategories())  # type: ignore[arg-type]
+    service = ExpenseCategoryService(_StubSession(), _NoCategories(), audit_trail())  # type: ignore[arg-type]
 
     with pytest.raises(NotFoundError, match=r"Expense category not found\."):
         service.get("NOPE")
@@ -695,8 +697,8 @@ def test_dependencies_assemble_the_four_services() -> None:
 
     revenue = deps.get_revenue_service(stub, scope)
     expenses = deps.get_expense_service(stub, scope)
-    revenue_categories = deps.get_revenue_category_service(stub)
-    expense_categories = deps.get_expense_category_service(stub)
+    revenue_categories = deps.get_revenue_category_service(stub, audit_trail(stub))
+    expense_categories = deps.get_expense_category_service(stub, audit_trail(stub))
 
     assert isinstance(revenue._repository, RevenueRepository)
     assert isinstance(revenue._categories, RevenueCategoryRepository)

@@ -1,0 +1,175 @@
+.grid {
+  display: grid;
+  /* 200px, not 240: at a 1280px viewport the content column is ~984px, and four
+   * 240px tracks plus three gaps need 1008px -- which wrapped the fourth KPI onto a row
+   * of its own. The four standard figures belong on one line. */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-4);
+  margin: 0 0 var(--space-6);
+}
+
+/* The KPI grid is a <dl>: each tile is a term and its value. The tiles themselves are the
+ * <dt>/<dd> pair inside a Card, so this element only lays them out. */
+
+.sectionTitle {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.rangeLine {
+  margin: calc(var(--space-2) * -1) 0 var(--space-5);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.rangeLine strong {
+  color: var(--color-text);
+  font-weight: var(--weight-medium);
+}
+
+.notice,
+.currencyNotice {
+  margin: 0 0 var(--space-6);
+}
+
+.currencyNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-warning-soft);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  line-height: var(--leading-normal);
+}
+
+/*
+ * Two panels side by side above 1100px, stacked below.
+ *
+ * A chart squeezed into half of a 900px viewport puts its date labels on top of one
+ * another, and the fix is a wider column rather than smaller type.
+ */
+.charts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+@media (min-width: 1100px) {
+  .charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.loadingNote {
+  margin: 0;
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.chartCard {
+  margin-bottom: var(--space-6);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.facts dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.footnote {
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  line-height: var(--leading-normal);
+  max-width: 60ch;
+}
+
+.notes {
+  margin: 0;
+  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+  max-width: 68ch;
+}
+
+.notes strong {
+  color: var(--color-text);
+  font-weight: var(--weight-medium);
+}
+
+/* A seven-column table cannot shrink to 375px. It scrolls inside its own box so the page
+ * itself never scrolls sideways -- the rule the whole layout is checked against. */
+.tableScroll {
+  overflow-x: auto;
+}
+
+.currencyTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.tableCaption {
+  text-align: left;
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+  padding-bottom: var(--space-3);
+}
+
+.currencyTable th,
+.currencyTable td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.currencyTable thead th {
+  color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
+}
+
+.currencyTable tbody th {
+  font-weight: var(--weight-semibold);
+}
+
+@media (max-width: 480px) {
+  .facts {
+    grid-template-columns: 1fr;
+    gap: var(--space-1) 0;
+  }
+
+  .facts dd {
+    margin-bottom: var(--space-3);
+  }
+
+  .currencyNotice {
+    flex-direction: column;
+  }
+}

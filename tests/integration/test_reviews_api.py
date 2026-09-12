@@ -120,8 +120,7 @@ def build_booking(
                     {
                         "room_number": room,
                         "nights": [
-                            {"stay_date": str(CHECK_IN + dt.timedelta(days=n)), "rate": "120.00"}
-                            for n in range(3)
+                            {"stay_date": str(CHECK_IN + dt.timedelta(days=n))} for n in range(3)
                         ],
                     }
                 ],
@@ -148,7 +147,7 @@ def second_booking(api: TestClient, hotel: str, guest: str, *, start: str = "202
                 "rooms": [
                     {
                         "room_number": "101",
-                        "nights": [{"stay_date": str(begin), "rate": "120.00"}],
+                        "nights": [{"stay_date": str(begin)}],
                     }
                 ],
             },
@@ -623,7 +622,7 @@ def make_reviews(api: TestClient, hotel: str, guest: str, dates: list[str]) -> N
                     "rooms": [
                         {
                             "room_number": "101",
-                            "nights": [{"stay_date": str(start), "rate": "120.00"}],
+                            "nights": [{"stay_date": str(start)}],
                         }
                     ],
                 },

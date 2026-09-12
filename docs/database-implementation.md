@@ -282,9 +282,47 @@ ruled out.
 Without `TEST_DATABASE_URL` they skip with a reason naming what is untested. The schema is
 built by running the **real Alembic migration**, so these tests verify the migration too.
 
-A safety guard added before Stage 2C refuses to run unless the target database name ends with
-`_test`, because the suite runs `alembic downgrade base` and `TRUNCATE ... CASCADE`. See
-`assert_safe_test_database_url` in `tests/integration/conftest.py`, covered by 45 unit tests.
+### The safety guard: two signals, both required
+
+The suite runs `alembic downgrade base` and `TRUNCATE ... CASCADE`, so it refuses to touch a
+database that has not proved it is disposable. The guard lives in `tests/db_safety.py` and is
+applied by the session-scoped `engine` fixture before the first destructive statement.
+
+**Signal 1 — the URL.** `assert_safe_test_database_url` is pure string analysis: the URL must
+parse, name a PostgreSQL server and exactly one database, that database name must end with
+`_test`, and the host must not look like real infrastructure. Added before Stage 2C.
+
+**Signal 2 — the contents.** `assert_disposable_database` connects read-only and refuses a
+database that already holds application data. Added in Stage 5.17, because **the name rule
+cannot be sufficient in this repository**: CI provisions an ephemeral container database
+called `hotel_intelligence_test`, and the local demo database is *also* called
+`hotel_intelligence_test`. One is disposable and one is not, and no reading of the name can
+tell them apart. A full-suite run during Stage 5.13 duly pointed `alembic downgrade base` at
+the populated one; it was refused only by an unrelated migration defect, which is luck rather
+than safety.
+
+A database is disposable if **either**:
+
+- none of `hotels`, `users`, `bookings`, `guests`, `revenue` holds a row — a freshly created
+  database, and equally one the suite has finished truncating; or
+- it carries the marker, set once by a person who has decided it is expendable:
+
+```sql
+COMMENT ON DATABASE my_scratch_test IS 'ahip-disposable-test-database';
+```
+
+A database comment survives `downgrade base`, which drops tables rather than the database, so
+the mark is made once and holds. Nothing sets it automatically: a guard that can clear its own
+alarm is not a guard.
+
+Anything else is refused, before any SQL runs, with a message naming the database, the row
+counts found, the fact that nothing was executed, and both ways forward. Passwords are
+redacted from every message. **Never point `TEST_DATABASE_URL` at the demo or any shared
+database** — the guard will stop you, but it is the second line of defence, not the first.
+
+Covered by `tests/backend/test_integration_safety_guard.py` (45 cases, signal 1) and
+`tests/backend/test_database_disposability_guard.py` (16 cases, signal 2 and the combination).
+Neither file opens a database connection for its decision tests.
 
 **One behavioural correction found by the live run.** `test_11` originally wrapped
 `session.commit()` in `pytest.raises`, but the exclusion constraint is **not** deferrable: it
@@ -296,6 +334,15 @@ night-completeness trigger, which *is* `INITIALLY DEFERRED` and correctly assert
 
 ```bash
 $env:TEST_DATABASE_URL = "postgresql+psycopg://USER:PASSWORD@localhost:5432/hotel_test"
+```
+
+The supported way to get such a database is `scripts/testdb.py`, which creates it, marks it
+disposable, and refuses to drop anything that has not cleared both signals:
+
+```bash
+python scripts/testdb.py create my_scratch_test   # create and mark
+python scripts/testdb.py check  my_scratch_test   # what does the guard think?
+python scripts/testdb.py drop   my_scratch_test   # refused unless disposable
 ```
 
 One implementation note worth recording: `pytestmark` in a `conftest.py` does **not** propagate

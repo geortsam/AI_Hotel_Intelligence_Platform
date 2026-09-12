@@ -1,0 +1,90 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  /* The card must never be the reason the page scrolls sideways. */
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.reference {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-primary-text);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  /* A comfortable touch target without changing the visual weight of the text. */
+  padding: var(--space-1) 0;
+}
+
+.reference:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 3px;
+}
+
+.facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fact {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.fact dt {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.fact dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  min-width: 0;
+  /* A long room list wraps rather than widening the card past the viewport. */
+  overflow-wrap: anywhere;
+}
+
+.nights {
+  color: var(--color-text-subtle);
+}
+
+.numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Below 380px the two-column fact grid leaves nothing for the value; stack instead. */
+@media (max-width: 379px) {
+  .fact {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+}

@@ -12,7 +12,9 @@ from fastapi import APIRouter
 from app.api.v1.endpoints import (
     amenities,
     analytics,
+    audit,
     auth,
+    availability,
     bookings,
     expense_categories,
     expenses,
@@ -22,6 +24,7 @@ from app.api.v1.endpoints import (
     members,
     meta,
     payments,
+    platform_audit,
     revenue,
     revenue_categories,
     reviews,
@@ -68,10 +71,21 @@ api_router.include_router(revenue.router)
 api_router.include_router(expenses.router)
 # Read-only analytics over everything above. Hotel-scoped: there is no portfolio-wide route,
 # because the hotel segment is where tenant isolation is established.
+api_router.include_router(availability.router)
 api_router.include_router(analytics.router)
 # Statistical forecasting, trend and anomaly detection over the analytics series. Read-only
 # and hotel-scoped, like analytics itself; it adds no metric definitions of its own.
 api_router.include_router(intelligence.router)
+# The audit trail. Hotel-scoped like everything else that is a property's own data, and
+# read-only: there is no route that writes, edits or deletes an event, because a history a
+# client can append to is not evidence. Registered last because it observes every domain
+# above it rather than belonging to any of them.
+api_router.include_router(audit.router)
+# Stage 4.5.13. The other half of the audit trail: the events that belong to no property, and
+# therefore to no hotel-scoped route. NOT nested under /hotels, because there is no hotel to
+# nest it under -- these rows have hotel_id IS NULL by definition. Guarded by the platform
+# grant alone, so no hotel role reaches it and no membership is consulted.
+api_router.include_router(platform_audit.router)
 
 # Further domain routers land here in later stages, one include_router() per aggregate.
 

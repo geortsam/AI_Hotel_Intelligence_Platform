@@ -36,7 +36,7 @@ from app.schemas.payment import (
 )
 from app.services.payment import IDEMPOTENCY_CONSTRAINT, PaymentService
 from app.services.scope import HotelScopeResolver
-from tests.backend.authorization_stubs import AllowAllPolicy
+from tests.backend.authorization_stubs import AllowAllPolicy, audit_trail
 
 
 def code_of(module: object) -> str:
@@ -157,7 +157,7 @@ def test_dependency_assembles_the_service_with_its_collaborators() -> None:
 
     stub: Any = _Session()
     scope = deps.get_scope_resolver(stub, AllowAllPolicy())
-    service = deps.get_payment_service(stub, scope)
+    service = deps.get_payment_service(stub, scope, audit_trail(stub))
 
     assert isinstance(service, PaymentService)
     assert isinstance(service._repository, PaymentRepository)
@@ -328,7 +328,13 @@ class _StubSession:
 
 def test_missing_hotel_is_reported_before_any_payment_work() -> None:
     scope = HotelScopeResolver(_NoHotels(), _NoRoomTypes(), AllowAllPolicy())  # type: ignore[arg-type]
-    service = PaymentService(_StubSession(), object(), object(), scope)  # type: ignore[arg-type]
+    service = PaymentService(
+        _StubSession(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        scope,
+        audit_trail(),
+    )
 
     with pytest.raises(NotFoundError, match=r"Hotel not found\."):
         service.get(uuid.uuid4(), uuid.uuid4(), uuid.uuid4())

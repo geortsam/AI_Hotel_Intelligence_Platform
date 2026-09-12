@@ -40,11 +40,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import (
+    GENERIC_CONFLICT_MESSAGE,
     SQLSTATE_CHECK_VIOLATION,
     SQLSTATE_DEPENDENCY_VIOLATIONS,
     SQLSTATE_UNIQUE_VIOLATION,
     ConflictError,
     NotFoundError,
+    constraint_name_of,
     sqlstate_of,
 )
 from app.models.booking import Booking
@@ -71,16 +73,6 @@ EXTERNAL_ID_CONSTRAINT = "uq_reviews_source_external_review_id"
 #: so ``list[Review]`` there resolves to that method rather than to the builtin.
 type ReviewRows = list[Review]
 type ReviewResponses = list[ReviewResponse]
-
-
-def _constraint_name(exc: IntegrityError) -> str | None:
-    """The violated constraint's NAME from driver diagnostics, never its message.
-
-    The message would quote the review's own text back into a log line.
-    """
-    diag = getattr(getattr(exc, "orig", None), "diag", None)
-    name = getattr(diag, "constraint_name", None)
-    return str(name) if name else None
 
 
 class ReviewService:
@@ -286,7 +278,7 @@ class ReviewService:
         name are enough to decide what to say, and are the only things recorded.
         """
         state = sqlstate_of(exc)
-        constraint = _constraint_name(exc)
+        constraint = constraint_name_of(exc)
         logger.warning("Review integrity error (sqlstate=%s, constraint=%s)", state, constraint)
 
         if state == SQLSTATE_UNIQUE_VIOLATION:
@@ -303,7 +295,7 @@ class ReviewService:
             return ConflictError("The supplied values violate a review constraint.")
         if state in SQLSTATE_DEPENDENCY_VIOLATIONS:
             return ConflictError("The review refers to a record that does not exist here.")
-        return ConflictError("The request conflicts with the current state of the database.")
+        return ConflictError(GENERIC_CONFLICT_MESSAGE)
 
 
 __all__ = [

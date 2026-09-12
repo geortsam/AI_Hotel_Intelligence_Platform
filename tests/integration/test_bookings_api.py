@@ -56,11 +56,9 @@ def type_payload(code: str = "DLX") -> dict[str, object]:
     }
 
 
-def nights(check_in: dt.date = CHECK_IN, count: int = 3, rate: str = "120.00") -> list[dict]:
-    return [
-        {"stay_date": str(check_in + dt.timedelta(days=offset)), "rate": rate}
-        for offset in range(count)
-    ]
+def nights(check_in: dt.date = CHECK_IN, count: int = 3) -> list[dict]:
+    """Nights for a creation payload. No amount: since Stage 4.5.23 the server prices them."""
+    return [{"stay_date": str(check_in + dt.timedelta(days=offset))} for offset in range(count)]
 
 
 def booking_payload(guest_public_id: str, **overrides: object) -> dict[str, object]:
@@ -159,9 +157,9 @@ def test_the_response_carries_allocations_and_their_nightly_rates(
                 {
                     "room_number": "101",
                     "nights": [
-                        {"stay_date": "2026-09-01", "rate": "120.00"},
-                        {"stay_date": "2026-09-02", "rate": "140.00"},
-                        {"stay_date": "2026-09-03", "rate": "180.00"},
+                        {"stay_date": "2026-09-01"},
+                        {"stay_date": "2026-09-02"},
+                        {"stay_date": "2026-09-03"},
                     ],
                 }
             ],
@@ -172,7 +170,12 @@ def test_the_response_carries_allocations_and_their_nightly_rates(
     assert room["room_number"] == "101"
     assert room["room_type_code"] == "DLX"
     assert room["nights"] == 3  # generated column
-    assert [n["rate"] for n in room["nightly_rates"]] == ["120.00", "140.00", "180.00"]
+    assert [n["rate"] for n in room["nightly_rates"]] == ["120.00", "120.00", "120.00"]
+    assert [n["stay_date"] for n in room["nightly_rates"]] == [
+        "2026-09-01",
+        "2026-09-02",
+        "2026-09-03",
+    ]
 
 
 def test_a_booking_may_allocate_several_rooms(
@@ -184,7 +187,7 @@ def test_a_booking_may_allocate_several_rooms(
             guest_id,
             rooms=[
                 {"room_number": "101", "nights": nights()},
-                {"room_number": "102", "nights": nights(rate="100.00")},
+                {"room_number": "102", "nights": nights()},
             ],
         ),
     ).json()
@@ -444,9 +447,18 @@ def test_a_cancelled_booking_releases_the_room(
 def test_a_checked_out_booking_releases_the_room(
     api: TestClient, hotel_id: str, guest_id: str
 ) -> None:
-    """checked_out is outside the inventory-holding set, per approved decision 8."""
+    """checked_out is outside the inventory-holding set, per approved decision 8.
+
+    Reaching it goes through check-in since Stage 4.5.7: the lifecycle refuses
+    ``confirmed -> checked_out`` because a guest who checked out first arrived. The
+    behaviour under test -- that a checked-out stay releases its room -- is unchanged, and
+    both hops are asserted so a silently failing PATCH cannot make this pass vacuously.
+    """
     first = api.post(bookings_url(hotel_id), json=booking_payload(guest_id)).json()
-    api.patch(f"{bookings_url(hotel_id)}/{first['public_id']}", json={"status": "checked_out"})
+    url = f"{bookings_url(hotel_id)}/{first['public_id']}"
+
+    assert api.patch(url, json={"status": "checked_in"}).status_code == 200
+    assert api.patch(url, json={"status": "checked_out"}).status_code == 200
 
     assert api.post(bookings_url(hotel_id), json=booking_payload(guest_id)).status_code == 201
 
@@ -469,11 +481,17 @@ def test_confirming_a_pending_booking_whose_room_is_taken_returns_409(
     assert "already booked" in response.json()["error"]["message"]
 
 
-def test_cancelling_sets_the_timestamp_and_uncancelling_clears_it(
+def test_cancelling_sets_the_timestamp_and_cancellation_is_final(
     api: TestClient, hotel_id: str, guest_id: str
 ) -> None:
     """ck_bookings_cancellation_consistent is a biconditional; the service keeps both sides
-    in step so the constraint is never violated."""
+    in step so the constraint is never violated.
+
+    Until Stage 4.5.7 this test also asserted that moving a cancelled booking back to
+    ``pending`` CLEARED the timestamp. That un-cancellation is exactly what a terminal state
+    forbids, so the second half now asserts the refusal instead. The clearing branch of
+    ``_cancelled_at_for`` is still reached -- on creation, which is the first assertion here.
+    """
     created = api.post(bookings_url(hotel_id), json=booking_payload(guest_id)).json()
     assert created["cancelled_at"] is None
 
@@ -485,8 +503,12 @@ def test_cancelling_sets_the_timestamp_and_uncancelling_clears_it(
 
     restored = api.patch(
         f"{bookings_url(hotel_id)}/{created['public_id']}", json={"status": "pending"}
-    ).json()
-    assert restored["cancelled_at"] is None
+    )
+    assert restored.status_code == 409
+
+    still_cancelled = api.get(f"{bookings_url(hotel_id)}/{created['public_id']}").json()
+    assert still_cancelled["status"] == "cancelled"
+    assert still_cancelled["cancelled_at"] == cancelled["cancelled_at"]
 
 
 def test_the_status_cascade_reaches_the_allocations(
@@ -819,17 +841,31 @@ def test_url_rebuilt_from_the_response_resolves(
 def test_money_survives_the_round_trip_as_exact_decimal(
     api: TestClient, hotel_id: str, guest_id: str
 ) -> None:
+    """A price no binary float can hold, carried from configuration to response.
+
+    120.03 is not representable in binary floating point. Since Stage 4.5.23 it enters
+    through the room type's ``base_price`` rather than through the payload, so the trip
+    it now survives is longer than before: column -> engine -> night row -> response.
+    """
+    api.post(
+        f"/api/v1/hotels/{hotel_id}/room-types",
+        json=type_payload("EXA") | {"base_price": "120.03"},
+    )
+    api.post(f"/api/v1/hotels/{hotel_id}/room-types/EXA/rooms", json={"room_number": "901"})
+
     body = api.post(
         bookings_url(hotel_id),
         json=booking_payload(
             guest_id,
             total_amount="360.10",
-            rooms=[{"room_number": "101", "nights": nights(rate="120.03")}],
+            rooms=[{"room_number": "901", "nights": nights()}],
         ),
     ).json()
 
     assert Decimal(body["total_amount"]) == Decimal("360.10")
-    assert Decimal(body["rooms"][0]["nightly_rates"][0]["rate"]) == Decimal("120.03")
+    rates = [Decimal(n["rate"]) for n in body["rooms"][0]["nightly_rates"]]
+    assert rates == [Decimal("120.03")] * 3
+    assert sum(rates) == Decimal("360.09"), "a float would not land here exactly"
 
 
 def test_errors_use_the_shared_envelope(api: TestClient, hotel_id: str) -> None:

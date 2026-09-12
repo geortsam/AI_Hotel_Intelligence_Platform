@@ -17,6 +17,8 @@ from typing import Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.client_address import parse_trusted_proxy
+
 Environment = Literal["development", "test", "staging", "production"]
 
 
@@ -86,12 +88,82 @@ class Settings(BaseSettings):
     auth_change_password_rate_limit: int = Field(default=5, ge=1)
     auth_change_password_rate_limit_window_seconds: int = Field(default=60, ge=1)
 
+    # --- Trusted proxies (Stage 4.5.6) -------------------------------------
+    #: IP addresses or CIDR blocks of reverse proxies whose forwarding headers may be read.
+    #: Comma-separated in the environment, a list once parsed.
+    #:
+    #: **Empty by default, and that default is the safe one.** While this is empty no
+    #: forwarding header is consulted at all, so no client can influence its own address by
+    #: sending one. Nothing is implicitly trusted -- not 127.0.0.1, not a private range --
+    #: because "the proxy is on loopback" is a deployment fact this application cannot verify
+    #: and must not assume. See `app.core.client_address` for the resolution algorithm.
+    trusted_proxies: list[str] = Field(default_factory=list)
+
+    # --- Audit retention (Stage 4.5.14) ------------------------------------
+    #: How long an audit event stays OUT of the archive, in days.
+    #:
+    #: **Two years, and the default is deliberately conservative.** Retention here does not
+    #: mean deletion -- nothing is ever deleted from ``audit_events`` (see
+    #: :mod:`app.services.retention`) -- so the only cost of a long window is that the archive
+    #: fills later. The cost of a short one is that recent evidence is copied out of the table
+    #: the read APIs serve while an incident is still being investigated. Erring long is the
+    #: safe direction, and two years covers the usual commercial dispute window.
+    #:
+    #: A floor of one day, so a misconfigured ``0`` cannot make every event written this
+    #: second immediately eligible.
+    audit_retention_days: int = Field(default=730, ge=1)
+
+    #: How many events one archival batch may copy.
+    #:
+    #: The archival job is bounded by this and loops; it never attempts the whole table in one
+    #: statement, and it never loads the eligible set into Python. A thousand rows is a short
+    #: transaction on any hardware this runs on, which matters because the batch holds row
+    #: locks on the rows it is inserting.
+    audit_archive_batch_size: int = Field(default=1_000, ge=1, le=10_000)
+
+    #: The most batches one invocation of the job may run.
+    #:
+    #: A stop condition that does not depend on the data: without it, a first run against a
+    #: large backlog would hold a process for an unbounded time, and an operator would have no
+    #: way to say "make progress, then let me look". The job reports whether more work remains.
+    audit_archive_max_batches: int = Field(default=100, ge=1)
+
+    # --- Security headers (Stage 4.5.6) ------------------------------------
+    #: HSTS is sent only in production, and only when the ORIGINAL client spoke HTTPS. One
+    #: year is the interval the preload list requires and the usual recommendation.
+    hsts_max_age: int = Field(default=31_536_000, ge=0)
+    hsts_include_subdomains: bool = True
+    #: Opt-in, and deliberately off. Preloading is close to irreversible -- removal takes
+    #: months to reach users -- so it is a decision a deployment makes on purpose.
+    hsts_preload: bool = False
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
         """Accept ``a,b,c`` from the environment as well as a real list."""
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
+    @field_validator("trusted_proxies", mode="before")
+    @classmethod
+    def _split_trusted_proxies(cls, value: object) -> object:
+        """Accept ``a,b,c`` from the environment as well as a real list."""
+        if isinstance(value, str):
+            return [entry.strip() for entry in value.split(",") if entry.strip()]
+        return value
+
+    @field_validator("trusted_proxies", mode="after")
+    @classmethod
+    def _validate_trusted_proxies(cls, value: list[str]) -> list[str]:
+        """Refuse to start with a proxy entry that is not a usable address or CIDR.
+
+        Parsed here rather than at the first request so a typo is a startup failure with a
+        message naming the entry, not a silently empty trust list that quietly turns every
+        forwarded header back off in production.
+        """
+        for entry in value:
+            parse_trusted_proxy(entry)
         return value
 
     @model_validator(mode="after")

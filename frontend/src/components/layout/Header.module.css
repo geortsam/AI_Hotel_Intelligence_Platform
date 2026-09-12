@@ -1,0 +1,145 @@
+.header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--header-height);
+  padding: 0 var(--space-4);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.titleGroup {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.breadcrumb {
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  line-height: var(--leading-tight);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* The hotel context slot. Stage 5.4 filled it with the real membership list from
+ * `GET /hotels`; it holds a name, a selector, or an honest statement of why neither. */
+.hotelContext {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/*
+ * The multi-property selector.
+ *
+ * A native <select> stripped back to sit inside the chip: it keeps the platform's own
+ * dropdown, keyboard handling and mobile picker, and only loses the border the chip already
+ * draws. `max-width` keeps a long property name from pushing the sign-out control off a
+ * narrow header.
+ */
+.hotelSelect {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  padding: 0 var(--space-1) 0 0;
+  max-width: 22ch;
+  cursor: pointer;
+}
+
+.hotelSelect:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+/* The options themselves are drawn by the platform, which does not inherit the page's dark
+ * surface on every browser. Setting it here keeps the open list legible. */
+.hotelSelect option {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.hotelContextMore {
+  color: var(--color-text-subtle);
+  font-size: var(--text-sm);
+}
+
+.menuButton {
+  display: inline-flex;
+}
+
+@media (min-width: 1024px) {
+  .menuButton {
+    display: none;
+  }
+}
+
+/* Below 640px the hotel context label would squeeze the page title out; the slot keeps its
+ * icon and drops the text rather than wrapping the header onto two lines. */
+@media (max-width: 639px) {
+  .hotelContextLabel {
+    display: none;
+  }
+
+  .hotelContext {
+    padding: 0 var(--space-2);
+  }
+}
+
+/* The authenticated user's identity. A display, not yet a menu -- the menu is a later
+ * stage, and this is the seam it will replace. */
+.account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.accountName {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 18ch;
+}
+
+/* Below 900px the header has to fit a title, the hotel chip and the sign-out control.
+ * The name is the first thing that can go: the sign-out button keeps its icon and label
+ * through its aria-label. */
+@media (max-width: 899px) {
+  .accountName {
+    display: none;
+  }
+}

@@ -1,0 +1,92 @@
+/*
+ * The room list on a small screen.
+ *
+ * Rendered instead of the table below 768px, never in addition to it -- the switch is a
+ * media query in `useIsCompact`, so only one of the two is ever mounted and a screen reader
+ * meets one copy of the data.
+ */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: var(--space-4);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.number {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* Two badges stack on a narrow card rather than squeezing the number. */
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+
+
+
+
+
+
+
+
+.fields {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-3) 0 0;
+}
+
+/* `display: contents` so each pair's dt/dd land in the grid's own columns rather than
+ * nesting a second layout inside a cell. */
+.field {
+  display: contents;
+}
+
+.label {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.value {
+  margin: 0;
+  font-size: var(--text-sm);
+  /* A long description must wrap rather than widen the card past the viewport. */
+  overflow-wrap: anywhere;
+}
+
+.link {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.link:hover,
+.link:focus-visible {
+  text-decoration: underline;
+}

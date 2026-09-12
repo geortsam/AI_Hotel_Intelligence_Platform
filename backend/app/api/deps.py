@@ -14,6 +14,11 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.client_address import (
+    FORWARDED_FOR_HEADER,
+    resolve_client_ip,
+    trusted_networks,
+)
 from app.core.config import Settings
 from app.core.errors import InvalidTokenError, RateLimitExceededError
 from app.core.rate_limit import FixedWindowRateLimiter, RateLimit
@@ -22,6 +27,7 @@ from app.models.enums import HotelRole
 from app.models.user import User
 from app.repositories.amenity import AmenityRepository, RoomTypeAmenityRepository
 from app.repositories.analytics import AnalyticsRepository
+from app.repositories.audit import AuditRepository
 from app.repositories.booking import BookingRepository
 from app.repositories.finance import (
     ExpenseCategoryRepository,
@@ -35,14 +41,17 @@ from app.repositories.hotel import HotelRepository
 from app.repositories.membership import MembershipRepository
 from app.repositories.payment import PaymentRepository
 from app.repositories.platform_admin import PlatformAdminRepository
+from app.repositories.pricing import PricingRepository
 from app.repositories.review import ReviewRepository
 from app.repositories.room import RoomRepository
 from app.repositories.room_type import RoomTypeRepository
 from app.repositories.user import UserRepository
 from app.services.amenity import AmenityService, RoomTypeAmenityService
 from app.services.analytics import AnalyticsService
+from app.services.audit import AuditQueryService, AuditTrail, PlatformAuditQueryService
 from app.services.auth import AuthService
 from app.services.authorization import HotelAccessPolicy, PlatformAccessPolicy
+from app.services.availability import AvailabilitySearchService
 from app.services.booking import BookingService
 from app.services.finance import (
     ExpenseCategoryService,
@@ -56,6 +65,8 @@ from app.services.hotel import HotelService
 from app.services.intelligence import IntelligenceService
 from app.services.membership import MembershipService
 from app.services.payment import PaymentService
+from app.services.pricing import PricingService
+from app.services.reconciliation import ReconciliationService
 from app.services.review import ReviewService
 from app.services.room import RoomService
 from app.services.room_type import RoomTypeService
@@ -100,6 +111,37 @@ def get_db() -> Generator[Session, None, None]:
 
 #: Annotated alias so endpoints read as `db: DbSession` rather than repeating Depends().
 DbSession = Annotated[Session, Depends(get_db)]
+
+
+def get_audit_trail(db: DbSession, current_user: CurrentUserDep) -> AuditTrail:
+    """The request's audit trail, already carrying the authenticated caller (Stage 4.5.12).
+
+    Bound at construction rather than passed per call, so a service records an event without
+    naming an identity and therefore cannot name the wrong one -- the same reason
+    ``HotelAccessPolicy`` is built with its user.
+
+    It shares the request's session, which is what makes an audit row part of the mutation's
+    own transaction rather than a second write that could succeed or fail independently.
+
+    Depending on ``CurrentUserDep`` adds no work to a hotel-scoped route: that dependency is
+    already resolved for it, by the chain the access policy sits on, and FastAPI resolves each
+    dependency once per request.
+    """
+    return AuditTrail(AuditRepository(db), current_user)
+
+
+AuditTrailDep = Annotated[AuditTrail, Depends(get_audit_trail)]
+
+
+def get_unbound_audit_trail(db: DbSession) -> AuditTrail:
+    """An audit trail with no actor bound yet.
+
+    For :class:`~app.services.auth.AuthService` alone, and unavoidable there: that service is
+    what RESOLVES a token, so the authenticated user cannot also be one of its dependencies.
+    ``change_password`` is handed the caller directly by ``CurrentUserDep`` and binds it with
+    ``AuditTrail.for_actor``; no other method on that service records anything.
+    """
+    return AuditTrail(AuditRepository(db))
 
 
 def get_health_service(db: DbSession) -> HealthService:
@@ -150,13 +192,13 @@ def get_room_service(db: DbSession, scope: ScopeResolverDep) -> RoomService:
 RoomServiceDep = Annotated[RoomService, Depends(get_room_service)]
 
 
-def get_amenity_service(db: DbSession) -> AmenityService:
+def get_amenity_service(db: DbSession, audit: AuditTrailDep) -> AmenityService:
     """Assemble the amenity catalogue service.
 
     No scope resolver: the catalogue is global, and pretending otherwise by threading a
     hotel through would imply an ownership the schema does not model.
     """
-    return AmenityService(db, AmenityRepository(db))
+    return AmenityService(db, AmenityRepository(db), audit)
 
 
 AmenityServiceDep = Annotated[AmenityService, Depends(get_amenity_service)]
@@ -174,29 +216,69 @@ def get_guest_service(db: DbSession, scope: ScopeResolverDep) -> GuestService:
 GuestServiceDep = Annotated[GuestService, Depends(get_guest_service)]
 
 
-def get_booking_service(db: DbSession, scope: ScopeResolverDep) -> BookingService:
+def get_booking_service(
+    db: DbSession, scope: ScopeResolverDep, audit: AuditTrailDep
+) -> BookingService:
     """Assemble the booking service over a request-scoped session.
 
     It receives the guest repository because a booking names its guest by public id and must
     resolve it *within the same hotel* -- reusing the existing scoped lookup rather than
     duplicating it.
+
+    Stage 4.5.23 adds the pricing service, over the same session: a new booking's
+    nightly rates are calculated here rather than accepted from the caller.
     """
-    return BookingService(db, BookingRepository(db), GuestRepository(db), scope)
+    return BookingService(
+        db,
+        BookingRepository(db),
+        GuestRepository(db),
+        scope,
+        audit,
+        PricingService(PricingRepository(db)),
+        PaymentRepository(db),
+    )
 
 
 BookingServiceDep = Annotated[BookingService, Depends(get_booking_service)]
 
 
-def get_payment_service(db: DbSession, scope: ScopeResolverDep) -> PaymentService:
+def get_payment_service(
+    db: DbSession, scope: ScopeResolverDep, audit: AuditTrailDep
+) -> PaymentService:
     """Assemble the payment service over a request-scoped session.
 
     It reuses the booking repository: a payment is reached through its booking, and that
     scoped lookup already exists rather than being duplicated here.
     """
-    return PaymentService(db, PaymentRepository(db), BookingRepository(db), scope)
+    return PaymentService(db, PaymentRepository(db), BookingRepository(db), scope, audit)
+
+
+def get_availability_service(db: DbSession, scope: ScopeResolverDep) -> AvailabilitySearchService:
+    """Assemble the availability search over a request-scoped session.
+
+    It reuses the room repository: availability is a question about rooms, and the scoped
+    access to them already exists rather than being duplicated for search.
+    """
+    return AvailabilitySearchService(db, RoomRepository(db), scope)
+
+
+AvailabilityServiceDep = Annotated[AvailabilitySearchService, Depends(get_availability_service)]
 
 
 PaymentServiceDep = Annotated[PaymentService, Depends(get_payment_service)]
+
+
+def get_reconciliation_service(db: DbSession, scope: ScopeResolverDep) -> ReconciliationService:
+    """Assemble the reconciliation service over a request-scoped session.
+
+    It reuses both existing repositories rather than gaining its own: the booking side already
+    knows how to reach a booking within a hotel, and the payment side already defines what
+    counts as money. A third repository would be a third place for those to drift.
+    """
+    return ReconciliationService(db, BookingRepository(db), PaymentRepository(db), scope)
+
+
+ReconciliationServiceDep = Annotated[ReconciliationService, Depends(get_reconciliation_service)]
 
 
 def get_review_service(db: DbSession, scope: ScopeResolverDep) -> ReviewService:
@@ -211,17 +293,17 @@ def get_review_service(db: DbSession, scope: ScopeResolverDep) -> ReviewService:
 ReviewServiceDep = Annotated[ReviewService, Depends(get_review_service)]
 
 
-def get_revenue_category_service(db: DbSession) -> RevenueCategoryService:
+def get_revenue_category_service(db: DbSession, audit: AuditTrailDep) -> RevenueCategoryService:
     """The revenue-stream vocabulary. Global -- no hotel scope resolver is needed or wanted."""
-    return RevenueCategoryService(db, RevenueCategoryRepository(db))
+    return RevenueCategoryService(db, RevenueCategoryRepository(db), audit)
 
 
 RevenueCategoryServiceDep = Annotated[RevenueCategoryService, Depends(get_revenue_category_service)]
 
 
-def get_expense_category_service(db: DbSession) -> ExpenseCategoryService:
+def get_expense_category_service(db: DbSession, audit: AuditTrailDep) -> ExpenseCategoryService:
     """The cost vocabulary. Also global, and a separate code space from revenue categories."""
-    return ExpenseCategoryService(db, ExpenseCategoryRepository(db))
+    return ExpenseCategoryService(db, ExpenseCategoryRepository(db), audit)
 
 
 ExpenseCategoryServiceDep = Annotated[ExpenseCategoryService, Depends(get_expense_category_service)]
@@ -265,6 +347,43 @@ def get_analytics_service(db: DbSession, scope: ScopeResolverDep) -> AnalyticsSe
 AnalyticsServiceDep = Annotated[AnalyticsService, Depends(get_analytics_service)]
 
 
+def get_audit_query_service(db: DbSession, scope: ScopeResolverDep) -> AuditQueryService:
+    """Assemble the read-only audit history service (Stage 4.5.12).
+
+    A DIFFERENT object from the ``AuditTrail`` the mutating services carry, over the same
+    repository. The writer needs an actor and no hotel scope; the reader needs a hotel scope
+    and no actor. One class doing both would be a class with a ``record`` method sitting on
+    the object a read-only endpoint holds.
+
+    It owns no unit of work -- reading history writes nothing -- so it is handed no session,
+    exactly as the analytics service is not.
+    """
+    return AuditQueryService(AuditRepository(db), scope)
+
+
+AuditServiceDep = Annotated[AuditQueryService, Depends(get_audit_query_service)]
+
+
+def get_platform_audit_service(db: DbSession) -> PlatformAuditQueryService:
+    """Assemble the read-only PLATFORM audit history service (Stage 4.5.13).
+
+    It is handed the repository and nothing else -- no scope resolver, deliberately, so the
+    object a platform-scoped route holds has no collaborator through which a hotel could be
+    reached. Compare `get_audit_query_service` above, which needs one and gets one.
+
+    No session either: reading history writes nothing, so there is no unit of work to own.
+
+    **It does not depend on the platform policy.** Authorization is declared on the route by
+    ``require_platform_admin``, exactly as it is for every catalogue write. Resolving the
+    policy here as well would put the grant check in two places, and two places is how one of
+    them ends up being the one nobody updates.
+    """
+    return PlatformAuditQueryService(AuditRepository(db))
+
+
+PlatformAuditServiceDep = Annotated[PlatformAuditQueryService, Depends(get_platform_audit_service)]
+
+
 def get_intelligence_service(db: DbSession, scope: ScopeResolverDep) -> IntelligenceService:
     """Assemble the read-only intelligence service.
 
@@ -285,7 +404,7 @@ def get_auth_service(db: DbSession, settings: SettingsDep) -> AuthService:
     module-level global -- the app factory can be constructed with different settings, and a
     cached global would ignore them.
     """
-    return AuthService(db, UserRepository(db), settings)
+    return AuthService(db, UserRepository(db), settings, get_unbound_audit_trail(db))
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
@@ -314,25 +433,25 @@ def get_current_user(
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 
 
-def client_address(request: Request) -> str:
+def client_address(request: Request, settings: Settings) -> str:
     """The address a rate-limit bucket is keyed by.
 
-    **The direct peer address, and nothing else.** ``X-Forwarded-For`` and ``Forwarded`` are
-    client-controlled: honouring either without a configured, trusted proxy in front would let
-    an attacker mint a fresh bucket per request by varying a header, which is worse than no
-    limiter at all because it looks like protection. This application has no trusted-proxy
-    configuration -- Stage 4.5.3 deliberately did not invent one -- so the peer address is the
-    only source that cannot be forged from outside.
+    The decision itself lives in `app.core.client_address`, which is the single place that
+    knows the trusted-proxy rule; this function only supplies the request's peer and headers.
+    Parsing a forwarding header HERE, next to the limiter, is how the two copies drift apart
+    and how one of them ends up trusting something it should not.
 
-    The consequence, stated rather than hidden: deployed behind a reverse proxy without
-    ``--forwarded-allow-ips``, every request appears to come from the proxy and the limit
-    becomes global rather than per-client. Turning on proxy handling is a deployment decision
-    that has to come with a trusted-proxy list, and that is the change to make first.
-
-    ``request.client`` is None only for a transport with no peer; those share one bucket
-    rather than escaping the limiter entirely.
+    The short version of the rule it applies: while `TRUSTED_PROXIES` is empty -- the
+    default -- no forwarding header is read at all and the direct peer address is used, so a
+    client cannot influence its own bucket. Once proxies are configured, a header is read only
+    when the peer IS one of them, and the chain is walked from the end nearest to us.
     """
-    return request.client.host if request.client else "unknown"
+    client = request.client
+    return resolve_client_ip(
+        client.host if client else None,
+        request.headers.getlist(FORWARDED_FOR_HEADER),
+        trusted_networks(tuple(settings.trusted_proxies)),
+    )
 
 
 def rate_limited(scope: str, policy_of: Callable[[Settings], RateLimit]) -> Callable[..., None]:
@@ -348,7 +467,7 @@ def rate_limited(scope: str, policy_of: Callable[[Settings], RateLimit]) -> Call
 
     def dependency(request: Request, settings: SettingsDep) -> None:
         limiter: FixedWindowRateLimiter = request.app.state.rate_limiter
-        verdict = limiter.check(f"{scope}:{client_address(request)}", policy_of(settings))
+        verdict = limiter.check(f"{scope}:{client_address(request, settings)}", policy_of(settings))
         if not verdict.allowed:
             raise RateLimitExceededError(verdict.retry_after)
 
@@ -433,7 +552,9 @@ def require_role(required: HotelRole) -> Callable[..., None]:
     return dependency
 
 
-def get_membership_service(db: DbSession, scope: ScopeResolverDep) -> MembershipService:
+def get_membership_service(
+    db: DbSession, scope: ScopeResolverDep, audit: AuditTrailDep
+) -> MembershipService:
     """Assemble the membership administration service over a request-scoped session.
 
     It reuses the SAME MembershipRepository the authorization policy reads through, so
@@ -441,7 +562,7 @@ def get_membership_service(db: DbSession, scope: ScopeResolverDep) -> Membership
     the UserRepository authentication already owns -- identity is global, and a second way
     to look up an account would be a second place for the lookup to differ.
     """
-    return MembershipService(db, MembershipRepository(db), UserRepository(db), scope)
+    return MembershipService(db, MembershipRepository(db), UserRepository(db), scope, audit)
 
 
 MembershipServiceDep = Annotated[MembershipService, Depends(get_membership_service)]
@@ -459,7 +580,10 @@ RoomTypeAmenityServiceDep = Annotated[
 __all__ = [
     "AmenityServiceDep",
     "AnalyticsServiceDep",
+    "AuditServiceDep",
+    "AuditTrailDep",
     "AuthServiceDep",
+    "AvailabilityServiceDep",
     "BookingServiceDep",
     "CurrentUserDep",
     "DbSession",
@@ -473,6 +597,8 @@ __all__ = [
     "MembershipServiceDep",
     "PaymentServiceDep",
     "PlatformAccessPolicyDep",
+    "PlatformAuditServiceDep",
+    "ReconciliationServiceDep",
     "RevenueCategoryServiceDep",
     "RevenueServiceDep",
     "ReviewServiceDep",
@@ -486,7 +612,10 @@ __all__ = [
     "get_amenity_service",
     "get_analytics_service",
     "get_app_settings",
+    "get_audit_query_service",
+    "get_audit_trail",
     "get_auth_service",
+    "get_availability_service",
     "get_booking_service",
     "get_current_user",
     "get_db",
@@ -500,6 +629,8 @@ __all__ = [
     "get_membership_service",
     "get_payment_service",
     "get_platform_access_policy",
+    "get_platform_audit_service",
+    "get_reconciliation_service",
     "get_revenue_category_service",
     "get_revenue_service",
     "get_review_service",
@@ -507,6 +638,7 @@ __all__ = [
     "get_room_type_amenity_service",
     "get_room_type_service",
     "get_scope_resolver",
+    "get_unbound_audit_trail",
     "login_rate_limit",
     "rate_limited",
     "require_platform_admin",

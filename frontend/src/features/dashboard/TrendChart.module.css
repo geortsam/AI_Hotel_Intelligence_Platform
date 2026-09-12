@@ -1,0 +1,131 @@
+/*
+ * The trend chart.
+ *
+ * The SVG scales with its column through the viewBox: `width: 100%` plus `height: auto`
+ * keeps the 720x220 aspect ratio, so text and strokes never distort and no JavaScript
+ * measures anything on resize.
+ */
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* Below this the axis labels start to collide; the chart keeps its width and the card
+   * scrolls horizontally instead of squeezing the plot into something unreadable. */
+  min-width: 280px;
+}
+
+.gridline {
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+/* Zero is drawn heavier than the other gridlines, so a series crossing it is legible as
+ * crossing it rather than as passing another tick. */
+.baseline {
+  stroke: var(--color-border-strong);
+  stroke-width: 1.5;
+}
+
+.axisLabel {
+  fill: var(--color-text-subtle);
+  font-size: 11px;
+  font-family: var(--font-sans);
+}
+
+.line {
+  fill: none;
+  stroke: var(--color-primary-text);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.point {
+  fill: var(--color-primary-text);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.details {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  /* A real focus target: this is the keyboard route to the exact values. */
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  margin-left: calc(var(--space-2) * -1);
+}
+
+.summary:hover {
+  color: var(--color-text);
+}
+
+.summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* The table can be long and, on a phone, wider than the card. It scrolls inside its own
+ * box; the page itself never scrolls sideways. */
+.tableScroll {
+  margin-top: var(--space-3);
+  max-height: 320px;
+  overflow: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.caption {
+  text-align: left;
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+  padding-bottom: var(--space-2);
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-weight: var(--weight-medium);
+}
+
+.table tbody th {
+  font-weight: var(--weight-normal);
+  color: var(--color-text-muted);
+}
+
+.table td {
+  color: var(--color-text);
+}

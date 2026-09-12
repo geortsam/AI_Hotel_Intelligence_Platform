@@ -1,0 +1,106 @@
+/*
+ * Element defaults. Applies to bare HTML only -- every class lives with its component.
+ *
+ * The rules here are the ones that would otherwise be repeated in every component file:
+ * box sizing, the focus ring, and sensible defaults for text elements.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+  /* The shell manages its own scrolling; without this a mobile drawer can scroll the page
+   * underneath it. */
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100%;
+}
+
+/*
+ * One focus ring for the whole application.
+ *
+ * `:focus-visible` rather than `:focus` so a mouse click does not leave a ring behind,
+ * while keyboard users keep it. The outline is offset so it reads as a ring around the
+ * control rather than a border on it, and it is never removed -- an invisible focus state
+ * makes the application unusable by keyboard, which is the failure this single rule exists
+ * to prevent.
+ */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  line-height: var(--leading-tight);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+h1 {
+  font-size: var(--text-2xl);
+}
+
+h2 {
+  font-size: var(--text-xl);
+}
+
+h3 {
+  font-size: var(--text-lg);
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--color-primary-text);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/*
+ * Honour the viewer's motion preference.
+ *
+ * Not a nicety: for people with vestibular disorders, movement they did not ask for can
+ * cause nausea. The application has little animation by design, and what it has stops here.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

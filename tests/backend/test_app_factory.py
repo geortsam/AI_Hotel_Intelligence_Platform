@@ -119,6 +119,19 @@ APPROVED_RESOURCE_SEGMENTS = {
     "amenities",
     "guests",
     "bookings",
+    # Stage 4.5.11. Moving a booking's dates and allocation. A sub-resource, but the whole
+    # stay aggregate in one transaction -- which is the unit the deferred night-completeness
+    # trigger judges, and therefore the one kind of booking child that CAN commit alone.
+    "stay",
+    # Stage 4.5.27. Keeping an in-house guest longer. A child of /stay rather than a
+    # second verb on it, because it is a DIFFERENT operation with a different status
+    # policy: /stay replaces the whole aggregate and refuses a checked-in booking,
+    # while this one may only push check-out outward and accepts nothing else.
+    "extension",
+    # Stage 4.5.9. A derived view of one booking: what it is worth, what has been paid, what
+    # remains. Not under /analytics, whose routes are period reports and require an explicit
+    # date window that a single booking has none of.
+    "reconciliation",
     "payments",
     "refunds",
     "reviews",
@@ -128,6 +141,10 @@ APPROVED_RESOURCE_SEGMENTS = {
     "expenses",
     "revenue-categories",
     "expense-categories",
+    # Stage 4.5.10. A read-only projection of what the hotel could sell for a stay. Its own
+    # segment rather than a child of /rooms: the question is about the hotel's inventory as a
+    # whole for a window, and it spans every room type.
+    "availability",
     "analytics",
     "overview",
     "daily",
@@ -143,6 +160,14 @@ APPROVED_RESOURCE_SEGMENTS = {
     "register",
     "login",
     "me",
+    # Stage 4.5.12. The property's own record of what was done to it. Hotel-scoped like the
+    # data it describes, and read-only: the collection offers GET and nothing else.
+    "audit-events",
+    # Stage 4.5.13. The other half of that record: the events that belong to no property.
+    # A top-level segment because there is nothing to nest it under -- these rows have
+    # hotel_id IS NULL by definition, and inventing a hotel for the URL would be the same
+    # falsehood the nullable column exists to avoid.
+    "platform",
 }
 
 #: Resources the SCHEMA models as global -- no hotel_id column, and a unique constraint with
@@ -159,6 +184,19 @@ IDENTITY_COLLECTIONS = {
     # change your own credential would mean a user who belongs to no property could never
     # change it, and one who belongs to two would have to pick.
     "/api/v1/auth/change-password",
+}
+
+#: Stage 4.5.13. Collections that sit outside the hotel hierarchy because their rows have no
+#: tenant AT ALL -- not because a lookup table is shared, but because ``audit_events.hotel_id``
+#: is NULL for them. Guarded by the platform grant rather than by a hotel role, so a member of
+#: every property in the portfolio still cannot reach it.
+#:
+#: Its own set rather than an entry in SCHEMA_GLOBAL_COLLECTIONS below: those three are
+#: readable by any authenticated caller because every hotel must reference the vocabulary it is
+#: required to use, and this is the opposite -- the most privileged read in the API. Sharing a
+#: list would eventually share a rule.
+PLATFORM_COLLECTIONS = {
+    "/api/v1/platform/audit-events",
 }
 
 SCHEMA_GLOBAL_COLLECTIONS = {
@@ -220,6 +258,9 @@ def test_domain_surface_is_exactly_the_approved_hierarchy() -> None:
         "/api/v1/hotels/{hotel_public_id}/guests/{guest_public_id}",
         "/api/v1/hotels/{hotel_public_id}/bookings",
         "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}",
+        "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/reconciliation",
+        "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/stay",
+        "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/stay/extension",
         "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/payments",
         "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/payments/refunds",
         "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}"
@@ -232,6 +273,7 @@ def test_domain_surface_is_exactly_the_approved_hierarchy() -> None:
         "/api/v1/expense-categories/{code}",
         "/api/v1/hotels/{hotel_public_id}/revenue",
         "/api/v1/hotels/{hotel_public_id}/expenses",
+        "/api/v1/hotels/{hotel_public_id}/availability",
         "/api/v1/hotels/{hotel_public_id}/analytics/overview",
         "/api/v1/hotels/{hotel_public_id}/analytics/daily",
         "/api/v1/hotels/{hotel_public_id}/analytics/revenue-by-category",
@@ -242,6 +284,8 @@ def test_domain_surface_is_exactly_the_approved_hierarchy() -> None:
         "/api/v1/hotels/{hotel_public_id}/intelligence/demand-trend",
         "/api/v1/hotels/{hotel_public_id}/intelligence/anomalies",
         "/api/v1/hotels/{hotel_public_id}/intelligence/insights",
+        "/api/v1/hotels/{hotel_public_id}/audit-events",
+        "/api/v1/platform/audit-events",
         "/api/v1/auth/register",
         "/api/v1/auth/login",
         "/api/v1/auth/change-password",
@@ -343,6 +387,7 @@ def test_every_domain_is_nested_unless_the_schema_makes_it_global() -> None:
         if not p.startswith("/api/v1/hotels")
         and p not in SCHEMA_GLOBAL_COLLECTIONS
         and p not in IDENTITY_COLLECTIONS
+        and p not in PLATFORM_COLLECTIONS
     }
     assert unexpected == set(), sorted(unexpected)
 
@@ -400,6 +445,12 @@ def test_bookings_expose_no_allocation_or_night_sub_resources() -> None:
         if p.startswith("/api/v1/hotels/{hotel_public_id}/bookings")
         and "payments" not in p
         and "review" not in p
+        # Stage 4.5.9, excluded on the same basis as payments and review: an approved child,
+        # not an allocation or a night. It writes nothing, so the single-transaction reason
+        # this rule exists does not reach it.
+        and "reconciliation" not in p
+        # Stage 4.5.11, on the same basis: the whole stay aggregate, one transaction.
+        and "/stay" not in p
     }
     assert own == {
         "/api/v1/hotels/{hotel_public_id}/bookings",

@@ -22,12 +22,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import (
+    GENERIC_CONFLICT_MESSAGE,
     SQLSTATE_DEPENDENCY_VIOLATIONS,
     SQLSTATE_UNIQUE_VIOLATION,
     ConflictError,
     NotFoundError,
+    internal_fault,
+    is_audit_integrity_failure,
     sqlstate_of,
 )
+from app.models.enums import AuditAction, AuditResourceType
 from app.models.room import Amenity
 from app.repositories.amenity import AmenityRepository, RoomTypeAmenityRepository
 from app.schemas.amenity import (
@@ -37,6 +41,7 @@ from app.schemas.amenity import (
     AmenityUpdate,
 )
 from app.schemas.common import Page
+from app.services.audit import AuditTrail
 from app.services.scope import HotelScopeResolver
 
 logger = logging.getLogger(__name__)
@@ -48,9 +53,14 @@ DEFAULT_PAGE_SIZE = 20
 class AmenityService:
     """Domain operations on the global amenity catalogue."""
 
-    def __init__(self, session: Session, repository: AmenityRepository) -> None:
+    def __init__(self, session: Session, repository: AmenityRepository, audit: AuditTrail) -> None:
         self._session = session
         self._repository = repository
+        # Stage 4.5.12. The catalogue is global -- one row is shared by every property -- so
+        # these events carry NO hotel_id: attributing a change that reaches every tenant to
+        # one of them would be false. They are therefore recorded but not retrievable through
+        # the hotel-scoped audit endpoint; see `PLATFORM_AUDIT_ACTIONS`.
+        self._audit = audit
 
     # --- reads --------------------------------------------------------------------------
 
@@ -79,6 +89,11 @@ class AmenityService:
         amenity = Amenity(**payload.model_dump())
         try:
             created = self._repository.add(amenity)
+            self._audit.record(
+                AuditAction.AMENITY_CREATED,
+                AuditResourceType.AMENITY,
+                created.code,
+            )
             self._session.commit()
         except IntegrityError as exc:
             self._session.rollback()
@@ -96,6 +111,13 @@ class AmenityService:
 
         try:
             updated = self._repository.apply_changes(amenity, changes)
+            # The FIELD NAMES that moved, never their values.
+            self._audit.record(
+                AuditAction.AMENITY_UPDATED,
+                AuditResourceType.AMENITY,
+                code,
+                details={"changed_fields": sorted(changes)},
+            )
             self._session.commit()
         except IntegrityError as exc:
             self._session.rollback()
@@ -113,8 +135,15 @@ class AmenityService:
         amenity = self._require(code)
         try:
             self._repository.delete(amenity)
+            self._audit.record(
+                AuditAction.AMENITY_DELETED,
+                AuditResourceType.AMENITY,
+                code,
+            )
             self._session.commit()
         except IntegrityError as exc:
+            # An amenity still assigned to a room type is refused by RESTRICT, and the
+            # rollback takes the event with it.
             self._session.rollback()
             if sqlstate_of(exc) in SQLSTATE_DEPENDENCY_VIOLATIONS:
                 raise ConflictError(
@@ -140,6 +169,13 @@ class AmenityService:
         # response, and it is all that is recorded. (Stage 3B.12 hygiene audit.)
         logger.warning("Amenity integrity error (sqlstate=%s)", state)
 
+        if is_audit_integrity_failure(exc):
+            # Stage 4.5.16. The audit layer failed, not this domain -- so nothing below may
+            # claim it. Before this guard, a booking deletion whose audit INSERT failed told
+            # the client that payments still referenced the booking, which was false and
+            # unactionable.
+            return internal_fault(exc)
+
         if state == SQLSTATE_UNIQUE_VIOLATION:
             detail = (
                 f"An amenity with code {code!r} already exists."
@@ -149,7 +185,7 @@ class AmenityService:
             return ConflictError(detail)
         if state in SQLSTATE_DEPENDENCY_VIOLATIONS:
             return ConflictError("This amenity is still referenced by other records.")
-        return ConflictError("The request conflicts with the current state of the database.")
+        return ConflictError(GENERIC_CONFLICT_MESSAGE)
 
 
 class RoomTypeAmenityService:
@@ -219,9 +255,7 @@ class RoomTypeAmenityService:
                     f"Amenity {amenity.code!r} is already assigned to this room type."
                 ) from exc
             logger.warning("Assignment integrity error (sqlstate=%s)", sqlstate_of(exc))
-            raise ConflictError(
-                "The request conflicts with the current state of the database."
-            ) from exc
+            raise ConflictError(GENERIC_CONFLICT_MESSAGE) from exc
 
         return AmenityResponse.model_validate(amenity)
 

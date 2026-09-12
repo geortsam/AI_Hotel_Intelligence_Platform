@@ -1,18 +1,27 @@
+import { AppRouter } from '@/router/AppRouter'
+import { AuthProvider } from '@/session/AuthProvider'
+import { HotelProvider } from '@/session/HotelProvider'
+
 /**
- * Stage 1 placeholder shell.
+ * The application root.
  *
- * It renders static text and calls no API. Routing, the dashboard, data fetching and every
- * feature view arrive in later stages.
+ * The session provider wraps the router, not the other way round: route guards and the
+ * sign-in page both read the session, so it has to exist above them. It mounts nothing
+ * else -- layout belongs to `AppShell`, routes to `AppRouter`, configuration to
+ * `config/env`.
+ *
+ * The hotel context sits **between** the two, and the nesting is load-bearing in both
+ * directions. It reads the session, so it must be inside `AuthProvider`; the header and the
+ * dashboard both read it, so it must be outside the router. It issues no request until a
+ * session exists and drops what it holds when one ends, so a signed-out browser is never
+ * left holding a list of properties.
  */
 export default function App() {
   return (
-    <main className="app-shell">
-      <h1>AI Hotel Intelligence Platform</h1>
-      <p className="tagline">Stage 1 &mdash; project foundation.</p>
-      <p>
-        The application shell is in place. Routing, views and the API client are added in
-        later stages.
-      </p>
-    </main>
+    <AuthProvider>
+      <HotelProvider>
+        <AppRouter />
+      </HotelProvider>
+    </AuthProvider>
   )
 }

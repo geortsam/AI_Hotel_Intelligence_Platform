@@ -26,6 +26,7 @@ from app.core.logging import configure_logging
 from app.core.rate_limit import FixedWindowRateLimiter
 from app.db.session import dispose_engine
 from app.middleware.request_id import RequestIdMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 
 
 @asynccontextmanager
@@ -89,6 +90,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+
+    # Added LAST, so in Starlette it is the OUTERMOST middleware -- `add_middleware` inserts
+    # at the front of the list. That placement is the point: every response passes back out
+    # through it, including the preflights CORSMiddleware answers by itself without ever
+    # calling inward. The relative order of the two middleware above is untouched.
+    #
+    # The one response it cannot reach is the 500 that Starlette's ServerErrorMiddleware
+    # produces, because that sits outside all user middleware; `handle_unexpected_error` in
+    # app.core.errors therefore applies the same headers itself, exactly as it already does
+    # for X-Request-ID.
+    #
+    # The documentation URLs come from the application object rather than being re-typed, so
+    # the CSP exemption cannot drift away from the paths actually served.
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        settings=settings,
+        csp_exempt_paths=frozenset(
+            path
+            for path in (
+                app.docs_url,
+                app.redoc_url,
+                # FastAPI keeps this set even when docs_url is None, so it must be gated on
+                # the docs actually being served -- otherwise production exempts a path that
+                # only ever 404s, and that 404 loses its CSP for no reason.
+                app.swagger_ui_oauth2_redirect_url if app.docs_url else None,
+            )
+            if path
+        ),
     )
 
     register_exception_handlers(app)

@@ -36,7 +36,7 @@ from app.services.booking import (
     BookingService,
 )
 from app.services.scope import HotelScopeResolver
-from tests.backend.authorization_stubs import AllowAllPolicy
+from tests.backend.authorization_stubs import AllowAllPolicy, audit_trail
 
 CHECK_IN = dt.date(2026, 9, 1)
 CHECK_OUT = dt.date(2026, 9, 4)
@@ -44,7 +44,7 @@ CHECK_OUT = dt.date(2026, 9, 4)
 
 def nights(*rates: str) -> list[dict[str, object]]:
     return [
-        {"stay_date": str(CHECK_IN + dt.timedelta(days=offset)), "rate": rate}
+        {"stay_date": str(CHECK_IN + dt.timedelta(days=offset))}
         for offset, rate in enumerate(rates)
     ]
 
@@ -202,7 +202,7 @@ def test_extra_nights_outside_the_stay_are_rejected() -> None:
             "room_number": "101",
             "nights": [
                 *nights("120.00", "120.00", "120.00"),
-                {"stay_date": str(CHECK_OUT), "rate": "120.00"},
+                {"stay_date": str(CHECK_OUT)},
             ],
         }
     ]
@@ -228,9 +228,9 @@ def test_duplicate_stay_dates_in_one_room_are_rejected() -> None:
         {
             "room_number": "101",
             "nights": [
-                {"stay_date": str(CHECK_IN), "rate": "120.00"},
-                {"stay_date": str(CHECK_IN), "rate": "130.00"},
-                {"stay_date": str(CHECK_IN + dt.timedelta(days=1)), "rate": "120.00"},
+                {"stay_date": str(CHECK_IN)},
+                {"stay_date": str(CHECK_IN)},
+                {"stay_date": str(CHECK_IN + dt.timedelta(days=1))},
             ],
         }
     ]
@@ -334,12 +334,18 @@ def test_allocation_input_rejects_a_room_id() -> None:
 
 
 def test_money_fields_are_decimal_not_float() -> None:
+    """Every amount a payload still carries is a Decimal.
+
+    Since Stage 4.5.23 a creation payload carries exactly one: the contracted
+    total. Nightly rates left this schema entirely -- the assertion that they are
+    Decimal moved to the pricing engine, where the number is now produced.
+    """
     import decimal
 
     parsed = BookingCreate.model_validate(base_payload())
 
     assert isinstance(parsed.total_amount, decimal.Decimal)
-    assert isinstance(parsed.rooms[0].nights[0].rate, decimal.Decimal)
+    assert not hasattr(parsed.rooms[0].nights[0], "rate")
 
 
 def test_negative_money_is_rejected() -> None:
@@ -365,7 +371,7 @@ def test_dependency_assembles_the_service_with_its_collaborators() -> None:
 
     stub: Any = _Session()
     scope = deps.get_scope_resolver(stub, AllowAllPolicy())
-    service = deps.get_booking_service(stub, scope)
+    service = deps.get_booking_service(stub, scope, audit_trail(stub))
 
     assert isinstance(service, BookingService)
     assert isinstance(service._repository, BookingRepository)
@@ -387,9 +393,13 @@ def test_repository_offers_no_unscoped_lookup() -> None:
 def test_every_repository_read_takes_a_hotel_id() -> None:
     for method_name in [
         "get_by_hotel_and_public_id",
+        # Stage 4.5.28. The render-path reader, tenant-scoped exactly like the one above.
+        "get_for_response",
         "count_for_hotel",
         "list_page_for_hotel",
-        "get_room_in_hotel",
+        # Stage 4.5.29. Replaced `get_room_in_hotel`, which resolved one room per query.
+        # The batch reader carries the same tenant predicate; only the arity changed.
+        "rooms_in_hotel",
     ]:
         parameters = inspect.signature(getattr(BookingRepository, method_name)).parameters
         assert "hotel_id" in parameters, method_name
@@ -413,7 +423,15 @@ class _StubSession:
 
 def test_missing_hotel_is_reported_before_any_booking_work() -> None:
     scope = HotelScopeResolver(_NoHotels(), _NoRoomTypes(), AllowAllPolicy())  # type: ignore[arg-type]
-    service = BookingService(_StubSession(), object(), object(), scope)  # type: ignore[arg-type]
+    service = BookingService(
+        _StubSession(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        scope,
+        audit_trail(),
+        object(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+    )
 
     with pytest.raises(NotFoundError, match=r"Hotel not found\."):
         service.get(uuid.uuid4(), uuid.uuid4())

@@ -1,0 +1,96 @@
+/*
+ * A segmented control built on native radios.
+ *
+ * The input is not `display: none` and not `visibility: hidden` -- either would remove it
+ * from the accessibility tree and from the tab order, taking the keyboard behaviour that is
+ * the whole reason for using radios. It is clipped to a single pixel instead, so it is
+ * focusable and announced while the styled label is what is seen, and the focus ring is
+ * drawn on the label via :focus-visible on the input.
+ */
+
+.group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+/* Available to assistive technology, absent from the visual design. */
+.legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.options {
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  /* On a narrow screen the four periods scroll rather than wrapping into a ragged block or
+   * pushing the page wider than the viewport. */
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.option {
+  position: relative;
+  display: inline-flex;
+}
+
+.input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
+}
+
+.optionLabel {
+  display: inline-block;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--easing),
+    color var(--duration-fast) var(--easing);
+}
+
+.optionLabel:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.input:checked + .optionLabel {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+/* The ring follows keyboard focus onto the label the input is hiding behind. */
+.input:focus-visible + .optionLabel {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.group:disabled .optionLabel {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .optionLabel {
+    transition: none;
+  }
+}

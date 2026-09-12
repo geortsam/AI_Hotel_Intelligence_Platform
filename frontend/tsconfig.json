@@ -14,8 +14,10 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] }
+    "paths": { "@/*": ["src/*"] },
+    "types": []
   },
   "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "//": "A `.node.test.ts` runs under vitest like any other test, but reads the source tree from disk and so needs Node's globals. `types: []` above is deliberate -- it keeps `process` and `node:fs` out of code that ships to a browser -- so those files are typechecked by tsconfig.node.json instead of relaxing the rule for everything.",
+  "exclude": ["src/**/*.node.test.ts"]
 }

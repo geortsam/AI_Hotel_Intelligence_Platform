@@ -1,0 +1,276 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+
+
+
+
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.blockHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.blockTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+
+.blockNote {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: var(--leading-relaxed);
+  max-width: 78ch;
+}
+
+.count {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.recordHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.recordName {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+
+/* The confirmation sits above the list rather than inside a row: a delete that the database
+ * will usually refuse deserves to be read, not dismissed with a reflex click in place. */
+.confirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.panelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: minmax(9rem, auto) 1fr;
+  gap: var(--space-3) var(--space-4);
+  margin: 0;
+}
+
+/* `display: contents` so each pair's dt/dd land in the grid's own columns. */
+.field {
+  display: contents;
+}
+
+.fieldLabel {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.fieldValue {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  /* An email, a phone number or a note is user-supplied and may be long and unbroken. */
+  overflow-wrap: anywhere;
+}
+
+.absent {
+  color: var(--color-text-subtle);
+}
+
+
+
+
+
+
+
+
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3);
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+}
+
+.confirmQuestion {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  line-height: var(--leading-normal);
+  max-width: 64ch;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.skeleton {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.success {
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--color-success-soft);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  line-height: var(--leading-normal);
+}
+
+.failure {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+}
+
+.failureTitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.failureDetail {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+  max-width: 70ch;
+}
+
+@media (max-width: 599px) {
+  .fields {
+    grid-template-columns: 1fr;
+    gap: var(--space-1) 0;
+  }
+
+  .field {
+    display: block;
+    margin-bottom: var(--space-3);
+  }
+}
+
+/* States a limit of the API rather than of the screen, so it is set apart from the record
+ * it follows without shouting. */
+.note {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+  max-width: 70ch;
+}
+
+.panelTitle {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+/* The self-removal warning. Inside the confirmation, because it changes what confirming
+ * means -- not a page-level banner. */
+.confirmWarning {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-danger);
+  line-height: var(--leading-normal);
+}
+
+/* What the four roles mean, beneath the list that uses them. A definition list, because
+ * that is what it is. */
+.legend {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.legendRow {
+  display: grid;
+  grid-template-columns: 6rem 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+@media (max-width: 767px) {
+  .legendRow {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+.legendTerm {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.legendDetail {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+}

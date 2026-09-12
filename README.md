@@ -212,6 +212,37 @@ Coverage:
 .venv/Scripts/python.exe -m pytest --cov --cov-report=term-missing
 ```
 
+### PostgreSQL integration tests
+
+The integration suite is **destructive**: it runs `alembic downgrade base` and
+`TRUNCATE ... RESTART IDENTITY CASCADE`. It runs only when `TEST_DATABASE_URL` is set, and
+only against a database that has proved it is disposable. Without the variable those tests
+skip as PENDING; the rest of the suite runs normally and needs no database.
+
+**Never point `TEST_DATABASE_URL` at the demo database, or at any database you would miss.**
+A `_test` suffix is not enough on its own — this project's CI container and its demo database
+share the name `hotel_intelligence_test` — so the guard also reads the target and refuses one
+that already holds application data.
+
+Get a safe database with the helper, which creates it, marks it disposable, and will not drop
+anything that has not cleared the guard:
+
+```bash
+.venv/Scripts/python.exe scripts/testdb.py create my_scratch_test
+.venv/Scripts/python.exe scripts/testdb.py check  my_scratch_test
+.venv/Scripts/python.exe scripts/testdb.py drop   my_scratch_test
+```
+
+Then, with `TEST_DATABASE_URL` set to that database:
+
+```bash
+.venv/Scripts/python.exe -m pytest tests/integration
+```
+
+If the target is not disposable the suite stops before any SQL runs and prints what it found,
+what it refused to do, and how to proceed. See `tests/db_safety.py` and
+`docs/database-implementation.md`.
+
 Tests live at the repository root and import `app` via `pythonpath = ["backend"]` in
 `pyproject.toml`.
 

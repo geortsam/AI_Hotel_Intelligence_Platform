@@ -1,0 +1,23 @@
+.icon {
+  /* Optical alignment with the label's cap height; the badge's own flex gap does the spacing. */
+  margin-top: -1px;
+  flex-shrink: 0;
+}
+
+/*
+ * Available to assistive technology, absent from the visual design.
+ *
+ * Not `display: none` and not `visibility: hidden` -- either would remove it from the
+ * accessibility tree, which is the one thing it exists to be in.
+ */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

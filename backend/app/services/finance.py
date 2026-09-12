@@ -43,14 +43,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import (
+    GENERIC_CONFLICT_MESSAGE,
     SQLSTATE_CHECK_VIOLATION,
     SQLSTATE_DEPENDENCY_VIOLATIONS,
     SQLSTATE_NOT_NULL_VIOLATION,
     SQLSTATE_UNIQUE_VIOLATION,
     ConflictError,
     NotFoundError,
+    constraint_name_of,
+    internal_fault,
+    is_audit_integrity_failure,
     sqlstate_of,
 )
+from app.models.enums import AuditAction, AuditResourceType
 from app.models.finance import Expense, ExpenseCategory, Revenue, RevenueCategory
 from app.models.hotel import Hotel
 from app.repositories.booking import BookingRepository
@@ -73,6 +78,7 @@ from app.schemas.finance import (
     RevenueCreate,
     RevenueResponse,
 )
+from app.services.audit import AuditTrail
 from app.services.scope import HotelScopeResolver
 
 logger = logging.getLogger(__name__)
@@ -87,21 +93,10 @@ type RevenueResponses = list[RevenueResponse]
 type ExpenseResponses = list[ExpenseResponse]
 
 
-def _constraint_name(exc: IntegrityError) -> str | None:
-    """The violated constraint's NAME from driver diagnostics, never its message.
-
-    The message quotes the offending row, which for this domain means amounts, vendor names
-    and invoice references.
-    """
-    diag = getattr(getattr(exc, "orig", None), "diag", None)
-    name = getattr(diag, "constraint_name", None)
-    return str(name) if name else None
-
-
 def _log(kind: str, exc: IntegrityError) -> tuple[str | None, str | None]:
     """Record only the SQLSTATE and the constraint name, never ``exc_info``."""
     state = sqlstate_of(exc)
-    constraint = _constraint_name(exc)
+    constraint = constraint_name_of(exc)
     logger.warning("%s integrity error (sqlstate=%s, constraint=%s)", kind, state, constraint)
     return state, constraint
 
@@ -112,9 +107,18 @@ def _log(kind: str, exc: IntegrityError) -> tuple[str | None, str | None]:
 class RevenueCategoryService:
     """The global revenue-stream vocabulary. Mutable; deletable only while unreferenced."""
 
-    def __init__(self, session: Session, repository: RevenueCategoryRepository) -> None:
+    def __init__(
+        self, session: Session, repository: RevenueCategoryRepository, audit: AuditTrail
+    ) -> None:
         self._session = session
         self._repository = repository
+        # Stage 4.5.12. The catalogue is global -- one row is shared by every property -- so
+        # these events carry NO hotel_id: attributing a change that reaches every tenant to
+        # one of them would be false. The consequence is stated rather than hidden: the
+        # hotel-scoped retrieval API cannot return them, because there is no hotel to ask
+        # under. They are recorded as evidence; a platform-scoped read surface is a separate
+        # authorization surface and is not this stage's.
+        self._audit = audit
 
     def get(self, code: str) -> RevenueCategoryResponse:
         return RevenueCategoryResponse.model_validate(self._require(code))
@@ -138,6 +142,11 @@ class RevenueCategoryService:
         prior lookup -- a check-then-insert would only add a race."""
         try:
             created = self._repository.add(RevenueCategory(**payload.model_dump()))
+            self._audit.record(
+                AuditAction.REVENUE_CATEGORY_CREATED,
+                AuditResourceType.REVENUE_CATEGORY,
+                created.code,
+            )
             self._session.commit()
         except IntegrityError as exc:
             self._session.rollback()
@@ -152,6 +161,15 @@ class RevenueCategoryService:
             return RevenueCategoryResponse.model_validate(category)
         try:
             updated = self._repository.apply_changes(category, changes)
+            # The FIELD NAMES that moved, never their values: a catalogue row is small, but
+            # "what changed" is what an audit trail is for and "to what" is what the resource
+            # itself already says.
+            self._audit.record(
+                AuditAction.REVENUE_CATEGORY_UPDATED,
+                AuditResourceType.REVENUE_CATEGORY,
+                code,
+                details={"changed_fields": sorted(changes)},
+            )
             self._session.commit()
         except IntegrityError as exc:
             self._session.rollback()
@@ -167,8 +185,16 @@ class RevenueCategoryService:
         category = self._require(code)
         try:
             self._repository.delete(category)
+            self._audit.record(
+                AuditAction.REVENUE_CATEGORY_DELETED,
+                AuditResourceType.REVENUE_CATEGORY,
+                code,
+            )
             self._session.commit()
         except IntegrityError as exc:
+            # A category still referenced by ledger lines is refused by RESTRICT here, and
+            # the rollback takes the event with it -- there is no record of a deletion the
+            # database declined.
             self._session.rollback()
             state = sqlstate_of(exc)
             _log("Revenue category", exc)
@@ -187,22 +213,36 @@ class RevenueCategoryService:
 
     def _translate(self, exc: IntegrityError) -> Exception:
         state, _ = _log("Revenue category", exc)
+        if is_audit_integrity_failure(exc):
+            # Stage 4.5.16. The audit layer failed, not this catalogue. Nothing below may
+            # claim it -- a platform administrator renaming an amenity must not be told the
+            # category is still referenced when what actually failed was the audit INSERT.
+            return internal_fault(exc)
         if state == SQLSTATE_UNIQUE_VIOLATION:
             return ConflictError("A revenue category with this code already exists.")
         if state == SQLSTATE_CHECK_VIOLATION:
             return ConflictError("The supplied values violate a revenue category constraint.")
         if state in SQLSTATE_DEPENDENCY_VIOLATIONS:
             return ConflictError("This revenue category is still referenced by other records.")
-        return ConflictError("The request conflicts with the current state of the database.")
+        return ConflictError(GENERIC_CONFLICT_MESSAGE)
 
 
 class ExpenseCategoryService:
     """The global cost vocabulary. Same lifecycle as revenue categories, separate table and
     separate code space -- the same code may exist in both (verified live)."""
 
-    def __init__(self, session: Session, repository: ExpenseCategoryRepository) -> None:
+    def __init__(
+        self, session: Session, repository: ExpenseCategoryRepository, audit: AuditTrail
+    ) -> None:
         self._session = session
         self._repository = repository
+        # Stage 4.5.12. The catalogue is global -- one row is shared by every property -- so
+        # these events carry NO hotel_id: attributing a change that reaches every tenant to
+        # one of them would be false. The consequence is stated rather than hidden: the
+        # hotel-scoped retrieval API cannot return them, because there is no hotel to ask
+        # under. They are recorded as evidence; a platform-scoped read surface is a separate
+        # authorization surface and is not this stage's.
+        self._audit = audit
 
     def get(self, code: str) -> ExpenseCategoryResponse:
         return ExpenseCategoryResponse.model_validate(self._require(code))
@@ -224,6 +264,11 @@ class ExpenseCategoryService:
     def create(self, payload: ExpenseCategoryCreate) -> ExpenseCategoryResponse:
         try:
             created = self._repository.add(ExpenseCategory(**payload.model_dump()))
+            self._audit.record(
+                AuditAction.EXPENSE_CATEGORY_CREATED,
+                AuditResourceType.EXPENSE_CATEGORY,
+                created.code,
+            )
             self._session.commit()
         except IntegrityError as exc:
             self._session.rollback()
@@ -237,6 +282,15 @@ class ExpenseCategoryService:
             return ExpenseCategoryResponse.model_validate(category)
         try:
             updated = self._repository.apply_changes(category, changes)
+            # The FIELD NAMES that moved, never their values: a catalogue row is small, but
+            # "what changed" is what an audit trail is for and "to what" is what the resource
+            # itself already says.
+            self._audit.record(
+                AuditAction.EXPENSE_CATEGORY_UPDATED,
+                AuditResourceType.EXPENSE_CATEGORY,
+                code,
+                details={"changed_fields": sorted(changes)},
+            )
             self._session.commit()
         except IntegrityError as exc:
             self._session.rollback()
@@ -248,8 +302,16 @@ class ExpenseCategoryService:
         category = self._require(code)
         try:
             self._repository.delete(category)
+            self._audit.record(
+                AuditAction.EXPENSE_CATEGORY_DELETED,
+                AuditResourceType.EXPENSE_CATEGORY,
+                code,
+            )
             self._session.commit()
         except IntegrityError as exc:
+            # A category still referenced by ledger lines is refused by RESTRICT here, and
+            # the rollback takes the event with it -- there is no record of a deletion the
+            # database declined.
             self._session.rollback()
             state = sqlstate_of(exc)
             _log("Expense category", exc)
@@ -268,13 +330,18 @@ class ExpenseCategoryService:
 
     def _translate(self, exc: IntegrityError) -> Exception:
         state, _ = _log("Expense category", exc)
+        if is_audit_integrity_failure(exc):
+            # Stage 4.5.16. The audit layer failed, not this catalogue. Nothing below may
+            # claim it -- a platform administrator renaming an amenity must not be told the
+            # category is still referenced when what actually failed was the audit INSERT.
+            return internal_fault(exc)
         if state == SQLSTATE_UNIQUE_VIOLATION:
             return ConflictError("An expense category with this code already exists.")
         if state == SQLSTATE_CHECK_VIOLATION:
             return ConflictError("The supplied values violate an expense category constraint.")
         if state in SQLSTATE_DEPENDENCY_VIOLATIONS:
             return ConflictError("This expense category is still referenced by other records.")
-        return ConflictError("The request conflicts with the current state of the database.")
+        return ConflictError(GENERIC_CONFLICT_MESSAGE)
 
 
 # --- ledger ------------------------------------------------------------------------------------
@@ -430,7 +497,7 @@ class RevenueService:
             return ConflictError("The revenue entry refers to a record that does not exist here.")
         if state == SQLSTATE_UNIQUE_VIOLATION:
             return ConflictError("That value is already taken by another revenue entry.")
-        return ConflictError("The request conflicts with the current state of the database.")
+        return ConflictError(GENERIC_CONFLICT_MESSAGE)
 
 
 class ExpenseService:
@@ -535,7 +602,7 @@ class ExpenseService:
             return ConflictError("The expense refers to a record that does not exist here.")
         if state == SQLSTATE_NOT_NULL_VIOLATION:
             return ConflictError("A required value was missing from the expense.")
-        return ConflictError("The request conflicts with the current state of the database.")
+        return ConflictError(GENERIC_CONFLICT_MESSAGE)
 
 
 __all__ = [

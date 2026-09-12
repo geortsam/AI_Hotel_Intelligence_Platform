@@ -4,12 +4,20 @@ Payments are **append-only**: this service posts charges and refunds and reads t
 has no update or delete method, and neither does the repository. A financial record is not
 edited; a mistake is corrected by posting a reversal.
 
-**What this service deliberately does NOT do**, because the frozen schema does not say it and
-inventing financial rules was out of scope:
+**Refund integrity (Stage 4.5.8).** Three rules the schema cannot express are enforced here,
+in ``_require_refundable``, with the parent payment row locked:
 
-* It does not cap a refund at the charge's amount. The schema constrains only ``amount > 0``;
-  nothing prevents refunding more than was taken. Reported as a finding, not silently fixed.
-* It does not forbid refunding a refund. ``refunded_payment_id`` accepts any payment row.
+* a refund never exceeds what is still refundable on its parent, computed from committed
+  database state as ``parent.amount - already_refunded``;
+* a refund cannot reverse another refund, so no refund chain can mint fresh balance;
+* a refund settles in the parent's currency.
+
+None of these can be a constraint: the cap spans rows, and PostgreSQL CHECK constraints see
+one row at a time. The earlier stages recorded all three as findings precisely because the
+brief then forbade inventing financial rules; this stage was authorised to close them.
+
+**What this service still deliberately does NOT do:**
+
 * It does not post to the ``revenue`` ledger. That is a separate domain and a later stage.
 * It does not reconcile against ``bookings.total_amount``.
 
@@ -29,20 +37,31 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import (
+    GENERIC_CONFLICT_MESSAGE,
     SQLSTATE_CHECK_VIOLATION,
     SQLSTATE_DEPENDENCY_VIOLATIONS,
     SQLSTATE_UNIQUE_VIOLATION,
     ConflictError,
     NotFoundError,
+    constraint_name_of,
+    internal_fault,
+    is_audit_integrity_failure,
     sqlstate_of,
 )
 from app.models.booking import Booking
+from app.models.enums import (
+    VOIDED_PAYMENT_STATUSES,
+    AuditAction,
+    AuditResourceType,
+    PaymentKind,
+)
 from app.models.hotel import Hotel
 from app.models.payment import Payment
 from app.repositories.booking import BookingRepository
 from app.repositories.payment import PaymentRepository
 from app.schemas.common import Page
 from app.schemas.payment import ChargeCreate, PaymentResponse, RefundCreate
+from app.services.audit import AuditTrail
 from app.services.scope import HotelScopeResolver
 
 logger = logging.getLogger(__name__)
@@ -56,13 +75,6 @@ DEFAULT_PAGE_SIZE = 20
 IDEMPOTENCY_CONSTRAINT = "uq_payments_provider_transaction_reference"
 
 
-def _constraint_name(exc: IntegrityError) -> str | None:
-    """The violated constraint's NAME from driver diagnostics, never its message."""
-    diag = getattr(getattr(exc, "orig", None), "diag", None)
-    name = getattr(diag, "constraint_name", None)
-    return str(name) if name else None
-
-
 class PaymentService:
     """Domain operations on payments, always within one booking at one hotel."""
 
@@ -72,11 +84,14 @@ class PaymentService:
         repository: PaymentRepository,
         bookings: BookingRepository,
         scope: HotelScopeResolver,
+        audit: AuditTrail,
     ) -> None:
         self._session = session
         self._repository = repository
         self._bookings = bookings
         self._scope = scope
+        # Stage 4.5.12. Required, so no path exists that moves money without recording it.
+        self._audit = audit
 
     # --- reads --------------------------------------------------------------------------
 
@@ -134,7 +149,7 @@ class PaymentService:
             refunded_payment_id=None,
             **payload.model_dump(),
         )
-        return self._persist(payment, hotel, booking)
+        return self._persist(payment, hotel, booking, AuditAction.PAYMENT_CREATED)
 
     def create_refund(
         self,
@@ -156,6 +171,12 @@ class PaymentService:
             # also what stops this endpoint being used to probe for one.
             raise NotFoundError("The payment being refunded was not found on this booking.")
 
+        # LOCK FIRST, then read everything the decision rests on. Reversing these two lines
+        # reintroduces the race this stage exists to close: the balance would be a snapshot
+        # taken before anyone contended on the row.
+        parent = self._repository.lock_for_refund(parent.id)
+        self._require_refundable(parent, payload)
+
         fields = payload.model_dump(exclude={"refunds_public_id"})
         payment = Payment(
             booking_id=booking.id,
@@ -164,14 +185,102 @@ class PaymentService:
             refunded_payment_id=parent.id,
             **fields,
         )
-        return self._persist(payment, hotel, booking)
+        return self._persist(
+            payment,
+            hotel,
+            booking,
+            AuditAction.PAYMENT_REFUND_CREATED,
+            reverses=parent.public_id,
+        )
 
     # --- internals ----------------------------------------------------------------------
 
-    def _persist(self, payment: Payment, hotel: Hotel, booking: Booking) -> PaymentResponse:
-        """Write one posting and commit, translating any integrity failure."""
+    def _require_refundable(self, parent: Payment, payload: RefundCreate) -> None:
+        """Refuse a refund the parent payment cannot support.
+
+        Called with the parent row LOCKED, so every value read here is committed state that no
+        other transaction can change until this one ends. Everything the decision uses comes
+        from the database; nothing about the balance is taken from the request.
+
+        Three refusals, in the order that gives the clearest answer:
+
+        1. **Refund of a refund.** ``refunded_payment_id`` references ``payments(id)`` -- any
+           row, including another refund -- and the CHECK named ``..._references_charge`` only
+           tests for non-null. Refund chains would make the cap meaningless, because each
+           reversal would carry its own fresh balance.
+        2. **Currency.** A refund settles in the currency the charge was taken in. Comparing
+           against the parent rather than the request is the point; there is no conversion
+           here and this stage introduces none.
+        3. **The cap.** ``refundable = parent.amount - already_refunded``, both read from the
+           database under the lock. A charge that never moved money refunds nothing.
+        """
+        if parent.kind == PaymentKind.REFUND.value:
+            raise ConflictError("A refund cannot be issued against another refund.")
+
+        if payload.currency != parent.currency:
+            raise ConflictError(
+                f"A refund must be in the same currency as the payment it reverses "
+                f"({parent.currency})."
+            )
+
+        if parent.status in VOIDED_PAYMENT_STATUSES:
+            raise ConflictError(
+                f"This payment is {parent.status} and moved no money, so nothing can be "
+                "refunded against it."
+            )
+
+        already_refunded = self._repository.refunded_total(parent.id)
+        remaining = parent.amount - already_refunded
+        if payload.amount > remaining:
+            raise ConflictError(
+                f"This refund exceeds the amount still refundable on the payment "
+                f"({remaining} {parent.currency} of {parent.amount} remaining)."
+            )
+
+    def _persist(
+        self,
+        payment: Payment,
+        hotel: Hotel,
+        booking: Booking,
+        action: AuditAction,
+        *,
+        reverses: uuid.UUID | None = None,
+    ) -> PaymentResponse:
+        """Write one posting, record it, and commit -- in one transaction.
+
+        The audit row is staged after the payment so it can name the server-assigned
+        ``public_id``, and before the commit so the two are decided together. A posting the
+        idempotency index refuses therefore leaves no event behind; a refund the cap refuses
+        never reaches here at all, because `_require_refundable` raises before anything is
+        written.
+
+        **What the event records is business metadata and nothing else**: the kind of
+        operation, the amount as a decimal STRING (never a float, so the audited figure is the
+        figure that was posted), the currency, the method, and the booking it settles. What it
+        deliberately omits is everything a payment row carries that an audit trail has no
+        business duplicating -- ``card_last_four``, ``provider`` and ``transaction_reference``.
+        The last two are the processor's own identifiers, and this table is read by more people
+        than the ledger is.
+        """
+        details: dict[str, object] = {
+            "amount": str(payment.amount),
+            "currency": payment.currency,
+            "method": payment.method,
+            "status": payment.status,
+            "booking_public_id": str(booking.public_id),
+        }
+        if reverses is not None:
+            details["refunds_public_id"] = str(reverses)
+
         try:
             created = self._repository.add(payment)
+            self._audit.record(
+                action,
+                AuditResourceType.PAYMENT,
+                str(created.public_id),
+                hotel_id=hotel.id,
+                details=details,
+            )
             self._session.commit()
         except IntegrityError as exc:
             self._session.rollback()
@@ -236,8 +345,15 @@ class PaymentService:
         reference and the card fragment. The SQLSTATE and constraint name decide what to say.
         """
         state = sqlstate_of(exc)
-        constraint = _constraint_name(exc)
+        constraint = constraint_name_of(exc)
         logger.warning("Payment integrity error (sqlstate=%s, constraint=%s)", state, constraint)
+
+        if is_audit_integrity_failure(exc):
+            # Stage 4.5.16. The audit layer failed, not this domain -- so nothing below may
+            # claim it. Before this guard, a booking deletion whose audit INSERT failed told
+            # the client that payments still referenced the booking, which was false and
+            # unactionable.
+            return internal_fault(exc)
 
         if state == SQLSTATE_UNIQUE_VIOLATION:
             if constraint == IDEMPOTENCY_CONSTRAINT:
@@ -250,7 +366,7 @@ class PaymentService:
             return ConflictError("The supplied values violate a payment constraint.")
         if state in SQLSTATE_DEPENDENCY_VIOLATIONS:
             return ConflictError("This payment is still referenced by other records.")
-        return ConflictError("The request conflicts with the current state of the database.")
+        return ConflictError(GENERIC_CONFLICT_MESSAGE)
 
 
 __all__ = ["DEFAULT_PAGE_SIZE", "IDEMPOTENCY_CONSTRAINT", "MAX_PAGE_SIZE", "PaymentService"]

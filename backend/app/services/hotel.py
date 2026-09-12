@@ -20,6 +20,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import (
+    GENERIC_CONFLICT_MESSAGE,
     SQLSTATE_CHECK_VIOLATION,
     SQLSTATE_DEPENDENCY_VIOLATIONS,
     SQLSTATE_UNIQUE_VIOLATION,
@@ -214,7 +215,7 @@ class HotelService:
             return ConflictError("The supplied values violate a hotel constraint.")
         if state in SQLSTATE_DEPENDENCY_VIOLATIONS:
             return ConflictError("This hotel is still referenced by other records.")
-        return ConflictError("The request conflicts with the current state of the database.")
+        return ConflictError(GENERIC_CONFLICT_MESSAGE)
 
 
 __all__ = ["DEFAULT_PAGE_SIZE", "MAX_PAGE_SIZE", "HotelService"]

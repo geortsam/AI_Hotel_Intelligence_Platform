@@ -1,0 +1,36 @@
+.card {
+  /* Roughly the height the KPI grid and chart would have occupied, so replacing them with
+   * a message does not collapse the page and shove the footer upwards. */
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+  padding: var(--space-6) var(--space-4);
+  max-width: 46ch;
+}
+
+.icon {
+  color: var(--color-text-subtle);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.detail {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+}

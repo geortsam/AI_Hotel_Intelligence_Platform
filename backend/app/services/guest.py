@@ -29,12 +29,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import (
+    GENERIC_CONFLICT_MESSAGE,
     SQLSTATE_CHECK_VIOLATION,
     SQLSTATE_DEPENDENCY_VIOLATIONS,
     SQLSTATE_NOT_NULL_VIOLATION,
     SQLSTATE_UNIQUE_VIOLATION,
     ConflictError,
     NotFoundError,
+    constraint_name_of,
     sqlstate_of,
 )
 from app.models.guest import Guest
@@ -52,17 +54,6 @@ DEFAULT_PAGE_SIZE = 20
 #: The partial unique index on (hotel_id, email). Named so a conflict can be reported
 #: precisely without quoting the offending address.
 EMAIL_UNIQUE_CONSTRAINT = "uq_guests_hotel_id_email"
-
-
-def _constraint_name(exc: IntegrityError) -> str | None:
-    """The violated constraint's NAME, taken from the driver diagnostics.
-
-    Deliberately not the message: ``str(exc)`` carries the offending values, which for this
-    table are personal data. The name alone is enough to decide what to tell the client.
-    """
-    diag = getattr(getattr(exc, "orig", None), "diag", None)
-    name = getattr(diag, "constraint_name", None)
-    return str(name) if name else None
 
 
 class GuestService:
@@ -216,7 +207,7 @@ class GuestService:
         values, and for this table those are a real person's details.
         """
         state = sqlstate_of(exc)
-        constraint = _constraint_name(exc)
+        constraint = constraint_name_of(exc)
         logger.warning("Guest integrity error (sqlstate=%s, constraint=%s)", state, constraint)
 
         if state == SQLSTATE_UNIQUE_VIOLATION:
@@ -229,7 +220,7 @@ class GuestService:
             return ConflictError("The supplied values violate a guest constraint.")
         if state in SQLSTATE_DEPENDENCY_VIOLATIONS:
             return ConflictError("This guest is still referenced by other records.")
-        return ConflictError("The request conflicts with the current state of the database.")
+        return ConflictError(GENERIC_CONFLICT_MESSAGE)
 
 
 __all__ = ["DEFAULT_PAGE_SIZE", "EMAIL_UNIQUE_CONSTRAINT", "MAX_PAGE_SIZE", "GuestService"]

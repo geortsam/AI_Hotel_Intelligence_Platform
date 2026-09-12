@@ -138,6 +138,14 @@ def make_booking(
 ) -> str:
     nights = [check_in + dt.timedelta(days=n) for n in range((check_out - check_in).days)]
     total = Decimal(rate) * len(nights) * len(room_numbers)
+    # Stage 4.5.23: the server prices the nights, so a test that wants a particular rate
+    # configures it rather than sending it. Bookings already made keep the rate they were
+    # created at -- the snapshot property -- so several rates can still coexist here.
+    configured = api.patch(
+        f"/api/v1/hotels/{hotel}/room-types/DLX",
+        json={"base_price": rate, "currency": currency},
+    )
+    assert configured.status_code == 200, configured.text
     response = api.post(
         f"/api/v1/hotels/{hotel}/bookings",
         json={
@@ -154,7 +162,6 @@ def make_booking(
                     "nights": [
                         {
                             "stay_date": str(night),
-                            "rate": rate,
                             "is_complimentary": complimentary,
                         }
                         for night in nights
@@ -554,6 +561,10 @@ def test_adr_comes_from_the_night_rate_not_the_booking_total(
     """bookings.total_amount is a header figure a client supplies; the night rate is the
     per-night truth, and only it may drive ADR."""
     guest = make_guest(api, occupancy_hotel)
+    api.patch(
+        f"/api/v1/hotels/{occupancy_hotel}/room-types/DLX",
+        json={"base_price": "100.00"},
+    )
     api.post(
         f"/api/v1/hotels/{occupancy_hotel}/bookings",
         json={
@@ -569,8 +580,8 @@ def test_adr_comes_from_the_night_rate_not_the_booking_total(
                 {
                     "room_number": "101",
                     "nights": [
-                        {"stay_date": "2026-09-01", "rate": "80.00"},
-                        {"stay_date": "2026-09-02", "rate": "120.00"},
+                        {"stay_date": "2026-09-01"},
+                        {"stay_date": "2026-09-02"},
                     ],
                 }
             ],
@@ -579,15 +590,24 @@ def test_adr_comes_from_the_night_rate_not_the_booking_total(
 
     body = api.get(analytics(occupancy_hotel, "overview"), params=RANGE).json()
 
-    assert body["room_revenue"][0]["room_revenue"] == "200.00"  # 80 + 120, not 99999
+    assert body["room_revenue"][0]["room_revenue"] == "200.00"  # 2 x 100, not 99999
     assert body["room_revenue"][0]["adr"] == "100.00"
 
 
 def test_adr_ignores_the_room_types_list_price(api: TestClient, occupancy_hotel: str) -> None:
-    """room_types.base_price is 120.00; the nights are booked at 70.00 and that is what
-    counts. No pricing is invented."""
+    """ADR reads the night rows, not the rate card.
+
+    Since Stage 4.5.23 a night is priced FROM the list price, so the two agree at the
+    moment of booking and the old form of this test could no longer tell them apart. The
+    list price is therefore moved afterwards: ADR must still report what was contracted,
+    not what the room type costs today.
+    """
     guest = make_guest(api, occupancy_hotel)
     make_booking(api, occupancy_hotel, guest, room_numbers=["101"], rate="70.00")
+    api.patch(
+        f"/api/v1/hotels/{occupancy_hotel}/room-types/DLX",
+        json={"base_price": "555.00"},
+    )
 
     body = api.get(analytics(occupancy_hotel, "overview"), params=RANGE).json()
 

@@ -1,0 +1,327 @@
+/*
+ * The room-type list: a table above 768px, cards below.
+ *
+ * The scroll container is the rule the layout is checked against: a table wider than its
+ * column scrolls INSIDE this box and the page never scrolls sideways. Below 768px the page
+ * renders cards instead (the cards below), so this never has to survive a phone.
+ */
+
+.scroll {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  /* Below this the columns crush rather than scroll, and the scroll container takes over. */
+  min-width: 960px;
+}
+
+/* Available to assistive technology, absent from the visual design: the table's own heading
+ * is the section header above it, and repeating it would be visual noise. */
+.caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: top;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tbody tr:hover {
+  background: var(--color-surface-hover);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* An em dash standing in for a field the server sent as null. Muted so it reads as "not
+ * recorded" rather than as a value. */
+.absent {
+  color: var(--color-text-muted);
+}
+
+.link {
+  color: var(--color-primary);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.link:hover,
+.link:focus-visible {
+  text-decoration: underline;
+}
+
+/* The code is the row header: it is the type's identity, and announcing it with every cell
+ * is what makes a wide row readable to a screen reader. */
+.codeCell {
+  font-weight: var(--weight-normal);
+  white-space: nowrap;
+}
+
+.nameCell {
+  max-width: 22rem;
+  overflow-wrap: anywhere;
+}
+
+/* The description sits under the name rather than in its own column: it is prose, and a
+ * column of paragraphs makes every other column unreadable. */
+.rowDescription {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+}
+
+/* Visually hidden, present for assistive technology: the actions column has no visible
+ * heading because the buttons name themselves, but the column still needs one. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* A floor is a small integer, right-aligned so a column of them lines up. */
+.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The code, shown as the code it is. */
+.code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  white-space: nowrap;
+}
+
+.timestamp {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* --- the card layout, below 768px --------------------------------------------------------- */
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.cardHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.cardTitle {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+/* `display: contents` so each pair's dt/dd land in the grid's own columns. */
+.field {
+  display: contents;
+}
+
+.fieldLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.fieldValue {
+  margin: 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.description {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: var(--leading-relaxed);
+  overflow-wrap: anywhere;
+}
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rowActions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.icon {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+.title {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+}
+
+.explanation {
+  margin: 0 0 var(--space-3);
+  max-width: 72ch;
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.type {
+  font-family: var(--font-mono);
+}
+
+.metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.metricName {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.metricValue {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}

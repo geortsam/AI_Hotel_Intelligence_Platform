@@ -27,13 +27,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import (
+    GENERIC_CONFLICT_MESSAGE,
     SQLSTATE_CHECK_VIOLATION,
     SQLSTATE_UNIQUE_VIOLATION,
     ConflictError,
     NotFoundError,
+    internal_fault,
+    is_audit_integrity_failure,
     sqlstate_of,
 )
-from app.models.enums import HotelRole
+from app.models.enums import AuditAction, AuditResourceType, HotelRole
 from app.models.hotel import Hotel
 from app.models.membership import UserHotel
 from app.models.user import User
@@ -41,6 +44,7 @@ from app.repositories.membership import MembershipRepository
 from app.repositories.user import UserRepository
 from app.schemas.common import Page
 from app.schemas.membership import MemberCreate, MemberResponse, MemberUpdate
+from app.services.audit import AuditTrail
 from app.services.authorization import MembershipPolicy
 from app.services.scope import HotelScopeResolver
 
@@ -72,11 +76,15 @@ class MembershipService:
         memberships: MembershipRepository,
         users: UserRepository,
         scope: HotelScopeResolver,
+        audit: AuditTrail,
     ) -> None:
         self._session = session
         self._memberships = memberships
         self._users = users
         self._scope = scope
+        # Stage 4.5.12. Required: who may reach a property is the change most worth a record,
+        # and a service that could be built without one could grant access silently.
+        self._audit = audit
 
     # --- reads ----------------------------------------------------------------------------
 
@@ -119,6 +127,17 @@ class MembershipService:
         membership = UserHotel(user_id=user.id, hotel_id=hotel.id, role=payload.role.value)
         try:
             created = self._memberships.add(membership)
+            # The membership is named by the ACCOUNT's public id, which is how the URL for
+            # changing or removing it is formed. The email is not recorded: an audit row is
+            # read by more people than the member listing is, and the public id already
+            # identifies the person unambiguously to anyone entitled to resolve it.
+            self._audit.record(
+                AuditAction.MEMBERSHIP_CREATED,
+                AuditResourceType.MEMBERSHIP,
+                str(user.public_id),
+                hotel_id=hotel.id,
+                details={"role": payload.role.value},
+            )
             self._session.commit()
         except IntegrityError as exc:
             self._session.rollback()
@@ -147,6 +166,17 @@ class MembershipService:
 
         try:
             updated = self._memberships.set_role(membership, payload.role)
+            if current is not payload.role:
+                # Only a real change. Reasserting the role somebody already holds changes
+                # nothing, and "manager -> manager" in the history would be noise that makes
+                # the rows that matter harder to find.
+                self._audit.record(
+                    AuditAction.MEMBERSHIP_ROLE_CHANGED,
+                    AuditResourceType.MEMBERSHIP,
+                    str(user.public_id),
+                    hotel_id=hotel.id,
+                    details={"old_role": current.value, "new_role": payload.role.value},
+                )
             self._session.commit()
         except IntegrityError as exc:
             self._session.rollback()
@@ -161,7 +191,8 @@ class MembershipService:
         that "no longer has access" has exactly one representation.
         """
         hotel = self._scope.require_hotel_with_role(hotel_public_id, HotelRole.OWNER)
-        _, membership = self._require_member(hotel, user_public_id)
+        user, membership = self._require_member(hotel, user_public_id)
+        removed_role = membership.role
 
         MembershipPolicy.check_removal(
             target_is_owner=HotelRole(membership.role) is HotelRole.OWNER,
@@ -170,6 +201,16 @@ class MembershipService:
 
         try:
             self._memberships.delete(membership)
+            # `removed_role` was read before the delete, because afterwards there is no row
+            # to read it from -- revoking access here means deleting the membership, not
+            # flagging it.
+            self._audit.record(
+                AuditAction.MEMBERSHIP_REMOVED,
+                AuditResourceType.MEMBERSHIP,
+                str(user.public_id),
+                hotel_id=hotel.id,
+                details={"role": removed_role},
+            )
             self._session.commit()
         except IntegrityError as exc:
             self._session.rollback()
@@ -222,11 +263,18 @@ class MembershipService:
         """
         state = sqlstate_of(exc)
         logger.warning("Membership write rejected by the database (SQLSTATE %s)", state)
+
+        if is_audit_integrity_failure(exc):
+            # Stage 4.5.16. The audit layer failed, not this domain -- so nothing below may
+            # claim it. Before this guard, a booking deletion whose audit INSERT failed told
+            # the client that payments still referenced the booking, which was false and
+            # unactionable.
+            return internal_fault(exc)
         if state == SQLSTATE_UNIQUE_VIOLATION:
             return ConflictError("That user is already a member of this hotel.")
         if state == SQLSTATE_CHECK_VIOLATION:
             return ConflictError("The supplied values violate a membership constraint.")
-        return ConflictError("The request conflicts with the current state of the database.")
+        return ConflictError(GENERIC_CONFLICT_MESSAGE)
 
 
 __all__ = [

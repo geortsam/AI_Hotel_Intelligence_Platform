@@ -1,0 +1,30 @@
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-10) var(--space-4);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  color: var(--color-text-subtle);
+  margin-bottom: var(--space-4);
+}
+
+.headline {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+
+.detail {
+  margin-top: var(--space-2);
+  max-width: 46ch;
+  color: var(--color-text-muted);
+}

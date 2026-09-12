@@ -23,7 +23,6 @@ from collections.abc import Iterator
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
 
 import pytest
 import sqlalchemy as sa
@@ -40,6 +39,15 @@ from app.models import (
     Room,
     RoomType,
 )
+from tests.db_safety import (
+    DANGEROUS_HOST_TOKENS,
+    REQUIRED_DB_SUFFIX,
+    UnsafeTestDatabaseError,
+    assert_safe_destructive_target,
+    assert_safe_test_database_url,
+    database_name_from_url,
+    redact_url,
+)
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -49,138 +57,31 @@ TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 #
 # This suite is destructive by design: it runs `alembic downgrade base` (DROP TABLE on
 # every table) once per session, and TRUNCATE ... RESTART IDENTITY CASCADE after every
-# single test. TEST_DATABASE_URL is supplied by hand, so a single typo -- pointing at
-# `hotel_intelligence` rather than `hotel_test` -- would silently destroy real data.
+# single test.
 #
-# The guard below refuses to proceed unless the target database NAME clearly identifies a
-# throwaway database. It runs before the first destructive statement, and it is a pure
-# function so it can be unit-tested without a database.
+# The guard itself lives in `tests/db_safety.py` -- one authoritative implementation, shared
+# by this conftest and by the guard tests, rather than a copy per caller. It applies two
+# independent signals: the URL's shape and name, and then the target's actual contents.
+# Stage 5.17 added the second because the first cannot be sufficient here -- CI's ephemeral
+# container database and the seeded demo database have the same name.
+#
+# The names below are re-exported because `tests/backend/test_integration_safety_guard.py`
+# has always imported them from this module.
 # ======================================================================================
 
-
-class UnsafeTestDatabaseError(RuntimeError):
-    """``TEST_DATABASE_URL`` does not clearly identify a throwaway test database."""
-
-
-#: Mandatory rule: the database name must end with this.
-REQUIRED_DB_SUFFIX = "_test"
-
-#: Secondary heuristic. Deliberately small -- the database-name rule is the real guard,
-#: and a long blocklist would give false confidence without adding much.
-DANGEROUS_HOST_TOKENS = ("prod", "production", "live")
-
-
-def redact_url(url: str) -> str:
-    """Return *url* with the password replaced by ``***``.
-
-    Every message this module emits passes through here. A connection string reaches error
-    output, logs and CI transcripts, and none of those should ever carry the password.
-    """
-    # urlsplit() does not validate on construction: `.port` and `.password` parse lazily and
-    # raise ValueError on ACCESS. Every one of them must therefore be read inside the try --
-    # this function is called from error paths, so it must never raise there itself.
-    try:
-        parts = urlsplit(url)
-        password = parts.password
-        host = parts.hostname or ""
-        port = parts.port
-        username = parts.username or ""
-    except ValueError:
-        return "<unparseable URL>"
-
-    if not password:
-        return url
-
-    netloc = f"{host}:{port}" if port else host
-    return urlunsplit(
-        (parts.scheme, f"{username}:***@{netloc}", parts.path, parts.query, parts.fragment)
-    )
-
-
-def database_name_from_url(url: str) -> str:
-    """Extract the database name, raising :class:`UnsafeTestDatabaseError` if it cannot be.
-
-    A URL we cannot parse is treated as unsafe rather than given the benefit of the doubt:
-    if we do not know what we are about to drop, we do not drop it.
-    """
-    if not url or not url.strip():
-        raise UnsafeTestDatabaseError(
-            "TEST_DATABASE_URL is empty.\n"
-            f"  required : a PostgreSQL URL whose database name ends with {REQUIRED_DB_SUFFIX!r}\n"
-            "  example  : postgresql+psycopg://user:PASSWORD@localhost:5432/hotel_test"
-        )
-
-    try:
-        parts = urlsplit(url)
-        _ = parts.port  # invalid ports only raise on access
-    except ValueError as exc:
-        raise UnsafeTestDatabaseError(
-            f"TEST_DATABASE_URL could not be parsed ({exc}).\n"
-            f"  target   : {redact_url(url)}\n"
-            "  example  : postgresql+psycopg://user:PASSWORD@localhost:5432/hotel_test"
-        ) from exc
-
-    # A bare `localhost:5432/db` parses with "localhost" AS THE SCHEME, so checking merely
-    # that a scheme exists would wave it through. Requiring a postgres driver prefix rejects
-    # that, and also stops a sqlite:// URL being handed to this suite by accident.
-    if not parts.scheme.lower().startswith("postgres"):
-        raise UnsafeTestDatabaseError(
-            "TEST_DATABASE_URL is not a PostgreSQL URL.\n"
-            f"  detected scheme : {parts.scheme!r}\n"
-            f"  target          : {redact_url(url)}\n"
-            "  required        : a postgresql:// or postgresql+psycopg:// URL\n"
-            "  example         : postgresql+psycopg://user:PASSWORD@localhost:5432/hotel_test"
-        )
-
-    name = parts.path.lstrip("/")
-    if not name or "/" in name:
-        raise UnsafeTestDatabaseError(
-            "TEST_DATABASE_URL names no database (or names more than one).\n"
-            f"  target   : {redact_url(url)}\n"
-            f"  required : a database name ending with {REQUIRED_DB_SUFFIX!r}\n"
-            "  example  : postgresql+psycopg://user:PASSWORD@localhost:5432/hotel_test"
-        )
-    return name
-
-
-def assert_safe_test_database_url(url: str) -> str:
-    """Return the database name, or refuse to let the suite run.
-
-    Called before any Alembic downgrade/upgrade and before any TRUNCATE.
-    """
-    name = database_name_from_url(url)
-
-    if not name.lower().endswith(REQUIRED_DB_SUFFIX):
-        raise UnsafeTestDatabaseError(
-            "TEST_DATABASE_URL is UNSAFE -- the integration suite refuses to run.\n"
-            f"  detected database : {name!r}\n"
-            f"  target            : {redact_url(url)}\n"
-            f"  required          : the database name must end with {REQUIRED_DB_SUFFIX!r}\n"
-            "  example           : "
-            "postgresql+psycopg://user:PASSWORD@localhost:5432/hotel_test\n"
-            "\n"
-            "This suite runs `alembic downgrade base` (DROP TABLE on every table) and\n"
-            "TRUNCATE ... RESTART IDENTITY CASCADE after every test. Pointing it at a\n"
-            "database that is not a throwaway would destroy it."
-        )
-
-    host = (urlsplit(url).hostname or "").lower()
-    dangerous = [token for token in DANGEROUS_HOST_TOKENS if token in host]
-    if dangerous:
-        raise UnsafeTestDatabaseError(
-            "TEST_DATABASE_URL is UNSAFE -- the host looks like real infrastructure.\n"
-            f"  detected database : {name!r}\n"
-            f"  detected host     : {host!r} (contains {dangerous[0]!r})\n"
-            f"  target            : {redact_url(url)}\n"
-            "  required          : run this suite against a local or disposable server\n"
-            "  example           : "
-            "postgresql+psycopg://user:PASSWORD@localhost:5432/hotel_test\n"
-            "\n"
-            "The database name passed the naming rule, but the host did not. If this host\n"
-            "really is disposable, rename it or adjust DANGEROUS_HOST_TOKENS deliberately."
-        )
-
-    return name
+#: Re-exported for `tests/backend/test_integration_safety_guard.py`, which has imported
+#: these from this module since Stage 2C. Listing them here says they are deliberate public
+#: names rather than leftovers.
+__all__ = [
+    "DANGEROUS_HOST_TOKENS",
+    "REQUIRED_DB_SUFFIX",
+    "UnsafeTestDatabaseError",
+    "assert_safe_destructive_target",
+    "assert_safe_test_database_url",
+    "database_name_from_url",
+    "redact_url",
+    "requires_postgres",
+]
 
 
 #: Applied as ``pytestmark`` by each test module. A marker defined in a conftest does NOT
@@ -205,10 +106,11 @@ def engine() -> Iterator[Engine]:
     if not TEST_DATABASE_URL:  # pragma: no cover - belt and braces alongside the marker
         pytest.skip("TEST_DATABASE_URL is not set")
 
-    # FIRST statement that touches the target, and it touches nothing: the guard is pure
-    # string analysis. Nothing below this line may run against a database whose name does
-    # not identify it as disposable.
-    assert_safe_test_database_url(TEST_DATABASE_URL)
+    # FIRST thing that happens, and nothing destructive is in it: the URL is analysed as a
+    # string, and then the target is READ -- three SELECTs -- to confirm it holds nothing
+    # worth keeping. Both must pass. Nothing below this line may run against a database that
+    # has not cleared both signals.
+    assert_safe_destructive_target(TEST_DATABASE_URL)
 
     from alembic import command
     from alembic.config import Config
@@ -244,6 +146,17 @@ def session(engine: Engine) -> Iterator[Session]:
                 "TRUNCATE booking_room_nights, booking_rooms, payments, reviews, revenue, "
                 "expenses, daily_hotel_metrics, bookings, guests, rooms, room_types, "
                 "room_type_amenities, amenities, revenue_categories, expense_categories, "
+                # Stage 4.5.12. audit_events is append-only -- migration 0007 installs a
+                # trigger that refuses UPDATE and DELETE on it. TRUNCATE is neither: it fires
+                # only statement-level TRUNCATE triggers, of which the table has none. So the
+                # suite can still start each test from empty without the immutability
+                # guarantee having a hole in it. It is named explicitly rather than left to
+                # CASCADE, like the three identity tables below and for the same reason.
+                # Stage 4.5.14. The archive is append-only too, and TRUNCATE is likewise
+                # neither an UPDATE nor a DELETE. Listed before audit_events for readability
+                # only -- TRUNCATE takes them in one statement and has no FK between them to
+                # order around, deliberately (see migration 0008).
+                "audit_events_archive, audit_events, "
                 # users, user_hotels and platform_admins (Stages 4.1/4.2/4.3) are listed
                 # explicitly: users has no foreign key to hotels, so the CASCADE from
                 # `hotels` does not reach it, and naming all three keeps the order

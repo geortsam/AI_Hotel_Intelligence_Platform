@@ -28,9 +28,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.errors import (
+    GENERIC_CONFLICT_MESSAGE,
     AuthenticationError,
     ConflictError,
     InvalidTokenError,
+    constraint_name_of,
+    internal_fault,
+    is_audit_integrity_failure,
     sqlstate_of,
 )
 from app.core.security import (
@@ -41,6 +45,7 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.models.enums import AuditAction, AuditResourceType
 from app.models.user import User
 from app.repositories.user import UserRepository
 from app.schemas.auth import (
@@ -49,6 +54,7 @@ from app.schemas.auth import (
     TokenResponse,
     UserResponse,
 )
+from app.services.audit import AuditTrail
 
 logger = logging.getLogger(__name__)
 
@@ -62,23 +68,23 @@ _DUMMY_HASH = hash_password(uuid.uuid4().hex + uuid.uuid4().hex)
 EMAIL_UNIQUE_CONSTRAINT = "uq_users_email"
 
 
-def _constraint_name(exc: IntegrityError) -> str | None:
-    """The violated constraint's NAME from driver diagnostics, never its message.
-
-    The message renders the offending row -- which for this table means the email address.
-    """
-    diag = getattr(getattr(exc, "orig", None), "diag", None)
-    name = getattr(diag, "constraint_name", None)
-    return str(name) if name else None
-
-
 class AuthService:
     """Registration, sign-in and token-subject resolution."""
 
-    def __init__(self, session: Session, repository: UserRepository, settings: Settings) -> None:
+    def __init__(
+        self,
+        session: Session,
+        repository: UserRepository,
+        settings: Settings,
+        audit: AuditTrail,
+    ) -> None:
         self._session = session
         self._repository = repository
         self._settings = settings
+        # Stage 4.5.12. Handed in WITHOUT an actor: this service is what resolves a token, so
+        # the authenticated user cannot also be one of its dependencies. `change_password`
+        # binds the caller it was given; see `AuditTrail.for_actor`.
+        self._audit = audit
 
     # --- registration -------------------------------------------------------------------
 
@@ -178,6 +184,17 @@ class AuthService:
         digest = hash_password(payload.new_password)
         try:
             self._repository.set_password(user, digest, dt.datetime.now(dt.UTC))
+            # Stage 4.5.12. The event carries no hotel: a password belongs to the ACCOUNT,
+            # and a user may belong to no property or to several -- attributing the change to
+            # one of them would be an invention. It carries no details at all, either. There
+            # is nothing safe to say about a password change beyond that it happened, and
+            # every field a reader might want here (old digest, new digest, strength, length)
+            # is a fact about a credential that must not be written down.
+            self._audit.for_actor(user).record(
+                AuditAction.AUTH_PASSWORD_CHANGED,
+                AuditResourceType.USER,
+                str(user.public_id),
+            )
             self._session.commit()
         except IntegrityError as exc:
             self._session.rollback()
@@ -279,15 +296,22 @@ class AuthService:
         all that is recorded, and neither reaches the client.
         """
         state = sqlstate_of(exc)
-        constraint = _constraint_name(exc)
+        constraint = constraint_name_of(exc)
         logger.warning("User integrity error (sqlstate=%s, constraint=%s)", state, constraint)
+
+        if is_audit_integrity_failure(exc):
+            # Stage 4.5.16. The audit layer failed, not this domain -- so nothing below may
+            # claim it. Before this guard, a booking deletion whose audit INSERT failed told
+            # the client that payments still referenced the booking, which was false and
+            # unactionable.
+            return internal_fault(exc)
 
         if constraint == EMAIL_UNIQUE_CONSTRAINT:
             # The address is not quoted back. A registration form can say "this address is
             # already registered" because the person typing it already knows it; the API
             # says the same without repeating the value into logs or proxies.
             return ConflictError("An account with this email address already exists.")
-        return ConflictError("The request conflicts with the current state of the database.")
+        return ConflictError(GENERIC_CONFLICT_MESSAGE)
 
 
 __all__ = ["EMAIL_UNIQUE_CONSTRAINT", "AuthService"]

@@ -373,6 +373,13 @@ def test_every_domain_collection_is_hotel_scoped_or_a_declared_global() -> None:
         "/api/v1/expense-categories/{code}",
     }
     infrastructure = {"/api/v1/", "/health", "/health/db", "/api/v1/hotels"}
+    # Stage 4.5.13. Audit events that belong to no property: `audit_events.hotel_id` is NULL
+    # for them, so there is no hotel segment to put them under and inventing one would be the
+    # falsehood the nullable column exists to avoid. Reached by the platform grant alone --
+    # `test_no_hotel_scoped_route_requires_platform_authority` in the authorization surface
+    # keeps the converse true, so this exemption cannot be used to smuggle a tenant route out
+    # of the hierarchy.
+    platform = {"/api/v1/platform/audit-events"}
     # Authentication (Stage 4.1). A user is not owned by a property -- `users` has no
     # hotel_id and no foreign key at all -- so identity cannot sit under the hotel
     # hierarchy. Which hotels a user may reach is Stage 4.2's question.
@@ -385,7 +392,7 @@ def test_every_domain_collection_is_hotel_scoped_or_a_declared_global() -> None:
     }
 
     for path in openapi()["paths"]:
-        if path in globals_ or path in infrastructure or path in identity:
+        if path in globals_ or path in infrastructure or path in identity or path in platform:
             continue
         assert path.startswith("/api/v1/hotels/{"), f"{path} sits outside the hotel hierarchy"
 
@@ -467,7 +474,12 @@ def test_no_endpoint_accepts_an_unbounded_free_text_identifier_in_a_path() -> No
 
 def test_no_collection_offers_delete_or_patch() -> None:
     """Those verbs belong on a resource, never on a collection."""
-    singletons = {"/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/review"}
+    singletons = {
+        "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/review",
+        # Stage 4.5.11. A booking has exactly one stay and it carries no identifier of its
+        # own, so PATCH addresses a resource here just as it does on the review singleton.
+        "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/stay",
+    }
     infrastructure = {"/api/v1/", "/health", "/health/db"}
 
     for path, operations in openapi()["paths"].items():
@@ -496,6 +508,10 @@ NON_CREATING_POSTS = {
     # caller's own token, so the replacement is not a convenience -- without it a successful
     # change signs the caller out.
     "/api/v1/auth/change-password": "200",
+    # Stage 4.5.27. Extending an in-house stay creates no separately addressable
+    # resource: the added nights belong to the booking that was already there, and its
+    # URL does not change. 201 would promise a Location that does not exist.
+    "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/stay/extension": "200",
 }
 
 
@@ -660,6 +676,19 @@ IDENTITY_AWARE = {
     POLICY_MODULE,  # answers "may they?", for both scopes
     "app.services.hotel",  # creates the owner membership in the same transaction
     "app.services.membership",  # Stage 4.4: memberships ARE its domain
+    # Stage 4.5.12. The audit trail records WHO acted and reports it back, so knowing that
+    # users exist is the table's entire purpose rather than a capability it grew. Admitted on
+    # the same footing as the membership repository, and with the same limit: the guards that
+    # matter are unchanged for it -- it compares no role, reads no membership, and raises no
+    # authorization error. `test_only_one_module_compares_roles` and
+    # `test_no_layer_module_raises_forbidden_for_itself` still cover it, because this list
+    # exempts a module from neither.
+    "app.repositories.audit",
+    # Stage 4.5.14. The archive denormalises the actor's PUBLIC id beside the internal one, so
+    # an archived row identifies who acted without joining a table that may one day not have
+    # the row. Admitted on exactly the same footing as the repository above, with the same
+    # limit: it compares no role, reads no membership, and raises no authorization error.
+    "app.repositories.audit_archive",
 }
 
 
@@ -762,6 +791,15 @@ PLATFORM_AWARE = {
     "app.api.v1.endpoints.amenities",  # declares the requirement on its writes
     "app.api.v1.endpoints.revenue_categories",
     "app.api.v1.endpoints.expense_categories",
+    # Stage 4.5.13. The platform audit ROUTER declares the same requirement on its single GET,
+    # in the same way the three above declare it -- one `Depends(require_platform_admin)` on
+    # the route, where a reviewer reads it.
+    #
+    # The admission is narrow on purpose and the shape of the list is why it stays useful:
+    # every entry is a router or the policy itself, and no SERVICE has ever been admitted.
+    # `PlatformAuditQueryService` deliberately does NOT appear here -- it decides no
+    # authorization, holds no policy, and would fail this test if it tried to.
+    "app.api.v1.endpoints.platform_audit",
 }
 
 #: Names that would mean somebody invented a second, informal platform role. Stage 4.3

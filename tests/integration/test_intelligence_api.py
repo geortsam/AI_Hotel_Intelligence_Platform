@@ -133,6 +133,12 @@ def stay(
 ) -> None:
     """One booking covering exactly one night in one room -- the finest grain available, so a
     series can be shaped precisely."""
+    # Stage 4.5.23: the night is priced from the room type, so a test that wants a
+    # particular rate configures it first. Bookings already made keep theirs.
+    api.patch(
+        f"/api/v1/hotels/{hotel}/room-types/DLX",
+        json={"base_price": rate, "currency": currency},
+    )
     response = api.post(
         f"/api/v1/hotels/{hotel}/bookings",
         json={
@@ -143,7 +149,7 @@ def stay(
             "status": status,
             "total_amount": rate,
             "currency": currency,
-            "rooms": [{"room_number": room, "nights": [{"stay_date": str(night), "rate": rate}]}],
+            "rooms": [{"room_number": room, "nights": [{"stay_date": str(night)}]}],
         },
     )
     assert response.status_code == 201, response.text

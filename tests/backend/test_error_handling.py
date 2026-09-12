@@ -50,7 +50,7 @@ def error_client() -> TestClient:
 
     @app.get("/boom/unexpected", response_model=None)
     def _unexpected() -> NoReturn:
-        raise RuntimeError(f"internal detail with {SECRET} at C:/Users/georg/secret.py")
+        raise RuntimeError(f"internal detail with {SECRET} at C:/Users/example/secret.py")
 
     @app.post("/boom/validate")
     def _validate(payload: Payload) -> dict[str, str]:

@@ -20,13 +20,16 @@ Nothing here commits. Transaction boundaries belong to the service.
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any
 
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.room import Room
+from app.models.booking import BookingRoom
+from app.models.enums import INVENTORY_HOLDING_STATUSES, OUT_OF_SERVICE_ROOM_STATUSES
+from app.models.room import Room, RoomType
 
 
 class RoomRepository:
@@ -102,6 +105,74 @@ class RoomRepository:
                 .offset(offset)
             ).all()
         )
+
+    def available_in_hotel(
+        self,
+        hotel_id: int,
+        check_in: dt.date,
+        check_out: dt.date,
+        *,
+        room_type_id: int | None = None,
+        min_occupancy: int | None = None,
+    ) -> list[tuple[Room, RoomType]]:
+        """Rooms this hotel could sell for ``[check_in, check_out)``, with their type.
+
+        **This predicate is the read-side mirror of the write-side authority**, and the two
+        are written to be read side by side. The constraint the database enforces is::
+
+            EXCLUDE USING gist (
+                room_id WITH =,
+                daterange(check_in_date, check_out_date, '[)') WITH &&
+            ) WHERE (booking_status = ANY (ARRAY['confirmed','checked_in']))
+
+        so the NOT EXISTS below matches it term for term: same room, same half-open
+        ``daterange`` with the same ``'[)'`` bound, same ``&&`` operator, and the same status
+        set -- taken from :data:`INVENTORY_HOLDING_STATUSES`, which is also the constant the
+        constraint's own WHERE clause is generated from. A search that used ``<`` and ``>``
+        comparisons instead would be a second, subtly different interval definition, and the
+        first disagreement would be a room sold twice.
+
+        One statement. The overlap test is a correlated ``NOT EXISTS`` evaluated by
+        PostgreSQL, not a booking list walked in Python: the cost is one indexed probe per
+        candidate room rather than a scan of the property's booking history.
+
+        Returned with the room type joined rather than lazily loaded, so grouping by type
+        costs no further queries.
+        """
+        overlapping = (
+            select(BookingRoom.id)
+            .where(
+                BookingRoom.room_id == Room.id,
+                BookingRoom.booking_status.in_(INVENTORY_HOLDING_STATUSES),
+                func.daterange(BookingRoom.check_in_date, BookingRoom.check_out_date, "[)").op(
+                    "&&"
+                )(func.daterange(check_in, check_out, "[)")),
+            )
+            .exists()
+        )
+
+        statement = (
+            select(Room, RoomType)
+            .join(RoomType, RoomType.id == Room.room_type_id)
+            # Tenancy is asserted on the ROOM, not inferred from the room type: the room is
+            # what gets allocated, and `uq_rooms_id_hotel_id` is what the allocation's own
+            # foreign key resolves against.
+            .where(
+                Room.hotel_id == hotel_id,
+                RoomType.hotel_id == hotel_id,
+                Room.is_active.is_(True),
+                RoomType.is_active.is_(True),
+                Room.status.not_in(OUT_OF_SERVICE_ROOM_STATUSES),
+                ~overlapping,
+            )
+            .order_by(RoomType.code, Room.room_number)
+        )
+        if room_type_id is not None:
+            statement = statement.where(Room.room_type_id == room_type_id)
+        if min_occupancy is not None:
+            statement = statement.where(RoomType.max_occupancy >= min_occupancy)
+
+        return [(room, room_type) for room, room_type in self._session.execute(statement).all()]
 
     def apply_changes(self, room: Room, changes: dict[str, Any]) -> Room:
         """Apply a partial update to a managed instance and flush it."""

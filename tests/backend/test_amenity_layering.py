@@ -31,7 +31,7 @@ from app.schemas.amenity import (
 )
 from app.services.amenity import AmenityService, RoomTypeAmenityService
 from app.services.scope import HotelScopeResolver
-from tests.backend.authorization_stubs import AllowAllPolicy
+from tests.backend.authorization_stubs import AllowAllPolicy, audit_trail
 
 # --- 25. routers hold no persistence logic -----------------------------------------------
 
@@ -118,7 +118,10 @@ def test_catalogue_service_takes_no_scope_resolver() -> None:
     parameters = inspect.signature(AmenityService.__init__).parameters
 
     assert "scope" not in parameters
-    assert set(parameters) == {"self", "session", "repository"}
+    # Stage 4.5.12 added `audit`. The guard this test exists for is the line above --
+    # no hotel scope on a global catalogue -- and it is unchanged; the exact set is
+    # extended rather than relaxed, so a THIRD collaborator would still fail here.
+    assert set(parameters) == {"self", "session", "repository", "audit"}
 
 
 def test_dependencies_assemble_both_services() -> None:
@@ -127,7 +130,7 @@ def test_dependencies_assemble_both_services() -> None:
 
     stub: Any = _Session()
 
-    catalogue = deps.get_amenity_service(stub)
+    catalogue = deps.get_amenity_service(stub, audit_trail(stub))
     assert isinstance(catalogue, AmenityService)
     assert isinstance(catalogue._repository, AmenityRepository)
 
@@ -241,7 +244,7 @@ class _StubSession:
 def test_missing_amenity_raises_not_found() -> None:
     from app.core.errors import NotFoundError
 
-    service = AmenityService(_StubSession(), _EmptyCatalogue())  # type: ignore[arg-type]
+    service = AmenityService(_StubSession(), _EmptyCatalogue(), audit_trail())  # type: ignore[arg-type]
 
     with pytest.raises(NotFoundError, match=r"Amenity not found\."):
         service.get("NOSUCH")
