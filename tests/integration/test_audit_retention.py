@@ -900,6 +900,44 @@ def test_a_concurrent_worker_cannot_archive_a_retained_event(
     assert all(str(row["resource_reference"]).startswith("OLD") for row in rows)
 
 
+def test_a_conflict_on_the_public_id_is_skipped_rather_than_raised(session: Session) -> None:
+    """The unique constraint that is NOT the primary key must be absorbed too.
+
+    The archive has two unique mechanisms -- ``pk_audit_events_archive (audit_event_id)`` and
+    ``uq_audit_events_archive_public_id (public_id)``. While the copy named only the first as
+    its ON CONFLICT arbiter, the second could still raise 23505 out of a batch when a
+    concurrent worker committed the same event at the wrong moment, and the whole run died.
+    That is what failed a real CI job.
+
+    The thread-based tests above cannot state this property reliably: they reproduce it only
+    on a narrow timing window, and they passed for months with the defect present. This one
+    is deterministic. It puts the archive into the state a concurrent worker's committed row
+    would have produced -- the event's public_id already present -- and requires the archival
+    run to skip that event instead of raising.
+    """
+    seed(session, count=1, age_days=900)
+    taken = session.scalar(sa.text("SELECT public_id FROM audit_events"))
+
+    # A DIFFERENT audit_event_id carrying that public_id, so the primary key cannot object
+    # and only uq_audit_events_archive_public_id can. Unreachable from real data, which is
+    # precisely why it isolates the constraint under test.
+    session.execute(
+        sa.text(
+            "INSERT INTO audit_events_archive (audit_event_id, public_id, action, "
+            " resource_type, resource_reference, occurred_at) "
+            "VALUES (-1, :p, 'amenity.created', 'amenity', 'PRIOR', now())"
+        ),
+        {"p": taken},
+    )
+    session.commit()
+
+    result = run(session)  # must not raise
+
+    # Skipped, not copied: the row the archive already holds under that public_id stands.
+    assert result.archived == 0
+    assert counts(session) == (1, 1)
+
+
 # ======================================================================================
 # Security -- there is no way in from outside
 # ======================================================================================

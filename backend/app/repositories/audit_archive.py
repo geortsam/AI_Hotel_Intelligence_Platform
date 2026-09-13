@@ -75,10 +75,27 @@ class AuditArchiveRepository:
         rather than deadlocking against it.
 
         **``ON CONFLICT DO NOTHING`` is the idempotency guarantee**, and it is the database's
-        rather than this code's. The primary key is the original event id, so an event that is
-        already archived cannot be archived twice -- by a repeat run, by a concurrent worker,
-        or by a bug here. ``RETURNING`` then reports only the rows that were really inserted,
-        which is what makes the caller's "archived" count true rather than optimistic.
+        rather than this code's. An event that is already archived cannot be archived twice --
+        by a repeat run, by a concurrent worker, or by a bug here. ``RETURNING`` then reports
+        only the rows that were really inserted, which is what makes the caller's "archived"
+        count true rather than optimistic.
+
+        **No conflict target is named, and that is the fix rather than an oversight.** This
+        table has two unique mechanisms, not one: ``pk_audit_events_archive (audit_event_id)``
+        and ``uq_audit_events_archive_public_id (public_id)``. Naming the primary key as the
+        arbiter covered only the first. PostgreSQL resolves an arbiter conflict speculatively
+        but enforces every OTHER unique index immediately, so when a concurrent worker
+        committed the same event in the window between the arbiter check and that second index
+        write, ``public_id`` raised 23505 and ``DO NOTHING`` never got the chance to skip the
+        row. That escaped as a failed batch: 9 failures in 120 contended runs, and one real
+        CI failure, before this line lost its ``index_elements``.
+
+        Leaving the target unspecified is safe here PRECISELY BECAUSE the two constraints
+        state the same fact. ``audit_events.public_id`` is unique at the source, so two
+        different event ids can never carry one public_id: a conflict on either index means
+        "this event is already archived", which is the single case this clause exists to
+        skip. The table carries no other unique index and no exclusion constraint, so there
+        is no third kind of duplicate that an unnamed target could swallow unnoticed.
 
         The ``NOT EXISTS`` filter is what makes repeated runs make PROGRESS. Without it a
         second run would re-select the same already-archived leading rows, insert nothing, and
@@ -114,7 +131,7 @@ class AuditArchiveRepository:
         statement = (
             pg_insert(AuditEventArchive)
             .from_select(list(ARCHIVED_COLUMNS), source)
-            .on_conflict_do_nothing(index_elements=["audit_event_id"])
+            .on_conflict_do_nothing()
             .returning(AuditEventArchive.audit_event_id)
         )
         return list(self._session.scalars(statement).all())
