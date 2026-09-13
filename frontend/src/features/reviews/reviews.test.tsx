@@ -279,10 +279,38 @@ describe('rating semantics', () => {
     renderReviews()
     await screen.findByText('Comfortable and central')
 
-    // (4 + 9) / 2 = 6.5, the number a naive average of this page would produce.
+    // (4 + 9) / 2 = 6.5, the number a naive average of this page would produce. 6.5
+    // cannot appear anywhere on this page for an innocent reason, so the whole document
+    // is the right scope for it.
     expect(visibleText()).not.toMatch(/6\.5/)
-    // 13 is their sum; 2 would be a count of the cards presented as a total.
-    expect(visibleText()).not.toMatch(/\b13\b/)
+
+    /*
+     * 13 is their sum. Unlike 6.5, a bare 13 DOES have an innocent reading here: the page
+     * prints a reporting period, and 13 is a day of the month. Asserting it against the
+     * whole document made this test fail on the thirteenth of a month over a date -- which
+     * is not what the invariant is about. The invariant is that no blended value reaches
+     * the UI that renders a rating, so that is what this reads: the summary's headline
+     * figures, and each review's own rating including its accessible name (a wrong scale
+     * would corrupt the name too, and `textContent` alone would not see it).
+     */
+    const figures = screen.getByText('Average rating').closest('dl')!
+    const headline = [...figures.querySelectorAll('dd')].map((element) => element.textContent)
+    const rated = screen.getAllByLabelText(/^Rated /)
+    // A scope that matched nothing would pass no matter what the page rendered.
+    expect(headline).toHaveLength(3)
+    expect(rated).toHaveLength(2)
+    /*
+     * Each value separately, joined by a separator. Reading `textContent` off a container
+     * instead would run the label into the value -- `Average rating13.0 / 5` -- and there
+     * is no word boundary between `g` and `1`, so `13` would silently stop matching.
+     * Mutation testing caught exactly that; hence the values, not their container.
+     */
+    const ratingText = [
+      ...headline,
+      ...rated.map((element) => `${element.getAttribute('aria-label')} ${element.textContent}`),
+    ].join(' | ')
+
+    expect(ratingText).not.toMatch(/\b13\b/)
   })
 })
 
