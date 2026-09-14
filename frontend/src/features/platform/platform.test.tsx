@@ -125,9 +125,23 @@ describe('the shared catalogues', () => {
     renderPage()
     await screen.findByText('Sea view')
 
-    expect(
-      fetchStub.calls.map((c) => new URL(c.url, 'http://localhost').pathname).sort(),
-    ).toEqual(['/api/v1/amenities', '/api/v1/auth/me', '/api/v1/hotels'])
+    /*
+     * Settled, not merely rendered. `/hotels` is fetched by HotelProvider's effect once
+     * `/auth/me` reports an authenticated session -- a chain independent of the catalogue --
+     * so `Sea view` can appear before the hotel list has even been asked for. Snapshotting
+     * every request at that instant failed about once in twenty-five runs, always by missing
+     * `/api/v1/hotels`, and it took a real CI run to notice.
+     *
+     * Waiting for the set itself keeps the claim exactly as strong rather than relaxing it:
+     * a request this page should not make never makes the arrays equal, so it still fails --
+     * by timeout instead of instantly. What is gone is only the assumption that one
+     * component's render implies another's fetch.
+     */
+    await waitFor(() =>
+      expect(
+        fetchStub.calls.map((c) => new URL(c.url, 'http://localhost').pathname).sort(),
+      ).toEqual(['/api/v1/amenities', '/api/v1/auth/me', '/api/v1/hotels']),
+    )
     // The other two catalogues are not fetched until their tab is opened.
     expect(requestsFor('/revenue-categories')).toHaveLength(0)
     expect(requestsFor('/expense-categories')).toHaveLength(0)
