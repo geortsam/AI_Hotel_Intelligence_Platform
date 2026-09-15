@@ -207,3 +207,761 @@ jobs:
         # The separate step above earns its place by naming the failure: a type error is
         # reported by a step called Typecheck, not by one called Production build.
         run: npm run build
+
+  # ---------------------------------------------------------------------------------------
+  # The deployment topology, actually executed.
+  #
+  # The two jobs above check source. This one checks the thing the source is deployed as, and
+  # it exists because the development machine has no container runtime: docker-compose.yml,
+  # backend/Dockerfile, frontend/Dockerfile and frontend/nginx.conf had never been built or
+  # run anywhere before this job. GitHub's ubuntu runners ship Docker and Compose, so this is
+  # the only place the deployment is more than a static claim.
+  #
+  # It proves the startup chain end to end --
+  #
+  #     db healthy -> migrate exits 0 -> api healthy -> frontend healthy
+  #
+  # -- and then the properties that chain is supposed to deliver: PostgreSQL 18.6, Alembic at
+  # 0009, the SPA fallback, the /api proxy, secret isolation, an unpublished database, and the
+  # gate that stops the API serving against an unmigrated schema.
+  #
+  # Every assertion below exits non-zero on failure. There is no continue-on-error, no
+  # `|| true`, no swallowed status and no condition that lets the job skip itself: it runs on
+  # exactly the same pushes and pull requests as the other two.
+  #
+  # Parallel to them, not downstream, for the reason the header of this file already gives --
+  # one red run should name every gate that is red, rather than hiding one behind another.
+  docker-runtime:
+    name: Docker runtime verification
+    runs-on: ubuntu-latest
+    # Bounded at the job level as well as per wait. A container that never turns healthy has
+    # to fail the run, not hold a runner for six hours.
+    timeout-minutes: 30
+
+    env:
+      # Unique per run. Two concurrent runs cannot collide, and nothing here can name a
+      # developer's local project or reach a volume that holds real data.
+      COMPOSE_PROJECT: hotel-intelligence-ci-${{ github.run_id }}
+      FAILGATE_PROJECT: hotel-intelligence-ci-${{ github.run_id }}-failgate
+      # Not secrets. This database is created for this job and destroyed with it, and the
+      # name is deliberately NOT hotel_intelligence_test -- that name is shared with a
+      # developer's demo database, and nothing in CI should ever be able to match it.
+      POSTGRES_USER: hotel_ci
+      POSTGRES_DB: hotel_intelligence_ci
+      # High ports, clear of anything the runner image binds by default.
+      API_PORT: '18000'
+      FRONTEND_PORT: '18080'
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Docker and Compose versions
+        run: |
+          set -euo pipefail
+          docker --version
+          docker compose version
+
+      - name: Prepare the disposable environment
+        run: |
+          set -euo pipefail
+
+          # Outside the workspace on purpose: nothing this job writes may land in the git
+          # working tree, and $RUNNER_TEMP is destroyed with the runner.
+          ENV_FILE="$RUNNER_TEMP/compose.ci.env"
+          umask 077
+
+          # Generated per run, never reused, and masked before anything can carry them into a
+          # log -- a command trace, an error message, or a resolved `docker compose config`.
+          PG_PASSWORD="$(openssl rand -hex 24)"
+          APP_SECRET="$(openssl rand -base64 48 | tr -d '\n=')"
+          echo "::add-mask::$PG_PASSWORD"
+          echo "::add-mask::$APP_SECRET"
+
+          {
+            echo "POSTGRES_USER=$POSTGRES_USER"
+            echo "POSTGRES_PASSWORD=$PG_PASSWORD"
+            echo "POSTGRES_DB=$POSTGRES_DB"
+            echo "SECRET_KEY=$APP_SECRET"
+            # Filled in once the Compose network exists and its subnet can be read back --
+            # see the database step. Empty is a valid value (it means "believe no forwarding
+            # header"), which is what lets `config` resolve before the network is created.
+            echo "TRUSTED_PROXIES="
+            # production on purpose. It is the mode that makes SECRET_KEY mandatory, so this
+            # job exercises the fail-closed path rather than the permissive one.
+            echo "ENVIRONMENT=production"
+            echo "LOG_LEVEL=WARNING"
+            echo "CORS_ORIGINS="
+            echo "API_PORT=$API_PORT"
+            echo "FRONTEND_PORT=$FRONTEND_PORT"
+          } > "$ENV_FILE"
+
+          {
+            echo "ENV_FILE=$ENV_FILE"
+            echo "PG_PASSWORD=$PG_PASSWORD"
+            echo "APP_SECRET=$APP_SECRET"
+          } >> "$GITHUB_ENV"
+
+          echo "wrote $(wc -l < "$ENV_FILE") variables; no value printed"
+
+      - name: Install the job's shell helpers
+        run: |
+          set -euo pipefail
+
+          # `dc` is the compose invocation with this job's project and env file already bound,
+          # so no step can accidentally address a different project.
+          cat > "$RUNNER_TEMP/dc" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" "$@"
+          SH
+
+          # Readiness comes from Docker's own healthcheck, polled until a deadline. The sleep
+          # is the poll interval, NOT the readiness mechanism: the loop exits early the moment
+          # the container reports healthy, and fails loudly with status and logs if it never
+          # does. A service without a healthcheck is a failure too -- silently treating "no
+          # healthcheck" as ready is exactly the hole this job exists to close.
+          cat > "$RUNNER_TEMP/wait_healthy" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          service="$1"
+          limit="$2"
+          deadline=$(( SECONDS + limit ))
+          while (( SECONDS < deadline )); do
+            cid="$(docker ps -aq \
+              --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" \
+              --filter "label=com.docker.compose.service=$service" | head -n1)"
+            if [[ -n "$cid" ]]; then
+              status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid")"
+              if [[ "$status" == healthy ]]; then
+                echo "$service: healthy after $(( SECONDS - (deadline - limit) ))s"
+                exit 0
+              fi
+              if [[ "$status" == none ]]; then
+                echo "::error::$service has no healthcheck; this job requires one"
+                exit 1
+              fi
+            fi
+            sleep 2
+          done
+          echo "::error::$service did not become healthy within ${limit}s"
+          dc ps -a
+          dc logs --tail 150 "$service"
+          exit 1
+          SH
+
+          chmod +x "$RUNNER_TEMP/dc" "$RUNNER_TEMP/wait_healthy"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Resolve and assert the Compose configuration
+        run: |
+          set -euo pipefail
+
+          # Written to a file rather than stdout: the resolved configuration contains
+          # DATABASE_URL, which embeds the password. The assertions below read the file; only
+          # their verdicts reach the log.
+          dc config --format json > "$RUNNER_TEMP/resolved.json"
+          echo "docker compose config: OK"
+
+          python3 - "$RUNNER_TEMP/resolved.json" <<'PY'
+          import json, sys
+
+          doc = json.load(open(sys.argv[1]))
+          svc = doc["services"]
+          checks = []
+
+          def check(label, condition):
+              print(("  OK   " if condition else "FAIL   ") + label)
+              checks.append(bool(condition))
+
+          check("services are exactly db, migrate, api, frontend",
+                set(svc) == {"db", "migrate", "api", "frontend"})
+          check("db image is postgres:18.6-alpine", svc["db"]["image"] == "postgres:18.6-alpine")
+          check("db publishes no host port", not svc["db"].get("ports"))
+          check("db has a healthcheck", "healthcheck" in svc["db"])
+
+          migrate = svc["migrate"]
+          check("migrate runs alembic upgrade head",
+                migrate.get("command") == ["python", "-m", "alembic", "upgrade", "head"])
+          check("migrate restart policy is no", migrate.get("restart") == "no")
+          check("migrate waits for db health",
+                migrate["depends_on"]["db"]["condition"] == "service_healthy")
+
+          api = svc["api"]
+          check("api waits for migrate to complete successfully",
+                api["depends_on"]["migrate"]["condition"] == "service_completed_successfully")
+          check("api has a healthcheck", "healthcheck" in api)
+
+          fe = svc["frontend"]
+          check("frontend waits for api health",
+                fe["depends_on"]["api"]["condition"] == "service_healthy")
+          check("frontend has a healthcheck", "healthcheck" in fe)
+
+          # Secret reach, asserted on the resolved configuration rather than assumed from the
+          # source file -- this is the form the daemon is actually given.
+          for name in ("api", "migrate"):
+              env = svc[name].get("environment") or {}
+              check(f"{name} receives SECRET_KEY", bool(env.get("SECRET_KEY")))
+              check(f"{name} receives TRUSTED_PROXIES", "TRUSTED_PROXIES" in env)
+
+          fe_env = fe.get("environment") or {}
+          check("frontend receives no SECRET_KEY", "SECRET_KEY" not in fe_env)
+          check("frontend receives no POSTGRES_PASSWORD", "POSTGRES_PASSWORD" not in fe_env)
+          check("frontend receives no DATABASE_URL", "DATABASE_URL" not in fe_env)
+
+          failed = checks.count(False)
+          print(f"\n{checks.count(True)}/{len(checks)} configuration assertions passed")
+          if failed:
+              print(f"::error::{failed} configuration assertion(s) failed")
+              sys.exit(1)
+          PY
+
+      - name: Build the images
+        run: |
+          set -euo pipefail
+          dc build
+          echo "--- images this project resolves to ---"
+          dc images
+
+      - name: Verify the backend image contents
+        run: |
+          set -euo pipefail
+
+          # --no-deps: this inspects the image, and must not start a database to do it.
+          # Runs as the image's USER, so a readability failure here is a real permission bug.
+          # Each `test` is its own statement, terminated by `;` rather than chained with `&&`.
+          # That is deliberate: under `set -e` a failing command on the left of `&&` is exempt
+          # from aborting the script, so `test -f X && echo OK` would silently print nothing
+          # and carry on. Sequenced like this, a missing file exits non-zero on the spot.
+          dc run --rm --no-deps --entrypoint sh api -c '
+            set -eu
+            echo "runtime user : $(id -un) (uid $(id -u))"
+            test -d /app/app;                 echo "  OK   /app/app"
+            test -f /app/app/main.py;         echo "  OK   /app/app/main.py"
+            test -f /app/alembic.ini;         echo "  OK   /app/alembic.ini"
+            test -r /app/alembic.ini;         echo "  OK   /app/alembic.ini is readable"
+            test -d /app/database/migrations; echo "  OK   /app/database/migrations"
+
+            revisions=$(ls /app/database/migrations/versions/*.py | wc -l)
+            echo "  revisions present: $revisions"
+            if [ "$revisions" -ne 9 ]; then
+              echo "::error::expected 9 revisions, found $revisions"
+              exit 1
+            fi
+
+            for f in /app/database/migrations/versions/*.py; do
+              if [ ! -r "$f" ]; then
+                echo "::error::$f is not readable by $(id -un)"
+                exit 1
+              fi
+            done
+            echo "  OK   every revision readable by the runtime user"
+
+            python -m alembic --help > /dev/null; echo "  OK   python -m alembic is executable"
+
+            if [ "$(id -un)" != "appuser" ]; then
+              echo "::error::runtime user is $(id -un), expected appuser"
+              exit 1
+            fi
+            echo "  OK   runtime user is appuser"
+          '
+
+      - name: Start PostgreSQL and verify it
+        run: |
+          set -euo pipefail
+          dc up -d db
+          wait_healthy db 120
+
+          echo "--- server version, read from inside the container ---"
+          version="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version()')"
+          echo "$version"
+          case "$version" in
+            "PostgreSQL 18.6"*) echo "  OK   PostgreSQL 18.6" ;;
+            *) echo "::error::expected PostgreSQL 18.6, got: $version"; exit 1 ;;
+          esac
+
+          echo "--- host publication ---"
+          # An assertion on the absence of a mapping, not a suppressed failure: `port` exits
+          # non-zero precisely because nothing is published, which is the result required here.
+          if published="$(dc port db 5432 2>/dev/null)" && [ -n "$published" ]; then
+            echo "::error::db publishes a host port: $published"
+            exit 1
+          fi
+          echo "  OK   db publishes no host port"
+
+          cid="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=db")"
+          mapped="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$cid")"
+          echo "  db port bindings: $mapped"
+          case "$mapped" in
+            *HostPort*) echo "::error::db has a host binding: $mapped"; exit 1 ;;
+            *) echo "  OK   no host binding on the container either" ;;
+          esac
+
+      - name: Set TRUSTED_PROXIES from the real Compose network
+        run: |
+          set -euo pipefail
+
+          # Read back rather than guessed. Compose allocates this subnet at runtime, which is
+          # exactly why docker-compose.yml hard-codes nothing: the value that makes the
+          # backend believe nginx's X-Forwarded-For is a property of the running network.
+          cid="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=db")"
+          network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "$cid")"
+          subnet="$(docker network inspect "$network" -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}')"
+          echo "network: $network"
+          echo "subnet : $subnet"
+
+          # Refuse anything that would trust the whole internet, and anything that is not a
+          # subnet at all. The application would reject a malformed value at startup; catching
+          # it here names the problem instead of leaving it as a container that will not boot.
+          case "$subnet" in
+            ""|"0.0.0.0/0"|"::/0")
+              echo "::error::refusing to use '$subnet' as TRUSTED_PROXIES"
+              exit 1 ;;
+          esac
+          python3 -c "import ipaddress,sys; ipaddress.ip_network(sys.argv[1]); print('  OK   parses as a network')" "$subnet"
+
+          # migrate, api and frontend have not started yet, so every service that receives this
+          # value will be created with it.
+          sed -i "s|^TRUSTED_PROXIES=.*|TRUSTED_PROXIES=$subnet|" "$ENV_FILE"
+          grep -q "^TRUSTED_PROXIES=$subnet$" "$ENV_FILE"
+          echo "  OK   TRUSTED_PROXIES set to the live Compose subnet"
+
+      - name: Run the migration
+        run: |
+          set -euo pipefail
+
+          # Started detached, then waited on by container id.
+          #
+          # NOT `up --exit-code-from migrate`: that flag implies --abort-on-container-exit,
+          # which stops every container in the invocation as soon as one exits -- it would
+          # take the running database down with it the moment the migration finished. `docker
+          # wait` returns the exit code of this container alone and touches nothing else.
+          dc up -d migrate
+
+          cid="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=migrate" | head -n1)"
+          if [ -z "$cid" ]; then
+            echo "::error::no migrate container was created"
+            dc ps -a
+            exit 1
+          fi
+
+          # Bounded: a migration that hangs must fail the job, not sit here until the runner
+          # is reclaimed. `timeout` exits 124 if it fires, which is a non-zero code like any
+          # other and fails the step.
+          code="$(timeout 600 docker wait "$cid")"
+          echo "  migrate exit code: $code"
+
+          echo "--- migration log ---"
+          dc logs migrate
+
+          if [ "$code" != "0" ]; then
+            echo "::error::migrate exited $code"
+            exit 1
+          fi
+          echo "  OK   migrate exited 0"
+
+          echo "--- container state ---"
+          dc ps -a --format 'table {{.Service}}\t{{.State}}\t{{.ExitCode}}'
+
+          echo "--- alembic_version, read from PostgreSQL ---"
+          revision="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
+          echo "  $revision"
+          [ "$revision" = "0009_audit_booking_deleted" ] || {
+            echo "::error::expected 0009_audit_booking_deleted, got $revision"; exit 1; }
+          echo "  OK   schema is at 0009_audit_booking_deleted"
+
+          tables="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
+          echo "  public tables created: $tables"
+          [ "$tables" -gt 15 ] || { echo "::error::only $tables tables; the schema did not apply"; exit 1; }
+
+      - name: Start the API and verify it
+        run: |
+          set -euo pipefail
+          dc up -d api
+          wait_healthy api 180
+
+          echo "--- /health, from inside the container (the real healthcheck path) ---"
+          dc exec -T api python -c "
+          import json, urllib.request
+          with urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5) as r:
+              body = json.load(r)
+              assert r.status == 200, r.status
+          print('  status      :', body['status'])
+          print('  environment :', body['environment'])
+          assert body['status'] == 'ok', body
+          assert body['environment'] == 'production', body
+          print('  OK   /health returns 200 and reports production')
+          "
+
+          echo "--- /health/db: proves api -> db over the Compose network ---"
+          dc exec -T api python -c "
+          import json, urllib.request
+          with urllib.request.urlopen('http://127.0.0.1:8000/health/db', timeout=5) as r:
+              body = json.load(r)
+              assert r.status == 200, r.status
+          print('  status   :', body['status'])
+          print('  database :', body['database'])
+          assert body['status'] == 'ok', body
+          assert body['database'] == 'reachable', body
+          print('  OK   /health/db returns 200 and the database is reachable')
+          "
+
+      - name: Start the frontend and verify the full topology
+        run: |
+          set -euo pipefail
+          dc up -d frontend
+          wait_healthy frontend 120
+
+          echo "--- the chain, end to end ---"
+          dc ps -a --format 'table {{.Service}}\t{{.State}}\t{{.Status}}\t{{.ExitCode}}'
+
+          for spec in "db:running" "api:running" "frontend:running"; do
+            service="${spec%%:*}"
+            cid="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=$service" | head -n1)"
+            state="$(docker inspect -f '{{.State.Status}}' "$cid")"
+            health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid")"
+            echo "  $service: state=$state health=$health"
+            [ "$state" = "running" ] || { echo "::error::$service is $state"; exit 1; }
+            [ "$health" = "healthy" ] || { echo "::error::$service health is $health"; exit 1; }
+          done
+
+          cid="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=migrate" | head -n1)"
+          state="$(docker inspect -f '{{.State.Status}}' "$cid")"
+          code="$(docker inspect -f '{{.State.ExitCode}}' "$cid")"
+          echo "  migrate: state=$state exit=$code"
+          [ "$state" = "exited" ] && [ "$code" = "0" ] || {
+            echo "::error::migrate is $state with exit $code"; exit 1; }
+          echo "  OK   db healthy -> migrate exited 0 -> api healthy -> frontend healthy"
+
+      - name: Verify the SPA through nginx
+        run: |
+          set -euo pipefail
+          base="http://127.0.0.1:${FRONTEND_PORT}"
+
+          # `/index.html` first: it is matched by nginx's exact location, which has no
+          # fallback, so a 200 here means the built artefact really is being served rather
+          # than something being invented by try_files.
+          for path in / /index.html /bookings /reviews /intelligence; do
+            body="$RUNNER_TEMP/spa-body"
+            code="$(curl -sS -o "$body" -w '%{http_code}' --max-time 15 "$base$path")"
+            printf '  %-16s -> HTTP %s' "$path" "$code"
+            [ "$code" = "200" ] || { echo; echo "::error::$path returned $code"; exit 1; }
+            grep -q '<div id="root"></div>' "$body" || {
+              echo; echo "::error::$path did not return the SPA document"; exit 1; }
+            grep -q '<title>AI Hotel Intelligence Platform</title>' "$body" || {
+              echo; echo "::error::$path returned HTML that is not this application"; exit 1; }
+            echo "   SPA document"
+          done
+          echo "  OK   SPA fallback serves real client-side routes rather than 404"
+
+          echo "--- cache policy, which only a running nginx can demonstrate ---"
+          curl -sSI --max-time 15 "$base/index.html" | grep -i '^cache-control:' || {
+            echo "::error::index.html carries no Cache-Control"; exit 1; }
+
+      - name: Verify the /api proxy through nginx
+        run: |
+          set -euo pipefail
+
+          # Deliberately through the FRONTEND port, never the API's own. The path under test is
+          # runner -> nginx -> /api/ -> api:8000 -> FastAPI, and a direct call to the API port
+          # would prove nothing about the proxy.
+          #
+          # /api/v1/ is the v1 router's own metadata endpoint (app/api/v1/endpoints/meta.py):
+          # unauthenticated, touches no table, exposes no business data. It is used because it
+          # already exists -- there is no /api/v1/health, and none was invented.
+          base="http://127.0.0.1:${FRONTEND_PORT}"
+          body="$RUNNER_TEMP/api-body"
+
+          code="$(curl -sS -o "$body" -w '%{http_code}' --max-time 15 "$base/api/v1/")"
+          echo "  GET /api/v1/ -> HTTP $code"
+          [ "$code" = "200" ] || { echo "::error::proxy returned $code"; cat "$body"; exit 1; }
+
+          echo "--- response body ---"
+          cat "$body"; echo
+
+          python3 - "$body" <<'PY'
+          import json, sys
+          body = json.load(open(sys.argv[1]))
+          assert body["api_version"] == "v1", body
+          print("  OK   JSON from FastAPI, api_version=v1 -- not the SPA fallback")
+          PY
+
+          echo "--- the request really left nginx: an unknown API path must 404 as the API, not as the SPA ---"
+          code="$(curl -sS -o "$body" -w '%{http_code}' --max-time 15 "$base/api/v1/__no_such_route__")"
+          echo "  GET /api/v1/__no_such_route__ -> HTTP $code"
+          if [ "$code" != "404" ]; then
+            echo "::error::expected 404 from the API, got $code"
+            exit 1
+          fi
+          if grep -q '<div id="root">' "$body"; then
+            echo "::error::an /api path fell through to the SPA fallback"
+            exit 1
+          fi
+          echo "  OK   /api/ is proxied, not swallowed by try_files"
+
+      - name: Verify secrets do not reach the frontend
+        run: |
+          set -euo pipefail
+
+          cid="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=frontend" | head -n1)"
+
+          # Names only. The values are never printed, and both are masked in any case.
+          echo "--- frontend container environment (variable names only) ---"
+          docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" | cut -d= -f1 | sort | sed 's/^/  /'
+
+          for name in SECRET_KEY POSTGRES_PASSWORD DATABASE_URL; do
+            if docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$cid" | cut -d= -f1 | grep -qx "$name"; then
+              echo "::error::$name is present in the frontend container environment"
+              exit 1
+            fi
+            echo "  $name: ABSENT"
+          done
+
+          # The shipped bundle, searched for the actual generated values. Copied out and
+          # searched here, where the secrets already exist, rather than passed into the
+          # container. grep -q prints nothing either way.
+          echo "--- built assets ---"
+          rm -rf "$RUNNER_TEMP/html"
+          dc cp frontend:/usr/share/nginx/html "$RUNNER_TEMP/html"
+          files="$(find "$RUNNER_TEMP/html" -type f | wc -l)"
+          echo "  searched $files served files"
+
+          for label in APP_SECRET PG_PASSWORD; do
+            value="${!label}"
+            if grep -rqF -- "$value" "$RUNNER_TEMP/html"; then
+              echo "::error::a generated secret appears in the served frontend assets"
+              exit 1
+            fi
+            echo "  ${label}: NOT FOUND in served assets"
+          done
+
+          # And not in what nginx actually returns, either.
+          curl -sS --max-time 15 "http://127.0.0.1:${FRONTEND_PORT}/" > "$RUNNER_TEMP/served-index"
+          for label in APP_SECRET PG_PASSWORD; do
+            value="${!label}"
+            if grep -qF -- "$value" "$RUNNER_TEMP/served-index"; then
+              echo "::error::a secret appears in an nginx response"
+              exit 1
+            fi
+          done
+          echo "  OK   no secret in the served document"
+          rm -rf "$RUNNER_TEMP/html" "$RUNNER_TEMP/served-index"
+
+      - name: Verify the network topology
+        run: |
+          set -euo pipefail
+
+          echo "--- frontend -> api, by Compose DNS, using the image's own busybox wget ---"
+          dc exec -T frontend wget -q -O- http://api:8000/health | head -c 200; echo
+          echo "  OK   frontend resolves and reaches api:8000"
+
+          echo "--- api -> db, by Compose DNS ---"
+          dc exec -T api python -c "
+          import json, urllib.request
+          with urllib.request.urlopen('http://127.0.0.1:8000/health/db', timeout=5) as r:
+              assert json.load(r)['database'] == 'reachable'
+          print('  OK   api reaches db:5432')
+          "
+
+          echo "--- the database is not reachable from the host ---"
+          if published="$(dc port db 5432 2>/dev/null)" && [ -n "$published" ]; then
+            echo "::error::db is published at $published"; exit 1
+          fi
+          echo "  OK   db has no host publication"
+
+          echo "--- api host publication is intentionally retained (Stage 5.29) ---"
+          dc port api 8000
+
+      - name: Verify migration idempotency
+        run: |
+          set -euo pipefail
+
+          before="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
+          echo "  before: $before"
+
+          # --force-recreate so this is unambiguously a second execution rather than compose
+          # deciding the exited container is already up to date and doing nothing.
+          dc up -d --force-recreate migrate
+          cid="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=migrate" | head -n1)"
+          code="$(timeout 600 docker wait "$cid")"
+          echo "  second migrate exit code: $code"
+
+          echo "--- second run log ---"
+          dc logs --tail 40 migrate
+
+          if [ "$code" != "0" ]; then
+            echo "::error::second migration exited $code"
+            exit 1
+          fi
+          echo "  OK   second migration exited 0"
+
+          after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
+          echo "  after : $after"
+          [ "$after" = "0009_audit_booking_deleted" ] || {
+            echo "::error::revision moved to $after"; exit 1; }
+          [ "$before" = "$after" ] || { echo "::error::revision changed"; exit 1; }
+          echo "  OK   upgrade head is idempotent and the schema is unchanged"
+
+      - name: Verify persistence across a restart
+        run: |
+          set -euo pipefail
+
+          volume="${COMPOSE_PROJECT}_postgres_data"
+          docker volume inspect "$volume" --format '  volume {{.Name}} ({{.Driver}})'
+
+          rows="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
+          echo "  tables before restart: $rows"
+
+          dc stop
+          dc start db api frontend
+          wait_healthy db 120
+          wait_healthy api 180
+          wait_healthy frontend 120
+
+          revision="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
+          after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
+          echo "  revision after restart: $revision"
+          echo "  tables after restart  : $after"
+          [ "$revision" = "0009_audit_booking_deleted" ] || {
+            echo "::error::schema did not survive the restart"; exit 1; }
+          [ "$rows" = "$after" ] || { echo "::error::table count changed across restart"; exit 1; }
+          echo "  OK   the named volume preserved the schema across stop/start"
+
+      - name: Verify the migration gate blocks the API
+        run: |
+          set -euo pipefail
+
+          # A SEPARATE disposable project, so the proven-good stack above is untouched and its
+          # already-migrated volume cannot make this test pass for the wrong reason.
+          #
+          # The failure is injected by configuration only: an override that points migrate at a
+          # database that does not exist. No committed file is modified, no migration is edited
+          # and nothing is downgraded.
+          override="$RUNNER_TEMP/failgate.yml"
+          cat > "$override" <<'YML'
+          services:
+            migrate:
+              environment:
+                DATABASE_URL: postgresql+psycopg://nobody:wrong@db:5432/database_that_does_not_exist
+          YML
+
+          fdc() {
+            docker compose --env-file "$ENV_FILE" -p "$FAILGATE_PROJECT" \
+              -f docker-compose.yml -f "$override" "$@"
+          }
+
+          fdc up -d db
+          fail_db_ready=no
+          for _ in $(seq 60); do
+            cid="$(docker ps -aq --filter "label=com.docker.compose.project=$FAILGATE_PROJECT" --filter "label=com.docker.compose.service=db" | head -n1)"
+            if [ -n "$cid" ]; then
+              status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid")"
+              if [ "$status" = healthy ]; then
+                fail_db_ready=yes
+                break
+              fi
+            fi
+            sleep 2
+          done
+          if [ "$fail_db_ready" != yes ]; then
+            echo "::error::the failgate database never became healthy, so the gate cannot be tested"
+            fdc ps -a
+            exit 1
+          fi
+          echo "  failgate db is healthy"
+
+          echo "--- migrate must fail ---"
+          # This is the one place in the job where a NON-zero exit is the required outcome, so
+          # it is captured deliberately and asserted on. `set +e` is scoped to the single
+          # command and restored immediately; a zero exit here fails the step.
+          fdc up -d migrate
+          mcid="$(docker ps -aq --filter "label=com.docker.compose.project=$FAILGATE_PROJECT" --filter "label=com.docker.compose.service=migrate" | head -n1)"
+          migrate_code="$(timeout 300 docker wait "$mcid")"
+          echo "  migrate exit code: $migrate_code"
+          echo "--- failgate migration log ---"
+          fdc logs --tail 30 migrate
+          if [ "$migrate_code" = "0" ]; then
+            echo "::error::migrate succeeded against a nonexistent database; the gate is not real"
+            exit 1
+          fi
+          echo "  OK   migrate failed as intended"
+
+          echo "--- the API must refuse to start ---"
+          set +e
+          fdc up -d api
+          api_code=$?
+          set -e
+          echo "  'up -d api' exit code: $api_code"
+          if [ "$api_code" -eq 0 ]; then
+            echo "::error::the API started despite a failed migration"
+            exit 1
+          fi
+
+          running="$(docker ps -q --filter "label=com.docker.compose.project=$FAILGATE_PROJECT" --filter "label=com.docker.compose.service=api" | wc -l)"
+          echo "  running api containers: $running"
+          if [ "$running" -ne 0 ]; then
+            echo "::error::an api container is running"
+            exit 1
+          fi
+          echo "  OK   api did not start"
+
+          echo "--- the frontend must not become healthy ---"
+          set +e
+          fdc up -d frontend
+          fe_code=$?
+          set -e
+          echo "  'up -d frontend' exit code: $fe_code"
+          if [ "$fe_code" -eq 0 ]; then
+            echo "::error::the frontend started despite a failed migration"
+            exit 1
+          fi
+
+          healthy="$(docker ps -q --filter "label=com.docker.compose.project=$FAILGATE_PROJECT" --filter "label=com.docker.compose.service=frontend" --filter "health=healthy" | wc -l)"
+          echo "  healthy frontend containers: $healthy"
+          if [ "$healthy" -ne 0 ]; then
+            echo "::error::the frontend is healthy"
+            exit 1
+          fi
+          echo "  OK   frontend did not become healthy"
+
+          echo "  OK   the API cannot bypass a failed migration"
+
+          fdc down -v --remove-orphans
+          rm -f "$override"
+          echo "  failgate project and its override removed"
+
+      - name: Tear down the disposable environment
+        # always(), so a failed assertion above still leaves the runner clean -- and it does
+        # NOT mask that failure: the job's conclusion is already decided by the failed step.
+        if: always()
+        run: |
+          # Deliberately NOT `set -e`. Teardown must attempt every step even when an earlier
+          # one cannot run -- there may be no containers to log if the build itself failed.
+          # This does not hide anything: `if: always()` runs the step in addition to the
+          # failure, not instead of it, and the job's conclusion was already decided by the
+          # step that failed. There is no `|| true` and no exit-code suppression anywhere in
+          # this workflow; this step simply has no assertions to suppress.
+          set -u
+
+          echo "--- final state before teardown ---"
+          docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" ps -a
+          echo "--- api logs (tail) ---"
+          docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" logs --tail 60 api
+          echo "--- frontend logs (tail) ---"
+          docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" logs --tail 60 frontend
+
+          # -v is safe here and ONLY here: both project names contain this run id, so the
+          # volumes they name can only be the ones this job created. Nothing unrelated is
+          # named and no prune is run, so no other Docker resource on the runner is touched.
+          docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" down -v --remove-orphans
+          docker compose --env-file "$ENV_FILE" -p "$FAILGATE_PROJECT" -f docker-compose.yml down -v --remove-orphans
+
+          rm -f "$ENV_FILE" "$RUNNER_TEMP/failgate.yml" "$RUNNER_TEMP/resolved.json"
+          rm -rf "$RUNNER_TEMP/html"
+
+          echo "--- containers left from this run (expected: none) ---"
+          docker ps -a --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --format '{{.Names}}'
+          docker ps -a --filter "label=com.docker.compose.project=$FAILGATE_PROJECT" --format '{{.Names}}'
+          echo "--- volumes left from this run (expected: none) ---"
+          docker volume ls --format '{{.Name}}' | grep -E "^(${COMPOSE_PROJECT}|${FAILGATE_PROJECT})_"
+          echo "(a grep with no output above means no volume survived, which is the expectation)"

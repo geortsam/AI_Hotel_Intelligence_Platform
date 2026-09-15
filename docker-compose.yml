@@ -3,26 +3,84 @@
 # NOTE: not executed on the development machine -- Docker is not installed there.
 # This file has NOT been verified with `docker compose config` or `docker compose up`.
 #
-#   cp .env.example .env      # then set POSTGRES_PASSWORD
+#   cp .env.example .env      # then set POSTGRES_PASSWORD, and SECRET_KEY for production
 #   docker compose up --build
 #
-# Stage 1 runs no migrations and seeds nothing: there is no schema yet. The db service is
-# defined now so the topology is fixed up front rather than bolted on later.
+# ## Startup is a chain of conditions, not a sequence of hopes
+#
+#   db  --healthy (pg_isready)-->  migrate  --exited 0-->  api  --healthy (/health)-->  frontend
+#
+# The `migrate` link is the reason the chain exists. Nothing in this system can otherwise tell
+# a migrated database from an empty one: `pg_isready` answers for the server, not the schema,
+# and the API's own readiness probe is `SELECT 1`, which succeeds perfectly well against a
+# database with no tables in it. Without the gate, a stack on a fresh volume comes up with
+# every probe green and every data endpoint returning 500.
+#
+# `service_completed_successfully` is what makes it a gate rather than a suggestion: the API
+# is not started at all unless Alembic exited 0.
+
+# Both backend services read the same configuration, and it is important that it is literally
+# the same: `migrate` must upgrade the database that `api` then queries. Anchored rather than
+# written twice so the two cannot drift -- a DATABASE_URL that diverged here would migrate one
+# database and serve another, and nothing downstream would notice.
+#
+# `migrate` needs more than the URL, which is not obvious. database/migrations/env.py does
+# `from app.core.config import Settings` and constructs it, so every validator in Settings runs
+# before a single revision is applied: a production environment with no SECRET_KEY, or a
+# malformed TRUSTED_PROXIES entry, fails the migration rather than failing later in the API.
+# That is the right order to find out.
+x-backend-environment: &backend-environment
+  # Inside the compose network the database is reachable by service name.
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-hotel}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-hotel_intelligence}
+  ENVIRONMENT: ${ENVIRONMENT:-development}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+
+  # Passed through with an empty default, and deliberately not with a `:?` guard.
+  #
+  # The application already decides this correctly: app/core/config.py refuses to construct a
+  # production configuration without a secret and will not fall back to a built-in one, while
+  # development starts without it. A `:?` here would override that judgement from the outside
+  # and make the secret mandatory in development too. Empty in, application decides -- so
+  # production still fails closed, and it fails with the application's own message.
+  SECRET_KEY: ${SECRET_KEY:-}
+
+  # Empty means "read no forwarding header at all", which is the safe default and, in THIS
+  # topology, the wrong value.
+  #
+  # nginx sits in front and sets X-Forwarded-For; with this empty the backend ignores it
+  # (app/core/client_address.py, rule 2) and attributes every request to the frontend
+  # container. The per-address login limit then becomes one bucket for the whole deployment --
+  # five sign-ins a minute for everybody -- and audit records name the proxy rather than the
+  # client. Set it in .env to the network the frontend container actually connects from; there
+  # is no correct value to hard-code here, because Compose allocates that subnet at runtime.
+  # .env.example explains how to read it back.
+  TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
 
 services:
   db:
-    image: postgres:16-alpine
+    # Pinned to 18.6 to match what this project actually verifies: CI runs postgres:18.6 and
+    # the development machine runs 18.6, so the schema, the 9-revision chain and all 4000
+    # backend tests are exercised against that version and no other. The previous
+    # `postgres:16-alpine` ran a major version nothing here has ever executed.
+    #
+    # Exact, not `postgres:18-alpine`: a floating major tag silently moves the server under a
+    # data directory that is bound to its major version.
+    image: postgres:18.6-alpine
     container_name: hotel_db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-hotel}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: ${POSTGRES_DB:-hotel_intelligence}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+    # No `ports:`. The database is reachable at db:5432 from inside the compose network, which
+    # is the only place anything needs it: the API connects over that network and nothing on
+    # the host does. Publishing it put the stack's one real secret in front of every process on
+    # the machine and, on a developer box already running PostgreSQL, collided with it.
     volumes:
       - postgres_data:/var/lib/postgresql/data
       # Anything dropped in database/init/ is executed once, on first cluster creation.
+      # Currently empty: the schema arrives through Alembic, in the `migrate` service below.
       - ./database/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hotel} -d ${POSTGRES_DB:-hotel_intelligence}"]
@@ -31,36 +89,110 @@ services:
       retries: 10
       start_period: 10s
 
-  api:
+  migrate:
+    # The same build and the same image tag as `api`, so the two cannot be different code.
+    # Compose builds it once and the second service reuses the tag.
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: hotel_api
-    restart: unless-stopped
+      context: .
+      dockerfile: backend/Dockerfile
+    image: hotel-intelligence-api:local
+    container_name: hotel_migrate
+    # One shot, and no restart policy on purpose. `unless-stopped` here would turn a failed
+    # migration into an unbounded retry loop issuing DDL against a live database -- a far worse
+    # failure than simply not starting. It runs, it exits, and its exit code is the signal.
+    restart: "no"
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      # Inside the compose network the database is reachable by service name.
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-hotel}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-hotel_intelligence}
-      ENVIRONMENT: ${ENVIRONMENT:-development}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+    environment: *backend-environment
+    # `python -m alembic`, not the bare console script: `-m` puts the working directory on
+    # sys.path as sys.path[0], which is how env.py's `from app.core.config import Settings`
+    # resolves inside the image. It is also exactly the invocation CI uses, so the command that
+    # migrates a deployment is the command the migration chain is verified with.
+    #
+    # No retry wrapper, no shell loop, no `|| true`. Waiting for the database is already
+    # handled by `service_healthy` above, so the only thing left that can fail here is a real
+    # migration failure -- and that must stop the stack, not be swallowed and retried.
+    #
+    # `upgrade head` is idempotent: against a database already at 0009 it applies nothing and
+    # exits 0. There is no downgrade here and there must not be; see .env.example.
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: hotel-intelligence-api:local
+    container_name: hotel_api
+    restart: unless-stopped
+    # Only on migrate, not on db. `migrate` already waits for `db` to be healthy, so the
+    # ordering is transitive, and naming db here as well would suggest the API has a route to
+    # start that skips the migration. It does not, and that is the point of the stage.
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment: *backend-environment
+    # Kept published for this stage. It bypasses nginx and, while ENVIRONMENT is `development`,
+    # serves /docs -- both are known and deliberately deferred to the production-profile stage,
+    # because this is the port a first bring-up is debugged through.
     ports:
       - "${API_PORT:-8000}:8000"
+    # /health is the liveness probe and consults no dependency (app/api/routes/health.py): no
+    # authentication, no database, no data endpoint. /health/db is deliberately NOT used -- a
+    # database blip would then mark the API unhealthy and take the frontend down with it, when
+    # the API is running correctly and already answers 503 for that case by itself.
+    #
+    # Run with the interpreter that is already in the image. python:3.12-slim ships no curl and
+    # no wget, and installing one for a health probe would add packages to the runtime image
+    # for no other reason; urllib is in the standard library. urlopen raises on any non-2xx, so
+    # an unhandled exception is itself the failure signal.
+    #
+    # 127.0.0.1, not localhost: uvicorn binds 0.0.0.0, which is IPv4 only, so a localhost that
+    # resolved to ::1 would fail against a perfectly healthy process.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
+        # Empty is correct for this topology and is not an oversight: the browser then calls
+        # /api/v1/... on its own origin, nginx proxies it to api:8000, no CORS is involved and
+        # the bundle's `connect-src 'self'` CSP is satisfied.
         VITE_API_BASE_URL: ""
     container_name: hotel_frontend
     restart: unless-stopped
+    # service_healthy, not the short form. The short form only waits for the container to
+    # start, and nginx resolves `api` once at startup -- so starting it early is exactly when
+    # the resolution can fail.
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
       - "${FRONTEND_PORT:-5173}:80"
+    # /index.html, NOT /health.
+    #
+    # /health is meaningless here: nginx.conf's `location /` falls through to
+    # `try_files ... /index.html`, so /health returns the SPA with status 200 whether or not
+    # anything works. It would pass on an empty server. /index.html is matched by the exact
+    # `location = /index.html`, which has no fallback of its own, so a 200 there means nginx
+    # really served the built artifact -- and index.html is emitted by every Vite build and
+    # copied to /usr/share/nginx/html by frontend/Dockerfile, so it is deterministic.
+    #
+    # `wget` is BusyBox's applet, already present in the Alpine base image; nothing is
+    # installed for this. Short options only, since BusyBox's wget does not carry GNU's full
+    # long-option set. 127.0.0.1 because nginx.conf has `listen 80` and no `listen [::]:80`.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/index.html"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   postgres_data:

@@ -1,0 +1,118 @@
+# Build context for backend/Dockerfile.
+#
+# That Dockerfile's context is the REPOSITORY ROOT rather than backend/, because Alembic needs
+# alembic.ini and database/migrations/ and both live here. A root context would otherwise
+# sweep in everything else as well -- .git, .venv, node_modules, the frontend, the test suite
+# -- so this file is what keeps the context to what the image actually copies.
+#
+# ## Three rules that decide whether a pattern here does what it looks like it does
+#
+#   1. Patterns are relative to the CONTEXT ROOT. `tests` means ./tests and nothing else.
+#
+#   2. Matching is Go's filepath.Match, where `*` DOES NOT CROSS `/`. So a bare `__pycache__`
+#      excludes only a __pycache__ at the root, and `*.pyc` only a .pyc at the root. To reach
+#      nested ones the pattern needs `**/`, which is Docker's own extension and matches any
+#      number of directories including zero. This is not pedantry: without `**/` the context
+#      here carries 132 stale .pyc files from 15 nested __pycache__ directories inside
+#      backend/app and database/migrations, compiled by the developer's Python 3.14 and copied
+#      into a Python 3.12 image that cannot use them.
+#
+#   3. A later line overrides an earlier one, which is why every `!` negation sits after the
+#      pattern it re-admits.
+#
+# This file governs the backend build only. The frontend service builds from ./frontend with
+# its own frontend/.dockerignore; excluding `frontend` here does not affect that build.
+#
+# (backend/.dockerignore still exists but is now DEAD: Docker reads only the .dockerignore at
+# the context root. Everything it used to exclude is covered below.)
+
+# --- MUST NOT be excluded ---------------------------------------------------
+#
+#   backend/requirements.txt    COPY backend/requirements.txt ./
+#   backend/app/                COPY backend/app ./app
+#   alembic.ini                 COPY alembic.ini ./
+#   database/migrations/        COPY database/migrations ./database/migrations
+#
+# No pattern below may match those four. One that did would remove them from the context and
+# the build would fail at COPY -- loudly, which is the single mercy of that mistake.
+
+# --- version control --------------------------------------------------------
+.git
+.gitattributes
+.gitignore
+.github
+
+# --- Python environments ----------------------------------------------------
+.venv
+venv
+env
+ENV
+
+# --- bytecode and tool caches, at every depth -------------------------------
+**/__pycache__
+**/*.py[cod]
+**/*.egg-info
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.tox
+**/.nox
+.coverage
+coverage.xml
+htmlcov
+
+# --- not inputs to the API image --------------------------------------------
+#
+# The frontend builds from its own context. tests/, docs/, scripts/ and the top-level ml/ are
+# not imported by backend/app -- verified rather than assumed: app/ imports only the standard
+# library plus the declared third-party packages, and the one ML module it does use lives at
+# backend/app/ml/timeseries.py, inside the application package.
+frontend
+tests
+docs
+scripts
+ml
+
+# database/init/ is bind-mounted into the db service at runtime and is not part of this image.
+# database/migrations/ IS part of it, and is deliberately not matched here.
+database/init
+
+# --- deployment descriptors -------------------------------------------------
+# In the context but never copied; excluding them stops an unrelated compose edit from
+# invalidating a build-cache layer.
+#
+# backend/Dockerfile and this file are deliberately NOT listed. Both can be excluded -- Docker
+# special-cases them so the build still works -- but that special case is exactly the kind of
+# thing this stage cannot verify with Docker unavailable, and the saving is a few kilobytes.
+docker-compose.yml
+backend/.dockerignore
+README.md
+
+# --- secrets ----------------------------------------------------------------
+#
+# Every dotenv form, at every depth. Compose and Vite both read mode files such as
+# `.env.production`, and a working tree may hold one. None is copied by the Dockerfile, but a
+# file that never enters the build context cannot be copied by a future edit either, and
+# cannot surface in an exported context.
+.env
+.env.*
+**/.env
+**/.env.*
+# Root only. A `!**/.env.example` here would be a mistake: the last matching pattern wins, so
+# it would re-admit frontend/.env.example and quietly undo the `frontend` exclusion above.
+!.env.example
+
+**/*.pem
+**/*.key
+
+# --- editors / OS -----------------------------------------------------------
+.vscode
+.idea
+**/.DS_Store
+**/Thumbs.db
+**/*.swp
+
+# --- local data -------------------------------------------------------------
+**/*.db
+**/*.sqlite
+**/*.sqlite3
