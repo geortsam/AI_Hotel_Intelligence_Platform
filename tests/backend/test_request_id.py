@@ -174,7 +174,19 @@ def test_an_unacceptable_id_is_replaced_and_never_echoed(
     assert response.status_code == 200, f"{label} turned a correlation header into a failure"
     assert UUID4_HEX.fullmatch(effective), f"{label} was not replaced with a fresh id"
     assert effective != supplied
-    assert supplied.strip() not in response.text or not supplied.strip()
+    # The body is exactly the sanitised id and nothing else -- which is both the stronger
+    # statement and the deterministic one.
+    #
+    # This replaces `supplied.strip() not in response.text`, a substring search that could
+    # not tell "the rejected value was echoed" apart from "the random replacement happens to
+    # contain those characters". For the `trailing-newline` case the needle is `abc`, three
+    # valid hex digits, and the body carries a 32-character hex UUID: measured over 500,000
+    # generated ids it collides 0.77% of the time (30 windows x 16^-3). CI run 34984757640
+    # drew `...1694ceabc92e` and failed on a correctly sanitised response.
+    #
+    # Asserting equality keeps the invariant the old line was reaching for -- the rejected
+    # bytes cannot be in a body that equals the effective id -- without the coincidence.
+    assert response.json() == {"seen": effective}
 
 
 def test_a_trailing_newline_is_not_accepted_by_the_pattern() -> None:

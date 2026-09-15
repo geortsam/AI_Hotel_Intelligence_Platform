@@ -935,12 +935,20 @@ jobs:
         # NOT mask that failure: the job's conclusion is already decided by the failed step.
         if: always()
         run: |
-          # Deliberately NOT `set -e`. Teardown must attempt every step even when an earlier
-          # one cannot run -- there may be no containers to log if the build itself failed.
-          # This does not hide anything: `if: always()` runs the step in addition to the
-          # failure, not instead of it, and the job's conclusion was already decided by the
-          # step that failed. There is no `|| true` and no exit-code suppression anywhere in
-          # this workflow; this step simply has no assertions to suppress.
+          # `set +e` explicitly, because omitting `set -e` is NOT enough: GitHub invokes every
+          # run block as `shell: /usr/bin/bash -e {0}`, so -e is already on before the first
+          # line here. Run 34984757640 proved it -- teardown removed the container, the volume
+          # and the network exactly as intended, then the step still went red because its last
+          # command, `docker volume ls | grep '^<project>_'`, exits 1 when no volume survives,
+          # which is the SUCCESS case. -e killed the script on that.
+          #
+          # Best-effort is the whole point of this step: it must attempt every cleanup command
+          # even when an earlier one cannot run -- there may be no containers to log if the
+          # build itself failed. This hides nothing. `if: always()` runs the step in addition
+          # to a failure, never instead of it, and the job's conclusion is already decided by
+          # the step that failed. No assertion lives here, so none is being suppressed, and
+          # there is still no `continue-on-error` and no `|| true` anywhere in this workflow.
+          set +e
           set -u
 
           echo "--- final state before teardown ---"

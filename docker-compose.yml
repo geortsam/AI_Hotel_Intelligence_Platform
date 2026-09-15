@@ -78,7 +78,20 @@ services:
     # the host does. Publishing it put the stack's one real secret in front of every process on
     # the machine and, on a developer box already running PostgreSQL, collided with it.
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # `/var/lib/postgresql`, NOT `/var/lib/postgresql/data`.
+      #
+      # PostgreSQL 18 changed where the official image keeps its cluster: data now lives in a
+      # major-version subdirectory (`/var/lib/postgresql/18/docker`) so that `pg_upgrade --link`
+      # can work across versions without crossing a mount boundary. The mount therefore belongs
+      # at the PARENT. Given the old 16-era path the image sees a volume it would never write
+      # to, recognises that the data would silently not persist, and refuses to start -- which
+      # with `restart: unless-stopped` becomes a crash loop, not a clear error.
+      #
+      # Found by running it: CI run 34984757640 reported `db did not become healthy within
+      # 120s` with "there appears to be PostgreSQL data in: /var/lib/postgresql/data (unused
+      # mount/volume)". No amount of static checking could have caught this -- the path is
+      # valid YAML, a valid volume and a valid mount; only the 18 image knows it is wrong.
+      - postgres_data:/var/lib/postgresql
       # Anything dropped in database/init/ is executed once, on first cluster creation.
       # Currently empty: the schema arrives through Alembic, in the `migrate` service below.
       - ./database/init:/docker-entrypoint-initdb.d:ro
