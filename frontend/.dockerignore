@@ -1,5 +1,16 @@
 node_modules/
 dist/
 .vite/
+
+# Every dotenv file, not just the two that were named before.
+#
+# Vite reads `.env`, `.env.local` AND mode files such as `.env.production` and
+# `.env.staging`. Listing only the first two left the mode files in the build context, where
+# any VITE_-prefixed value in them would be INLINED into the shipped bundle -- the one way a
+# secret can reach a browser from this repository. `.gitignore` already stops such a file
+# being committed; this stops it being copied out of a developer's working tree.
 .env
-.env.local
+.env.*
+
+# The example carries only empty values and documents the two variables that exist.
+!.env.example

@@ -1,18 +1,46 @@
-# NOTE: not built or run on the development machine -- Docker and Node are not installed
-# there. This Dockerfile has NOT been verified.
-FROM node:20-alpine AS build
+# NOTE: not built or run on the development machine -- Docker is not installed there.
+# This Dockerfile has NOT been verified by building it.
+#
+# Node 24 because that is the only version this project actually verifies: CI runs
+# actions/setup-node with node-version 24, and the developer machine runs 24.21.0. Vite 6
+# supports 20 as well, so the previous node:20-alpine was not broken -- it was simply a
+# version nothing in this repository ever tested, which is a poor thing to ship from.
+FROM node:24-alpine AS build
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install
+# The lockfile belongs in THIS layer, beside package.json.
+#
+# Previously only package.json was copied here and the install was `npm install`, so the
+# lockfile -- which arrived later, with the source -- had no effect at all: the image resolved
+# fresh versions from the "^" ranges and could ship dependencies CI had never seen. `npm ci`
+# installs exactly what package-lock.json records and fails outright if the two disagree,
+# which is what makes this build reproducible. It is also what CI already does.
+#
+# No `--omit=dev`: vite and typescript are devDependencies, and this stage is the build.
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
+
+# Build-time, not runtime: Vite inlines this at compile time, so changing the API origin means
+# rebuilding the image. Empty means "same origin as the page", which is what the compose
+# topology uses -- the nginx stage below proxies /api to the api service, so the browser never
+# needs a second origin and no CORS is involved.
 ARG VITE_API_BASE_URL=""
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build
 
 FROM nginx:1.27-alpine AS runtime
+
+# Replaces the stock server block rather than sitting beside it: the image's own default.conf
+# is what would otherwise serve this directory with no SPA fallback, no cache policy and no
+# security headers.
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Only the built output crosses the stage boundary. No Node, no npm, no node_modules, no
+# source tree, no tests -- the runtime image is nginx plus static files.
 COPY --from=build /app/dist /usr/share/nginx/html
+
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
