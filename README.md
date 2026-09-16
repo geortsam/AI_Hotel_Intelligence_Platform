@@ -303,7 +303,7 @@ Every push and pull request to `main` runs three jobs in parallel on `ubuntu-lat
 |---|---|
 | `quality-gates` | Ruff lint, Ruff format check, mypy, the Alembic chain against a disposable PostgreSQL 18.6, then the full pytest suite |
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
-| `Docker runtime verification` | builds both images and **runs the real Compose stack** |
+| `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
@@ -313,7 +313,11 @@ and `/intelligence`, that `/api/v1/` is proxied through to FastAPI while an unkn
 path still returns a real 404 rather than the SPA, that `SECRET_KEY` and `POSTGRES_PASSWORD`
 reach no frontend container or served asset, that a second `alembic upgrade head` is a no-op,
 that the schema survives a stop/start, and that **a deliberately broken migration prevents the
-API from starting at all**. Everything is torn down afterwards, volumes included.
+API from starting at all**. It then seeds data through the real API, takes a `pg_dump`, restores
+it into a **separate** PostgreSQL 18.6 instance, and requires the restored database to match the
+source byte for byte and to serve the application — see
+[docs/deployment/backup-restore.md](docs/deployment/backup-restore.md). Everything is torn down
+afterwards, volumes included.
 
 That is why the deployment files in this repository are no longer described as unverified.
 
@@ -366,9 +370,13 @@ available locally; `package-lock.json` is committed.
 
 What remains genuinely missing is operational rather than functional:
 
-- **No backup or restore.** There is no `pg_dump` procedure, no restore tooling and no recovery
-  runbook. `docker compose down -v` destroys the database permanently and nothing can bring it
-  back. This is the largest gap between "runs correctly" and "safe to run in production".
+- **Backup and restore are documented and runtime-verified, but not automated.**
+  [docs/deployment/backup-restore.md](docs/deployment/backup-restore.md) is the procedure, and CI
+  proves it on every push: it dumps a seeded database, restores into a *separate* PostgreSQL
+  18.6 instance, requires the restored data to match the source byte for byte, and requires the
+  real API to serve from the result. What is **not** automated is scheduling, off-host storage,
+  encryption, retention and point-in-time recovery — taking a backup remains a deliberate
+  operator action. `docker compose down -v` still destroys the volume permanently.
 - **No TLS.** nginx listens on port 80 only. The stack terminates no TLS and the repository does
   not yet say whether termination belongs here or upstream, so the HSTS settings in
   `.env.example` cannot take effect.

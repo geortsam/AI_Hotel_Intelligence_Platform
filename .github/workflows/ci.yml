@@ -243,6 +243,10 @@ jobs:
       # developer's local project or reach a volume that holds real data.
       COMPOSE_PROJECT: hotel-intelligence-ci-${{ github.run_id }}
       FAILGATE_PROJECT: hotel-intelligence-ci-${{ github.run_id }}-failgate
+      # The restore target is a plain `docker run` container rather than a Compose service, so
+      # it carries the run id in its own name for the same reason the projects do: nothing here
+      # may collide with a concurrent run or with anything on a developer's machine.
+      RESTORE_CONTAINER: hotel-intelligence-ci-${{ github.run_id }}-restore
       # Not secrets. This database is created for this job and destroyed with it, and the
       # name is deliberately NOT hotel_intelligence_test -- that name is shared with a
       # developer's demo database, and nothing in CI should ever be able to match it.
@@ -848,6 +852,280 @@ jobs:
           [ "$rows" = "$after" ] || { echo "::error::table count changed across restart"; exit 1; }
           echo "  OK   the named volume preserved the schema across stop/start"
 
+      - name: Seed deterministic data through the API
+        run: |
+          set -euo pipefail
+
+          # Through the real endpoints, not an INSERT. A migrated database is empty, so there
+          # would otherwise be nothing for a backup to prove it preserved -- and rows written
+          # straight into the tables would prove only that pg_dump copies rows, not that the
+          # application's own data survives a round trip. This is the documented bootstrap
+          # path from docs/deployment/first-run-bootstrap.md, exercised end to end.
+          base="http://127.0.0.1:${FRONTEND_PORT}"
+
+          code="$(curl -sS -o "$RUNNER_TEMP/register.json" -w '%{http_code}' --max-time 15 \
+            -X POST "$base/api/v1/auth/register" -H 'Content-Type: application/json' \
+            -d '{"email":"backup-probe@example.test","full_name":"Backup Probe","password":"ci-only-not-a-real-password"}')"
+          echo "  POST /api/v1/auth/register -> $code"
+          [ "$code" = "201" ] || { echo "::error::register returned $code"; cat "$RUNNER_TEMP/register.json"; exit 1; }
+
+          code="$(curl -sS -o "$RUNNER_TEMP/login.json" -w '%{http_code}' --max-time 15 \
+            -X POST "$base/api/v1/auth/login" -H 'Content-Type: application/json' \
+            -d '{"email":"backup-probe@example.test","password":"ci-only-not-a-real-password"}')"
+          echo "  POST /api/v1/auth/login    -> $code"
+          [ "$code" = "200" ] || { echo "::error::login returned $code"; exit 1; }
+
+          # The token is a bearer credential: read it into a masked variable rather than
+          # echoing it, and never write it to a file that a later step prints.
+          token="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["access_token"])' "$RUNNER_TEMP/login.json")"
+          echo "::add-mask::$token"
+          rm -f "$RUNNER_TEMP/login.json"
+
+          code="$(curl -sS -o "$RUNNER_TEMP/hotel.json" -w '%{http_code}' --max-time 15 \
+            -X POST "$base/api/v1/hotels" -H "Authorization: Bearer $token" \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"Backup Probe Hotel","slug":"backup-probe-hotel","address_line1":"1 Test Street","city":"Testville","country_code":"GR","currency":"EUR"}')"
+          echo "  POST /api/v1/hotels        -> $code"
+          [ "$code" = "201" ] || { echo "::error::hotel creation returned $code"; cat "$RUNNER_TEMP/hotel.json"; exit 1; }
+
+          echo "--- what the API actually wrote ---"
+          dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c \
+            "SELECT u.email, h.slug, uh.role FROM user_hotels uh
+               JOIN users u ON u.id = uh.user_id
+               JOIN hotels h ON h.id = uh.hotel_id"
+          echo "  OK   one user, one hotel and the creator's owner membership exist"
+
+      - name: Capture source facts and take a pg_dump backup
+        run: |
+          set -euo pipefail
+
+          # The facts are captured BEFORE the dump and compared against the restored database
+          # afterwards. Counts alone would not prove much, so this also pins the exact stored
+          # values -- including the server-generated public_id UUIDs and the timestamps, which
+          # must come back byte-identical. They are read from the source rather than asserted
+          # against literals precisely because they are server-generated.
+          cat > "$RUNNER_TEMP/facts.sql" <<'SQL'
+          SELECT 'revision=' || version_num FROM alembic_version
+          UNION ALL SELECT 'base_tables=' || count(*)::text FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+          UNION ALL SELECT 'views=' || count(*)::text FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_type = 'VIEW'
+          UNION ALL SELECT 'count.users=' || count(*)::text FROM users
+          UNION ALL SELECT 'count.hotels=' || count(*)::text FROM hotels
+          UNION ALL SELECT 'count.user_hotels=' || count(*)::text FROM user_hotels
+          UNION ALL SELECT 'row.user=' || email || '|' || full_name || '|' || is_active::text
+            || '|' || public_id::text || '|'
+            || to_char(password_changed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.US') FROM users
+          UNION ALL SELECT 'row.hotel=' || slug || '|' || name || '|' || city || '|'
+            || country_code || '|' || currency || '|' || timezone || '|' || public_id::text FROM hotels
+          UNION ALL SELECT 'row.membership=' || u.email || '|' || h.slug || '|' || uh.role
+            FROM user_hotels uh JOIN users u ON u.id = uh.user_id JOIN hotels h ON h.id = uh.hotel_id
+          UNION ALL SELECT 'digest.users=' || md5(string_agg(
+            email || full_name || public_id::text || is_active::text, '|' ORDER BY email)) FROM users
+          UNION ALL SELECT 'digest.hotels=' || md5(string_agg(
+            slug || name || public_id::text, '|' ORDER BY slug)) FROM hotels
+          ORDER BY 1
+          SQL
+
+          dc cp "$RUNNER_TEMP/facts.sql" "db:/tmp/facts.sql"
+          dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -f /tmp/facts.sql \
+            > "$RUNNER_TEMP/source-facts.txt"
+          echo "--- source facts ---"
+          sed 's/^/  /' "$RUNNER_TEMP/source-facts.txt"
+
+          echo "--- the client tools this procedure depends on ---"
+          dc exec -T db pg_dump --version
+          dc exec -T db pg_restore --version
+
+          # Custom format, not plain SQL: it is compressed, it can be inspected with
+          # `pg_restore --list` without being applied, and it can be restored selectively.
+          # Written inside the container and copied out, rather than streamed over stdout,
+          # because the archive is binary and must not pass through any text handling.
+          #
+          # No password anywhere: `dc exec db` authenticates over the container's own unix
+          # socket, so nothing sensitive reaches the command line, the log or the process list.
+          dc exec -T db pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+            --format=custom --file=/tmp/hotel.backup
+          dc cp "db:/tmp/hotel.backup" "$RUNNER_TEMP/hotel.backup"
+
+          bytes="$(stat -c%s "$RUNNER_TEMP/hotel.backup")"
+          echo "  backup size: $bytes bytes"
+          [ "$bytes" -gt 1000 ] || { echo "::error::backup is implausibly small ($bytes bytes)"; exit 1; }
+
+          echo "--- pg_restore --list (the archive is readable without restoring it) ---"
+          dc exec -T db pg_restore --list /tmp/hotel.backup > "$RUNNER_TEMP/archive-toc.txt"
+          echo "  table-of-contents entries: $(grep -c ';' "$RUNNER_TEMP/archive-toc.txt")"
+
+          for object in "TABLE users" "TABLE hotels" "TABLE user_hotels" "TABLE alembic_version" "TABLE audit_events"; do
+            if ! grep -q "$object" "$RUNNER_TEMP/archive-toc.txt"; then
+              echo "::error::archive contains no $object"
+              exit 1
+            fi
+            echo "  OK   archive contains $object"
+          done
+          echo "  OK   custom-format backup created and verified readable"
+
+      - name: Restore into a separate disposable PostgreSQL instance
+        run: |
+          set -euo pipefail
+
+          # A SEPARATE container, not a second database in the source server. Restoring into a
+          # fresh instance is what disaster recovery actually means, and it also proves the
+          # archive is portable rather than dependent on anything left in the source server.
+          #
+          # Named after the run id and attached to this project's network; no global name is
+          # used, so nothing here can collide with another run or with a developer's Docker.
+          network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' \
+            "$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=db" | head -n1)")"
+          echo "  attaching to network: $network"
+
+          restore_password="$(openssl rand -hex 24)"
+          echo "::add-mask::$restore_password"
+
+          docker run -d --name "$RESTORE_CONTAINER" --network "$network" \
+            -e POSTGRES_PASSWORD="$restore_password" \
+            -e POSTGRES_DB=hotel_restore \
+            postgres:18.6-alpine > /dev/null
+          echo "  started $RESTORE_CONTAINER"
+
+          ready=no
+          for _ in $(seq 60); do
+            if docker exec "$RESTORE_CONTAINER" pg_isready -U postgres -d hotel_restore > /dev/null 2>&1; then
+              ready=yes
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != yes ]; then
+            echo "::error::the restore target never became ready"
+            docker logs --tail 50 "$RESTORE_CONTAINER"
+            exit 1
+          fi
+          echo "  restore target is accepting connections"
+
+          docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc \
+            "SELECT 'target server: ' || version()"
+
+          docker cp "$RUNNER_TEMP/hotel.backup" "$RESTORE_CONTAINER:/tmp/hotel.backup"
+
+          # --exit-on-error matters more than it looks: without it pg_restore reports errors
+          # and still exits 0, so "the restore succeeded" would mean nothing. --no-owner and
+          # --no-privileges because the dump's objects belong to a role that does not exist in
+          # this fresh instance, which is the normal cross-instance case.
+          docker exec "$RESTORE_CONTAINER" pg_restore \
+            --exit-on-error --no-owner --no-privileges \
+            -U postgres -d hotel_restore /tmp/hotel.backup
+          echo "  OK   pg_restore completed with --exit-on-error"
+
+      - name: Prove the restored database matches the source
+        run: |
+          set -euo pipefail
+
+          docker cp "$RUNNER_TEMP/facts.sql" "$RESTORE_CONTAINER:/tmp/facts.sql"
+          docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tA -f /tmp/facts.sql \
+            > "$RUNNER_TEMP/restored-facts.txt"
+
+          echo "--- restored facts ---"
+          sed 's/^/  /' "$RUNNER_TEMP/restored-facts.txt"
+
+          echo "--- source vs restored ---"
+          if ! diff -u "$RUNNER_TEMP/source-facts.txt" "$RUNNER_TEMP/restored-facts.txt"; then
+            echo "::error::the restored database does not match the source"
+            exit 1
+          fi
+          echo "  OK   every captured fact is identical, byte for byte"
+
+          # The diff above is the real proof. These restate the few facts that must hold
+          # absolutely, so a failure names what was wrong rather than only that something was.
+          revision="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc 'SELECT version_num FROM alembic_version')"
+          [ "$revision" = "0009_audit_booking_deleted" ] || {
+            echo "::error::restored revision is $revision"; exit 1; }
+          echo "  OK   alembic_version is 0009_audit_booking_deleted -- no upgrade or downgrade happened"
+
+          tables="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")"
+          [ "$tables" -eq 22 ] || { echo "::error::restored database has $tables base tables, expected 22"; exit 1; }
+          echo "  OK   22 base tables (21 application tables + alembic_version)"
+
+          membership="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc \
+            "SELECT u.email || '/' || h.slug || '/' || uh.role FROM user_hotels uh
+               JOIN users u ON u.id = uh.user_id JOIN hotels h ON h.id = uh.hotel_id")"
+          echo "  restored membership: $membership"
+          [ "$membership" = "backup-probe@example.test/backup-probe-hotel/owner" ] || {
+            echo "::error::the application row did not survive the round trip"; exit 1; }
+          echo "  OK   the user, the hotel and the owner membership all survived"
+
+          echo "--- the source database was only ever read ---"
+          dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -f /tmp/facts.sql \
+            > "$RUNNER_TEMP/source-facts-after.txt"
+          if ! diff -u "$RUNNER_TEMP/source-facts.txt" "$RUNNER_TEMP/source-facts-after.txt"; then
+            echo "::error::the source database changed during backup and restore"
+            exit 1
+          fi
+          echo "  OK   source is unchanged -- nothing was restored over it"
+
+      - name: Prove the application can serve from the restored database
+        run: |
+          set -euo pipefail
+
+          # Rows in the right places is not the same as a database the application can use.
+          # This runs the real API image against the restored database and asks its own
+          # readiness probe, which executes a query rather than reporting process liveness.
+          network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "$RESTORE_CONTAINER")"
+          restore_url="$(docker exec "$RESTORE_CONTAINER" printenv POSTGRES_PASSWORD | \
+            sed "s|^|postgresql+psycopg://postgres:|; s|$|@${RESTORE_CONTAINER}:5432/hotel_restore|")"
+          echo "::add-mask::$restore_url"
+
+          docker run --rm --network "$network" \
+            -e DATABASE_URL="$restore_url" \
+            -e ENVIRONMENT=production \
+            -e SECRET_KEY="$APP_SECRET" \
+            -e LOG_LEVEL=WARNING \
+            hotel-intelligence-api:local \
+            python -c "
+          import json
+          from fastapi.testclient import TestClient
+          from app.main import create_app
+
+          with TestClient(create_app()) as client:
+              health = client.get('/health/db')
+              print('  /health/db ->', health.status_code, json.dumps(health.json()))
+              assert health.status_code == 200, health.status_code
+              assert health.json()['database'] == 'reachable', health.json()
+          print('  OK   the application reached the restored database')
+          "
+
+      - name: Prove a damaged backup is refused
+        run: |
+          set -euo pipefail
+
+          # A COPY of the archive, truncated. The real backup is never touched, and the target
+          # is a third database so neither the source nor the verified restore is at risk.
+          head -c 4096 "$RUNNER_TEMP/hotel.backup" > "$RUNNER_TEMP/damaged.backup"
+          echo "  damaged copy: $(stat -c%s "$RUNNER_TEMP/damaged.backup") bytes of $(stat -c%s "$RUNNER_TEMP/hotel.backup")"
+
+          docker exec "$RESTORE_CONTAINER" createdb -U postgres hotel_damaged
+          docker cp "$RUNNER_TEMP/damaged.backup" "$RESTORE_CONTAINER:/tmp/damaged.backup"
+
+          # The one place a non-zero exit is the required outcome, so it is captured
+          # deliberately and asserted on rather than allowed to fail the step.
+          set +e
+          docker exec "$RESTORE_CONTAINER" pg_restore --exit-on-error --no-owner --no-privileges \
+            -U postgres -d hotel_damaged /tmp/damaged.backup
+          damaged_code=$?
+          set -e
+          echo "  pg_restore on the damaged archive exited: $damaged_code"
+          if [ "$damaged_code" -eq 0 ]; then
+            echo "::error::a truncated archive restored successfully; the restore gate proves nothing"
+            exit 1
+          fi
+          echo "  OK   a damaged archive is refused rather than silently half-applied"
+
+          intact="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc 'SELECT count(*) FROM users')"
+          [ "$intact" = "1" ] || { echo "::error::the good restore was affected"; exit 1; }
+          echo "  OK   the verified restore and the source are both untouched"
+
+          rm -f "$RUNNER_TEMP/damaged.backup"
+
       - name: Verify the migration gate blocks the API
         run: |
           set -euo pipefail
@@ -1000,12 +1278,24 @@ jobs:
           docker compose --env-file "$ENV_FILE" -p "$COMPOSE_PROJECT" down -v --remove-orphans
           docker compose --env-file "$ENV_FILE" -p "$FAILGATE_PROJECT" -f docker-compose.yml down -v --remove-orphans
 
+          # The restore target is not a Compose service, so `down` does not reach it. Removed
+          # by its exact run-scoped name -- never by prune, never by a filter that could match
+          # anything else on the host.
+          docker rm -f "$RESTORE_CONTAINER"
+
+          # The backup and every file derived from it. These live in $RUNNER_TEMP, outside the
+          # workspace, so no archive can ever be staged, committed or uploaded as an artifact.
           rm -f "$ENV_FILE" "$RUNNER_TEMP/failgate.yml" "$RUNNER_TEMP/resolved.json"
+          rm -f "$RUNNER_TEMP/hotel.backup" "$RUNNER_TEMP/damaged.backup" "$RUNNER_TEMP/facts.sql"
+          rm -f "$RUNNER_TEMP/source-facts.txt" "$RUNNER_TEMP/source-facts-after.txt"
+          rm -f "$RUNNER_TEMP/restored-facts.txt" "$RUNNER_TEMP/archive-toc.txt"
+          rm -f "$RUNNER_TEMP/register.json" "$RUNNER_TEMP/login.json" "$RUNNER_TEMP/hotel.json"
           rm -rf "$RUNNER_TEMP/html"
 
           echo "--- containers left from this run (expected: none) ---"
           docker ps -a --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --format '{{.Names}}'
           docker ps -a --filter "label=com.docker.compose.project=$FAILGATE_PROJECT" --format '{{.Names}}'
+          docker ps -a --filter "name=$RESTORE_CONTAINER" --format '{{.Names}}'
           echo "--- volumes left from this run (expected: none) ---"
           docker volume ls --format '{{.Name}}' | grep -E "^(${COMPOSE_PROJECT}|${FAILGATE_PROJECT})_"
           echo "(a grep with no output above means no volume survived, which is the expectation)"
