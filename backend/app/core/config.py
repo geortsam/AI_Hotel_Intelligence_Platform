@@ -12,10 +12,10 @@ never built. ``secret_key`` remains declared but unread -- there is no authentic
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from app.core.client_address import parse_trusted_proxy
 
@@ -46,7 +46,20 @@ class Settings(BaseSettings):
 
     # --- CORS --------------------------------------------------------------
     # Comma-separated in the environment, a list once parsed.
-    cors_origins: list[str] = Field(
+    #
+    # `NoDecode` is what makes that sentence true, and without it the field is unusable from
+    # the environment at all. pydantic-settings treats a complex annotation -- `list[str]` is
+    # one -- as JSON, so `EnvSettingsSource` calls `json.loads` on the raw value BEFORE any
+    # `mode="before"` validator runs. `http://localhost:5173` is not JSON, so the process dies
+    # at import with `SettingsError: error parsing value for field "cors_origins"`, and so does
+    # every other documented form including the one in .env.example. `NoDecode` suppresses that
+    # decode step and hands `_split_origins` below the raw string it was written to accept.
+    #
+    # This escaped five stages of review because the init source does NOT decode:
+    # `Settings(cors_origins="a,b")` -- which is how every test builds settings -- has always
+    # worked. Only the environment path was broken, and that is the only path a deployment
+    # uses. It surfaced as a crashed `migrate` container in CI run 35090204615.
+    cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://localhost:3000"]
     )
 
@@ -97,7 +110,14 @@ class Settings(BaseSettings):
     #: sending one. Nothing is implicitly trusted -- not 127.0.0.1, not a private range --
     #: because "the proxy is on loopback" is a deployment fact this application cannot verify
     #: and must not assume. See `app.core.client_address` for the resolution algorithm.
-    trusted_proxies: list[str] = Field(default_factory=list)
+    #:
+    #: `NoDecode` for the same reason as ``cors_origins`` above: without it the environment
+    #: source JSON-decodes this field before ``_split_trusted_proxies`` can split it, so
+    #: ``TRUSTED_PROXIES=10.0.0.0/8,192.168.1.5`` -- the form this file documents and
+    #: .env.example prints -- raises instead of parsing. A deployment behind a proxy could
+    #: therefore never configure the one setting that makes rate limiting and audit attribution
+    #: correct.
+    trusted_proxies: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
     # --- Audit retention (Stage 4.5.14) ------------------------------------
     #: How long an audit event stays OUT of the archive, in days.
