@@ -309,9 +309,15 @@ describe('period-over-period comparison', () => {
 
   it('shows no comparison at all when the previous window could not be fetched', async () => {
     stubSession()
+    // Keyed on `date_to` for the same reason stubOverview is: the selected window always ends
+    // on the hotel's today and the comparison window always ends before it, so that is what
+    // separates them on every day this suite runs. Keying on `date_from` against the fixture's
+    // own literal made this test a calendar bomb -- it passed only while the comparison window
+    // began before 2026-09-04, and started failing on 2026-09-17, when `today - 13` reached it.
+    const today = todayInZone(TEST_HOTEL.timezone)
     fetchStub.on('GET', 'analytics/overview', ({ url }) => {
-      const from = new URL(url, 'http://localhost').searchParams.get('date_from')!
-      return from >= CURRENT_OVERVIEW.range.date_from
+      const to = new URL(url, 'http://localhost').searchParams.get('date_to')!
+      return to === today
         ? { body: CURRENT_OVERVIEW }
         : { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'x', details: [] } } }
     })
