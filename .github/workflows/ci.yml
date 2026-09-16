@@ -247,6 +247,7 @@ jobs:
       # it carries the run id in its own name for the same reason the projects do: nothing here
       # may collide with a concurrent run or with anything on a developer's machine.
       RESTORE_CONTAINER: hotel-intelligence-ci-${{ github.run_id }}-restore
+      RESTORE_API: hotel-intelligence-ci-${{ github.run_id }}-restore-api
       # Not secrets. This database is created for this job and destroyed with it, and the
       # name is deliberately NOT hotel_intelligence_test -- that name is shared with a
       # developer's demo database, and nothing in CI should ever be able to match it.
@@ -1074,31 +1075,60 @@ jobs:
           set -euo pipefail
 
           # Rows in the right places is not the same as a database the application can use.
-          # This runs the real API image against the restored database and asks its own
-          # readiness probe, which executes a query rather than reporting process liveness.
+          #
+          # This starts the real API image, with its real CMD, against the restored database and
+          # asks its own readiness probe -- which runs a query rather than reporting process
+          # liveness. NOT via starlette's TestClient: that needs httpx, a dev dependency the
+          # runtime image deliberately does not carry, and an in-process harness would prove
+          # less than uvicorn actually serving. urllib is in the standard library, and is the
+          # same mechanism the compose healthcheck already uses.
+          #
+          # ENVIRONMENT=production so this also exercises the strict configuration path, which
+          # refuses to start without a signing secret.
           network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "$RESTORE_CONTAINER")"
           restore_url="$(docker exec "$RESTORE_CONTAINER" printenv POSTGRES_PASSWORD | \
             sed "s|^|postgresql+psycopg://postgres:|; s|$|@${RESTORE_CONTAINER}:5432/hotel_restore|")"
           echo "::add-mask::$restore_url"
 
-          docker run --rm --network "$network" \
+          docker run -d --name "$RESTORE_API" --network "$network" \
             -e DATABASE_URL="$restore_url" \
             -e ENVIRONMENT=production \
             -e SECRET_KEY="$APP_SECRET" \
             -e LOG_LEVEL=WARNING \
-            hotel-intelligence-api:local \
-            python -c "
-          import json
-          from fastapi.testclient import TestClient
-          from app.main import create_app
+            hotel-intelligence-api:local > /dev/null
 
-          with TestClient(create_app()) as client:
-              health = client.get('/health/db')
-              print('  /health/db ->', health.status_code, json.dumps(health.json()))
-              assert health.status_code == 200, health.status_code
-              assert health.json()['database'] == 'reachable', health.json()
+          alive=no
+          for _ in $(seq 45); do
+            if docker exec "$RESTORE_API" python -c "
+          import urllib.request
+          urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)
+          " > /dev/null 2>&1; then
+              alive=yes
+              break
+            fi
+            sleep 2
+          done
+          if [ "$alive" != yes ]; then
+            echo "::error::the API never came up against the restored database"
+            docker logs --tail 60 "$RESTORE_API"
+            exit 1
+          fi
+          echo "  the API started against the restored database"
+
+          docker exec "$RESTORE_API" python -c "
+          import json, urllib.request
+          with urllib.request.urlopen('http://127.0.0.1:8000/health/db', timeout=5) as response:
+              body = json.load(response)
+              status = response.status
+          print('  /health/db ->', status, json.dumps(body))
+          assert status == 200, status
+          assert body['status'] == 'ok', body
+          assert body['database'] == 'reachable', body
           print('  OK   the application reached the restored database')
           "
+
+          docker rm -f "$RESTORE_API" > /dev/null
+          echo "  disposable API container removed"
 
       - name: Prove a damaged backup is refused
         run: |
@@ -1287,7 +1317,7 @@ jobs:
           # The restore target is not a Compose service, so `down` does not reach it. Removed
           # by its exact run-scoped name -- never by prune, never by a filter that could match
           # anything else on the host.
-          docker rm -f "$RESTORE_CONTAINER"
+          docker rm -f "$RESTORE_CONTAINER" "$RESTORE_API"
 
           # The backup and every file derived from it. These live in $RUNNER_TEMP, outside the
           # workspace, so no archive can ever be staged, committed or uploaded as an artifact.
@@ -1302,6 +1332,7 @@ jobs:
           docker ps -a --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --format '{{.Names}}'
           docker ps -a --filter "label=com.docker.compose.project=$FAILGATE_PROJECT" --format '{{.Names}}'
           docker ps -a --filter "name=$RESTORE_CONTAINER" --format '{{.Names}}'
+          docker ps -a --filter "name=$RESTORE_API" --format '{{.Names}}'
           echo "--- volumes left from this run (expected: none) ---"
           docker volume ls --format '{{.Name}}' | grep -E "^(${COMPOSE_PROJECT}|${FAILGATE_PROJECT})_"
           echo "(a grep with no output above means no volume survived, which is the expectation)"
