@@ -130,12 +130,39 @@ Rules these must follow when they are built:
 
 ---
 
-## 6. Deployment (planned, unverified)
+## 6. Deployment (runtime-verified in CI)
 
-Docker Compose defines three services -- `db` (PostgreSQL 16), `api`, `frontend` (built assets
-behind nginx). The API image excludes ML dependencies and trained weights; artifacts are
-mounted rather than baked in, so retraining does not require an image rebuild.
+Docker Compose defines four services:
 
-**These files have not been executed.** Docker is not installed on the current development
-machine, so `docker-compose.yml` and both Dockerfiles are written from documented behaviour
-and remain unverified.
+| Service | Image | Role |
+|---|---|---|
+| `db` | `postgres:18.6-alpine` | The database. Not published to the host. |
+| `migrate` | the API image | One-shot `alembic upgrade head`, then exits. |
+| `api` | built from `backend/Dockerfile` | uvicorn, running as non-root `appuser`. |
+| `frontend` | built from `frontend/Dockerfile` | nginx serving the built SPA and proxying `/api/`. |
+
+Startup is a chain of conditions rather than a sequence of delays:
+
+```
+db healthy  →  migrate exits 0  →  api healthy  →  frontend starts
+```
+
+`migrate` is a separate service from `api` deliberately. `pg_isready` proves the server accepts
+connections, not that a schema exists, and the API's own readiness probe is `SELECT 1`, which
+succeeds perfectly well against an empty database -- so without this gate a stack on a fresh
+volume would come up with every probe green and every data endpoint failing.
+`service_completed_successfully` makes the API's start conditional on the migration having
+actually succeeded.
+
+The API image excludes ML dependencies and trained weights. It carries the application package
+plus `alembic.ini` and `database/migrations/`, which is why its build context is the repository
+root rather than `backend/`: one image both serves requests and applies migrations.
+
+**These files are executed on every push.** A `docker-runtime` job on GitHub Actions builds both
+images and runs the stack in a disposable, run-scoped Compose project, asserting the startup
+chain, the PostgreSQL version, the schema revision, the SPA fallback, the `/api` proxy, secret
+isolation, migration idempotency, persistence across a restart, and that a failed migration
+blocks the API from starting. The repository README lists the gates.
+
+Not present, and not claimed here: TLS termination, backup and restore, and any multi-host or
+orchestrated deployment. This is a single-host Compose deployment.

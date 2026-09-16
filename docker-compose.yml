@@ -1,7 +1,11 @@
 # AI Hotel Intelligence Platform -- local stack.
 #
-# NOTE: not executed on the development machine -- Docker is not installed there.
-# This file has NOT been verified with `docker compose config` or `docker compose up`.
+# VERIFIED AT RUNTIME, in CI rather than here: Docker is still not installed on the development
+# machine, so every change to this file is proved by the `docker-runtime` job in
+# .github/workflows/ci.yml, which builds both images and runs this stack on every push. It
+# asserts the startup chain below, PostgreSQL 18.6, the schema reaching 0009, the SPA fallback,
+# the /api proxy, secret isolation, migration idempotency, persistence across a restart, and
+# that a failed migration keeps the API from starting.
 #
 #   cp .env.example .env      # then set POSTGRES_PASSWORD, and SECRET_KEY for production
 #   docker compose up --build

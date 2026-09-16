@@ -1,5 +1,8 @@
-# NOTE: not built or run on the development machine -- Docker is not installed there.
-# This Dockerfile has NOT been verified by building it.
+# NOTE: not built on the development machine -- Docker is not installed there. It IS built and
+# run on every push: the `docker-runtime` job in .github/workflows/ci.yml builds this image and
+# drives the running container, asserting that nginx serves the built SPA at /, /index.html and
+# the client-side routes, that /api/ is proxied to the API rather than swallowed by the fallback,
+# and that no build-time secret reaches the served assets.
 #
 # Node 24 because that is the only version this project actually verifies: CI runs
 # actions/setup-node with node-version 24, and the developer machine runs 24.21.0. Vite 6

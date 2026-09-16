@@ -1,5 +1,8 @@
-# NOTE: not built or run on the development machine -- Docker is not installed there.
-# This Dockerfile has NOT been verified by building it.
+# NOTE: not built on the development machine -- Docker is not installed there. It IS built and
+# run on every push: the `docker-runtime` job in .github/workflows/ci.yml builds this image and
+# checks it from the inside, asserting that /app/app, /app/alembic.ini and /app/database/migrations
+# are present, that all nine revisions are readable by the runtime user, that `python -m alembic`
+# is executable, and that the container runs as appuser.
 #
 # ## The build context is the REPOSITORY ROOT, not backend/
 #
