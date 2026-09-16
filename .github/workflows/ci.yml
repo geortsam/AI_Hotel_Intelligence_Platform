@@ -956,12 +956,18 @@ jobs:
           dc exec -T db pg_restore --list /tmp/hotel.backup > "$RUNNER_TEMP/archive-toc.txt"
           echo "  table-of-contents entries: $(grep -c ';' "$RUNNER_TEMP/archive-toc.txt")"
 
-          for object in "TABLE users" "TABLE hotels" "TABLE user_hotels" "TABLE alembic_version" "TABLE audit_events"; do
-            if ! grep -q "$object" "$RUNNER_TEMP/archive-toc.txt"; then
-              echo "::error::archive contains no $object"
+          echo "--- TABLE entries in the archive ---"
+          grep -E ' TABLE [a-z_]+ ' "$RUNNER_TEMP/archive-toc.txt" | sed 's/^/  /'
+
+          # A TOC line names the schema before the object: `... TABLE public users hotel_ci`,
+          # not `TABLE users`. Matching the schema-qualified form is what makes this assertion
+          # real -- the first version searched for `TABLE users` and found nothing.
+          for table in users hotels user_hotels alembic_version audit_events; do
+            if ! grep -qE " TABLE public ${table}( |$)" "$RUNNER_TEMP/archive-toc.txt"; then
+              echo "::error::archive contains no TABLE public.${table}"
               exit 1
             fi
-            echo "  OK   archive contains $object"
+            echo "  OK   archive contains TABLE public.${table}"
           done
           echo "  OK   custom-format backup created and verified readable"
 
