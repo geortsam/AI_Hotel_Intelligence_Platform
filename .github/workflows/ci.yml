@@ -732,38 +732,44 @@ jobs:
             | openssl x509 -noout -subject -issuer -dates
           echo "  OK   a certificate is presented on 443"
 
-          echo "--- negotiated protocol ---"
-          # Read from openssl's SSL-Session block, not from curl's `%{ssl_version}` write-out
-          # variable: the runner's curl does not know that name ("unknown --write-out variable"),
-          # and a write-out curl cannot resolve expands to an empty string rather than failing,
-          # which would have made this check silently vacuous.
-          version="$(openssl s_client -connect "127.0.0.1:${HTTPS_PORT}" -servername localhost </dev/null 2>/dev/null \
-            | awk -F': *' '/^ *Protocol *:/ { print $2; exit }')"
-          echo "  negotiated: ${version:-<none>}"
-          case "$version" in
-            TLSv1.2|TLSv1.3) echo "  OK   modern TLS negotiated" ;;
-            *) echo "::error::unexpected or unreadable TLS version: '${version}'"; exit 1 ;;
-          esac
-
-          # And the application really is reachable over TLS with the CA pinned -- no -k, so a
-          # certificate this CA did not sign would fail here.
+          echo "--- the application is reachable over TLS, with the CA pinned ---"
+          # No -k anywhere: a certificate this CA did not sign would fail here rather than be
+          # waved through, which is the whole point of pinning in a TLS gate.
           code="$(curl -sS --cacert "$CERT_DIR/fullchain.pem" -o /dev/null -w '%{http_code}' --max-time 15 "$https/index.html")"
           echo "  GET $https/index.html -> $code"
           [ "$code" = "200" ] || { echo "::error::HTTPS index.html returned $code"; exit 1; }
 
-          echo "--- TLS 1.0 and 1.1 are refused ---"
-          # Older OpenSSL builds may not even offer these; either way the connection must not
-          # succeed. `set +e` is scoped to the one command whose failure is the required result.
-          for old in tls1 tls1_1; do
+          echo "--- which protocol versions the server accepts ---"
+          # Asserted by CONNECTING with each version rather than by parsing a negotiated version
+          # out of some tool's output. Two earlier attempts at that parse -- curl's
+          # `%{ssl_version}` and openssl's `Protocol :` line -- each produced an empty string on
+          # this runner, and an empty string is exactly the kind of result that turns a security
+          # assertion into a no-op. Connecting is also the stronger statement: it tests the
+          # policy directly instead of describing it.
+          probe_protocol() {
             set +e
-            openssl s_client -connect "127.0.0.1:${HTTPS_PORT}" "-$old" </dev/null >/dev/null 2>&1
-            rc=$?
+            openssl s_client -connect "127.0.0.1:${HTTPS_PORT}" -servername localhost "$1" \
+              </dev/null >/dev/null 2>&1
+            local rc=$?
             set -e
-            if [ "$rc" -eq 0 ]; then
-              echo "::error::$old was accepted"
+            return "$rc"
+          }
+
+          for modern in -tls1_2 -tls1_3; do
+            if probe_protocol "$modern"; then
+              echo "  OK   ${modern#-} accepted"
+            else
+              echo "::error::${modern#-} was refused; the server must offer both TLS 1.2 and 1.3"
               exit 1
             fi
-            echo "  OK   $old refused (exit $rc)"
+          done
+
+          for obsolete in -tls1 -tls1_1; do
+            if probe_protocol "$obsolete"; then
+              echo "::error::${obsolete#-} was accepted; RFC 8996 deprecates it and ssl_protocols excludes it"
+              exit 1
+            fi
+            echo "  OK   ${obsolete#-} refused"
           done
 
           echo "--- port 80 redirects and serves no application content ---"
