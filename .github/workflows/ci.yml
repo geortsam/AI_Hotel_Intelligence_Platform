@@ -481,10 +481,25 @@ jobs:
           esac
 
           echo "--- host publication ---"
-          # An assertion on the absence of a mapping, not a suppressed failure: `port` exits
-          # non-zero precisely because nothing is published, which is the result required here.
-          if published="$(dc port db 5432 2>/dev/null)" && [ -n "$published" ]; then
-            echo "::error::db publishes a host port: $published"
+          # Compose does NOT signal "unpublished" through its exit status: for a port with no
+          # host binding it succeeds and prints a zero mapping -- `:0`, and depending on the
+          # address family `0.0.0.0:0` or `[::]:0`. Run 34990193958 failed here on exactly
+          # that, reading `:0` as evidence of a binding. The OUTPUT has to be read, and what
+          # distinguishes the two cases is the host port itself: zero means nothing is
+          # published, anything else is a real binding.
+          #
+          # awk rather than grep so the check cannot turn "no match" into a step failure, and
+          # so a multi-line answer (one mapping per address family) is handled a line at a
+          # time. `-F:` makes $NF the host port for every shape these mappings take --
+          # `127.0.0.1:5432`, `:::5432`, `[::]:5432` -- and the gsub drops any stray CR.
+          #
+          # No 2>/dev/null and no `if`: a genuine `compose port` failure must abort this step
+          # under `set -e`, not be mistaken for an absent binding.
+          published="$(dc port db 5432)"
+          echo "  compose reports: ${published:-<empty>}"
+          real_binding="$(printf '%s\n' "$published" | awk -F: '{ p = $NF; gsub(/[^0-9]/, "", p); if (p != "" && p + 0 != 0) print $0 }')"
+          if [ -n "$real_binding" ]; then
+            echo "::error::db publishes a host port: $real_binding"
             exit 1
           fi
           echo "  OK   db publishes no host port"
@@ -764,8 +779,14 @@ jobs:
           "
 
           echo "--- the database is not reachable from the host ---"
-          if published="$(dc port db 5432 2>/dev/null)" && [ -n "$published" ]; then
-            echo "::error::db is published at $published"; exit 1
+          # Same reading as in the database step: Compose succeeds and prints a zero mapping
+          # when nothing is bound, so the host port in the output is what decides.
+          published="$(dc port db 5432)"
+          echo "  compose reports: ${published:-<empty>}"
+          real_binding="$(printf '%s\n' "$published" | awk -F: '{ p = $NF; gsub(/[^0-9]/, "", p); if (p != "" && p + 0 != 0) print $0 }')"
+          if [ -n "$real_binding" ]; then
+            echo "::error::db is published at $real_binding"
+            exit 1
           fi
           echo "  OK   db has no host publication"
 
