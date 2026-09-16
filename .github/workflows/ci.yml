@@ -253,9 +253,10 @@ jobs:
       # developer's demo database, and nothing in CI should ever be able to match it.
       POSTGRES_USER: hotel_ci
       POSTGRES_DB: hotel_intelligence_ci
-      # High ports, clear of anything the runner image binds by default.
-      API_PORT: '18000'
-      FRONTEND_PORT: '18080'
+      # High ports, clear of anything the runner image binds by default. No API port: the API is
+      # no longer published, and one of the gates below proves it.
+      HTTP_PORT: '18080'
+      HTTPS_PORT: '18443'
 
     steps:
       - name: Check out the repository
@@ -274,6 +275,7 @@ jobs:
           # Outside the workspace on purpose: nothing this job writes may land in the git
           # working tree, and $RUNNER_TEMP is destroyed with the runner.
           ENV_FILE="$RUNNER_TEMP/compose.ci.env"
+          CERT_DIR="$RUNNER_TEMP/tls"
           umask 077
 
           # Generated per run, never reused, and masked before anything can carry them into a
@@ -297,12 +299,37 @@ jobs:
             echo "ENVIRONMENT=production"
             echo "LOG_LEVEL=WARNING"
             echo "CORS_ORIGINS="
-            echo "API_PORT=$API_PORT"
-            echo "FRONTEND_PORT=$FRONTEND_PORT"
+            echo "HTTP_PORT=$HTTP_PORT"
+            echo "HTTPS_PORT=$HTTPS_PORT"
+            echo "TLS_CERT_DIR=$CERT_DIR"
           } > "$ENV_FILE"
+
+          # A disposable self-signed certificate, generated here and never committed.
+          #
+          # It lives in $RUNNER_TEMP, OUTSIDE the workspace, so the private key cannot be staged,
+          # committed or collected as an artifact. It is issued for `localhost` rather than any
+          # real name, is valid for two days, and is trusted by exactly one thing: the curl
+          # invocations below, via --cacert.
+          #
+          # This proves the TLS configuration works. It proves nothing about public trust -- a
+          # self-signed certificate is not a substitute for one from a CA, and the runbook says
+          # so.
+          mkdir -p "$CERT_DIR"
+          chmod 700 "$CERT_DIR"
+          openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout "$CERT_DIR/privkey.pem" -out "$CERT_DIR/fullchain.pem" \
+            -days 2 -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null
+          chmod 600 "$CERT_DIR/privkey.pem"
+          chmod 644 "$CERT_DIR/fullchain.pem"
+
+          echo "--- certificate (public half only) ---"
+          openssl x509 -in "$CERT_DIR/fullchain.pem" -noout -subject -dates
+          echo "  key permissions: $(stat -c '%a' "$CERT_DIR/privkey.pem")  (never printed, never uploaded)"
 
           {
             echo "ENV_FILE=$ENV_FILE"
+            echo "CERT_DIR=$CERT_DIR"
             echo "PG_PASSWORD=$PG_PASSWORD"
             echo "APP_SECRET=$APP_SECRET"
           } >> "$GITHUB_ENV"
@@ -517,34 +544,44 @@ jobs:
             *) echo "  OK   no host binding on the container either" ;;
           esac
 
-      - name: Set TRUSTED_PROXIES from the real Compose network
+      - name: Assert the declared trust boundary is the real one
         run: |
           set -euo pipefail
 
-          # Read back rather than guessed. Compose allocates this subnet at runtime, which is
-          # exactly why docker-compose.yml hard-codes nothing: the value that makes the
-          # backend believe nginx's X-Forwarded-For is a property of the running network.
-          cid="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=db")"
+          # docker-compose.yml no longer discovers this at runtime: it DECLARES the network's
+          # subnet and pins the frontend to 172.29.0.10, so TRUSTED_PROXIES can be a constant
+          # (/32) rather than a value rediscovered on every deployment. A discovered value is
+          # the more dangerous design -- set once against a subnet that Docker later hands to a
+          # different network, it silently trusts the wrong peers.
+          #
+          # Declaring it moves the risk to "the declaration and reality disagree", which is
+          # exactly what this step exists to catch.
+          expected_subnet='172.29.0.0/16'
+          expected_proxy='172.29.0.10'
+
+          cid="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=db" | head -n1)"
           network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "$cid")"
           subnet="$(docker network inspect "$network" -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}')"
-          echo "network: $network"
-          echo "subnet : $subnet"
+          echo "  network: $network"
+          echo "  subnet : $subnet"
+          if [ "$subnet" != "$expected_subnet" ]; then
+            echo "::error::network subnet is $subnet, but docker-compose.yml declares $expected_subnet"
+            exit 1
+          fi
+          echo "  OK   the running network matches the declared subnet"
 
-          # Refuse anything that would trust the whole internet, and anything that is not a
-          # subnet at all. The application would reject a malformed value at startup; catching
-          # it here names the problem instead of leaving it as a container that will not boot.
-          case "$subnet" in
-            ""|"0.0.0.0/0"|"::/0")
-              echo "::error::refusing to use '$subnet' as TRUSTED_PROXIES"
-              exit 1 ;;
+          # Refuse anything that would trust the whole internet. The application rejects a
+          # malformed value at startup; catching it here names the problem rather than leaving a
+          # container that will not boot.
+          case "$expected_proxy" in
+            ""|"0.0.0.0"|"::") echo "::error::refusing '$expected_proxy'"; exit 1 ;;
           esac
-          python3 -c "import ipaddress,sys; ipaddress.ip_network(sys.argv[1]); print('  OK   parses as a network')" "$subnet"
+          python3 -c "import ipaddress,sys; ipaddress.ip_address(sys.argv[1]); print('  OK   the trust boundary parses as a single address')" "$expected_proxy"
 
-          # migrate, api and frontend have not started yet, so every service that receives this
-          # value will be created with it.
-          sed -i "s|^TRUSTED_PROXIES=.*|TRUSTED_PROXIES=$subnet|" "$ENV_FILE"
-          grep -q "^TRUSTED_PROXIES=$subnet$" "$ENV_FILE"
-          echo "  OK   TRUSTED_PROXIES set to the live Compose subnet"
+          # TRUSTED_PROXIES is left empty in the CI env file so docker-compose.yml's own default
+          # applies -- the gate is on the shipped default, not on something CI substitutes.
+          grep -q '^TRUSTED_PROXIES=$' "$ENV_FILE"
+          echo "  OK   CI overrides nothing; the compose default is what runs"
 
       - name: Run the migration
         run: |
@@ -656,14 +693,14 @@ jobs:
       - name: Verify the SPA through nginx
         run: |
           set -euo pipefail
-          base="http://127.0.0.1:${FRONTEND_PORT}"
+          base="https://127.0.0.1:${HTTPS_PORT}"
 
           # `/index.html` first: it is matched by nginx's exact location, which has no
           # fallback, so a 200 here means the built artefact really is being served rather
           # than something being invented by try_files.
           for path in / /index.html /bookings /reviews /intelligence; do
             body="$RUNNER_TEMP/spa-body"
-            code="$(curl -sS -o "$body" -w '%{http_code}' --max-time 15 "$base$path")"
+            code="$(curl -sS --cacert "$CERT_DIR/fullchain.pem" -o "$body" -w '%{http_code}' --max-time 15 "$base$path")"
             printf '  %-16s -> HTTP %s' "$path" "$code"
             [ "$code" = "200" ] || { echo; echo "::error::$path returned $code"; exit 1; }
             grep -q '<div id="root"></div>' "$body" || {
@@ -675,8 +712,200 @@ jobs:
           echo "  OK   SPA fallback serves real client-side routes rather than 404"
 
           echo "--- cache policy, which only a running nginx can demonstrate ---"
-          curl -sSI --max-time 15 "$base/index.html" | grep -i '^cache-control:' || {
+          curl -sSI --cacert "$CERT_DIR/fullchain.pem" --max-time 15 "$base/index.html" | grep -i '^cache-control:' || {
             echo "::error::index.html carries no Cache-Control"; exit 1; }
+
+      - name: Verify TLS termination and the HTTP redirect
+        run: |
+          set -euo pipefail
+          https="https://127.0.0.1:${HTTPS_PORT}"
+          http="http://127.0.0.1:${HTTP_PORT}"
+
+          echo "--- nginx was built with TLS support ---"
+          dc exec -T frontend nginx -V 2>&1 | tr ' ' '\n' | grep -- '--with-http_ssl_module'
+          echo "  OK   http_ssl_module is compiled in"
+
+          echo "--- the certificate nginx actually presents ---"
+          # -servername exercises SNI; </dev/null so s_client does not wait on stdin. Only the
+          # public half is printed: subject, issuer and validity, never the key.
+          openssl s_client -connect "127.0.0.1:${HTTPS_PORT}" -servername localhost </dev/null 2>/dev/null \
+            | openssl x509 -noout -subject -issuer -dates
+          echo "  OK   a certificate is presented on 443"
+
+          echo "--- negotiated protocol ---"
+          version="$(curl -sS --cacert "$CERT_DIR/fullchain.pem" -o /dev/null -w '%{ssl_version}' --max-time 15 "$https/index.html")"
+          echo "  $version"
+          case "$version" in
+            TLSv1.2|TLSv1.3) echo "  OK   modern TLS negotiated" ;;
+            *) echo "::error::unexpected TLS version: $version"; exit 1 ;;
+          esac
+
+          echo "--- TLS 1.0 and 1.1 are refused ---"
+          # Older OpenSSL builds may not even offer these; either way the connection must not
+          # succeed. `set +e` is scoped to the one command whose failure is the required result.
+          for old in tls1 tls1_1; do
+            set +e
+            openssl s_client -connect "127.0.0.1:${HTTPS_PORT}" "-$old" </dev/null >/dev/null 2>&1
+            rc=$?
+            set -e
+            if [ "$rc" -eq 0 ]; then
+              echo "::error::$old was accepted"
+              exit 1
+            fi
+            echo "  OK   $old refused (exit $rc)"
+          done
+
+          echo "--- port 80 redirects and serves no application content ---"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$http/")"
+          location="$(curl -sSI --max-time 15 "$http/" | tr -d '\r' | awk -F': ' 'tolower($1)=="location"{print $2}')"
+          echo "  GET $http/ -> $code  Location: $location"
+          [ "$code" = "308" ] || { echo "::error::expected 308 on port 80, got $code"; exit 1; }
+          case "$location" in
+            https://*) echo "  OK   redirected to HTTPS" ;;
+            *) echo "::error::redirect target is not HTTPS: $location"; exit 1 ;;
+          esac
+
+          body="$(curl -sS --max-time 15 "$http/")"
+          if printf '%s' "$body" | grep -q '<div id="root">'; then
+            echo "::error::port 80 served the SPA instead of redirecting"
+            exit 1
+          fi
+          echo "  OK   port 80 served no application content"
+
+          echo "--- a client-side route on port 80 also redirects, rather than 404ing ---"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$http/bookings")"
+          echo "  GET $http/bookings -> $code"
+          [ "$code" = "308" ] || { echo "::error::expected 308, got $code"; exit 1; }
+
+          echo "--- the healthcheck path is the one exception, by design ---"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "$http/healthz")"
+          echo "  GET $http/healthz -> $code"
+          [ "$code" = "200" ] || { echo "::error::healthz returned $code"; exit 1; }
+
+      - name: Verify HSTS and the forwarded-proto boundary
+        run: |
+          set -euo pipefail
+          https="https://127.0.0.1:${HTTPS_PORT}"
+
+          echo "--- HSTS on the static response nginx serves ---"
+          hsts="$(curl -sSI --cacert "$CERT_DIR/fullchain.pem" --max-time 15 "$https/index.html" | tr -d '\r' | awk -F': ' 'tolower($1)=="strict-transport-security"{print $2}')"
+          echo "  nginx: ${hsts:-<absent>}"
+          [ -n "$hsts" ] || { echo "::error::no HSTS on the static response"; exit 1; }
+          case "$hsts" in
+            *includeSubDomains*) echo "::error::includeSubDomains is not this deployment's policy"; exit 1 ;;
+            *preload*) echo "::error::preload must never be enabled automatically"; exit 1 ;;
+          esac
+          echo "  OK   HSTS present, without includeSubDomains and without preload"
+
+          echo "--- HSTS on the API response, which only the backend can set ---"
+          # This is the real proof that the whole chain works: the backend emits HSTS only when
+          # ENVIRONMENT=production AND it believes the original request was HTTPS
+          # (app/core/security_headers.py). It can only believe that if nginx set
+          # X-Forwarded-Proto AND the backend trusts nginx's address. An absent header here
+          # means TRUSTED_PROXIES is wrong, not that HSTS is misconfigured.
+          api_hsts="$(curl -sSI --cacert "$CERT_DIR/fullchain.pem" --max-time 15 "$https/api/v1/" | tr -d '\r' | awk -F': ' 'tolower($1)=="strict-transport-security"{print $2}')"
+          echo "  api  : ${api_hsts:-<absent>}"
+          [ -n "$api_hsts" ] || {
+            echo "::error::the API did not emit HSTS -- the forwarded-proto trust chain is broken"
+            exit 1; }
+          [ "$api_hsts" = "$hsts" ] || {
+            echo "::error::nginx and the API advertise different HSTS policies: '$hsts' vs '$api_hsts'"
+            exit 1; }
+          echo "  OK   one origin, one HSTS policy, proving X-Forwarded-Proto is trusted end to end"
+
+          echo "--- the security headers survived the move to TLS ---"
+          headers="$(curl -sSI --cacert "$CERT_DIR/fullchain.pem" --max-time 15 "$https/index.html" | tr -d '\r')"
+          for header in "x-content-type-options: nosniff" "x-frame-options: DENY" "referrer-policy: no-referrer" "permissions-policy:" "content-security-policy:" "cache-control: no-cache"; do
+            if ! printf '%s\n' "$headers" | grep -qi "^${header}"; then
+              echo "::error::missing header: $header"
+              printf '%s\n' "$headers"
+              exit 1
+            fi
+            echo "  OK   $header"
+          done
+
+      - name: Verify a client cannot forge the forwarded headers
+        run: |
+          set -euo pipefail
+          https="https://127.0.0.1:${HTTPS_PORT}"
+
+          # nginx sets X-Forwarded-Proto and X-Forwarded-For with `proxy_set_header`, which
+          # REPLACES whatever the client sent -- for the proto outright, and for the chain by
+          # appending the real peer. A client therefore cannot dictate either. The backend's own
+          # rule is the second defence: it reads a forwarded header only from a trusted peer,
+          # and walks the chain from the right.
+          echo "--- a forged X-Forwarded-Proto cannot make anything appear more secure ---"
+          # Sent over plain HTTP with a spoofed https claim. It must still redirect: nothing a
+          # client says can turn an HTTP request into an HTTPS one.
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 \
+            -H 'X-Forwarded-Proto: https' "http://127.0.0.1:${HTTP_PORT}/")"
+          echo "  GET http:// with X-Forwarded-Proto: https -> $code"
+          [ "$code" = "308" ] || { echo "::error::a forged header changed port 80's behaviour"; exit 1; }
+          echo "  OK   still redirected"
+
+          echo "--- a forged X-Forwarded-For does not become the client identity ---"
+          # The request is legitimate; only the header is a lie. nginx appends the real peer, so
+          # the rightmost entry the backend walks to is nginx's own address, and the forged
+          # value sits to its left where the backend refuses to read it. A 200 with the audit
+          # trail intact is the expected outcome -- the assertion is that the request is served
+          # normally and the spoof is simply not believed.
+          code="$(curl -sS --cacert "$CERT_DIR/fullchain.pem" -o /dev/null -w '%{http_code}' --max-time 15 \
+            -H 'X-Forwarded-For: 203.0.113.1' -H 'X-Real-IP: 203.0.113.1' "$https/api/v1/")"
+          echo "  GET /api/v1/ with a forged X-Forwarded-For -> $code"
+          [ "$code" = "200" ] || { echo "::error::expected 200, got $code"; exit 1; }
+          echo "  OK   served normally; nginx appended the real peer rather than trusting the claim"
+
+          echo "--- the API is not reachable except through nginx ---"
+          set +e
+          curl -sS --max-time 5 -o /dev/null "http://127.0.0.1:8000/health"
+          direct_default=$?
+          curl -sS --max-time 5 -o /dev/null "http://127.0.0.1:18000/health"
+          direct_old=$?
+          set -e
+          echo "  direct :8000  -> curl exit $direct_default"
+          echo "  direct :18000 -> curl exit $direct_old"
+          if [ "$direct_default" -eq 0 ] || [ "$direct_old" -eq 0 ]; then
+            echo "::error::the API answered directly on the host; it must only be reachable through nginx"
+            exit 1
+          fi
+          echo "  OK   no direct API route from the host"
+
+      - name: Verify TLS fails closed without a certificate
+        run: |
+          set -euo pipefail
+
+          # A separate, disposable frontend container with an EMPTY certificate directory. The
+          # running stack is untouched: this neither stops it nor borrows its certificates.
+          #
+          # The point is that a missing certificate must stop nginx, not make it quietly serve
+          # the application over plain HTTP.
+          empty_dir="$RUNNER_TEMP/tls-empty"
+          mkdir -p "$empty_dir"
+
+          # The frontend service declares no `image:`, so Compose names it <project>-frontend.
+          # --rm and no --name: nothing to clean up, and no global name to collide with.
+          set +e
+          docker run --rm \
+            -v "$empty_dir:/etc/nginx/certs:ro" \
+            "${COMPOSE_PROJECT}-frontend" \
+            nginx -t > "$RUNNER_TEMP/nginx-t.log" 2>&1
+          rc=$?
+          set -e
+
+          echo "--- nginx -t with no certificate present ---"
+          sed 's/^/  /' "$RUNNER_TEMP/nginx-t.log"
+          echo "  exit: $rc"
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::nginx accepted a configuration with no certificate; TLS does not fail closed"
+            exit 1
+          fi
+          if ! grep -qi "certs/fullchain.pem" "$RUNNER_TEMP/nginx-t.log"; then
+            echo "::error::nginx failed, but not because of the missing certificate"
+            exit 1
+          fi
+          echo "  OK   nginx refuses to start without its certificate"
+
+          rm -rf "$empty_dir" "$RUNNER_TEMP/nginx-t.log"
 
       - name: Verify the /api proxy through nginx
         run: |
@@ -689,10 +918,10 @@ jobs:
           # /api/v1/ is the v1 router's own metadata endpoint (app/api/v1/endpoints/meta.py):
           # unauthenticated, touches no table, exposes no business data. It is used because it
           # already exists -- there is no /api/v1/health, and none was invented.
-          base="http://127.0.0.1:${FRONTEND_PORT}"
+          base="https://127.0.0.1:${HTTPS_PORT}"
           body="$RUNNER_TEMP/api-body"
 
-          code="$(curl -sS -o "$body" -w '%{http_code}' --max-time 15 "$base/api/v1/")"
+          code="$(curl -sS --cacert "$CERT_DIR/fullchain.pem" -o "$body" -w '%{http_code}' --max-time 15 "$base/api/v1/")"
           echo "  GET /api/v1/ -> HTTP $code"
           [ "$code" = "200" ] || { echo "::error::proxy returned $code"; cat "$body"; exit 1; }
 
@@ -707,7 +936,7 @@ jobs:
           PY
 
           echo "--- the request really left nginx: an unknown API path must 404 as the API, not as the SPA ---"
-          code="$(curl -sS -o "$body" -w '%{http_code}' --max-time 15 "$base/api/v1/__no_such_route__")"
+          code="$(curl -sS --cacert "$CERT_DIR/fullchain.pem" -o "$body" -w '%{http_code}' --max-time 15 "$base/api/v1/__no_such_route__")"
           echo "  GET /api/v1/__no_such_route__ -> HTTP $code"
           if [ "$code" != "404" ]; then
             echo "::error::expected 404 from the API, got $code"
@@ -755,8 +984,9 @@ jobs:
             echo "  ${label}: NOT FOUND in served assets"
           done
 
-          # And not in what nginx actually returns, either.
-          curl -sS --max-time 15 "http://127.0.0.1:${FRONTEND_PORT}/" > "$RUNNER_TEMP/served-index"
+          # And not in what nginx actually returns over TLS, either.
+          base="https://127.0.0.1:${HTTPS_PORT}"
+          curl -sS --cacert "$CERT_DIR/fullchain.pem" --max-time 15 "$base/" > "$RUNNER_TEMP/served-index"
           for label in APP_SECRET PG_PASSWORD; do
             value="${!label}"
             if grep -qF -- "$value" "$RUNNER_TEMP/served-index"; then
@@ -795,8 +1025,31 @@ jobs:
           fi
           echo "  OK   db has no host publication"
 
-          echo "--- api host publication is intentionally retained (Stage 5.29) ---"
-          dc port api 8000
+          echo "--- the API is NOT published to the host ---"
+          # Stage 5.29 kept 8000 published for debugging; Stage 5.36 removed it, because a
+          # published API port is a second entrance that bypasses TLS, the redirect and every
+          # header nginx sets. Same reading as the database check above: Compose prints an empty
+          # mapping rather than failing when nothing is bound.
+          api_published="$(dc port api 8000)"
+          echo "  compose reports: ${api_published:-<empty>}"
+          api_binding="$(printf '%s\n' "$api_published" | awk -F: '{ p = $NF; gsub(/[^0-9]/, "", p); if (p != "" && p + 0 != 0) print $0 }')"
+          if [ -n "$api_binding" ]; then
+            echo "::error::the api publishes a host port: $api_binding"
+            exit 1
+          fi
+          echo "  OK   api publishes no host port"
+
+          cid="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=api" | head -n1)"
+          mapped="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$cid")"
+          echo "  api port bindings: $mapped"
+          case "$mapped" in
+            *HostPort*) echo "::error::api has a host binding: $mapped"; exit 1 ;;
+            *) echo "  OK   no host binding on the api container either" ;;
+          esac
+
+          echo "--- only the frontend is published ---"
+          dc port frontend 80
+          dc port frontend 443
 
       - name: Verify migration idempotency
         run: |
@@ -862,15 +1115,15 @@ jobs:
           # straight into the tables would prove only that pg_dump copies rows, not that the
           # application's own data survives a round trip. This is the documented bootstrap
           # path from docs/deployment/first-run-bootstrap.md, exercised end to end.
-          base="http://127.0.0.1:${FRONTEND_PORT}"
+          base="https://127.0.0.1:${HTTPS_PORT}"
 
-          code="$(curl -sS -o "$RUNNER_TEMP/register.json" -w '%{http_code}' --max-time 15 \
+          code="$(curl -sS --cacert "$CERT_DIR/fullchain.pem" -o "$RUNNER_TEMP/register.json" -w '%{http_code}' --max-time 15 \
             -X POST "$base/api/v1/auth/register" -H 'Content-Type: application/json' \
             -d '{"email":"backup-probe@example.test","full_name":"Backup Probe","password":"ci-only-not-a-real-password"}')"
           echo "  POST /api/v1/auth/register -> $code"
           [ "$code" = "201" ] || { echo "::error::register returned $code"; cat "$RUNNER_TEMP/register.json"; exit 1; }
 
-          code="$(curl -sS -o "$RUNNER_TEMP/login.json" -w '%{http_code}' --max-time 15 \
+          code="$(curl -sS --cacert "$CERT_DIR/fullchain.pem" -o "$RUNNER_TEMP/login.json" -w '%{http_code}' --max-time 15 \
             -X POST "$base/api/v1/auth/login" -H 'Content-Type: application/json' \
             -d '{"email":"backup-probe@example.test","password":"ci-only-not-a-real-password"}')"
           echo "  POST /api/v1/auth/login    -> $code"
@@ -882,7 +1135,7 @@ jobs:
           echo "::add-mask::$token"
           rm -f "$RUNNER_TEMP/login.json"
 
-          code="$(curl -sS -o "$RUNNER_TEMP/hotel.json" -w '%{http_code}' --max-time 15 \
+          code="$(curl -sS --cacert "$CERT_DIR/fullchain.pem" -o "$RUNNER_TEMP/hotel.json" -w '%{http_code}' --max-time 15 \
             -X POST "$base/api/v1/hotels" -H "Authorization: Bearer $token" \
             -H 'Content-Type: application/json' \
             -d '{"name":"Backup Probe Hotel","slug":"backup-probe-hotel","address_line1":"1 Test Street","city":"Testville","country_code":"GR","currency":"EUR"}')"
@@ -1327,6 +1580,13 @@ jobs:
           rm -f "$RUNNER_TEMP/restored-facts.txt" "$RUNNER_TEMP/archive-toc.txt"
           rm -f "$RUNNER_TEMP/register.json" "$RUNNER_TEMP/login.json" "$RUNNER_TEMP/hotel.json"
           rm -rf "$RUNNER_TEMP/html"
+
+          # The disposable certificate and its private key. In $RUNNER_TEMP, outside the
+          # workspace, so it could never have been staged or collected as an artifact -- but it
+          # is removed explicitly rather than left to the runner's own cleanup.
+          rm -rf "$CERT_DIR" "$RUNNER_TEMP/tls-empty"
+          echo "--- certificate material left behind (expected: none) ---"
+          ls -la "$CERT_DIR" 2>/dev/null || echo "  none"
 
           echo "--- containers left from this run (expected: none) ---"
           docker ps -a --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --format '{{.Names}}'

@@ -164,5 +164,11 @@ chain, the PostgreSQL version, the schema revision, the SPA fallback, the `/api`
 isolation, migration idempotency, persistence across a restart, and that a failed migration
 blocks the API from starting. The repository README lists the gates.
 
-Not present, and not claimed here: TLS termination, backup and restore, and any multi-host or
-orchestrated deployment. This is a single-host Compose deployment.
+nginx terminates TLS on 443 and is the only published service; port 80 redirects to it, and the
+API and database have no host ports. The backend trusts exactly one forwarding peer -- the
+frontend container's fixed address -- which is what lets rate limiting, audit attribution and
+HSTS see the real client. See [deployment/tls.md](deployment/tls.md).
+
+Not present, and not claimed here: automated certificate issuance or renewal, and any multi-host
+or orchestrated deployment. This is a single-host Compose deployment, and CI proves its TLS with
+a self-signed certificate, which is not the same as public-internet readiness.

@@ -49,17 +49,27 @@ x-backend-environment: &backend-environment
   # production still fails closed, and it fails with the application's own message.
   SECRET_KEY: ${SECRET_KEY:-}
 
-  # Empty means "read no forwarding header at all", which is the safe default and, in THIS
-  # topology, the wrong value.
+  # The single address nginx connects from -- a /32, not a subnet, and not empty.
   #
-  # nginx sits in front and sets X-Forwarded-For; with this empty the backend ignores it
-  # (app/core/client_address.py, rule 2) and attributes every request to the frontend
-  # container. The per-address login limit then becomes one bucket for the whole deployment --
-  # five sign-ins a minute for everybody -- and audit records name the proxy rather than the
-  # client. Set it in .env to the network the frontend container actually connects from; there
-  # is no correct value to hard-code here, because Compose allocates that subnet at runtime.
-  # .env.example explains how to read it back.
-  TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+  # Empty means "read no forwarding header at all". That is the safe default for a directly
+  # exposed API and the WRONG value here: nginx sits in front, so with it empty the backend
+  # ignores X-Forwarded-For (app/core/client_address.py, rule 2) and attributes every request to
+  # the proxy. The per-address login limit then becomes one bucket for the whole deployment --
+  # five sign-ins a minute for everybody -- audit records name nginx rather than the client, and
+  # X-Forwarded-Proto is ignored too, so HSTS can never activate.
+  #
+  # Too broad is worse than empty: anything inside a trusted range can claim to be any client.
+  # This is why the network below declares its subnet and the frontend gets a fixed address --
+  # the boundary is exactly one container, stated in this file, rather than whatever subnet
+  # Docker happened to allocate. Change the address here and in `networks:` together.
+  TRUSTED_PROXIES: ${TRUSTED_PROXIES:-172.29.0.10/32}
+
+  # Matching the header nginx sets on the static responses, so one origin does not advertise two
+  # different policies depending on which path answered. `includeSubDomains` is off because this
+  # deployment makes no claim about subdomains it does not serve -- turning it on would impose
+  # HTTPS on every neighbouring name under the same domain. Preload stays off in the application
+  # by default and is not enabled here; it is close to irreversible.
+  HSTS_INCLUDE_SUBDOMAINS: ${HSTS_INCLUDE_SUBDOMAINS:-false}
 
 services:
   db:
@@ -149,11 +159,14 @@ services:
       migrate:
         condition: service_completed_successfully
     environment: *backend-environment
-    # Kept published for this stage. It bypasses nginx and, while ENVIRONMENT is `development`,
-    # serves /docs -- both are known and deliberately deferred to the production-profile stage,
-    # because this is the port a first bring-up is debugged through.
-    ports:
-      - "${API_PORT:-8000}:8000"
+    # NO `ports:`. The API is reachable at api:8000 from inside the compose network and from
+    # nowhere else; nginx is the only way in.
+    #
+    # It was published up to Stage 5.35 because a first bring-up gets debugged through it. That
+    # justification expired once the deployment terminated TLS: a published 8000 is a second,
+    # plaintext entrance that bypasses every header, the redirect and the certificate, and with
+    # ENVIRONMENT unset it also serves /docs. Reaching the API directly is now a deliberate act
+    # -- `docker compose exec api ...` -- rather than something the topology offers by default.
     # /health is the liveness probe and consults no dependency (app/api/routes/health.py): no
     # authentication, no database, no data endpoint. /health/db is deliberately NOT used -- a
     # database blip would then mark the API unhealthy and take the frontend down with it, when
@@ -190,22 +203,39 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    # A fixed address inside the declared subnet below, so the backend's trust boundary can name
+    # this container exactly rather than a whole network. See TRUSTED_PROXIES above.
+    networks:
+      default:
+        ipv4_address: 172.29.0.10
     ports:
-      - "${FRONTEND_PORT:-5173}:80"
-    # /index.html, NOT /health.
+      # Both, and both are needed: 80 exists only to redirect to 443 (see frontend/nginx.conf),
+      # because a client that types the hostname without a scheme arrives on 80 and must be sent
+      # somewhere rather than refused.
+      - "${HTTP_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    volumes:
+      # The certificate and key, read-only, mounted rather than built in -- so the image is the
+      # same everywhere, a private key never enters a layer or a registry, and renewal is a file
+      # replacement plus a reload rather than a rebuild. See docs/deployment/tls.md.
+      #
+      # If this directory does not contain fullchain.pem and privkey.pem, nginx refuses to
+      # start. That is deliberate: a server that cannot present a certificate should not fall
+      # back to serving the application unencrypted.
+      - ${TLS_CERT_DIR:-./certs}:/etc/nginx/certs:ro
+    # /healthz on port 80, and the reason is TLS rather than laziness.
     #
-    # /health is meaningless here: nginx.conf's `location /` falls through to
-    # `try_files ... /index.html`, so /health returns the SPA with status 200 whether or not
-    # anything works. It would pass on an empty server. /index.html is matched by the exact
-    # `location = /index.html`, which has no fallback of its own, so a 200 there means nginx
-    # really served the built artifact -- and index.html is emitted by every Vite build and
-    # copied to /usr/share/nginx/html by frontend/Dockerfile, so it is deterministic.
+    # This probe runs INSIDE the container, where the only HTTP client is BusyBox's wget, which
+    # has no usable way to trust this deployment's certificate -- so an HTTPS probe would fail
+    # on certificate verification rather than on nginx's health, and disabling verification
+    # would make the probe pass against a server whose TLS was broken. /healthz is the one path
+    # port 80 does not redirect; it returns a constant and discloses nothing.
     #
-    # `wget` is BusyBox's applet, already present in the Alpine base image; nothing is
-    # installed for this. Short options only, since BusyBox's wget does not carry GNU's full
-    # long-option set. 127.0.0.1 because nginx.conf has `listen 80` and no `listen [::]:80`.
+    # It proves nginx is up and serving. It does NOT prove the SPA is present or that TLS works
+    # -- both of those are asserted over real HTTPS, with the CA certificate, by the
+    # docker-runtime job in .github/workflows/ci.yml, which has curl.
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/index.html"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -213,3 +243,20 @@ services:
 
 volumes:
   postgres_data:
+
+# An explicitly declared network, which exists so the trust boundary can be a constant.
+#
+# Compose allocates a subnet from Docker's default pool when none is declared, and it is not
+# guaranteed to be the same one after a `down`. TRUSTED_PROXIES would then either have to be
+# rediscovered on every deployment or -- far worse -- be set once to a subnet that later
+# belongs to something else, silently trusting the wrong network. Declaring the subnet here,
+# and pinning the frontend to a fixed address inside it, makes the boundary a fact of this
+# file rather than of whatever Docker happened to hand out.
+#
+# 172.29.0.0/16 sits inside Docker's usual default pool. If it collides with another network
+# on your host, change it and TRUSTED_PROXIES together -- they are one decision in two places.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/16

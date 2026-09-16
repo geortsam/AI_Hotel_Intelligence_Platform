@@ -45,5 +45,9 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # source tree, no tests -- the runtime image is nginx plus static files.
 COPY --from=build /app/dist /usr/share/nginx/html
 
-EXPOSE 80
+# 443 is the application; 80 exists only to redirect to it (and to answer the container
+# healthcheck at /healthz). No certificate is copied here on purpose -- it is mounted at
+# /etc/nginx/certs by docker-compose.yml, so this image carries no deployment secret and is
+# identical in every environment.
+EXPOSE 80 443
 CMD ["nginx", "-g", "daemon off;"]

@@ -191,6 +191,13 @@ cd frontend && npm ci && npm run dev
 `POSTGRES_PASSWORD` must be set in `.env`; Compose refuses to start without it. Set `SECRET_KEY`
 too if you intend `ENVIRONMENT=production` — the API refuses to start in production without one.
 
+**The stack terminates TLS, so it needs a certificate before it will start.** For local use,
+one command:
+
+```bash
+mkdir -p certs && chmod 700 certs && openssl req -x509 -newkey rsa:2048 -nodes -keyout certs/privkey.pem -out certs/fullchain.pem -days 365 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" && chmod 600 certs/privkey.pem
+```
+
 ```bash
 docker compose up --build
 ```
@@ -202,9 +209,17 @@ db healthy  →  migrate exits 0  →  api healthy  →  frontend starts
 ```
 
 `migrate` is a one-shot service running `alembic upgrade head`; the API does not start unless it
-exits 0, so the schema can never be behind the code that serves it. Browse the application at
-http://localhost:5173 — nginx serves the built SPA and proxies `/api/` to the API on the same
-origin, so no second origin and no CORS are involved.
+exits 0, so the schema can never be behind the code that serves it.
+
+Browse the application at **https://localhost:8443** — nginx terminates TLS, serves the built SPA
+and proxies `/api/` to the API on the same origin, so no second origin and no CORS are involved.
+http://localhost:8080 exists only to redirect there. With a self-signed certificate the browser
+will warn once; that is what self-signed means.
+
+**Only nginx is published.** The API and the database have no host ports — reach them with
+`docker compose exec` rather than over the network. See
+[docs/deployment/tls.md](docs/deployment/tls.md) for certificates, renewal, the trusted-proxy
+boundary and what this deliberately does not automate.
 
 This flow is exercised on every push: see [Continuous integration](#continuous-integration).
 
@@ -377,20 +392,15 @@ What remains genuinely missing is operational rather than functional:
   real API to serve from the result. What is **not** automated is scheduling, off-host storage,
   encryption, retention and point-in-time recovery — taking a backup remains a deliberate
   operator action. `docker compose down -v` still destroys the volume permanently.
-- **No TLS.** nginx listens on port 80 only. The stack terminates no TLS and the repository does
-  not yet say whether termination belongs here or upstream, so the HSTS settings in
-  `.env.example` cannot take effect.
-- **`TRUSTED_PROXIES` is empty by default**, which is the safe value and the wrong one behind
-  nginx: the backend then attributes every request to the proxy, so the per-address login rate
-  limit becomes one bucket shared by all users and audit events name the proxy rather than the
-  client. Set it to the Compose network's subnet before exposing the stack to real users.
-- **The API port is published** (`API_PORT`, default 8000), bypassing nginx and its headers. It
-  is kept published deliberately while the deployment is young, because it is how a first
-  bring-up is debugged.
+- **TLS terminates at nginx and is runtime-verified, but certificates are not automated.** There
+  is no ACME client, no certbot and no renewal timer: replacing a certificate is a file swap and
+  `nginx -s reload`. CI proves the configuration with a *self-signed* certificate, which is not
+  the same as being ready for public internet exposure — that also needs a real certificate and
+  a real hostname. See [docs/deployment/tls.md](docs/deployment/tls.md).
 - **nginx resolves `api` once at startup.** If the API container is recreated with a new address
   the proxy keeps the old one and answers 502 until nginx itself restarts — and the frontend
-  healthcheck reads a static file, so the container still reports healthy. Recovery today is
-  `docker compose restart frontend`.
+  healthcheck answers from nginx itself, so the container still reports healthy. Recovery today
+  is `docker compose restart frontend`.
 - **Base images use mutable tags** and are not digest-pinned, so a rebuild is not guaranteed to
   reproduce the same image. The API image also runs Python 3.12 while CI runs 3.14.
 - **Two stacks cannot share one host** — the services declare fixed `container_name` values,
