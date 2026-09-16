@@ -165,8 +165,28 @@ written into `.env` can later name a network that belongs to something else enti
 trusting the wrong peers. Declaring it makes the boundary a fact of the compose file; CI asserts
 the running network matches the declaration, so a drift fails the build instead of going unnoticed.
 
-If you change the subnet, change the frontend address and `TRUSTED_PROXIES` with it. They are
-one decision written in three places.
+All three are overridable, and changing one means changing all three — they are a single
+decision written in three places:
+
+| Variable | Default |
+|---|---|
+| `COMPOSE_SUBNET` | `172.29.0.0/16` |
+| `FRONTEND_IP` | `172.29.0.10` |
+| `TRUSTED_PROXIES` | `172.29.0.10/32` |
+
+Two situations need the override. A host that already uses `172.29.0.0/16` must move elsewhere.
+And **two copies of this stack cannot share one host on the same subnet** — Docker refuses the
+second network with `Pool overlaps with other one on this address space`. Give the second stack
+its own range:
+
+```bash
+COMPOSE_SUBNET=172.30.0.0/16 FRONTEND_IP=172.30.0.10 TRUSTED_PROXIES=172.30.0.10/32 \
+  docker compose -p second-stack up -d
+```
+
+That is a real constraint of declaring the subnet, and the price of a trust boundary that cannot
+drift. CI relies on exactly this override to run its disposable failure-gate stack beside the
+real one.
 
 **Never** `0.0.0.0/0` or `::/0`. Anything inside a trusted range can claim to be any client, so
 trusting the internet is strictly worse than trusting nothing.

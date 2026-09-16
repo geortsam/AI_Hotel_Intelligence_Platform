@@ -61,7 +61,7 @@ x-backend-environment: &backend-environment
   # Too broad is worse than empty: anything inside a trusted range can claim to be any client.
   # This is why the network below declares its subnet and the frontend gets a fixed address --
   # the boundary is exactly one container, stated in this file, rather than whatever subnet
-  # Docker happened to allocate. Change the address here and in `networks:` together.
+  # Docker happened to allocate. Change this, FRONTEND_IP and COMPOSE_SUBNET together.
   TRUSTED_PROXIES: ${TRUSTED_PROXIES:-172.29.0.10/32}
 
   # Matching the header nginx sets on the static responses, so one origin does not advertise two
@@ -207,7 +207,7 @@ services:
     # this container exactly rather than a whole network. See TRUSTED_PROXIES above.
     networks:
       default:
-        ipv4_address: 172.29.0.10
+        ipv4_address: ${FRONTEND_IP:-172.29.0.10}
     ports:
       # Both, and both are needed: 80 exists only to redirect to 443 (see frontend/nginx.conf),
       # because a client that types the hostname without a scheme arrives on 80 and must be sent
@@ -253,10 +253,16 @@ volumes:
 # and pinning the frontend to a fixed address inside it, makes the boundary a fact of this
 # file rather than of whatever Docker happened to hand out.
 #
-# 172.29.0.0/16 sits inside Docker's usual default pool. If it collides with another network
-# on your host, change it and TRUSTED_PROXIES together -- they are one decision in two places.
+# 172.29.0.0/16 sits inside Docker's usual default pool. Both it and the frontend's address are
+# overridable, for two reasons: a host that already uses this range needs somewhere else to go,
+# and a second copy of this stack on one host cannot claim the same pool -- Docker refuses with
+# "Pool overlaps with other one on this address space". CI relies on that override to run its
+# disposable failure-gate stack beside the real one.
+#
+# Change COMPOSE_SUBNET and you must change FRONTEND_IP and TRUSTED_PROXIES with it. They are
+# one decision written in three places.
 networks:
   default:
     ipam:
       config:
-        - subnet: 172.29.0.0/16
+        - subnet: ${COMPOSE_SUBNET:-172.29.0.0/16}
