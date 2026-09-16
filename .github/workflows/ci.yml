@@ -899,10 +899,19 @@ jobs:
           empty_dir="$RUNNER_TEMP/tls-empty"
           mkdir -p "$empty_dir"
 
+          # On the compose network, which is not optional: nginx.conf proxies to `api`, and nginx
+          # resolves upstream names at configuration load. Off-network the test fails with
+          # "host not found in upstream" BEFORE it ever reads a certificate -- nginx would exit
+          # non-zero for the wrong reason, and this gate would pass while proving nothing. The
+          # assertion below catches exactly that, which is how the omission was found.
+          network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' \
+            "$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=frontend" | head -n1)")"
+          echo "  attaching the probe to: $network"
+
           # The frontend service declares no `image:`, so Compose names it <project>-frontend.
           # --rm and no --name: nothing to clean up, and no global name to collide with.
           set +e
-          docker run --rm \
+          docker run --rm --network "$network" \
             -v "$empty_dir:/etc/nginx/certs:ro" \
             "${COMPOSE_PROJECT}-frontend" \
             nginx -t > "$RUNNER_TEMP/nginx-t.log" 2>&1
@@ -916,8 +925,14 @@ jobs:
             echo "::error::nginx accepted a configuration with no certificate; TLS does not fail closed"
             exit 1
           fi
+          # It must fail for the RIGHT reason. Any non-zero exit would otherwise satisfy a
+          # careless version of this test -- including one caused by the probe's own setup.
           if ! grep -qi "certs/fullchain.pem" "$RUNNER_TEMP/nginx-t.log"; then
             echo "::error::nginx failed, but not because of the missing certificate"
+            exit 1
+          fi
+          if grep -qi "host not found in upstream" "$RUNNER_TEMP/nginx-t.log"; then
+            echo "::error::the probe could not resolve its upstream; this proves nothing about certificates"
             exit 1
           fi
           echo "  OK   nginx refuses to start without its certificate"
