@@ -733,12 +733,23 @@ jobs:
           echo "  OK   a certificate is presented on 443"
 
           echo "--- negotiated protocol ---"
-          version="$(curl -sS --cacert "$CERT_DIR/fullchain.pem" -o /dev/null -w '%{ssl_version}' --max-time 15 "$https/index.html")"
-          echo "  $version"
+          # Read from openssl's SSL-Session block, not from curl's `%{ssl_version}` write-out
+          # variable: the runner's curl does not know that name ("unknown --write-out variable"),
+          # and a write-out curl cannot resolve expands to an empty string rather than failing,
+          # which would have made this check silently vacuous.
+          version="$(openssl s_client -connect "127.0.0.1:${HTTPS_PORT}" -servername localhost </dev/null 2>/dev/null \
+            | awk -F': *' '/^ *Protocol *:/ { print $2; exit }')"
+          echo "  negotiated: ${version:-<none>}"
           case "$version" in
             TLSv1.2|TLSv1.3) echo "  OK   modern TLS negotiated" ;;
-            *) echo "::error::unexpected TLS version: $version"; exit 1 ;;
+            *) echo "::error::unexpected or unreadable TLS version: '${version}'"; exit 1 ;;
           esac
+
+          # And the application really is reachable over TLS with the CA pinned -- no -k, so a
+          # certificate this CA did not sign would fail here.
+          code="$(curl -sS --cacert "$CERT_DIR/fullchain.pem" -o /dev/null -w '%{http_code}' --max-time 15 "$https/index.html")"
+          echo "  GET $https/index.html -> $code"
+          [ "$code" = "200" ] || { echo "::error::HTTPS index.html returned $code"; exit 1; }
 
           echo "--- TLS 1.0 and 1.1 are refused ---"
           # Older OpenSSL builds may not even offer these; either way the connection must not
