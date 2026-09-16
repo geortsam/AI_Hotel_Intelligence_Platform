@@ -719,6 +719,20 @@ def concurrent_refunds(
     return [codes[0], codes[1]]
 
 
+def assert_exactly_one_refund_won(codes: list[int]) -> None:
+    """Exactly one refund is accepted and the other is refused.
+
+    The row lock guarantees that much. The loser's status does not follow from it: normally
+    it blocks, re-reads the committed balance and is refused with 409, but PostgreSQL may
+    instead detect a deadlock and abort it, which the application maps to 503 (observed in
+    CI run 35097766182). Pinning one of the two asserts a scheduling outcome rather than the
+    safety property, so both are accepted -- and nothing else is: two successes, two
+    rejections, or any other pair still fails.
+    """
+    assert codes.count(201) == 1, codes
+    assert sum(code in {409, 503} for code in codes) == 1, codes
+
+
 def test_two_concurrent_full_refunds_cannot_both_win(
     api: TestClient, engine: Engine, booking_ctx: tuple[str, str], session: Session
 ) -> None:
@@ -733,7 +747,7 @@ def test_two_concurrent_full_refunds_cannot_both_win(
 
     codes = concurrent_refunds(engine, booking_ctx, parent["public_id"], ("100.00", "100.00"))
 
-    assert sorted(codes) == [201, 409], codes
+    assert_exactly_one_refund_won(codes)
     session.expire_all()
     assert refunded_total(session, parent["public_id"]) == Decimal("100.00")
 
@@ -747,7 +761,7 @@ def test_two_concurrent_partial_refunds_cannot_exceed_the_remainder(
 
     codes = concurrent_refunds(engine, booking_ctx, parent["public_id"], ("40.00", "40.00"))
 
-    assert sorted(codes) == [201, 409], codes
+    assert_exactly_one_refund_won(codes)
     session.expire_all()
     assert refunded_total(session, parent["public_id"]) == Decimal("100.00")
 

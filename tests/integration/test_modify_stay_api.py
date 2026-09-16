@@ -840,7 +840,13 @@ def test_two_bookings_cannot_move_onto_the_same_room_and_dates(
         ],
     )
 
-    assert sorted(codes) == [200, 409], codes
+    # Exactly one move succeeds; the other is refused. HOW it is refused is the database's
+    # choice: usually the loser blocks and then fails the exclusion constraint (409), and
+    # sometimes PostgreSQL detects a deadlock and aborts it instead, which the application
+    # maps to 503. CI run 35097766182 took the second path. Asserting one of those two is
+    # asserting a scheduling outcome; the safety property is that only one booking wins.
+    assert codes.count(200) == 1, codes
+    assert sum(code in {409, 503} for code in codes) == 1, codes
     session.expire_all()
     holders = session.scalars(
         sa.select(BookingRoom).where(BookingRoom.check_in_date == sep(20))

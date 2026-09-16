@@ -858,12 +858,27 @@ jobs:
           # The failure is injected by configuration only: an override that points migrate at a
           # database that does not exist. No committed file is modified, no migration is edited
           # and nothing is downgraded.
+          #
+          # The container names are overridden too, and that is not cosmetic. docker-compose.yml
+          # sets `container_name: hotel_db` and friends, and container_name is global to the
+          # DAEMON -- Compose does not scope it by project. So a second project isolates the
+          # network and the volume but still tries to claim `/hotel_db`, and run 35097766182
+          # failed here with "Conflict. The container name /hotel_db is already in use" while
+          # the proven-good stack was still up for the persistence check. Distinct names make
+          # the two stacks genuinely independent.
           override="$RUNNER_TEMP/failgate.yml"
           cat > "$override" <<'YML'
           services:
+            db:
+              container_name: hotel_db_failgate
             migrate:
+              container_name: hotel_migrate_failgate
               environment:
                 DATABASE_URL: postgresql+psycopg://nobody:wrong@db:5432/database_that_does_not_exist
+            api:
+              container_name: hotel_api_failgate
+            frontend:
+              container_name: hotel_frontend_failgate
           YML
 
           fdc() {

@@ -1048,7 +1048,12 @@ def test_two_identical_extensions_of_one_booking_serialise(
 
     codes = race(engine, [(url, {"check_out_date": "2026-09-18"})] * 2)
 
-    assert sorted(codes) == [200, 409], codes
+    # Exactly one extension is applied; the other is refused. The row lock guarantees that
+    # much, but the loser's status depends on the interleaving: normally 409 once it re-reads
+    # the committed check-out date, and 503 when PostgreSQL detects a deadlock and aborts it
+    # instead (observed in CI run 35097766182). The invariant is that only one wins.
+    assert codes.count(200) == 1, codes
+    assert sum(code in {409, 503} for code in codes) == 1, codes
     assert booking_dates(session, "ext-hotel") == [(CHECK_IN, sep(18))]
     assert len(night_rows(session, "ext-hotel")) == NIGHTS + 3
 
