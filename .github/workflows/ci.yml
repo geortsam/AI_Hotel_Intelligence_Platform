@@ -1489,15 +1489,58 @@ jobs:
 
           echo "--- the query string survives the variable upstream ---"
           # The part a variable proxy_pass could silently drop, and the one thing nothing else in
-          # this job would notice. GET /api/v1/hotels is unauthenticated and declares `page` with
-          # ge=1 (app/api/v1/endpoints/hotels.py), so page=0 is a contract violation FastAPI
-          # answers with 422 -- a status it can only produce if the query string arrived.
-          code="$(curl -sS --cacert "$cacert" -o /dev/null -w '%{http_code}' --max-time 15 "$https/api/v1/hotels?page=0")"
-          echo "  GET /api/v1/hotels?page=0 -> $code"
-          [ "$code" = "422" ] || {
-            echo "::error::expected 422 from FastAPI's own validation, got $code -- the query string did not survive the proxy"
-            exit 1; }
-          echo "  OK   FastAPI rejected page=0, so it saw the query string"
+          # this job would notice.
+          #
+          # Read from the API's OWN access log rather than inferred from a status code. The first
+          # version of this gate asked FastAPI to reject `?page=0` with 422 and got 401 (run
+          # 35170373354): every hotel-scoped route is authenticated through HotelServiceDep ->
+          # HotelAccessPolicyDep -> CurrentUserDep, so authentication answers before query
+          # validation ever runs, and the status said nothing either way about the query string.
+          #
+          # uvicorn logs the literal request line it received. That answers the question
+          # directly, needs no token, and depends on no endpoint's authentication contract --
+          # and the peer on the same line proves the request arrived through nginx rather than
+          # from anywhere else.
+          #
+          # /api/v1/ is used because it is unauthenticated and ignores unknown query parameters,
+          # so the probe is a normal 200 rather than an error path.
+          probe="stage537-${GITHUB_RUN_ID}-${RANDOM}"
+          query="probe=${probe}&page=7"
+          code="$(curl -sS --cacert "$cacert" -o /dev/null -w '%{http_code}' --max-time 15 "$https/api/v1/?${query}")"
+          echo "  GET /api/v1/?${query} -> $code"
+          [ "$code" = "200" ] || { echo "::error::the probe request returned $code"; exit 1; }
+
+          # Bounded poll rather than a sleep: the line is unbuffered (PYTHONUNBUFFERED=1 in
+          # backend/Dockerfile) but reading it back through `compose logs` is not instantaneous.
+          #
+          # awk with index() rather than grep: it is a fixed-string search, so `?` and `&` need
+          # no escaping, it reads its whole input so it cannot SIGPIPE the log producer under
+          # `pipefail`, and it exits 0 whether or not it matched -- the assertion is the count.
+          expected="GET /api/v1/?${query} HTTP/1.1"
+          deadline=$(( SECONDS + 60 ))
+          hits=0
+          while (( SECONDS < deadline )); do
+            hits="$(dc logs api | awk -v needle="$expected" 'index($0, needle) { n++ } END { print n+0 }')"
+            if [ "$hits" -gt 0 ]; then
+              break
+            fi
+            sleep 2
+          done
+          if [ "$hits" -eq 0 ]; then
+            echo "::error::the API never logged '$expected' -- the path or query string did not survive the proxy"
+            dc logs --tail 20 api
+            exit 1
+          fi
+          matched="$(dc logs api | awk -v needle="$probe" 'index($0, needle) { print }')"
+          printf '%s\n' "$matched" | sed 's/^/  /'
+          echo "  OK   the API received the full path and query string, byte for byte"
+
+          # And it came from nginx. TRUSTED_PROXIES names 172.29.0.10, and that is the peer
+          # uvicorn recorded, so this request went through the proxy rather than around it.
+          from_nginx="$(printf '%s\n' "$matched" | awk 'index($0, "172.29.0.10:") { n++ } END { print n+0 }')"
+          [ "$from_nginx" -gt 0 ] || {
+            echo "::error::the probe did not reach the API from nginx's address"; exit 1; }
+          echo "  OK   and it arrived from 172.29.0.10, which is nginx"
 
           echo "--- an unknown /api path is still the API's 404, not the SPA ---"
           code="$(curl -sS --cacert "$cacert" -o "$api_body" -w '%{http_code}' --max-time 15 "$https/api/v1/__no_such_route__")"
