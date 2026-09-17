@@ -115,10 +115,35 @@ not to introduce. So it is **open, deliberately, and recorded here rather than l
 to discover**. What mitigates it: the `image-reproducibility` job prints the resolved version of
 every direct dependency on each run, and the full suite runs against whatever was resolved.
 
-`--require-hashes` is not used, for the same reason. `--no-compile` is not used either: it would
-trade a deterministic install layer for recompiling every module at every container start, and
-whether pip's `.pyc` output even differs between builds is *measured* by the job rather than
-guessed at.
+`--require-hashes` is not used, for the same reason.
+
+### The one thing the experiment caught
+
+The first run of the `image-reproducibility` job (35221886583) failed, and it was right to.
+
+Of 2991 files in the backend image, the counts matched, the five base-image layers were
+byte-identical — the digest pin doing exactly its job — and **every single differing file was a
+`__pycache__/*.pyc`**. Nothing else in the image varied at all.
+
+The cause is CPython's default bytecode invalidation: a `.pyc` header records the **source
+file's mtime**, pip writes extracted sources with the build's current time, and so two builds
+produce byte-different `.pyc` files containing identical code. Reproduced directly — the same
+source at two mtimes, compiled both ways:
+
+| Invalidation mode | Build A vs Build B |
+|---|---|
+| `TIMESTAMP` (CPython's default, what pip used) | **different** |
+| `UNCHECKED_HASH` (PEP 552, what is used now) | **identical** |
+
+So `backend/Dockerfile` installs with `--no-compile` and then compiles once with
+`--invalidation-mode unchecked-hash`. A hash-based `.pyc` records the source's *hash* instead of
+its timestamp, which is the same everywhere. `unchecked-hash` rather than `checked-hash` because
+source inside an image layer cannot change underneath its bytecode: there is nothing to
+re-verify at import, and verifying would cost a hash of every module on every start.
+
+Shipping no bytecode at all — `--no-compile` alone — was rejected. `PYTHONDONTWRITEBYTECODE=1`
+means the container cannot cache what it compiles, so every module would be recompiled on every
+container start instead of once at build time.
 
 ## 5. The experiment
 

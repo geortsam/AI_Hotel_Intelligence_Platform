@@ -85,14 +85,38 @@ ENV PYTHONPATH=/app
 #   PIP_ROOT_USER_ACTION=ignore    suppresses the "running as root" advice. This build IS root
 #                                  until the USER below; the warning is noise, not news.
 #
-# What is deliberately NOT here: `--require-hashes`, which would need a hash for every
-# transitive package and so a second lock file to maintain beside requirements.txt, and
-# `--no-compile`, which would trade a deterministic layer for recompiling every module on each
-# container start. Whether pip's .pyc output is even a source of difference is measured by the
-# `image-reproducibility` job rather than guessed at -- see docs/deployment/reproducibility.md.
+# ## `--no-compile`, then compiling by hand -- because the measurement said so
+#
+# pip compiles every installed module to .pyc as it goes, and CPython's DEFAULT .pyc header
+# embeds the SOURCE FILE'S MTIME. pip writes extracted sources with the build's current time, so
+# two builds of one commit produce byte-different .pyc files containing identical code.
+#
+# That is not a hypothesis. Run 35221886583 built this image twice with --no-cache and compared
+# all 2991 files: the counts matched, the five base-image layers were identical -- the digest pin
+# doing its job -- and every single differing file was a `__pycache__/*.pyc`. Nothing else in the
+# image varied at all.
+#
+# PEP 552 is the fix. A hash-based .pyc records the source's HASH instead of its timestamp, so
+# the same source compiles to the same bytes on any machine at any time. `unchecked-hash` rather
+# than `checked-hash` because the source in an image layer cannot change underneath the bytecode:
+# there is nothing to re-verify at import, and verifying it would cost a hash of every module on
+# every start.
+#
+# The obvious alternative -- `--no-compile` alone, shipping no bytecode at all -- was rejected.
+# PYTHONDONTWRITEBYTECODE=1 above means the container cannot cache what it compiles, so every
+# module would be recompiled on every single start rather than once at build time.
+#
+# The site-packages path is asked of the interpreter rather than written out, so bumping the
+# Python pin cannot silently leave this compiling nothing.
+#
+# Still deliberately NOT here: `--require-hashes`, which needs a hash for every transitive
+# package and therefore a second lock file to maintain beside requirements.txt. That gap is real,
+# and it is recorded in docs/deployment/reproducibility.md rather than papered over.
 COPY backend/requirements.txt ./
 RUN PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ROOT_USER_ACTION=ignore \
-    pip install --no-cache-dir -r requirements.txt
+        pip install --no-cache-dir --no-compile -r requirements.txt \
+ && python -m compileall -q --invalidation-mode unchecked-hash \
+        "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
 
 # The three things the image contains, named one by one rather than swept in with `COPY . .`,
 # so the contents of the image are a statement in this file rather than a consequence of
