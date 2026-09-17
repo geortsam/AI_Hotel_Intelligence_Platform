@@ -314,7 +314,7 @@ Tests live at the repository root and import `app` via `pythonpath = ["backend"]
 
 ### Continuous integration
 
-Every push and pull request to `main` runs three jobs in parallel on `ubuntu-latest`
+Every push and pull request to `main` runs four jobs in parallel on `ubuntu-latest`
 (`.github/workflows/ci.yml`):
 
 | Job | What it runs |
@@ -322,6 +322,7 @@ Every push and pull request to `main` runs three jobs in parallel on `ubuntu-lat
 | `quality-gates` | Ruff lint, Ruff format check, mypy, the Alembic chain against a disposable PostgreSQL 18.6, then the full pytest suite |
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
+| `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical |
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
@@ -415,8 +416,16 @@ What remains genuinely missing is operational rather than functional:
   subnet is *declared* rather than discovered, so that the trust boundary can be a constant, and
   two networks cannot claim one range. `COMPOSE_SUBNET`, `FRONTEND_IP` and `TRUSTED_PROXIES`
   move together.
-- **Base images use mutable tags** and are not digest-pinned, so a rebuild is not guaranteed to
-  reproduce the same image. The API image also runs Python 3.12 while CI runs 3.14.
+- **Transitive Python dependencies are not pinned.** `requirements.txt` fixes the ten direct
+  packages with `==`; what *they* depend on is resolved by pip at build time, so a new release
+  of `anyio` or `h11` changes the image without changing this repository. Closing that needs a
+  hash-pinned lock file maintained beside `requirements.txt` — a second source of truth for
+  dependencies, which is a deliberate omission rather than an oversight. Base images, the
+  interpreter and the frontend tree are all pinned; see
+  [docs/deployment/reproducibility.md](docs/deployment/reproducibility.md).
+- **Nothing updates the pins.** No Renovate, no Dependabot. A pinned digest is a digest that
+  goes stale, and sitting on a base image with a known CVE is the real cost of pinning; bumping
+  one is a deliberate act.
 - **No platform-administrator API.** Granting platform administration is a deliberate
   out-of-band database write; see [First run](#first-run). That is by design, not an omission.
 

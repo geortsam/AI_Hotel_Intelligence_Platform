@@ -25,10 +25,25 @@ htmlcov/
 *.pem
 *.key
 
+# The rest of what a CA hands out, and the directory the TLS runbook creates.
+# docs/deployment/tls.md defaults TLS_CERT_DIR to ./certs, so following it puts certificate
+# material inside this repository; *.pem and *.key alone do not cover a .crt/.pfx bundle.
+certs/
+*.crt
+*.cer
+*.pfx
+*.p12
+*.jks
+
 # --- Databases -------------------------------------------------------------
 *.db
 *.sqlite
 *.sqlite3
+
+# Dumps. docs/deployment/backup-restore.md writes `hotel-intelligence-<stamp>.backup` into the
+# repository root, so the one file most worth never committing lands where `git add -A` sees it.
+*.backup
+*.dump
 
 # --- Data: payloads are ignored, documentation and manifests are tracked ---
 ml/data/raw/*

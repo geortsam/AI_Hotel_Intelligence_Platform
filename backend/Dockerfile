@@ -25,7 +25,30 @@
 # tests/, docs/, scripts/, ml/, every cache and every .env -- is excluded by the root
 # .dockerignore. Note that backend/.dockerignore is no longer consulted: Docker reads only the
 # .dockerignore found at the context root.
-FROM python:3.12-slim
+# ## Pinned by DIGEST, and to the interpreter this project actually tests
+#
+# Two changes in one line, and they are really the same change.
+#
+# `python:3.12-slim` was mutable AND unrehearsed. Mutable, because the tag moves: two builds of
+# this commit a month apart got different interpreters, different OpenSSL, different everything,
+# with nothing in the repository recording which. Unrehearsed, because 3.12 is the one version
+# nothing here runs -- CI's quality gates run 3.14, the development machine runs 3.14.7, and the
+# header of backend/requirements.txt says in as many words that the pins were "verified to
+# install and run on Python 3.14.6". The image shipped an interpreter the 4011-test suite had
+# never executed.
+#
+# pyproject's `requires-python = ">=3.12"`, ruff's `target-version = "py312"` and mypy's
+# `python_version = "3.12"` are deliberately the FLOOR of support rather than the runtime: they
+# make the lint and type gates reject anything that would break the oldest supported
+# interpreter. They are unchanged, and they were never a statement about what to ship.
+#
+# The DIGEST is the pin; the tag beside it is documentation and is ignored during resolution. It
+# was read from the registry rather than invented -- the `Docker-Content-Digest` of
+# `library/python:3.14-slim`, requested as an OCI image INDEX so the pin stays correct on amd64
+# and arm64 alike -- and the image's own config blob, fetched back BY that digest, reports
+# PYTHON_VERSION=3.14.7. Pinning it also pins the pip and setuptools the image ships, so neither
+# needs a pin of its own. docs/deployment/reproducibility.md records how to re-resolve it.
+FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -51,8 +74,25 @@ ENV PYTHONPATH=/app
 # requirements.txt only. requirements-dev.txt -- pytest, ruff, mypy, httpx, coverage -- is
 # deliberately never installed: none of it is a runtime input, and the image is smaller and
 # carries less surface without it.
+#
+# The two variables are set on the RUN rather than as ENV, so they are build-only and do not
+# become part of the shipped image's environment.
+#
+#   PIP_DISABLE_PIP_VERSION_CHECK  stops pip reaching PyPI to ask whether a newer pip exists.
+#                                  That call decides nothing about what is installed, but it is
+#                                  a network round trip the build does not need and a line of
+#                                  output that differs between builds.
+#   PIP_ROOT_USER_ACTION=ignore    suppresses the "running as root" advice. This build IS root
+#                                  until the USER below; the warning is noise, not news.
+#
+# What is deliberately NOT here: `--require-hashes`, which would need a hash for every
+# transitive package and so a second lock file to maintain beside requirements.txt, and
+# `--no-compile`, which would trade a deterministic layer for recompiling every module on each
+# container start. Whether pip's .pyc output is even a source of difference is measured by the
+# `image-reproducibility` job rather than guessed at -- see docs/deployment/reproducibility.md.
 COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ROOT_USER_ACTION=ignore \
+    pip install --no-cache-dir -r requirements.txt
 
 # The three things the image contains, named one by one rather than swept in with `COPY . .`,
 # so the contents of the image are a statement in this file rather than a consequence of

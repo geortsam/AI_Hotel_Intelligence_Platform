@@ -8,7 +8,18 @@
 # actions/setup-node with node-version 24, and the developer machine runs 24.21.0. Vite 6
 # supports 20 as well, so the previous node:20-alpine was not broken -- it was simply a
 # version nothing in this repository ever tested, which is a poor thing to ship from.
-FROM node:24-alpine AS build
+#
+# Pinned by DIGEST as of Stage 5.38. `node:24-alpine` moves with every 24.x release and every
+# Alpine rebuild, so the tag alone said "some Node 24" -- which is not what a build of a fixed
+# commit should be free to choose. The digest was read from the registry, not invented, and the
+# image's own config blob fetched back BY that digest reports NODE_VERSION=24.21.0: the exact
+# version the comment above claims. The tag is documentation and is ignored during resolution.
+#
+# Note that the version-precise tag `node:24.21.0-alpine` is a DIFFERENT digest from
+# `node:24-alpine` even though both carry Node 24.21.0 -- the alias tags are rebuilt on
+# different Alpine bases. That is precisely why the digest, and not a tag that looks precise,
+# is what pins this. See docs/deployment/reproducibility.md.
+FROM node:24-alpine@sha256:50c8e8ca1d27439048670df5883f32d57cf81cff6233222c893fd0d9884cbd81 AS build
 
 WORKDIR /app
 
@@ -21,8 +32,13 @@ WORKDIR /app
 # which is what makes this build reproducible. It is also what CI already does.
 #
 # No `--omit=dev`: vite and typescript are devDependencies, and this stage is the build.
+# `--no-audit --no-fund` change nothing about WHAT is installed -- the tree still comes from
+# package-lock.json, integrity hash by integrity hash. They remove two registry round trips that
+# happen after resolution and only produce advisory output, so the build has one less network
+# dependency and one less source of run-to-run noise. Auditing belongs in a scheduled security
+# job that can act on the answer, not in an image build that cannot.
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
 COPY . .
 
@@ -34,7 +50,11 @@ ARG VITE_API_BASE_URL=""
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build
 
-FROM nginx:1.27-alpine AS runtime
+# Pinned by digest for the same reason as the build stage. This one is the image that actually
+# ships and terminates TLS, so "some nginx 1.27" is the weakest claim of the three: the digest
+# fixes the OpenSSL it links against, not only the nginx version. Read from the registry; the
+# config blob fetched back by this digest reports NGINX_VERSION=1.27.5.
+FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS runtime
 
 # Replaces the stock server block rather than sitting beside it: the image's own default.conf
 # is what would otherwise serve this directory with no SPA fallback, no cache policy and no

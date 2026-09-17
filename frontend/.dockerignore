@@ -14,3 +14,24 @@ dist/
 
 # The example carries only empty values and documents the two variables that exist.
 !.env.example
+
+# Certificate material and database dumps, excluded here for the same reason the root
+# .dockerignore excludes them rather than because either belongs in frontend/.
+#
+# Neither runbook writes into this directory today -- TLS_CERT_DIR defaults to ../certs and the
+# backup lands in the repository root -- so this is defence in depth against a future one that
+# does, and against an operator who puts a certificate next to the nginx.conf that reads it,
+# which is a very natural thing to do.
+#
+# Nothing here may match nginx.conf or docker-entrypoint.d/: the runtime stage COPYs both, and
+# excluding either would fail the build.
+certs
+*.pem
+*.key
+*.crt
+*.cer
+*.pfx
+*.p12
+*.jks
+*.backup
+*.dump

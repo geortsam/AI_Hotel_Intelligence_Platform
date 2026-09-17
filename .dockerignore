@@ -105,6 +105,28 @@ README.md
 **/*.pem
 **/*.key
 
+# The certificate directory, by name as well as by extension.
+#
+# `TLS_CERT_DIR` defaults to `./certs` (docs/deployment/tls.md), so an operator following the
+# runbook creates that directory inside this very build context. The two extensions above catch
+# the fullchain.pem and privkey.pem it usually holds -- but a CA hands out .crt, .cer, .pfx and
+# .p12 as well, and none of those was matched by anything in this file.
+certs
+**/*.crt
+**/*.cer
+**/*.pfx
+**/*.p12
+**/*.jks
+
+# Database dumps.
+#
+# docs/deployment/backup-restore.md tells the operator to write
+# `./hotel-intelligence-<stamp>.backup` INTO THE REPOSITORY ROOT, which is exactly this context.
+# Nothing here copies it, but a dump of a real database is the single worst file to leave where
+# a future COPY -- or an exported context -- could pick it up.
+**/*.backup
+**/*.dump
+
 # --- editors / OS -----------------------------------------------------------
 .vscode
 .idea

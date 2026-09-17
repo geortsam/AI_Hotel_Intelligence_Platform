@@ -176,6 +176,11 @@ the running nginx rather than leaving it bound to the address it resolved once. 
 compose file is scoped to the Docker daemon rather than to the project, so two stacks coexist on
 one host given their own address space. See [deployment/robustness.md](deployment/robustness.md).
 
+Every external base image is pinned by digest rather than by a tag someone else can move, and
+the API image runs the same Python the test suite does. CI builds each image twice from scratch
+and requires every shipped file to be byte-identical; what that does and does not claim is in
+[deployment/reproducibility.md](deployment/reproducibility.md).
+
 Not present, and not claimed here: automated certificate issuance or renewal, and any multi-host
 or orchestrated deployment. This is a single-host Compose deployment, and CI proves its TLS with
 a self-signed certificate, which is not the same as public-internet readiness.

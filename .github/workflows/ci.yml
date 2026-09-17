@@ -65,7 +65,17 @@ jobs:
       postgres:
         # Pinned to the version the schema was developed and verified against. The exclusion
         # constraint needs btree_gist, which the official image ships as a contrib module.
-        image: postgres:18.6
+        #
+        # By digest as of Stage 5.38, for the same reason as docker-compose.yml's db service:
+        # `18.6` fixes PostgreSQL and nothing else, and it is rebuilt whenever its Debian base is
+        # patched. This is the server the whole suite runs against, so what it is should not be
+        # decided by the date. Read from the registry; the config blob fetched back by this
+        # digest reports PG_VERSION=18.6-1.pgdg13+2.
+        #
+        # This is the Debian image, NOT the Alpine one the deployment runs -- the two have
+        # different digests and that is correct. The deployment pins its own in
+        # docker-compose.yml.
+        image: postgres:18.6@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
         env:
           POSTGRES_DB: hotel_intelligence_test
           POSTGRES_USER: postgres
@@ -88,7 +98,13 @@ jobs:
           # The version this project is developed on. pyproject declares >=3.12 as the floor;
           # CI runs what the developer runs, so a 3.14-only failure cannot hide behind an
           # older interpreter.
-          python-version: '3.14'
+          #
+          # Exact patch as of Stage 5.38, and it is the same interpreter the API image now ships:
+          # backend/Dockerfile pins python:3.14-slim by a digest whose config reports 3.14.7.
+          # '3.14' floated, so on any given day the tests and the image could be two different
+          # interpreters while both called themselves 3.14 -- which is the whole failure mode
+          # "CI runs what ships" is meant to exclude. Bump this and that digest together.
+          python-version: '3.14.7'
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
 
@@ -171,10 +187,16 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          # The line this project is developed on (24.21.0 locally), pinned the same way and
-          # for the same reason Python is pinned to 3.14: CI runs what the developer runs,
-          # so a version-specific failure cannot hide behind a different runtime.
-          node-version: '24'
+          # The line this project is developed on, pinned the same way and for the same reason
+          # Python is: CI runs what the developer runs, so a version-specific failure cannot
+          # hide behind a different runtime.
+          #
+          # Exact patch as of Stage 5.38, and it is the same Node the frontend image builds
+          # with: frontend/Dockerfile pins node:24-alpine by a digest whose config reports
+          # NODE_VERSION=24.21.0. '24' floated, so the bundle these gates check and the bundle
+          # the image ships could come from two different compilers on the same day. Bump this
+          # and that digest together.
+          node-version: '24.21.0'
           # package.json declares no `packageManager` field, so setup-node's automatic npm
           # caching does not switch itself on; asking for it explicitly is what does. The
           # path is relative to the workspace root, NOT to `working-directory` above.
@@ -2161,3 +2183,342 @@ jobs:
           echo "--- volumes left from this run (expected: none) ---"
           docker volume ls --format '{{.Name}}' | grep -E "^(${COMPOSE_PROJECT}|${FAILGATE_PROJECT})_"
           echo "(a grep with no output above means no volume survived, which is the expectation)"
+
+  # ---------------------------------------------------------------------------------------
+  # Is a build of this commit the same build tomorrow?
+  #
+  # The job above proves the images WORK. This one asks a different question: build the same
+  # commit twice and do you get the same thing back. Every pin in this repository -- the base
+  # image digests, package-lock.json, requirements.txt, the interpreter versions -- is an answer
+  # to that question, and until Stage 5.38 nothing checked any of them.
+  #
+  # Both builds run with --no-cache. With the layer cache on, the second build reuses the first
+  # one's layers and reports a perfect match while proving nothing whatsoever; that is exactly
+  # the fake result this job exists to avoid.
+  #
+  # The GATE is on the application artefacts: every file the image runs or serves, hashed inside
+  # the image and compared. Image ids and layer ids are recorded and reported, but whether those
+  # can match is a property of the build system's metadata handling rather than of this
+  # repository, so they are reported with their cause rather than asserted. Conflating the two
+  # is how a reproducibility claim becomes a slogan -- see docs/deployment/reproducibility.md.
+  image-reproducibility:
+    name: Image reproducibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      # Run-scoped, like every other name this workflow creates: two concurrent runs must not
+      # collide, and nothing here may name an image on anyone's machine.
+      TAG_A: ahip-repro-${{ github.run_id }}-a
+      TAG_B: ahip-repro-${{ github.run_id }}-b
+      FE_TAG_A: ahip-repro-fe-${{ github.run_id }}-a
+      FE_TAG_B: ahip-repro-fe-${{ github.run_id }}-b
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Docker version
+        run: |
+          set -euo pipefail
+          docker --version
+          docker buildx version
+          echo "  BuildKit is the default builder here, and it is what honours SOURCE_DATE_EPOCH."
+
+      - name: Assert every external image is pinned by digest
+        run: |
+          set -euo pipefail
+
+          # The premise of the whole job. Without digest pins the two builds below could
+          # legitimately differ because the registry moved a tag between them, and the
+          # experiment would be measuring Docker Hub rather than this repository.
+          #
+          # Each reference is read out of the file it lives in, and the digest must be on the
+          # SAME reference -- a `FROM python:3.14-slim` with a digest mentioned in a nearby
+          # comment does not satisfy this.
+          fail=0
+          checked=0
+
+          assert_all_pinned() {
+            local file="$1" label="$2" pattern="$3" expected="$4"
+            local found=0 line
+            echo "--- $file ---"
+            while IFS= read -r line; do
+              found=$(( found + 1 ))
+              checked=$(( checked + 1 ))
+              if printf '%s\n' "$line" | grep -Eq '@sha256:[0-9a-f]{64}'; then
+                printf '  OK   %s\n' "$(printf '%s\n' "$line" | grep -oE '[^ ]+@sha256:[0-9a-f]{64}')"
+              else
+                printf '  UNPINNED: %s\n' "$line"
+                echo "::error::$file: $label is not pinned by digest -- $line"
+                fail=1
+              fi
+            done < <(grep -E "$pattern" "$file")
+
+            # A pattern that matches nothing would otherwise pass this step in silence, which
+            # is the one way a check like this fails without saying so.
+            if [ "$found" -ne "$expected" ]; then
+              echo "::error::$file: expected $expected $label reference(s), found $found"
+              fail=1
+            fi
+          }
+
+          assert_all_pinned backend/Dockerfile          "FROM"              '^FROM '                  1
+          assert_all_pinned frontend/Dockerfile         "FROM"              '^FROM '                  2
+          assert_all_pinned docker-compose.yml          "service image"     '^ +image: postgres'      1
+          assert_all_pinned .github/workflows/ci.yml    "service container" '^ +image: postgres'      1
+
+          [ "$fail" -eq 0 ] || exit 1
+          echo
+          echo "  OK   all $checked external image references carry an immutable digest"
+
+      - name: Build the backend image twice, from scratch
+        run: |
+          set -euo pipefail
+
+          # The COMMIT's timestamp, not the wall clock. BuildKit reads SOURCE_DATE_EPOCH and
+          # rewrites the timestamps it controls, so the one input that would otherwise differ
+          # between two builds of one commit -- when they happened -- does not. Being derived
+          # from the commit, it is the same value on every machine that builds this commit,
+          # today or next year.
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          export SOURCE_DATE_EPOCH
+          echo "  SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH  ($(date -u -d "@$SOURCE_DATE_EPOCH" '+%Y-%m-%dT%H:%M:%SZ'), this commit)"
+          echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" >> "$GITHUB_ENV"
+
+          for tag in "$TAG_A" "$TAG_B"; do
+            echo "--- building $tag with --no-cache ---"
+            docker build --no-cache -f backend/Dockerfile -t "$tag" . > "build-${tag}.log" 2>&1
+            echo "  built $tag"
+          done
+
+      - name: Compare the two backend images
+        run: |
+          set -euo pipefail
+
+          a_id="$(docker image inspect "$TAG_A" --format '{{.Id}}')"
+          b_id="$(docker image inspect "$TAG_B" --format '{{.Id}}')"
+          echo "--- image ids ---"
+          echo "  A: $a_id"
+          echo "  B: $b_id"
+
+          docker image inspect "$TAG_A" --format '{{range .RootFS.Layers}}{{println .}}{{end}}' | sed '/^$/d' > a-layers.txt
+          docker image inspect "$TAG_B" --format '{{range .RootFS.Layers}}{{println .}}{{end}}' | sed '/^$/d' > b-layers.txt
+          total="$(wc -l < a-layers.txt)"
+          same="$(paste a-layers.txt b-layers.txt | awk '$1 == $2 { n++ } END { print n+0 }')"
+          echo "--- filesystem layers ---"
+          echo "  $same of $total layer ids identical"
+          paste a-layers.txt b-layers.txt | awk '{ printf "  %-72s %s\n", $1, ($1==$2 ? "==" : "!= " $2) }'
+
+          echo "--- everything the image runs, hashed inside the image ---"
+          # The assertion. `sha256sum` via `-exec ... +` and then a plain sort of the OUTPUT,
+          # rather than `find -print0 | sort -z | xargs -0`: BusyBox's sort is used for the
+          # frontend image below and its -z support is not something to depend on. Sorting the
+          # result lines makes the order deterministic either way.
+          #
+          # The site-packages path is globbed rather than spelled `python3.14`, so this does not
+          # quietly stop covering the dependencies the day the interpreter is bumped.
+          for spec in "$TAG_A:a" "$TAG_B:b"; do
+            tag="${spec%:*}"; slot="${spec##*:}"
+            docker run --rm --entrypoint sh "$tag" -c \
+              'find /app /usr/local/lib/python*/site-packages -type f -exec sha256sum {} + | sort -k2' \
+              > "artifacts-$slot.txt"
+          done
+
+          a_files="$(wc -l < artifacts-a.txt)"
+          b_files="$(wc -l < artifacts-b.txt)"
+          echo "  A: $a_files files"
+          echo "  B: $b_files files"
+          [ "$a_files" -gt 100 ] || {
+            echo "::error::only $a_files files hashed; the find path is wrong and this proves nothing"
+            exit 1; }
+
+          if ! diff -u artifacts-a.txt artifacts-b.txt > artifacts.diff; then
+            echo "::error::the backend image's contents are NOT reproducible"
+            echo "--- differing lines (first 40) ---"
+            grep -E '^[+-]' artifacts.diff | grep -vE '^(\+\+\+|---)' | head -40
+            exit 1
+          fi
+          echo "  OK   all $a_files files byte-identical across two independent no-cache builds"
+
+          # One number for the whole filesystem, so the result is something a person on another
+          # machine can compute and compare rather than a claim they have to take on trust.
+          a_sum="$(sha256sum < artifacts-a.txt | cut -d' ' -f1)"
+          b_sum="$(sha256sum < artifacts-b.txt | cut -d' ' -f1)"
+          [ "$a_sum" = "$b_sum" ] || { echo "::error::manifest hashes differ"; exit 1; }
+          echo "  OK   backend artefact manifest sha256: $a_sum"
+
+          {
+            echo "### Backend image reproducibility"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Files compared | $a_files |"
+            echo "| Artefact manifest sha256 | \`$a_sum\` |"
+            echo "| Layer ids identical | $same / $total |"
+            echo "| Image ids match | $([ "$a_id" = "$b_id" ] && echo yes || echo no) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo "BACKEND_IDS_MATCH=$([ "$a_id" = "$b_id" ] && echo yes || echo no)"
+            echo "BACKEND_LAYERS_SAME=$same/$total"
+            echo "BACKEND_MANIFEST=$a_sum"
+          } >> "$GITHUB_ENV"
+
+      - name: Build the frontend image twice, from scratch
+        run: |
+          set -euo pipefail
+
+          # VITE_API_BASE_URL passed explicitly so these builds produce the artefact
+          # docker-compose.yml produces. Relying on the Dockerfile default would measure a
+          # different bundle from the one that ships.
+          for tag in "$FE_TAG_A" "$FE_TAG_B"; do
+            echo "--- building $tag with --no-cache ---"
+            docker build --no-cache --build-arg VITE_API_BASE_URL= \
+              -f frontend/Dockerfile -t "$tag" ./frontend > "build-${tag}.log" 2>&1
+            echo "  built $tag"
+          done
+
+      - name: Compare the two frontend images and the bundle they serve
+        run: |
+          set -euo pipefail
+
+          a_id="$(docker image inspect "$FE_TAG_A" --format '{{.Id}}')"
+          b_id="$(docker image inspect "$FE_TAG_B" --format '{{.Id}}')"
+          echo "--- image ids ---"
+          echo "  A: $a_id"
+          echo "  B: $b_id"
+
+          docker image inspect "$FE_TAG_A" --format '{{range .RootFS.Layers}}{{println .}}{{end}}' | sed '/^$/d' > fe-a-layers.txt
+          docker image inspect "$FE_TAG_B" --format '{{range .RootFS.Layers}}{{println .}}{{end}}' | sed '/^$/d' > fe-b-layers.txt
+          total="$(wc -l < fe-a-layers.txt)"
+          same="$(paste fe-a-layers.txt fe-b-layers.txt | awk '$1 == $2 { n++ } END { print n+0 }')"
+          echo "--- filesystem layers ---"
+          echo "  $same of $total layer ids identical"
+
+          echo "--- the served bundle and the nginx configuration, file by file ---"
+          # The real question for the frontend: does Vite, run twice over one lockfile, emit the
+          # same bytes. /docker-entrypoint.d is included so the Stage 5.37 resolver script is
+          # covered too -- it is part of what ships.
+          for spec in "$FE_TAG_A:a" "$FE_TAG_B:b"; do
+            tag="${spec%:*}"; slot="${spec##*:}"
+            docker run --rm --entrypoint sh "$tag" -c \
+              'find /usr/share/nginx/html /etc/nginx/conf.d /docker-entrypoint.d -type f -exec sha256sum {} + | sort -k2' \
+              > "fe-artifacts-$slot.txt"
+          done
+
+          a_files="$(wc -l < fe-artifacts-a.txt)"
+          echo "  A: $a_files files"
+          echo "  B: $(wc -l < fe-artifacts-b.txt) files"
+          [ "$a_files" -gt 10 ] || {
+            echo "::error::only $a_files files hashed; the find path is wrong and this proves nothing"
+            exit 1; }
+
+          if ! diff -u fe-artifacts-a.txt fe-artifacts-b.txt > fe-artifacts.diff; then
+            echo "::error::the frontend bundle is NOT reproducible"
+            echo "--- differing lines (first 40) ---"
+            grep -E '^[+-]' fe-artifacts.diff | grep -vE '^(\+\+\+|---)' | head -40
+            exit 1
+          fi
+          echo "  OK   all $a_files served files byte-identical across two no-cache builds"
+
+          echo "--- the hashed asset names Vite chose ---"
+          awk '{ print $2 }' fe-artifacts-a.txt | grep '/assets/' | head -8 | sed 's/^/  /'
+          echo "  (Vite names assets by content hash, so identical names across both builds is"
+          echo "   itself evidence the inputs were identical)"
+
+          a_sum="$(sha256sum < fe-artifacts-a.txt | cut -d' ' -f1)"
+          b_sum="$(sha256sum < fe-artifacts-b.txt | cut -d' ' -f1)"
+          [ "$a_sum" = "$b_sum" ] || { echo "::error::manifest hashes differ"; exit 1; }
+          echo "  OK   frontend artefact manifest sha256: $a_sum"
+
+          {
+            echo
+            echo "### Frontend image reproducibility"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Files compared | $a_files |"
+            echo "| Artefact manifest sha256 | \`$a_sum\` |"
+            echo "| Layer ids identical | $same / $total |"
+            echo "| Image ids match | $([ "$a_id" = "$b_id" ] && echo yes || echo no) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo "FRONTEND_IDS_MATCH=$([ "$a_id" = "$b_id" ] && echo yes || echo no)"
+            echo "FRONTEND_LAYERS_SAME=$same/$total"
+            echo "FRONTEND_MANIFEST=$a_sum"
+          } >> "$GITHUB_ENV"
+
+      - name: Verify the images ship the versions the pins claim
+        run: |
+          set -euo pipefail
+
+          # The digests were resolved from the registry by hand. This asks the built images what
+          # they actually contain, so a digest copied from the wrong tag fails here rather than
+          # at someone's next deployment.
+          echo "--- the interpreter the backend image ships ---"
+          got="$(docker run --rm --entrypoint python "$TAG_A" -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')"
+          echo "  python: $got"
+          [ "$got" = "3.14.7" ] || {
+            echo "::error::the backend image ships Python $got, but the pin claims 3.14.7"; exit 1; }
+          echo "  OK   and it is the exact version actions/setup-python installs for the quality gates"
+
+          echo "--- the nginx the frontend image ships ---"
+          got="$(docker run --rm --entrypoint nginx "$FE_TAG_A" -v 2>&1 | sed 's#.*/##' | tr -d '\r')"
+          echo "  nginx: $got"
+          [ "$got" = "1.27.5" ] || {
+            echo "::error::the frontend image ships nginx $got, but the pin claims 1.27.5"; exit 1; }
+          echo "  OK"
+
+          echo "--- the dependency versions the backend image resolved ---"
+          docker run --rm --entrypoint python "$TAG_A" -c "
+          import importlib.metadata as md
+          for name in ('fastapi', 'starlette', 'uvicorn', 'pydantic', 'pydantic-settings',
+                       'SQLAlchemy', 'psycopg', 'alembic', 'argon2-cffi', 'PyJWT'):
+              print(f'  {name:20} {md.version(name)}')
+          "
+          echo "  (every one of these is pinned with == in backend/requirements.txt)"
+
+      - name: Report what is reproducible and what is not
+        run: |
+          set -euo pipefail
+
+          # Not an assertion, and deliberately not one. Whether two image IDS match is a property
+          # of BuildKit's metadata handling rather than of this repository; the claim that
+          # matters -- every shipped byte identical -- has already been asserted above. Recording
+          # both separately is what keeps them from being quietly conflated.
+          echo "======================================================================"
+          echo "  Two --no-cache builds of ${GITHUB_SHA}"
+          echo "  SOURCE_DATE_EPOCH = ${SOURCE_DATE_EPOCH}"
+          echo "======================================================================"
+          printf '  %-34s %s\n' "backend artefacts identical"  "yes (asserted; the job fails otherwise)"
+          printf '  %-34s %s\n' "backend manifest sha256"      "${BACKEND_MANIFEST}"
+          printf '  %-34s %s\n' "backend layer ids identical"  "${BACKEND_LAYERS_SAME}"
+          printf '  %-34s %s\n' "backend image ids match"      "${BACKEND_IDS_MATCH}"
+          echo
+          printf '  %-34s %s\n' "frontend artefacts identical" "yes (asserted; the job fails otherwise)"
+          printf '  %-34s %s\n' "frontend manifest sha256"     "${FRONTEND_MANIFEST}"
+          printf '  %-34s %s\n' "frontend layer ids identical" "${FRONTEND_LAYERS_SAME}"
+          printf '  %-34s %s\n' "frontend image ids match"     "${FRONTEND_IDS_MATCH}"
+          echo
+          if [ "${BACKEND_IDS_MATCH}" = "yes" ] && [ "${FRONTEND_IDS_MATCH}" = "yes" ]; then
+            echo "  Image ids matched, so the config metadata normalised as well as the content."
+          else
+            echo "  Image ids did NOT match. That is a metadata difference, not a content one:"
+            echo "  every file in both images is byte-identical, which the steps above asserted"
+            echo "  file by file. docs/deployment/reproducibility.md names the causes."
+          fi
+
+      - name: Remove the experiment's images
+        if: always()
+        run: |
+          # `set +e` explicitly, for the same reason the docker-runtime teardown uses it: GitHub
+          # runs every block as `bash -e`, and a cleanup that finds nothing to clean must not
+          # turn a passing job red. No assertion lives here, so none is being suppressed.
+          set +e
+          set -u
+          docker image rm -f "$TAG_A" "$TAG_B" "$FE_TAG_A" "$FE_TAG_B"
+          echo "--- images left from this job (expected: none) ---"
+          docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -E "^ahip-repro-(fe-)?${GITHUB_RUN_ID}"
+          echo "(a grep with no output above means none survived, which is the expectation)"
