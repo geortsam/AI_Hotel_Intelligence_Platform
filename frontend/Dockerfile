@@ -41,6 +41,19 @@ FROM nginx:1.27-alpine AS runtime
 # security headers.
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Generates /etc/nginx/resolver.conf from this container's own /etc/resolv.conf, before nginx
+# starts, through the image's documented /docker-entrypoint.d/ convention. nginx.conf includes
+# that file and reaches the API through a variable, which is what lets a RUNNING nginx pick up a
+# recreated api container instead of dialling the address it resolved at startup for ever. The
+# script's own header explains why this is a script rather than a line of configuration.
+#
+# chmod here rather than relying on the file mode carried in git: the development machine is
+# Windows, where that bit is not preserved, and the image entrypoint silently IGNORES a script
+# it cannot execute -- which would leave nginx with no resolver.conf to include and a container
+# refusing to start for a reason nowhere near the cause.
+COPY docker-entrypoint.d/25-resolver.sh /docker-entrypoint.d/25-resolver.sh
+RUN chmod +x /docker-entrypoint.d/25-resolver.sh
+
 # Only the built output crosses the stage boundary. No Node, no npm, no node_modules, no
 # source tree, no tests -- the runtime image is nginx plus static files.
 COPY --from=build /app/dist /usr/share/nginx/html

@@ -219,7 +219,10 @@ will warn once; that is what self-signed means.
 **Only nginx is published.** The API and the database have no host ports — reach them with
 `docker compose exec` rather than over the network. See
 [docs/deployment/tls.md](docs/deployment/tls.md) for certificates, renewal, the trusted-proxy
-boundary and what this deliberately does not automate.
+boundary and what this deliberately does not automate, and
+[docs/deployment/robustness.md](docs/deployment/robustness.md) for which operations are safe
+against a running stack — recreating the API, restarting it, running a second stack — and what
+each healthcheck does and does not prove.
 
 This flow is exercised on every push: see [Continuous integration](#continuous-integration).
 
@@ -328,11 +331,16 @@ and `/intelligence`, that `/api/v1/` is proxied through to FastAPI while an unkn
 path still returns a real 404 rather than the SPA, that `SECRET_KEY` and `POSTGRES_PASSWORD`
 reach no frontend container or served asset, that a second `alembic upgrade head` is a no-op,
 that the schema survives a stop/start, and that **a deliberately broken migration prevents the
-API from starting at all**. It then seeds data through the real API, takes a `pg_dump`, restores
-it into a **separate** PostgreSQL 18.6 instance, and requires the restored database to match the
-source byte for byte and to serve the application — see
-[docs/deployment/backup-restore.md](docs/deployment/backup-restore.md). Everything is torn down
-afterwards, volumes included.
+API from starting at all**.
+
+It then replaces the API container outright and requires the **same** nginx — same container,
+same master pid, never restarted — to keep serving HTTPS and to reach the replacement, with TLS,
+the forwarded-proto trust chain, every security header and the exposure boundary re-asserted
+afterwards; see [docs/deployment/robustness.md](docs/deployment/robustness.md). Finally it seeds
+data through the real API, takes a `pg_dump`, restores it into a **separate** PostgreSQL 18.6
+instance, and requires the restored database to match the source byte for byte and to serve the
+application — see [docs/deployment/backup-restore.md](docs/deployment/backup-restore.md).
+Everything is torn down afterwards, volumes included.
 
 That is why the deployment files in this repository are no longer described as unverified.
 
@@ -397,14 +405,18 @@ What remains genuinely missing is operational rather than functional:
   `nginx -s reload`. CI proves the configuration with a *self-signed* certificate, which is not
   the same as being ready for public internet exposure — that also needs a real certificate and
   a real hostname. See [docs/deployment/tls.md](docs/deployment/tls.md).
-- **nginx resolves `api` once at startup.** If the API container is recreated with a new address
-  the proxy keeps the old one and answers 502 until nginx itself restarts — and the frontend
-  healthcheck answers from nginx itself, so the container still reports healthy. Recovery today
-  is `docker compose restart frontend`.
+- **There is no zero-downtime deployment.** A recreated API container is now picked up by the
+  *running* nginx without restarting it, and CI proves that on real containers — but there is a
+  window of up to ten seconds, bounded by the DNS resolver's `valid=`, in which `/api` can
+  answer 502. This is a single-nginx, single-API stack: it has no second instance to route to
+  meanwhile. See [docs/deployment/robustness.md](docs/deployment/robustness.md).
+- **A second stack on one host still needs its own address space.** Container names, the
+  network and the volume are all scoped to the Compose project, so two copies coexist — but the
+  subnet is *declared* rather than discovered, so that the trust boundary can be a constant, and
+  two networks cannot claim one range. `COMPOSE_SUBNET`, `FRONTEND_IP` and `TRUSTED_PROXIES`
+  move together.
 - **Base images use mutable tags** and are not digest-pinned, so a rebuild is not guaranteed to
   reproduce the same image. The API image also runs Python 3.12 while CI runs 3.14.
-- **Two stacks cannot share one host** — the services declare fixed `container_name` values,
-  which Docker scopes to the daemon rather than to the Compose project.
 - **No platform-administrator API.** Granting platform administration is a deliberate
   out-of-band database write; see [First run](#first-run). That is by design, not an omission.
 

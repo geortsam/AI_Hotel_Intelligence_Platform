@@ -161,13 +161,20 @@ root rather than `backend/`: one image both serves requests and applies migratio
 **These files are executed on every push.** A `docker-runtime` job on GitHub Actions builds both
 images and runs the stack in a disposable, run-scoped Compose project, asserting the startup
 chain, the PostgreSQL version, the schema revision, the SPA fallback, the `/api` proxy, secret
-isolation, migration idempotency, persistence across a restart, and that a failed migration
+isolation, migration idempotency, persistence across a restart, that the running nginx keeps
+serving a REPLACED api container without being restarted itself, and that a failed migration
 blocks the API from starting. The repository README lists the gates.
 
 nginx terminates TLS on 443 and is the only published service; port 80 redirects to it, and the
 API and database have no host ports. The backend trusts exactly one forwarding peer -- the
 frontend container's fixed address -- which is what lets rate limiting, audit attribution and
 HSTS see the real client. See [deployment/tls.md](deployment/tls.md).
+
+nginx reaches the API through a variable upstream, against a resolver generated at container
+start from the container's own `/etc/resolv.conf`, so a recreated api container is picked up by
+the running nginx rather than leaving it bound to the address it resolved once. Nothing in the
+compose file is scoped to the Docker daemon rather than to the project, so two stacks coexist on
+one host given their own address space. See [deployment/robustness.md](deployment/robustness.md).
 
 Not present, and not claimed here: automated certificate issuance or renewal, and any multi-host
 or orchestrated deployment. This is a single-host Compose deployment, and CI proves its TLS with

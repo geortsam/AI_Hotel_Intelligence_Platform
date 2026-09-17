@@ -408,6 +408,16 @@ jobs:
 
           check("services are exactly db, migrate, api, frontend",
                 set(svc) == {"db", "migrate", "api", "frontend"})
+
+          # container_name is scoped to the DAEMON, not to the project, so any service that
+          # declares one makes a second copy of this stack unstartable on the same host --
+          # including CI's own failure-gate project. Stage 5.37 removed all four; this keeps
+          # them removed.
+          named = sorted(n for n, s in svc.items() if s.get("container_name"))
+          label = "no service declares a daemon-global container_name"
+          if named:
+              label += " -- found on: " + ", ".join(named)
+          check(label, not named)
           check("db image is postgres:18.6-alpine", svc["db"]["image"] == "postgres:18.6-alpine")
           check("db publishes no host port", not svc["db"].get("ports"))
           check("db has a healthcheck", "healthcheck" in svc["db"])
@@ -899,11 +909,14 @@ jobs:
           empty_dir="$RUNNER_TEMP/tls-empty"
           mkdir -p "$empty_dir"
 
-          # On the compose network, which is not optional: nginx.conf proxies to `api`, and nginx
-          # resolves upstream names at configuration load. Off-network the test fails with
-          # "host not found in upstream" BEFORE it ever reads a certificate -- nginx would exit
-          # non-zero for the wrong reason, and this gate would pass while proving nothing. The
-          # assertion below catches exactly that, which is how the omission was found.
+          # Still attached to the compose network, and the reason is now historical as much as
+          # current. It used to be mandatory: nginx.conf named `api` literally, nginx resolved
+          # upstream names at configuration load, and off-network the probe died with "host not
+          # found in upstream" BEFORE it ever read a certificate -- a non-zero exit for the wrong
+          # reason, and a gate that passed while proving nothing. Stage 5.37 moved the upstream
+          # behind a variable, so nginx no longer resolves it at load time and that failure mode
+          # is gone. The attachment and the assertion below both stay: they cost nothing, and if
+          # a literal upstream is ever reintroduced they are what keeps this gate honest.
           network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' \
             "$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=frontend" | head -n1)")"
           echo "  attaching the probe to: $network"
@@ -1137,6 +1150,446 @@ jobs:
             echo "::error::schema did not survive the restart"; exit 1; }
           [ "$rows" = "$after" ] || { echo "::error::table count changed across restart"; exit 1; }
           echo "  OK   the named volume preserved the schema across stop/start"
+
+      - name: Verify nginx re-resolves a replaced API container
+        run: |
+          set -euo pipefail
+
+          # THE point of this step, and the reason inspecting the configuration would not do: the
+          # same nginx PROCESS that was serving before must still be serving after the API
+          # container it talks to has been thrown away and rebuilt.
+          #
+          # Before Stage 5.37 this failed. nginx resolved `api` once, at configuration load, and
+          # kept that address, so a recreated API left it dialling a container that no longer
+          # existed -- 502 for ever, while /healthz on port 80 kept the container reporting
+          # healthy. frontend/nginx.conf now reaches the API through a variable, against a
+          # resolver generated at startup from the container's own /etc/resolv.conf.
+          https="https://127.0.0.1:${HTTPS_PORT}"
+          cacert="$CERT_DIR/fullchain.pem"
+
+          cid_of() {
+            docker ps -aq \
+              --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" \
+              --filter "label=com.docker.compose.service=$1" | head -n1
+          }
+          # One address per attached network; this stack attaches exactly one, so the range
+          # yields a single value rather than a concatenation.
+          ip_of() {
+            docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$1"
+          }
+
+          echo "--- the resolver nginx is actually using, read from the running container ---"
+          # Captured first rather than piped: `grep -q` closes the pipe on its first match, and
+          # under `pipefail` the SIGPIPE that gives `docker compose exec` would fail the step
+          # for a successful assertion.
+          resolver_conf="$(dc exec -T frontend cat /etc/nginx/resolver.conf)"
+          printf '%s\n' "$resolver_conf" | sed 's/^/  /'
+          printf '%s\n' "$resolver_conf" | grep -Eq '^resolver ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+|\[[0-9a-fA-F:]+\]) .*valid=' || {
+            echo "::error::resolver.conf does not name a nameserver with a valid= window"
+            exit 1; }
+          echo "  OK   the resolver was generated from resolv.conf, not hard-coded"
+
+          echo "--- the upstream is variable-based, which is what allows re-resolution ---"
+          # Anchored to a DIRECTIVE line, not merely to the text appearing somewhere in the
+          # file: nginx.conf explains this change in a comment that quotes the directive, and a
+          # looser pattern would be satisfied by the prose while the configuration said
+          # something else entirely.
+          served_conf="$(dc exec -T frontend cat /etc/nginx/conf.d/default.conf)"
+          printf '%s\n' "$served_conf" | grep -n 'proxy_pass' | sed 's/^/  /'
+          printf '%s\n' "$served_conf" | grep -Eq '^[[:space:]]*proxy_pass[[:space:]]+http://\$api_upstream;[[:space:]]*$' || {
+            echo "::error::proxy_pass is not the variable form; a literal name resolves once"
+            exit 1; }
+          printf '%s\n' "$served_conf" | grep -Eq '^[[:space:]]*set[[:space:]]+\$api_upstream[[:space:]]+api:8000;[[:space:]]*$' || {
+            echo "::error::\$api_upstream is not set to api:8000"
+            exit 1; }
+          echo "  OK   proxy_pass resolves api:8000 through a variable"
+
+          fe_before="$(cid_of frontend)"
+          fe_started_before="$(docker inspect -f '{{.State.StartedAt}}' "$fe_before")"
+          fe_restarts_before="$(docker inspect -f '{{.RestartCount}}' "$fe_before")"
+          fe_pid_before="$(docker inspect -f '{{.State.Pid}}' "$fe_before")"
+          api_before="$(cid_of api)"
+          api_ip_before="$(ip_of "$api_before")"
+          db_before="$(cid_of db)"
+          migrate_before="$(cid_of migrate)"
+          migrate_finished_before="$(docker inspect -f '{{.State.FinishedAt}}' "$migrate_before")"
+
+          echo "--- before ---"
+          echo "  frontend : ${fe_before:0:12}  pid=$fe_pid_before started=$fe_started_before restarts=$fe_restarts_before"
+          echo "  api      : ${api_before:0:12}  ip=$api_ip_before"
+          echo "  db       : ${db_before:0:12}"
+          echo "  migrate  : ${migrate_before:0:12}  finished=$migrate_finished_before"
+
+          # The request must prove it reached the APPLICATION, not merely that something
+          # answered 200: /api/v1/ is FastAPI's own v1 metadata document.
+          before_body="$RUNNER_TEMP/reresolve-before.json"
+          code="$(curl -sS --cacert "$cacert" -o "$before_body" -w '%{http_code}' --max-time 15 "$https/api/v1/")"
+          echo "  GET /api/v1/ before -> HTTP $code"
+          [ "$code" = "200" ] || {
+            echo "::error::the proxy was already broken before the test"; cat "$before_body"; exit 1; }
+          python3 -c "import json,sys; b=json.load(open(sys.argv[1])); assert b['api_version']=='v1', b; print('  OK   FastAPI answered through nginx')" "$before_body"
+
+          # Recreation, and only of the api service.
+          #
+          # --no-deps is load-bearing twice over: without it Compose walks the dependency graph
+          # and may recreate `migrate`, re-running DDL against a live database for no reason, or
+          # disturb `db`, which this job's backup steps depend on. With it, the blast radius is
+          # one service.
+          echo "--- docker compose up -d --no-deps --force-recreate api ---"
+          dc up -d --no-deps --force-recreate api
+          wait_healthy api 180
+
+          api_after="$(cid_of api)"
+          api_ip_after="$(ip_of "$api_after")"
+          fe_after="$(cid_of frontend)"
+          fe_started_after="$(docker inspect -f '{{.State.StartedAt}}' "$fe_after")"
+          fe_restarts_after="$(docker inspect -f '{{.RestartCount}}' "$fe_after")"
+          fe_pid_after="$(docker inspect -f '{{.State.Pid}}' "$fe_after")"
+          db_after="$(cid_of db)"
+          migrate_after="$(cid_of migrate)"
+          migrate_finished_after="$(docker inspect -f '{{.State.FinishedAt}}' "$migrate_after")"
+
+          echo "--- after ---"
+          echo "  frontend : ${fe_after:0:12}  pid=$fe_pid_after started=$fe_started_after restarts=$fe_restarts_after"
+          echo "  api      : ${api_after:0:12}  ip=$api_ip_after"
+          echo "  db       : ${db_after:0:12}"
+          echo "  migrate  : ${migrate_after:0:12}  finished=$migrate_finished_after"
+
+          echo "--- the API really was replaced ---"
+          [ -n "$api_after" ] || { echo "::error::no api container after recreation"; exit 1; }
+          [ "$api_before" != "$api_after" ] || {
+            echo "::error::the api container id did not change; nothing was recreated"; exit 1; }
+          echo "  OK   api container id changed: ${api_before:0:12} -> ${api_after:0:12}"
+
+          # Reported, never gated. Docker's IPAM is free to hand the replacement the address the
+          # removed container just released, and sometimes does. The invariant under test is that
+          # the SAME nginx keeps working, not that the address moved -- gating on a new address
+          # would fail this test for something that is not a defect.
+          if [ "$api_ip_before" != "$api_ip_after" ]; then
+            echo "  note: the address changed too: $api_ip_before -> $api_ip_after"
+            echo "        this is precisely the case a startup-resolved upstream cannot survive"
+          else
+            echo "  note: Docker reused $api_ip_after for the replacement"
+            echo "        legitimate, and deliberately not asserted on -- see the comment above"
+          fi
+
+          echo "--- the frontend was NOT restarted ---"
+          [ "$fe_before" = "$fe_after" ] || {
+            echo "::error::the frontend container was replaced: ${fe_before:0:12} -> ${fe_after:0:12}"; exit 1; }
+          [ "$fe_started_before" = "$fe_started_after" ] || {
+            echo "::error::the frontend restarted: $fe_started_before -> $fe_started_after"; exit 1; }
+          [ "$fe_restarts_before" = "$fe_restarts_after" ] || {
+            echo "::error::the frontend restart count moved: $fe_restarts_before -> $fe_restarts_after"; exit 1; }
+          # A container can survive while the process inside it dies and is raised again. Same
+          # pid means the same nginx master, which is the strongest available form of "the
+          # instance that was serving before is the instance serving now".
+          [ "$fe_pid_before" = "$fe_pid_after" ] || {
+            echo "::error::the nginx master process was replaced: $fe_pid_before -> $fe_pid_after"; exit 1; }
+          echo "  OK   same container, same nginx master pid, same start time, no restart"
+
+          echo "--- nothing else was disturbed ---"
+          [ "$db_before" = "$db_after" ] || { echo "::error::the db container was replaced"; exit 1; }
+          [ "$migrate_before" = "$migrate_after" ] || {
+            echo "::error::migrate was recreated; an API recreation must not re-run DDL"; exit 1; }
+          [ "$migrate_finished_before" = "$migrate_finished_after" ] || {
+            echo "::error::migrate ran again: $migrate_finished_before -> $migrate_finished_after"; exit 1; }
+          echo "  OK   db untouched, migrate not re-run"
+
+          # Bounded polling, not a sleep. The resolver's valid=10s means nginx may still hold the
+          # previous answer for a few seconds after the API reports healthy, so an early request
+          # is allowed to fail -- but recovery must complete within the deadline, and the state
+          # asserted at the end is deterministic: 200 carrying FastAPI's own document.
+          echo "--- the SAME nginx must reach the REPLACEMENT api ---"
+          after_body="$RUNNER_TEMP/reresolve-after.json"
+          deadline=$(( SECONDS + 120 ))
+          recovered=no
+          attempt=0
+          while (( SECONDS < deadline )); do
+            attempt=$(( attempt + 1 ))
+            # curl exits non-zero only on a TRANSPORT failure; an HTTP 502 is a successful
+            # request with an unwanted status. The `if` captures the first case as 000 without
+            # suppressing anything -- the assertion is on the value, not on curl's exit code.
+            if out="$(curl -sS --cacert "$cacert" -o "$after_body" -w '%{http_code}' --max-time 10 "$https/api/v1/")"; then
+              code="$out"
+            else
+              code=000
+            fi
+            echo "  attempt $attempt: HTTP $code"
+            if [ "$code" = "200" ]; then
+              recovered=yes
+              break
+            fi
+            sleep 2
+          done
+          if [ "$recovered" != yes ]; then
+            echo "::error::the running nginx never reached the replacement api"
+            dc logs --tail 60 frontend
+            exit 1
+          fi
+          python3 -c "import json,sys; b=json.load(open(sys.argv[1])); assert b['api_version']=='v1', b; print('  OK   FastAPI answered through the SAME nginx after replacement')" "$after_body"
+
+          echo "--- and the name now resolves to the replacement from inside the frontend ---"
+          dc exec -T frontend wget -q -O- http://api:8000/health | head -c 120; echo
+          echo "  OK   frontend -> api:8000 reaches the running replacement"
+
+          rm -f "$before_body" "$after_body"
+
+      - name: Verify nginx recovers from an API outage without being restarted
+        run: |
+          set -euo pipefail
+
+          # The transient case, which is the other half of the same defect: while the API is down
+          # the proxy must fail, and when it returns the proxy must recover BY ITSELF.
+          #
+          # What is asserted DURING the outage is only that nginx does not serve a success. The
+          # exact status is deliberately not pinned: nginx answers 502 for a refused connection
+          # and 502 for a name that no longer resolves, and which one a given request meets
+          # depends on whether the resolver's cache has expired yet. Pinning it would be a flake.
+          # The RECOVERY assertion, which is the one that matters, is exact.
+          https="https://127.0.0.1:${HTTPS_PORT}"
+          cacert="$CERT_DIR/fullchain.pem"
+          body="$RUNNER_TEMP/outage-recovery.json"
+
+          cid_of() {
+            docker ps -aq \
+              --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" \
+              --filter "label=com.docker.compose.service=$1" | head -n1
+          }
+
+          # Poll until /api/v1/ answers 200, or fail at the deadline. Used twice below.
+          await_api() {
+            local deadline=$(( SECONDS + 120 ))
+            local attempt=0 out code
+            while (( SECONDS < deadline )); do
+              attempt=$(( attempt + 1 ))
+              if out="$(curl -sS --cacert "$cacert" -o "$body" -w '%{http_code}' --max-time 10 "$https/api/v1/")"; then
+                code="$out"
+              else
+                code=000
+              fi
+              echo "  attempt $attempt: HTTP $code"
+              if [ "$code" = "200" ]; then
+                return 0
+              fi
+              sleep 2
+            done
+            return 1
+          }
+
+          fe_before="$(cid_of frontend)"
+          fe_pid_before="$(docker inspect -f '{{.State.Pid}}' "$fe_before")"
+          echo "  frontend before: ${fe_before:0:12} pid=$fe_pid_before"
+
+          echo "--- stop the API ---"
+          dc stop api
+
+          # The frontend must stay up and keep serving static content. An API outage is not a
+          # site outage: the SPA still has to load, so it can say so.
+          code="$(curl -sS --cacert "$cacert" -o /dev/null -w '%{http_code}' --max-time 15 "$https/index.html")"
+          echo "  GET /index.html during the outage -> $code"
+          [ "$code" = "200" ] || { echo "::error::static content stopped being served"; exit 1; }
+          echo "  OK   the SPA is still served while the API is down"
+
+          if out="$(curl -sS --cacert "$cacert" -o /dev/null -w '%{http_code}' --max-time 15 "$https/api/v1/")"; then
+            api_code="$out"
+          else
+            api_code=000
+          fi
+          echo "  GET /api/v1/ during the outage -> $api_code"
+          if [ "$api_code" = "200" ]; then
+            echo "::error::the proxy returned 200 while the API was stopped"
+            exit 1
+          fi
+          echo "  OK   the proxy fails while the API is down rather than inventing an answer"
+
+          echo "--- start the API again ---"
+          dc start api
+          wait_healthy api 180
+
+          echo "--- recovery must be automatic and bounded ---"
+          if ! await_api; then
+            echo "::error::the proxy never recovered after the API returned"
+            dc logs --tail 60 frontend
+            exit 1
+          fi
+          python3 -c "import json,sys; b=json.load(open(sys.argv[1])); assert b['api_version']=='v1', b; print('  OK   the proxy recovered on its own')" "$body"
+
+          fe_after="$(cid_of frontend)"
+          fe_pid_after="$(docker inspect -f '{{.State.Pid}}' "$fe_after")"
+          [ "$fe_before" = "$fe_after" ] || {
+            echo "::error::the frontend container changed during the outage test"; exit 1; }
+          [ "$fe_pid_before" = "$fe_pid_after" ] || {
+            echo "::error::the nginx master was replaced during the outage test"; exit 1; }
+          echo "  OK   no frontend restart was needed: ${fe_after:0:12} pid=$fe_pid_after"
+
+          # `docker compose restart api` is the other operation an operator actually performs. It
+          # keeps the container and its address, so it is a weaker test than the replacement
+          # above; it is here because it is what the runbook tells people to run.
+          echo "--- docker compose restart api ---"
+          api_before="$(cid_of api)"
+          dc restart api
+          wait_healthy api 180
+          api_after="$(cid_of api)"
+          echo "  api: ${api_before:0:12} -> ${api_after:0:12}"
+          [ "$api_before" = "$api_after" ] || {
+            echo "::error::restart replaced the container; that is not what restart means"; exit 1; }
+
+          if ! await_api; then
+            echo "::error::the proxy did not recover after 'docker compose restart api'"
+            dc logs --tail 60 frontend
+            exit 1
+          fi
+          echo "  OK   the proxy works after a restart too"
+
+          echo "--- the whole chain is healthy again ---"
+          for service in db api frontend; do
+            cid="$(cid_of "$service")"
+            state="$(docker inspect -f '{{.State.Status}}' "$cid")"
+            health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid")"
+            echo "  $service: state=$state health=$health"
+            [ "$state" = "running" ] || { echo "::error::$service is $state"; exit 1; }
+            [ "$health" = "healthy" ] || { echo "::error::$service health is $health"; exit 1; }
+          done
+
+          rm -f "$body"
+
+      - name: Verify TLS, headers and the trust boundary survived the replacement
+        run: |
+          set -euo pipefail
+
+          # A re-resolution fix that quietly cost the forwarded headers, the certificate or the
+          # security headers would be a regression, not a fix. Everything Stage 5.36 proved is
+          # therefore proved AGAIN here, after the API container has been replaced, stopped,
+          # started and restarted -- and, as there, without -k anywhere.
+          https="https://127.0.0.1:${HTTPS_PORT}"
+          cacert="$CERT_DIR/fullchain.pem"
+          body="$RUNNER_TEMP/post-recreate-index"
+          api_body="$RUNNER_TEMP/post-recreate-api.json"
+
+          echo "--- the certificate is still presented on 443 ---"
+          openssl s_client -connect "127.0.0.1:${HTTPS_PORT}" -servername localhost </dev/null 2>/dev/null \
+            | openssl x509 -noout -subject -issuer -dates | sed 's/^/  /'
+
+          echo "--- the SPA still serves over HTTPS, with the CA pinned ---"
+          code="$(curl -sS --cacert "$cacert" -o "$body" -w '%{http_code}' --max-time 15 "$https/index.html")"
+          echo "  GET /index.html -> $code"
+          [ "$code" = "200" ] || { echo "::error::index.html returned $code"; exit 1; }
+          grep -q '<div id="root"></div>' "$body" || {
+            echo "::error::/index.html is not the SPA document"; exit 1; }
+          echo "  OK   200, verified against the CI CA, and it is this application's document"
+
+          echo "--- the path still reaches the API unchanged ---"
+          # /api/v1/ answering at all proves the /api/ prefix was NOT stripped: the backend
+          # mounts its v1 router at /api/v1, so a stripped prefix would 404 here.
+          code="$(curl -sS --cacert "$cacert" -o "$api_body" -w '%{http_code}' --max-time 15 "$https/api/v1/")"
+          echo "  GET /api/v1/ -> $code"
+          [ "$code" = "200" ] || { echo "::error::/api/v1/ returned $code"; cat "$api_body"; exit 1; }
+          python3 -c "import json,sys; b=json.load(open(sys.argv[1])); assert b['api_version']=='v1', b" "$api_body"
+          echo "  OK   the full /api/v1/ path arrived at FastAPI"
+
+          echo "--- the query string survives the variable upstream ---"
+          # The part a variable proxy_pass could silently drop, and the one thing nothing else in
+          # this job would notice. GET /api/v1/hotels is unauthenticated and declares `page` with
+          # ge=1 (app/api/v1/endpoints/hotels.py), so page=0 is a contract violation FastAPI
+          # answers with 422 -- a status it can only produce if the query string arrived.
+          code="$(curl -sS --cacert "$cacert" -o /dev/null -w '%{http_code}' --max-time 15 "$https/api/v1/hotels?page=0")"
+          echo "  GET /api/v1/hotels?page=0 -> $code"
+          [ "$code" = "422" ] || {
+            echo "::error::expected 422 from FastAPI's own validation, got $code -- the query string did not survive the proxy"
+            exit 1; }
+          echo "  OK   FastAPI rejected page=0, so it saw the query string"
+
+          echo "--- an unknown /api path is still the API's 404, not the SPA ---"
+          code="$(curl -sS --cacert "$cacert" -o "$api_body" -w '%{http_code}' --max-time 15 "$https/api/v1/__no_such_route__")"
+          echo "  GET /api/v1/__no_such_route__ -> $code"
+          [ "$code" = "404" ] || { echo "::error::expected 404, got $code"; exit 1; }
+          if grep -q '<div id="root">' "$api_body"; then
+            echo "::error::an /api path fell through to the SPA fallback"
+            exit 1
+          fi
+          echo "  OK   /api/ is still proxied rather than swallowed by try_files"
+
+          echo "--- the forwarded-proto trust chain still works end to end ---"
+          # Same reasoning as the Stage 5.36 gate: the backend emits HSTS only when it believes
+          # the original request was HTTPS, which requires nginx's X-Forwarded-Proto AND the
+          # backend trusting nginx's address. If the replacement broke either, this is absent.
+          hsts="$(curl -sSI --cacert "$cacert" --max-time 15 "$https/index.html" | tr -d '\r' | awk -F': ' 'tolower($1)=="strict-transport-security"{print $2}')"
+          api_hsts="$(curl -sSI --cacert "$cacert" --max-time 15 "$https/api/v1/" | tr -d '\r' | awk -F': ' 'tolower($1)=="strict-transport-security"{print $2}')"
+          echo "  nginx: ${hsts:-<absent>}"
+          echo "  api  : ${api_hsts:-<absent>}"
+          [ -n "$api_hsts" ] || {
+            echo "::error::the API stopped emitting HSTS; the forwarded-proto trust chain broke"
+            exit 1; }
+          [ "$hsts" = "$api_hsts" ] || {
+            echo "::error::nginx and the API now advertise different policies: '$hsts' vs '$api_hsts'"
+            exit 1; }
+          echo "  OK   one origin, one policy -- TRUSTED_PROXIES still names the running nginx"
+
+          echo "--- the security headers survived ---"
+          headers="$(curl -sSI --cacert "$cacert" --max-time 15 "$https/index.html" | tr -d '\r')"
+          for header in "strict-transport-security:" "x-content-type-options: nosniff" "x-frame-options: DENY" "referrer-policy: no-referrer" "permissions-policy:" "content-security-policy:"; do
+            if ! printf '%s\n' "$headers" | grep -qi "^${header}"; then
+              echo "::error::missing header after replacement: $header"
+              printf '%s\n' "$headers"
+              exit 1
+            fi
+            echo "  OK   $header"
+          done
+
+          echo "--- a forged X-Forwarded-For is still not believed ---"
+          code="$(curl -sS --cacert "$cacert" -o /dev/null -w '%{http_code}' --max-time 15 \
+            -H 'X-Forwarded-For: 203.0.113.1' -H 'X-Real-IP: 203.0.113.1' "$https/api/v1/")"
+          echo "  GET /api/v1/ with a forged X-Forwarded-For -> $code"
+          [ "$code" = "200" ] || { echo "::error::expected 200, got $code"; exit 1; }
+          echo "  OK   served normally; nginx still appends the real peer"
+
+          echo "--- port 80 still redirects and still serves no application content ---"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "http://127.0.0.1:${HTTP_PORT}/")"
+          echo "  GET http://.../ -> $code"
+          [ "$code" = "308" ] || { echo "::error::port 80 returned $code, not 308"; exit 1; }
+          echo "  OK   308 to HTTPS"
+
+          echo "--- the exposure boundary is unchanged ---"
+          # The recreation is exactly when a stale definition could reintroduce a host port, so
+          # this is read back rather than assumed -- the same reading as the topology step, where
+          # `compose port` prints a zero mapping instead of failing when nothing is bound.
+          for spec in "api:8000" "db:5432"; do
+            service="${spec%%:*}"
+            port="${spec##*:}"
+            published="$(dc port "$service" "$port")"
+            binding="$(printf '%s\n' "$published" | awk -F: '{ p = $NF; gsub(/[^0-9]/, "", p); if (p != "" && p + 0 != 0) print $0 }')"
+            echo "  $service:$port -> ${published:-<empty>}"
+            if [ -n "$binding" ]; then
+              echo "::error::$service became published at $binding after recreation"
+              exit 1
+            fi
+            cid="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=$service" | head -n1)"
+            mapped="$(docker inspect -f '{{json .NetworkSettings.Ports}}' "$cid")"
+            case "$mapped" in
+              *HostPort*) echo "::error::$service has a host binding: $mapped"; exit 1 ;;
+            esac
+          done
+          echo "  OK   api and db are still unpublished"
+
+          set +e
+          curl -sS --max-time 5 -o /dev/null "http://127.0.0.1:8000/health"
+          direct=$?
+          set -e
+          echo "  direct :8000 -> curl exit $direct"
+          [ "$direct" -ne 0 ] || {
+            echo "::error::the API answered directly on the host after recreation"; exit 1; }
+          echo "  OK   there is still no route around nginx"
+
+          echo "--- the trust boundary is still a /32 at the declared address ---"
+          fe_cid="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=frontend" | head -n1)"
+          fe_ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$fe_cid")"
+          echo "  frontend address: $fe_ip"
+          [ "$fe_ip" = "172.29.0.10" ] || {
+            echo "::error::the frontend is at $fe_ip, but TRUSTED_PROXIES names 172.29.0.10/32"
+            exit 1; }
+          echo "  OK   the pinned address is unchanged; TRUSTED_PROXIES was not broadened"
+
+          rm -f "$body" "$api_body"
 
       - name: Seed deterministic data through the API
         run: |
@@ -1458,26 +1911,24 @@ jobs:
           # database that does not exist. No committed file is modified, no migration is edited
           # and nothing is downgraded.
           #
-          # The container names are overridden too, and that is not cosmetic. docker-compose.yml
-          # sets `container_name: hotel_db` and friends, and container_name is global to the
-          # DAEMON -- Compose does not scope it by project. So a second project isolates the
-          # network and the volume but still tries to claim `/hotel_db`, and run 35097766182
-          # failed here with "Conflict. The container name /hotel_db is already in use" while
-          # the proven-good stack was still up for the persistence check. Distinct names make
-          # the two stacks genuinely independent.
+          # The override used to carry four `container_name:` lines as well, and they were not
+          # cosmetic: docker-compose.yml set `container_name: hotel_db` and friends, and
+          # container_name is global to the DAEMON -- Compose does not scope it by project. A
+          # second project therefore isolated the network and the volume but still tried to claim
+          # `/hotel_db`, and run 35097766182 failed here with "Conflict. The container name
+          # /hotel_db is already in use" while the proven-good stack was still up for the
+          # persistence check.
+          #
+          # Stage 5.37 removed those names from docker-compose.yml instead of working around them
+          # here, so this override is now only the injected failure. That this step still runs a
+          # whole second stack beside the first IS the multi-stack gate: if a daemon-global name
+          # comes back, this is where it fails, and the assertions below name it explicitly.
           override="$RUNNER_TEMP/failgate.yml"
           cat > "$override" <<'YML'
           services:
-            db:
-              container_name: hotel_db_failgate
             migrate:
-              container_name: hotel_migrate_failgate
               environment:
                 DATABASE_URL: postgresql+psycopg://nobody:wrong@db:5432/database_that_does_not_exist
-            api:
-              container_name: hotel_api_failgate
-            frontend:
-              container_name: hotel_frontend_failgate
           YML
 
           # A different address space, and this is not incidental. docker-compose.yml declares its
@@ -1514,6 +1965,35 @@ jobs:
             exit 1
           fi
           echo "  failgate db is healthy"
+
+          echo "--- two stacks from one unmodified file, side by side ---"
+          # This is the multi-stack gate, and it costs nothing extra: a second full project from
+          # the same docker-compose.yml is already running here, beside the proven-good stack
+          # that is still up. Before Stage 5.37 it could not be -- the daemon-global
+          # `container_name` values collided. The names are read back rather than assumed.
+          first_db="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=db" | head -n1)"
+          first_name="$(docker inspect -f '{{.Name}}' "$first_db")"
+          second_name="$(docker inspect -f '{{.Name}}' "$cid")"
+          echo "  first  stack db: $first_name"
+          echo "  second stack db: $second_name"
+          [ "$first_name" != "$second_name" ] || {
+            echo "::error::both projects named the same container"; exit 1; }
+          for name in "$first_name" "$second_name"; do
+            case "$name" in
+              /hotel_db|/hotel_api|/hotel_migrate|/hotel_frontend)
+                echo "::error::a daemon-global container_name is back in docker-compose.yml: $name"
+                exit 1 ;;
+            esac
+          done
+          echo "  OK   Compose named both by project, so neither could claim the other's name"
+
+          # And the first stack is still serving. Coexistence that broke the running deployment
+          # would not be coexistence.
+          code="$(curl -sS --cacert "$CERT_DIR/fullchain.pem" -o /dev/null -w '%{http_code}' --max-time 15 "https://127.0.0.1:${HTTPS_PORT}/api/v1/")"
+          echo "  first stack GET /api/v1/ -> $code"
+          [ "$code" = "200" ] || {
+            echo "::error::the first stack stopped serving once a second one started"; exit 1; }
+          echo "  OK   the first stack is unaffected by the second"
 
           echo "--- migrate must fail ---"
           # This is the one place in the job where a NON-zero exit is the required outcome, so

@@ -186,7 +186,9 @@ COMPOSE_SUBNET=172.30.0.0/16 FRONTEND_IP=172.30.0.10 TRUSTED_PROXIES=172.30.0.10
 
 That is a real constraint of declaring the subnet, and the price of a trust boundary that cannot
 drift. CI relies on exactly this override to run its disposable failure-gate stack beside the
-real one.
+real one. The second stack's boundary is a `/32` exactly like the first's — nothing is relaxed
+to let two stacks coexist. See
+[robustness.md §5](robustness.md#5-two-stacks-on-one-host).
 
 **Never** `0.0.0.0/0` or `::/0`. Anything inside a trusted range can claim to be any client, so
 trusting the internet is strictly worse than trusting nothing.
@@ -235,6 +237,9 @@ are asserted by the `docker-runtime` CI job, which has `curl` and the CA certifi
 
 The API healthcheck is unchanged: `/health` over plain HTTP inside the API container, which never
 involved TLS.
+
+What each probe does and does not prove — including why the frontend's does not test `/api` —
+is in [robustness.md §6](robustness.md#6-healthchecks-and-what-each-one-actually-proves).
 
 ## 8. Development versus production
 

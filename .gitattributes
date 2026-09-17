@@ -6,7 +6,15 @@
 # Linux CI runner would then see a diff that does not exist locally.
 #
 # `text=auto` makes the normalisation a rule of the repository instead: every text file is
-# stored as LF and checked out in the platform's native form. No binary or line-ending
-# sensitive file exists in the tree (no .sh, .bat or .ps1; the only non-text artefacts are
-# ignored), so a single blanket rule is enough and no per-pattern overrides are needed.
+# stored as LF and checked out in the platform's native form.
 * text=auto
+
+# Shell scripts are the exception, and they need LF in the WORKING TREE, not only in the
+# repository. `text=auto` checks a file out with CRLF on Windows, which is harmless for a
+# config file and fatal for a script: frontend/docker-entrypoint.d/25-resolver.sh is copied
+# verbatim into the nginx image, and a CRLF shebang makes the kernel look for an interpreter
+# whose name ends in a carriage return. The image entrypoint would then report a failure that
+# the build itself never showed.
+#
+# `eol=lf` pins the checkout form regardless of platform or of a contributor's core.autocrlf.
+*.sh text eol=lf

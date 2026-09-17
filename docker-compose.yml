@@ -4,8 +4,10 @@
 # machine, so every change to this file is proved by the `docker-runtime` job in
 # .github/workflows/ci.yml, which builds both images and runs this stack on every push. It
 # asserts the startup chain below, PostgreSQL 18.6, the schema reaching 0009, the SPA fallback,
-# the /api proxy, secret isolation, migration idempotency, persistence across a restart, and
-# that a failed migration keeps the API from starting.
+# the /api proxy, TLS and the trusted-proxy boundary, secret isolation, migration idempotency,
+# persistence across a restart, that the running nginx keeps proxying to a REPLACED api
+# container without being restarted itself, and that a failed migration keeps the API from
+# starting.
 #
 #   cp .env.example .env      # then set POSTGRES_PASSWORD, and SECRET_KEY for production
 #   docker compose up --build
@@ -71,6 +73,21 @@ x-backend-environment: &backend-environment
   # by default and is not enabled here; it is close to irreversible.
   HSTS_INCLUDE_SUBDOMAINS: ${HSTS_INCLUDE_SUBDOMAINS:-false}
 
+# ## No `container_name` anywhere below, and that is deliberate
+#
+# Compose names containers `<project>-<service>-<index>` and scopes that name to the PROJECT.
+# `container_name` overrides it with a name scoped to the DAEMON instead, which is not the
+# cosmetic difference it looks like: a second copy of this stack -- staging beside production, a
+# reviewer's checkout beside a running one, or CI's own disposable failure-gate project -- is
+# refused with "the container name /hotel_db is already in use" even though its network, its
+# volume and its project are entirely separate. Run 35097766182 failed exactly that way, and CI
+# carried a block of `container_name: *_failgate` overrides for no other reason.
+#
+# Nothing here needed the fixed names. Services find each other by SERVICE name over this
+# network's DNS -- `db`, `api`, which is what DATABASE_URL and frontend/nginx.conf use -- and
+# that is unaffected by how the containers are named. `docker compose exec <service> ...`
+# addresses them without one, and every assertion in CI selects by Compose label rather than by
+# name.
 services:
   db:
     # Pinned to 18.6 to match what this project actually verifies: CI runs postgres:18.6 and
@@ -81,7 +98,6 @@ services:
     # Exact, not `postgres:18-alpine`: a floating major tag silently moves the server under a
     # data directory that is bound to its major version.
     image: postgres:18.6-alpine
-    container_name: hotel_db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-hotel}
@@ -123,7 +139,6 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     image: hotel-intelligence-api:local
-    container_name: hotel_migrate
     # One shot, and no restart policy on purpose. `unless-stopped` here would turn a failed
     # migration into an unbounded retry loop issuing DDL against a live database -- a far worse
     # failure than simply not starting. It runs, it exits, and its exit code is the signal.
@@ -150,7 +165,6 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     image: hotel-intelligence-api:local
-    container_name: hotel_api
     restart: unless-stopped
     # Only on migrate, not on db. `migrate` already waits for `db` to be healthy, so the
     # ordering is transitive, and naming db here as well would suggest the API has a route to
@@ -195,11 +209,17 @@ services:
         # /api/v1/... on its own origin, nginx proxies it to api:8000, no CORS is involved and
         # the bundle's `connect-src 'self'` CSP is satisfied.
         VITE_API_BASE_URL: ""
-    container_name: hotel_frontend
     restart: unless-stopped
-    # service_healthy, not the short form. The short form only waits for the container to
-    # start, and nginx resolves `api` once at startup -- so starting it early is exactly when
-    # the resolution can fail.
+    # service_healthy, not the short form, and the reason changed in Stage 5.37 without the
+    # condition changing. It used to be about name resolution: nginx resolved `api` once, at
+    # startup, so starting the frontend early was exactly when that could fail. It no longer
+    # resolves once -- frontend/nginx.conf reaches the API through a variable and re-resolves per
+    # request -- so the frontend would now survive starting first.
+    #
+    # It still waits, because "would survive" is not "should". The short form returns as soon as
+    # the api CONTAINER starts, which is before uvicorn is listening: the frontend would come up
+    # advertising a site whose every /api request 502s, and a browser would be told the
+    # application is available before any of it is. Waiting for health costs a few seconds once.
     depends_on:
       api:
         condition: service_healthy
