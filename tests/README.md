@@ -16,6 +16,15 @@ Root-level tests import `app` because `pythonpath = ["backend"]` is set in the r
 pytest -q
 ```
 
-Frontend tests are not configured. They need Node/npm, which is not installed on the current
-development machine, so adding a test runner that cannot be executed would be untested
-configuration.
+## Frontend tests
+
+Frontend tests are **not** here. They live beside the code they cover, as
+`frontend/src/**/*.test.tsx`, and run under Vitest rather than pytest — so `pytest -q` from the
+repository root does not touch them, and neither does anything in this directory.
+
+```bash
+cd frontend && npm test
+```
+
+There are 27 test files and 998 tests. CI runs them in their own `Frontend quality gates` job,
+separately from the Python suite.
