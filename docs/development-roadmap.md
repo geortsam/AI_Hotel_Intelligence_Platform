@@ -113,6 +113,24 @@ restore, and that a failed migration blocks the API from starting.
 
 ---
 
+# V2 — IN PROGRESS
+
+## Stage 6.1 — Demand dataset and feature pipeline · *done*
+
+A reproducible, leakage-safe dataset over the existing domain data, and the feature pipeline a
+later model stage can consume. **No model was trained, and none exists.**
+
+Target: daily hotel room-night demand, one observation per hotel per calendar date, derived from
+`booking_room_nights` under the existing `OCCUPANCY_STATUSES` definition. Features are tied to an
+explicit prediction cutoff and classified by when they become knowable; chronological splitting
+only, with no shuffle parameter to misuse. Implemented in the standard library, with no new
+dependency and no schema change.
+
+Detail, including the two schema facts that bound what is reconstructible and the measured
+reasons the demo data cannot train anything: **[ml-dataset-design.md](ml-dataset-design.md)**.
+
+---
+
 # V2 — FUTURE / NOT IMPLEMENTED
 
 **None of the following exists in this repository.** No code, no dependency, no configuration.
@@ -121,8 +139,8 @@ restore, and that a failed migration blocks the API from starting.
 
 | Item | Note |
 |---|---|
-| Trained occupancy forecasting | replacing the statistical baseline; requires a dataset, a rolling-origin backtest as the figure of record, and per-version evaluation records |
-| Richer feature pipeline | `ml/pipelines/` is an empty placeholder today |
+| Trained occupancy forecasting | would consume the Stage 6.1 dataset; still requires a rolling-origin backtest as the figure of record and per-version evaluation records |
+| Richer feature pipeline | `ml/pipelines/` is an empty placeholder today; Stage 6.1's pipeline is online extraction, not an offline training pipeline |
 | Review sentiment | polarity and aspect breakdown over review text |
 | Room-image classification | class set fixed before training |
 | AI recommendations | evaluated with ranking metrics against a popularity baseline |

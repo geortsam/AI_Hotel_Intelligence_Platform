@@ -158,9 +158,29 @@ trend response returns both window medians *and* the threshold, so its classific
 recomputed by hand.
 
 **There is no LLM, no embedding, no vector database, no retrieval-augmented generation, no
-agent framework and no external AI service anywhere in this repository.** See §5.2.
+agent framework and no external AI service anywhere in this repository.** See §5.3.
 
-### 5.1 The offline / online boundary (structure only, not yet used)
+### 5.1 The V2 demand dataset (Stage 6.1) — a dataset, not a model
+
+A separate layer, added without touching anything above. It turns the operational tables into a
+leakage-safe training dataset: one observation per hotel per calendar date, targeting realised
+room-night demand under the same `OCCUPANCY_STATUSES` definition the analytics layer uses.
+
+    MlDemandRepository     SQL, one hotel at a time     app/repositories/ml_demand.py
+        |
+        v
+    MlDatasetService       orchestration, writes nothing  app/services/ml_dataset.py
+        |
+        v
+    app.ml.dataset         pure features, rules, splits   app/ml/dataset.py
+
+Every feature is tied to an explicit prediction cutoff and declared by when it becomes knowable;
+splitting is chronological with no shuffle parameter to misuse. **No model is trained and none
+exists**, the V1 statistical layer above is unchanged, and there is no public endpoint — the
+pipeline is called programmatically. See
+[ml-dataset-design.md](ml-dataset-design.md), particularly its limitations.
+
+### 5.2 The offline / online boundary (structure only, not yet used)
 
 ```
 operational tables ---> pipelines (offline) ---> artifact + metrics.json
@@ -173,7 +193,7 @@ operational tables ---> pipelines (offline) ---> artifact + metrics.json
 empty**. No pipeline, no trained artifact, no dataset and no `metrics.json` exists. The
 dependencies in `ml/requirements-ml.txt` are declared and installed by nothing.
 
-### 5.2 FUTURE — NOT IMPLEMENTED
+### 5.3 FUTURE — NOT IMPLEMENTED
 
 None of the following exists. They are recorded as direction, not as capability:
 
