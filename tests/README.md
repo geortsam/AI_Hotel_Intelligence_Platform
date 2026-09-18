@@ -7,10 +7,14 @@ what it covers.
 |---|---|
 | `conftest.py` | Shared fixtures: test settings and a `TestClient`. |
 | `backend/` | Backend foundation: configuration behaviour and the liveness probe. |
-| `ml/` | ML pipelines. Empty -- there is nothing to test yet. |
+| `ml/` | The offline ML pipelines in `ml/`: source parsing, target derivation, coverage bounds, leakage, determinism, checksums and the manifest. Reads a committed excerpt of the real source; downloads nothing. |
 
 Root-level tests import `app` because `pythonpath = ["backend"]` is set in the root
 `pyproject.toml`; run pytest from the repository root.
+
+`tests/ml/` additionally imports `ml`, and needs no configuration to do so: every directory from
+`tests/` down carries an `__init__.py`, so pytest walks up to the first one that does not -- the
+repository root -- and puts *that* on `sys.path`.
 
 ```bash
 pytest -q

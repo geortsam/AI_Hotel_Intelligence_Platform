@@ -134,7 +134,7 @@ AI_Hotel_Intelligence_Platform/
 │   └── requirements-dev.txt
 ├── frontend/          React + TypeScript SPA, nginx production image
 ├── database/          migrations/ (9 revisions) and init SQL
-├── ml/                data/, pipelines/, models/, notebooks/  (structure only — all empty)
+├── ml/                offline data preparation; manifests tracked, data payloads ignored
 ├── docs/              architecture, roadmap, design records, deployment runbooks
 ├── tests/             backend/ and integration/ suites, mirroring the source layout
 ├── pyproject.toml     ruff · mypy · pytest · coverage
@@ -409,7 +409,11 @@ classification can be recomputed by hand.
 
 **There is no trained model, no LLM, no embeddings, no vector database, no RAG and no agent
 framework in this repository.** `ml/` holds the offline structure — `data/`, `pipelines/`,
-`models/`, `notebooks/` — and every one of those directories is empty.
+`manifests/`, `models/`, `notebooks/`. Stage 6.2 filled in the first half of it: `pipelines/`
+prepares a versioned offline training dataset from a published, CC BY 4.0 hotel-booking dataset,
+and `manifests/` records its checksums and partitions. `models/` is still empty and there is no
+`metrics.json`, because **nothing has been trained** — see
+[docs/ml-training-data.md](docs/ml-training-data.md).
 
 ### V2 — NOT IMPLEMENTED
 

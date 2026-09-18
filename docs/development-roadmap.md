@@ -129,6 +129,24 @@ dependency and no schema change.
 Detail, including the two schema facts that bound what is reconstructible and the measured
 reasons the demo data cannot train anything: **[ml-dataset-design.md](ml-dataset-design.md)**.
 
+## Stage 6.2 — Offline training dataset · *done*
+
+Stage 6.1 measured that the demo database cannot train anything. Stage 6.2 is the answer that
+is not fabrication: a real, published, CC BY 4.0 hotel-booking dataset — Antonio, de Almeida &
+Nunes (2019), two hotels, 2015–2017 — acquired from a commit-pinned URL, checksum-enforced, and
+transformed into **1,462 rows over 737 dates** that satisfy the Stage 6.1 contract rather than a
+contract of their own. **No model was trained, and none exists.**
+
+Bookings are expanded into room nights rather than counted as arrivals; dates whose demand the
+source cannot fully account for are dropped as targets rather than believed; missing values stay
+missing. One feature, `rooms_existing_at_cutoff`, is **NOT SUPPORTED** by the source and reports
+as unavailable instead of being fabricated as zero. Standard library only, no new dependency, no
+schema change, no API change, and the raw and processed payloads stay out of Git under the
+ignore rule that already existed — what is committed is the manifest.
+
+Detail, including provenance, licence, feature compatibility, the truncation rule and the
+measured limits: **[ml-training-data.md](ml-training-data.md)**.
+
 ---
 
 # V2 — FUTURE / NOT IMPLEMENTED
@@ -139,8 +157,8 @@ reasons the demo data cannot train anything: **[ml-dataset-design.md](ml-dataset
 
 | Item | Note |
 |---|---|
-| Trained occupancy forecasting | would consume the Stage 6.1 dataset; still requires a rolling-origin backtest as the figure of record and per-version evaluation records |
-| Richer feature pipeline | `ml/pipelines/` is an empty placeholder today; Stage 6.1's pipeline is online extraction, not an offline training pipeline |
+| Trained occupancy forecasting | would consume the Stage 6.2 offline dataset through the Stage 6.1 contract; still requires a rolling-origin backtest as the figure of record and per-version evaluation records |
+| Richer feature pipeline | `ml/pipelines/` holds data preparation only; nothing there trains, evaluates or versions a model |
 | Review sentiment | polarity and aspect breakdown over review text |
 | Room-image classification | class set fixed before training |
 | AI recommendations | evaluated with ranking metrics against a popularity baseline |

@@ -180,7 +180,27 @@ exists**, the V1 statistical layer above is unchanged, and there is no public en
 pipeline is called programmatically. See
 [ml-dataset-design.md](ml-dataset-design.md), particularly its limitations.
 
-### 5.2 The offline / online boundary (structure only, not yet used)
+### 5.1a The offline training dataset (Stage 6.2) — still not a model
+
+The production database holds too little history to train on, which Stage 6.1 measured rather
+than assumed. Stage 6.2 acquires real history instead of manufacturing it: a published, CC BY
+4.0 hotel-booking dataset (Antonio, de Almeida & Nunes, 2019 — two hotels, 2015–2017), pinned
+to a commit, checksum-enforced on every run, and transformed into 1,462 rows over 737 dates.
+
+```
+ml/pipelines/offline_demand.py  ---imports--->  app.ml.dataset   (the §5.1 contract)
+        |
+        v
+ml/data/processed/  (ignored)   +   ml/manifests/  (committed: checksums, ranges, partitions)
+```
+
+The arrow is the point: the offline pipeline does not define a contract of its own, so a model
+trained on its output would consume the same columns, order and cutoff semantics as one served
+against the production database. `ml/` is excluded from the backend build context, so nothing
+here reaches the API image. **No model is trained, none exists, and no dependency capable of
+training one is installed.** See [ml-training-data.md](ml-training-data.md).
+
+### 5.2 The offline / online boundary (data preparation only, no artifact)
 
 ```
 operational tables ---> pipelines (offline) ---> artifact + metrics.json
@@ -189,9 +209,11 @@ operational tables ---> pipelines (offline) ---> artifact + metrics.json
                                           backend loads artifact, serves predictions
 ```
 
-`ml/` holds this structure — `data/`, `pipelines/`, `models/`, `notebooks/` — and **all of it is
-empty**. No pipeline, no trained artifact, no dataset and no `metrics.json` exists. The
-dependencies in `ml/requirements-ml.txt` are declared and installed by nothing.
+`ml/` holds this structure — `data/`, `pipelines/`, `manifests/`, `models/`, `notebooks/`. Only
+the first half of the diagram exists: `pipelines/` holds the Stage 6.2 data preparation above,
+and **there is no trained artifact and no `metrics.json`**. The dependencies in
+`ml/requirements-ml.txt` are declared and installed by nothing, which is what stops the missing
+half being filled in quietly.
 
 ### 5.3 FUTURE — NOT IMPLEMENTED
 
