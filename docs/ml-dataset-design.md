@@ -251,10 +251,12 @@ attacked.
 
 Other limitations:
 
-- **No trained model.** Stage 6.2 acquired an offline training dataset
-  ([ml-training-data.md](ml-training-data.md)) and trained nothing either; a model is a
-  later stage, and nothing here anticipates it.
-- **No backtest, no metric, no baseline comparison.** Those require a model.
+- **No trained model in this stage.** Stage 6.2 acquired an offline training dataset
+  ([ml-training-data.md](ml-training-data.md)) and Stage 6.3 backtested a baseline and one
+  learned regressor against it ([ml-model-evaluation.md](ml-model-evaluation.md)) — offline,
+  with no artifact persisted and no endpoint. Nothing in *this* document anticipates either.
+- **No backtest, no metric, no baseline comparison here.** Those arrived in Stage 6.3, and they
+  measure the offline dataset rather than the production database.
 - `on_books_room_nights_at_cutoff` is an upper bound (§5), not a confirmed count.
 - `rooms_existing_at_cutoff` ignores `is_active` (§5).
 - Only one target is defined. Revenue, ADR and cancellation probability are not modelled.

@@ -7,7 +7,7 @@ what it covers.
 |---|---|
 | `conftest.py` | Shared fixtures: test settings and a `TestClient`. |
 | `backend/` | Backend foundation: configuration behaviour and the liveness probe. |
-| `ml/` | The offline ML pipelines in `ml/`: source parsing, target derivation, coverage bounds, leakage, determinism, checksums and the manifest. Reads a committed excerpt of the real source; downloads nothing. |
+| `ml/` | The offline ML pipelines in `ml/`: source parsing, target derivation, coverage bounds, the seasonal-naive baseline, feature admissibility, the rolling-origin backtest, metric arithmetic, leakage, determinism and checksums. Reads committed fixtures and the committed dataset; downloads nothing and touches no database. |
 
 Root-level tests import `app` because `pythonpath = ["backend"]` is set in the root
 `pyproject.toml`; run pytest from the repository root.

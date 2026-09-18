@@ -18,3 +18,9 @@
 #
 # `eol=lf` pins the checkout form regardless of platform or of a contributor's core.autocrlf.
 *.sh text eol=lf
+
+# Data files whose sha256 is compared against a committed manifest. `text=auto` would check
+# them out with CRLF on Windows and LF on Linux, so the bytes on disk -- and therefore the
+# digest -- would depend on the platform, and the check would fail on exactly one of them.
+# `-text` pins the checkout form to whatever was committed.
+ml/data/processed/*.csv -text

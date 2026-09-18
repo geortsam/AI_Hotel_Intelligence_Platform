@@ -52,12 +52,25 @@ ml/data/external/*
 !ml/data/**/.gitkeep
 !ml/data/**/README.md
 
+# One exception, added in Stage 6.3. The processed demand dataset is 263 KB of text whose
+# sha256 is pinned in a COMMITTED manifest, and the offline evaluation has to be able to run in
+# CI -- which cannot download 17 MB of raw source and must not be allowed to skip instead. A
+# payload whose checksum is committed beside it is verifiable rather than merely present.
+!ml/data/processed/demand_daily_v1.csv
+
 # --- Trained model artifacts ----------------------------------------------
 # Weights are large binaries and are never committed. Evaluation records are, so a metric
 # can always be traced back to a real run.
-ml/models/**
+# Written file by file rather than as `ml/models/**`, because git does not descend into an
+# excluded DIRECTORY and a negation beneath one therefore never fires. Stage 6.3 is the first
+# stage to produce a metrics.json, and with the old spelling it would have been ignored --
+# silently, which is the worst way for a rule stating "evaluation records are committed" to
+# fail.
+ml/models/*
 !ml/models/.gitkeep
-!ml/models/**/metrics.json
+!ml/models/*/
+ml/models/*/*
+!ml/models/*/metrics.json
 
 # --- Node / frontend -------------------------------------------------------
 node_modules/

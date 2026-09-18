@@ -110,8 +110,11 @@ Full detail, including the rules later stages must follow:
 target `py312` so the gates reject anything that would break it. What actually runs — in CI and
 in the API image — is **3.14.7**.
 
-`ml/requirements-ml.txt` declares pandas, NumPy and scikit-learn for future offline work. Nothing
-installs them: they are not in the API image, not in CI, and not imported anywhere.
+`ml/requirements-ml.txt` pins **scikit-learn** for the offline demand evaluation in `ml/`. CI's
+quality-gates job installs it, so the Python 3.14 wheel is verified rather than assumed; the API
+image does not — the backend Dockerfile copies only `backend/app`, `alembic.ini` and
+`database/migrations`, and `.dockerignore` excludes `ml/` from its build context. Nothing under
+`backend/app` imports scikit-learn, NumPy, SciPy or pandas, and a test asserts it.
 
 ## Project structure
 
@@ -134,7 +137,7 @@ AI_Hotel_Intelligence_Platform/
 │   └── requirements-dev.txt
 ├── frontend/          React + TypeScript SPA, nginx production image
 ├── database/          migrations/ (9 revisions) and init SQL
-├── ml/                offline data preparation; manifests tracked, data payloads ignored
+├── ml/                offline data preparation and evaluation; manifests and metrics tracked
 ├── docs/              architecture, roadmap, design records, deployment runbooks
 ├── tests/             backend/ and integration/ suites, mirroring the source layout
 ├── pyproject.toml     ruff · mypy · pytest · coverage
@@ -407,23 +410,28 @@ The same question always returns the same answer. The forecast method is reporte
 rather than hidden, and the trend response returns both window medians and the threshold, so its
 classification can be recomputed by hand.
 
-**There is no trained model, no LLM, no embeddings, no vector database, no RAG and no agent
-framework in this repository.** `ml/` holds the offline structure — `data/`, `pipelines/`,
-`manifests/`, `models/`, `notebooks/`. Stage 6.2 filled in the first half of it: `pipelines/`
-prepares a versioned offline training dataset from a published, CC BY 4.0 hotel-booking dataset,
-and `manifests/` records its checksums and partitions. `models/` is still empty and there is no
-`metrics.json`, because **nothing has been trained** — see
-[docs/ml-training-data.md](docs/ml-training-data.md).
+**There is no served model, no LLM, no embeddings, no vector database, no RAG and no agent
+framework in this repository.** `ml/` holds the offline half: Stage 6.2 prepares a versioned
+training dataset from a published, CC BY 4.0 hotel-booking dataset, and Stage 6.3 backtests a
+seasonal-naive baseline and one scikit-learn regressor over 54 chronological origins, recording
+what it measured in `ml/models/demand_baseline_v1/metrics.json`.
+
+**No model artifact is persisted and no endpoint serves one.** The public API is the same 82
+operations it was in V1, `backend/` gained no ML dependency, and the intelligence the platform
+actually serves is still the deterministic statistical baseline above. See
+[docs/ml-training-data.md](docs/ml-training-data.md) and
+[docs/ml-model-evaluation.md](docs/ml-model-evaluation.md) — including why those numbers
+establish neither production accuracy nor cross-hotel generalisation.
 
 ### V2 — NOT IMPLEMENTED
 
-None of these exist. Each would be built as its own stage, with its dependencies in
+None of these is served. Each would be built as its own stage, with its dependencies in
 `ml/requirements-ml.txt`, its pipeline in `ml/pipelines/`, and its artifacts plus evaluation
-record in `ml/models/<model>-<version>/`.
+record in `ml/models/<model_version>/` — which is where Stage 6.3 wrote the first `metrics.json`.
 
 | Module | Input | Output |
 |---|---|---|
-| **Trained occupancy forecasting** | Booking history | A learned model replacing the statistical baseline, validated by rolling-origin backtest |
+| **Served occupancy forecasting** | Booking history | A learned model replacing the statistical baseline. Stage 6.3 backtested one offline over 54 rolling origins and **persisted no artifact**; serving it needs one, plus a loading path, an unavailable-model error and an endpoint |
 | **Review sentiment** | Review text | Polarity plus an aspect breakdown (cleanliness, staff, location, value) and token-level explanations |
 | **Room-image classification** | Room photographs | Room type and feature tags for automatic media organisation |
 | **Recommendations** | User and hotel history | Ranked hotel suggestions, evaluated against a popularity baseline |

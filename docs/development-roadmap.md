@@ -147,6 +147,29 @@ ignore rule that already existed — what is committed is the manifest.
 Detail, including provenance, licence, feature compatibility, the truncation rule and the
 measured limits: **[ml-training-data.md](ml-training-data.md)**.
 
+## Stage 6.3 — Baseline demand model and rolling-origin backtest · *done*
+
+The first stage that fits anything, and it fits it **offline only**. A seasonal-naive baseline
+(demand seven days earlier) and one learned regressor — scikit-learn's
+`HistGradientBoostingRegressor`, the single dependency added — backtested over **54
+chronological origins** at a 7-day horizon, 744 predictions, none skipped.
+
+Measured, pooled over all 744: baseline MAE 18.371 / RMSE 28.166 / sMAPE 12.652 %; learned
+17.502 / 27.000 / 12.473 %. The learned model is ahead on 32 of 54 folds, and the pooled gap of
+0.87 room nights sits inside a per-fold spread of roughly ±50 — the two methods fail on
+different weeks. **No winner is declared and no accuracy is claimed.**
+
+The forecast horizon costs features and the cost is computed, not assumed: at seven days only 9
+of the 15 contract columns are knowable, and `rooms_existing_at_cutoff` is excluded outright
+rather than imputed. **No model artifact is persisted**, no API endpoint exists, the schema and
+the 82-operation public API are untouched, and `backend/` gained no ML dependency —
+`.dockerignore` keeps `ml/` out of the API image and a test asserts the application imports none
+of it.
+
+Detail, including the protocol, the fold table, the metric definitions and a section on why the
+numbers establish neither production accuracy nor cross-hotel generalisation:
+**[ml-model-evaluation.md](ml-model-evaluation.md)**.
+
 ---
 
 # V2 — FUTURE / NOT IMPLEMENTED
@@ -157,17 +180,17 @@ measured limits: **[ml-training-data.md](ml-training-data.md)**.
 
 | Item | Note |
 |---|---|
-| Trained occupancy forecasting | would consume the Stage 6.2 offline dataset through the Stage 6.1 contract; still requires a rolling-origin backtest as the figure of record and per-version evaluation records |
-| Richer feature pipeline | `ml/pipelines/` holds data preparation only; nothing there trains, evaluates or versions a model |
+| A **served** trained forecast | Stage 6.3 backtested one offline; serving it needs an artifact, a loading path, an unavailable-model error and an endpoint, none of which exists |
+| Richer feature pipeline | the 7-day horizon admits 9 of 15 contract columns; a horizon-matched on-the-books and rolling-window feature set does not exist |
 | Review sentiment | polarity and aspect breakdown over review text |
 | Room-image classification | class set fixed before training |
 | AI recommendations | evaluated with ranking metrics against a popularity baseline |
-| Model evaluation and versioning discipline | a metric may only be quoted from a real run written to `metrics.json` |
+| Model evaluation and versioning discipline | `ml/models/demand_baseline_v1/metrics.json` is the first such record; a registry for several coexisting versions is not built |
 
 Rules these must follow, unchanged from the original plan: predictions persisted with the model
 version that produced them; a missing artifact surfacing as an explicit unavailable-model error
 rather than a fabricated number; time-series evaluation by rolling-origin backtest, never a
-single chronological split.
+single chronological split. Stage 6.3 discharged the last of those three.
 
 ## Generative AI
 

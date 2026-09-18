@@ -1,11 +1,14 @@
 # AI / ML
 
-> ### There is one pipeline here, and no model.
+> ### Two pipelines here, and still no model artifact.
 >
-> **No trained artifact, no `metrics.json`, no notebook, and no dependency that could produce
-> one.** `requirements-ml.txt` is still installed by nothing — not by the API image, not by CI —
-> and `pipelines/` holds the Stage 6.2 offline data preparation, written against the standard
-> library plus the Stage 6.1 contract it has to satisfy.
+> Stage 6.2 prepares an offline dataset; Stage 6.3 backtests a seasonal-naive baseline and one
+> learned regressor against it and writes `models/demand_baseline_v1/metrics.json`. **Nothing is
+> serialised.** No pickle, no joblib dump, no weights — there is no artifact that could be
+> loaded and served, and the API has no path that would load one.
+>
+> `requirements-ml.txt` pins exactly one dependency, scikit-learn, installed by CI's
+> quality-gates job and **not** by the API image.
 >
 > **The intelligence the platform serves today is not here.** It is a deterministic statistical
 > baseline in `backend/app/ml/timeseries.py` and `backend/app/services/intelligence.py`,
@@ -14,8 +17,8 @@
 > insight templates. No trained model, no LLM, no embeddings, no vector database, no RAG, no
 > agent. See [`../docs/architecture.md` §5](../docs/architecture.md#5-data-and-intelligence-architecture).
 >
-> Everything below about **training** is still the shape it would take, not something that
-> exists. See [`../docs/development-roadmap.md`](../docs/development-roadmap.md).
+> Everything below about a **served** model is still the shape it would take, not something
+> that exists. See [`../docs/development-roadmap.md`](../docs/development-roadmap.md).
 
 All machine-learning work lives here, deliberately outside `backend/`, and `.dockerignore`
 excludes this directory from the backend build context so it cannot reach the API image. The
@@ -31,9 +34,9 @@ held to the same rules as one built from the production database.
 | `data/raw/` | Immutable source datasets exactly as downloaded. Never edited in place. |
 | `data/processed/` | Derived, model-ready datasets produced by a pipeline. |
 | `data/external/` | Third-party reference data. |
-| `pipelines/` | Reproducible data-preparation, training and evaluation scripts. **Stage 6.2 added the first: offline demand data preparation.** |
+| `pipelines/` | Reproducible data-preparation, training and evaluation scripts. **Stage 6.2 added data preparation, Stage 6.3 the offline evaluation.** |
 | `manifests/` | Dataset manifests. **Committed**, unlike the payloads they describe. |
-| `models/` | Trained artifacts, one directory per model version, each with its `metrics.json`. |
+| `models/` | One directory per model version, each with its `metrics.json`. Weights would live here too; none exists. |
 | `notebooks/` | Exploration only. Findings graduate into `pipelines/` before they count. |
 | `requirements-ml.txt` | ML dependencies. Kept separate so the API image stays small. |
 
@@ -49,24 +52,28 @@ return an invented prediction.
 
 ## Current state
 
-**No models and no trained artifact.** The dependencies in `requirements-ml.txt` (pandas, NumPy,
-scikit-learn) are declared and deliberately not installed anywhere; keeping them out is why the
-API image stays small, why the shipped intelligence layer is standard-library only, and why
-nothing here can quietly start fitting an estimator. A test asserts that no module under
-`pipelines/` imports any of them.
-
-What does exist, as of Stage 6.2:
+**No trained artifact.** `requirements-ml.txt` pins scikit-learn and nothing else; CI's
+quality-gates job installs it (so Python 3.14 compatibility is verified rather than assumed) and
+the API image does not — the backend Dockerfile copies only `backend/app`, and `.dockerignore`
+excludes this directory from its build context. Tests assert that no module under `backend/app`
+imports sklearn, NumPy, SciPy, pandas, PyTorch or TensorFlow, and that no gradient-boosting
+library, deep-learning framework or LLM client is imported anywhere.
 
 | Path | |
 |---|---|
-| `pipelines/offline_demand.py` | turns a published, CC BY 4.0 hotel-booking dataset into Stage 6.1 daily demand rows — target derivation, coverage bounds, features, split, checksums, manifest |
+| `pipelines/offline_demand.py` | Stage 6.2 — turns a published, CC BY 4.0 hotel-booking dataset into Stage 6.1 daily demand rows |
 | `pipelines/build_demand_dataset.py` | the command that acquires, verifies, builds and writes |
-| `manifests/demand_daily_v1.json` | the committed record: checksums, date ranges, partitions, rejection counts |
-| `data/` | still empty in Git — the raw and processed payloads are ignored, by the rule that predates this stage |
+| `loading.py`, `metrics.py`, `models.py`, `evaluation.py`, `manifests.py` | Stage 6.3 — dataset verification, MAE/RMSE/sMAPE, the baseline and the learned model, the rolling-origin backtest, the evaluation record |
+| `pipelines/evaluate_demand_model.py` | the command that backtests and writes the record |
+| `manifests/demand_daily_v1.json` | the dataset's committed record: checksums, ranges, partitions, rejections |
+| `models/demand_baseline_v1/metrics.json` | the **metric of record**: 54 folds, 744 predictions, both methods |
+| `data/` | raw payload ignored; the 263 KB processed dataset is committed so the evaluation can run in CI |
 
-Rebuild the dataset with:
+```
+python -m ml.pipelines.build_demand_dataset --download --verify
+python -m ml.pipelines.evaluate_demand_model --verify
+```
 
-    python -m ml.pipelines.build_demand_dataset --download --verify
-
-Full detail, including provenance, licence, feature compatibility and the measured limits:
-[`../docs/ml-training-data.md`](../docs/ml-training-data.md).
+Detail: [`../docs/ml-training-data.md`](../docs/ml-training-data.md) for the dataset and its
+provenance, [`../docs/ml-model-evaluation.md`](../docs/ml-model-evaluation.md) for the backtest,
+the measured results and what they do **not** establish.

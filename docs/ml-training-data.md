@@ -42,7 +42,7 @@ PRODUCTION DATABASE            OFFLINE HISTORICAL SOURCE
   (the contract)         imports   (satisfies the same contract)
         |                                |
         v                                v
-  rows for serving                 rows for training  -->  Stage 6.3 (not built)
+  rows for serving                 rows for training  -->  Stage 6.3 backtest
 ```
 
 The arrow that matters is the one pointing left. The offline pipeline does not define a dataset
@@ -101,20 +101,25 @@ citation and licence above are the *primary* source's, which is what CC BY requi
 
 ```
 ml/data/raw/demand_daily_v1_source.csv    the file as downloaded    16.9 MB   IGNORED
-ml/data/processed/demand_daily_v1.csv     the model-ready rows       263 KB   IGNORED
+ml/data/processed/demand_daily_v1.csv     the model-ready rows       263 KB   COMMITTED (6.3)
 ml/manifests/demand_daily_v1.json         checksums and coverage     ~4 KB    COMMITTED
 ```
 
 The `.gitignore` rule that decides this predates the stage — *"Data: payloads are ignored,
-documentation and manifests are tracked"* — and **no change to it was needed**. Neither Git LFS
-nor any external storage service was introduced; the acquisition is one pinned URL and one
-command.
+documentation and manifests are tracked"* — and Stage 6.2 needed **no change to it**. Neither
+Git LFS nor any external storage service was introduced; the acquisition is one pinned URL and
+one command.
 
-A 16.9 MB raw file does not belong in a Git history, and the 263 KB processed file is a
-*derived* artefact: committing it would create a second copy of the truth that can drift from
-the code that produces it. What is committed is the manifest, which is what makes the ignored
-payload verifiable rather than merely absent — rebuild, compare the checksum, and either it is
-the same dataset or it is not.
+A 16.9 MB raw file does not belong in a Git history. The 263 KB processed file was ignored here
+too, on the argument that a derived artefact in Git is a second copy of the truth that can drift
+from the code producing it. **Stage 6.3 reversed that one decision**, with a narrowly scoped
+negation and a stated reason: the offline evaluation has to run in CI, CI cannot download 17 MB
+of raw source, and the alternative would have been to let the evaluation tests skip. A payload
+whose checksum is committed beside it does not drift silently — it fails the six checks in
+`ml/loading.py`. See [ml-model-evaluation.md §12](ml-model-evaluation.md#12-versioning).
+
+What makes either arrangement work is the manifest: rebuild, compare the checksum, and either it
+is the same dataset or it is not.
 
 Rebuild it with:
 
@@ -438,8 +443,10 @@ asserts that, by substring, over the serialised bytes.
 
 ## 15. Known limitations
 
-- **No model, and no basis for claiming one.** No estimator, no fitted parameter, no metric, no
-  baseline comparison. Stage 6.3 or later.
+- **No model in this stage.** Stage 6.3 backtests a baseline and one learned regressor against
+  this dataset and records what it measured in
+  [ml-model-evaluation.md](ml-model-evaluation.md); it persists no artifact either. Nothing in
+  *this* document reports an accuracy, because nothing here computes one.
 - **This is not the production hotel's history.** It is two Portuguese hotels, 2015–2017,
   observed by someone else. A model trained on it is a model trained on *analogous* demand, and
   any later stage must say so wherever a prediction is surfaced.

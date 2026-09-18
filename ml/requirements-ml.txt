@@ -1,9 +1,17 @@
-# AI/ML dependencies. DECLARED, NOT INSTALLED in Stage 1 -- kept in a separate file so the
-# backend image and the development environment stay lean until a stage actually trains
-# something. Install explicitly when that stage begins:
+# Offline ML dependencies. Installed by CI's quality-gates job (so that Python 3.14
+# compatibility is verified rather than assumed) and NOT by the API image: the backend
+# Dockerfile copies only `backend/app`, and `.dockerignore` excludes `ml/` from its build
+# context entirely.
 #
 #   pip install -r ml/requirements-ml.txt
+#
+# Stage 6.3 pins scikit-learn and removes the pandas and NumPy declarations that had been here
+# since Stage 1 and were installed by nothing. Nothing imports either directly; NumPy and SciPy
+# arrive as scikit-learn's own requirements, which is the repository's usual policy -- direct
+# dependencies pinned, their dependencies resolved at install time.
+#
+# scikit-learn is here for exactly one estimator, HistGradientBoostingRegressor: the smallest
+# conventional learned regressor for a small tabular panel. No gradient-boosting library, no
+# deep-learning framework and no LLM client is declared, and a test asserts none is imported.
 
-pandas
-numpy
-scikit-learn
+scikit-learn==1.9.1

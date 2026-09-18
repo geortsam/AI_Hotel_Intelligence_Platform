@@ -56,3 +56,12 @@ disallow_untyped_defs = true
 no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
+
+# scikit-learn and SciPy ship no py.typed marker and no stubs are published for either, so
+# every import of them is an `import-untyped` error by default. The alternative is a
+# `# type: ignore` on each import, which `warn_unused_ignores` would then have to police.
+# The override is scoped to those two packages: nothing else in the tree is exempted, and
+# NumPy is deliberately absent from the list because it ships its own types.
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "scipy.*"]
+ignore_missing_imports = true

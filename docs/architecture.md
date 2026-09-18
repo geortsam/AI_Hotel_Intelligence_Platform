@@ -200,7 +200,30 @@ against the production database. `ml/` is excluded from the backend build contex
 here reaches the API image. **No model is trained, none exists, and no dependency capable of
 training one is installed.** See [ml-training-data.md](ml-training-data.md).
 
-### 5.2 The offline / online boundary (data preparation only, no artifact)
+### 5.1b The offline backtest (Stage 6.3) — a measurement, not a deployment
+
+The first stage that fits an estimator, and it fits it entirely offline. A seasonal-naive
+baseline and one `HistGradientBoostingRegressor` are backtested over 54 chronological origins at
+a 7-day horizon; the record lands in `ml/models/demand_baseline_v1/metrics.json`.
+
+```
+ml/models.py       feature admissibility, baseline, estimator   (the only sklearn import)
+ml/evaluation.py   rolling origins, folds, the chronology assertion
+ml/metrics.py      MAE, RMSE, sMAPE, with their denominators
+ml/manifests.py    the evaluation record and its content checksum
+```
+
+Three properties matter architecturally. **The horizon decides the feature set**: at seven days
+only 9 of the 15 contract columns are knowable, and the other six are excluded with recorded
+reasons rather than by hand. **No artifact is persisted** — nothing was serialised, so nothing
+could be served. **`backend/` gained no dependency**: scikit-learn is pinned in
+`ml/requirements-ml.txt`, installed by CI and not by the API image, and a test asserts that no
+module under `backend/app` imports it or NumPy or SciPy.
+
+The measured numbers, and a section on why they establish neither production accuracy nor
+cross-hotel generalisation: [ml-model-evaluation.md](ml-model-evaluation.md).
+
+### 5.2 The offline / online boundary (offline half only, no artifact)
 
 ```
 operational tables ---> pipelines (offline) ---> artifact + metrics.json
@@ -210,10 +233,10 @@ operational tables ---> pipelines (offline) ---> artifact + metrics.json
 ```
 
 `ml/` holds this structure — `data/`, `pipelines/`, `manifests/`, `models/`, `notebooks/`. Only
-the first half of the diagram exists: `pipelines/` holds the Stage 6.2 data preparation above,
-and **there is no trained artifact and no `metrics.json`**. The dependencies in
-`ml/requirements-ml.txt` are declared and installed by nothing, which is what stops the missing
-half being filled in quietly.
+the first half of the diagram exists: data preparation (Stage 6.2), an offline backtest and its
+`metrics.json` (Stage 6.3). **There is no trained artifact**, so the arrow into the backend has
+nothing to carry, and the backend has no path that would load one. `ml/requirements-ml.txt` pins
+scikit-learn, CI installs it and the API image does not.
 
 ### 5.3 FUTURE — NOT IMPLEMENTED
 
@@ -222,7 +245,7 @@ None of the following exists. They are recorded as direction, not as capability:
 | Module | Input | Output |
 |---|---|---|
 | Review sentiment | review text | polarity, aspect breakdown |
-| Trained occupancy forecasting | booking history | a learned model replacing the statistical baseline |
+| Served occupancy forecasting | booking history | a learned model replacing the statistical baseline; Stage 6.3 backtested one offline and persisted nothing |
 | Room image classification | room photographs | room type / feature tags |
 | Recommendations | user and hotel history | ranked hotel suggestions |
 
@@ -232,7 +255,8 @@ Rules these must follow when they are built:
   be traced to an artifact.
 - A missing artifact surfaces as an explicit unavailable-model error. It never degrades into a
   fabricated prediction.
-- For time-series work, evaluation uses a rolling-origin backtest, not a single split.
+- For time-series work, evaluation uses a rolling-origin backtest, not a single split. Stage 6.3
+  is the first stage to do this; see [ml-model-evaluation.md](ml-model-evaluation.md).
 
 ---
 

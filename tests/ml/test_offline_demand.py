@@ -900,14 +900,22 @@ TRAINING_LIBRARIES = (
 )
 
 
+#: The data-preparation half of `ml/`, named file by file. Stage 6.3 added an evaluation
+#: pipeline beside these, which legitimately reaches scikit-learn through `ml/models.py`; the
+#: repository-wide guard against the libraries that remain forbidden lives in
+#: `test_demand_model_integration.py`. Scoping this one by name keeps it a true statement about
+#: the dataset build rather than a claim about the directory that happens to still pass.
+DATA_PREPARATION_MODULES = ("offline_demand.py", "build_demand_dataset.py")
+
+
 @pytest.mark.parametrize("library", TRAINING_LIBRARIES)
-def test_the_offline_pipeline_imports_no_training_library(library: str) -> None:
-    """Stage 6.2 prepares data. A dependency that could fit a model has no business here."""
+def test_the_dataset_pipeline_imports_no_training_library(library: str) -> None:
+    """Stage 6.2 prepares data. A dependency that could fit a model has no business in it."""
     root = Path(__file__).resolve().parents[2] / "ml" / "pipelines"
-    for module in sorted(root.glob("*.py")):
-        source = module.read_text(encoding="utf-8")
-        assert f"import {library}" not in source, module.name
-        assert f"from {library}" not in source, module.name
+    for name in DATA_PREPARATION_MODULES:
+        source = (root / name).read_text(encoding="utf-8")
+        assert f"import {library}" not in source, name
+        assert f"from {library}" not in source, name
 
 
 def test_the_identity_columns_describe_an_observation_and_not_a_prediction() -> None:
