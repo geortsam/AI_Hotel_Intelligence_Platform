@@ -1,5 +1,12 @@
 # ML / Intelligence design — Stage 3B.11
 
+> **Stage snapshot, not a current-state document.** This records the design of the statistical
+> intelligence layer at Stage 3B.11 and is not maintained since. What it describes is still what
+> ships in V1 — a deterministic standard-library baseline, no trained model and no LLM — and
+> [architecture.md §5](architecture.md#5-data-and-intelligence-architecture) is the current
+> summary. V2 machine-learning direction is in
+> [development-roadmap.md](development-roadmap.md).
+
 Deterministic, explainable statistical models over the Stage 3B.10 analytics series.
 Read-only, hotel-scoped, no persistence, no new dependencies.
 

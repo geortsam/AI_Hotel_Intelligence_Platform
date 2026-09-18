@@ -1,8 +1,15 @@
 # Architecture
 
-This document describes the intended architecture and the rules that later stages must
-follow. It describes **intent**; it does not claim that code exists. Anything not yet built is
-marked as such.
+This document describes the architecture of the system as it stands at V1, and the rules it is
+held to. Where something is planned rather than built, it says so in those words.
+
+It was originally written as a statement of intent before the code existed. It is now a
+description of what is there: every rule below is enforced by code and asserted by the test
+suite. The stage-dated companions -- [`backend-architecture.md`](backend-architecture.md),
+[`database-design.md`](database-design.md), [`database-implementation.md`](database-implementation.md),
+[`analytics-design.md`](analytics-design.md) and [`ml-design.md`](ml-design.md) -- are snapshots
+of the stage each one names, kept as the record of how the system was built. This document and
+the runbooks under [`deployment/`](deployment/) are the ones maintained as current.
 
 ---
 
@@ -59,11 +66,29 @@ whether an action is permitted; an endpoint never builds a query.
 what is stored. They are kept as separate types on purpose -- so that a change to the storage
 layout is not automatically a public API change.
 
-`core/` holds cross-cutting concerns: configuration, and later logging, error handling and
-security.
+`core/` holds cross-cutting concerns: configuration, logging, the error taxonomy, password
+hashing and tokens, rate limiting, request-id propagation, security headers and the
+trusted-proxy client-address rules. `middleware/` carries the two ASGI middlewares that apply
+the last two per request.
 
-**Current state:** only `core/config.py` and `main.py` exist. Every other layer directory is
-an empty marker.
+**Transaction ownership, which is the layering rule with teeth.** A repository never commits.
+`grep` for `.commit()` under `backend/app/repositories/` returns nothing, and it is meant to
+stay that way: repositories build and run queries, services decide when a unit of work is
+finished. The request-scoped session in `db/session.py` commits on success and rolls back on
+an exception, so a service that raises cannot leave a half-written change behind.
+
+**Multi-tenant isolation is structural rather than conditional.** Every hotel-scoped service is
+reached through `HotelServiceDep -> HotelAccessPolicyDep -> CurrentUserDep`, so there is no path
+to a domain service that skips authentication — see `backend/app/api/deps.py`. Where a
+cross-tenant lookup would otherwise be expressible, the repository method simply does not exist,
+and the database backs this up with composite foreign keys that carry `hotel_id`. Public
+identifiers at the API boundary are UUIDs; internal `BIGINT` keys are never serialised.
+
+**Current state at V1:** every layer directory is populated —
+`api/` 28 files, `services/` 23, `schemas/` 20, `repositories/` 18, `models/` 14, `core/` 9,
+`db/` 3, `middleware/` 3, `ml/` 2. The HTTP surface is 82 routes, of which 77 require
+authentication; the 5 that do not are the version-metadata endpoint, registration, login and
+the two health probes.
 
 ---
 
@@ -77,32 +102,65 @@ Development and production are separated by the `ENVIRONMENT` variable rather th
 code paths. One visible consequence today: interactive API docs are served everywhere except
 production.
 
-In Stage 1 every setting has a working default, so the backend starts on a fresh checkout with
-no `.env` at all. As real secrets appear (starting with `SECRET_KEY` for authentication), the
-settings object should refuse to start without them rather than fall back to a default -- a
-misconfigured deployment must fail loudly instead of running insecurely.
+Most settings have a working default so a fresh checkout runs, but that stops where it should:
+`Settings` refuses to construct a **production** configuration without a `SECRET_KEY` and will
+not fall back to a built-in one. A misconfigured deployment fails loudly instead of running
+insecurely, and because `database/migrations/env.py` constructs the same `Settings`, it fails at
+the migration rather than later in the API.
 
 ---
 
-## 4. Request lifecycle (target)
+## 4. Request lifecycle
 
-1. CORS middleware admits or rejects the browser origin.
-2. *(later)* A request ID is assigned and bound to the logging context.
+1. A request ID is assigned and bound to the logging context (`middleware/request_id.py`).
+2. CORS middleware admits or rejects the browser origin.
 3. FastAPI validates the request against a Pydantic schema.
-4. *(later)* Dependencies resolve the database session and the authenticated user.
+4. Dependencies resolve the database session and the authenticated user, and — for every
+   hotel-scoped route — the caller's membership of that hotel.
 5. The endpoint calls a service.
 6. The service applies business rules and calls repositories.
 7. The response is serialised through a response schema.
-8. *(later)* Domain errors map to one uniform error envelope.
+8. Domain errors map to one uniform error envelope (`core/errors.py`).
+9. Security headers are applied on the way out (`middleware/security_headers.py`).
 
-Steps 2, 4 and 8 do not exist yet. Only 1, 3, 5 and 7 have any code behind them, and the only
-route is `/health`.
+All nine steps exist. Step 8 is worth reading in full before changing anything near it: the
+envelope is deliberately uninformative about internals, and 500-class faults carry one fixed
+sentence so that a client cannot learn a constraint name, a relation or a SQLSTATE from an
+error response. The detail goes to the logs, correlated by the request id from step 1.
 
 ---
 
-## 5. Data and ML architecture (planned)
+## 5. Data and intelligence architecture
 
 The platform is an operational system *and* an analytics layer reading the same data.
+
+### What exists at V1
+
+A **deterministic statistical intelligence layer**, computed on request from the operational
+tables. It is not trained, not learned and not generative:
+
+| Capability | Method |
+|---|---|
+| Occupancy and revenue forecasting | seasonal-naive day-of-week median, falling back to the window median when a weekday bucket is too thin |
+| Prediction intervals | median absolute deviation, scaled by 1.4826 |
+| Anomaly detection | modified z-score on the MAD, Iglewicz & Hoaglin threshold 3.5 |
+| Demand trend | split-window median comparison against an explicit relative threshold |
+| Insights | deterministic templates over the figures above |
+
+It lives in `backend/app/ml/timeseries.py` and `backend/app/services/intelligence.py`, is
+implemented in the **Python standard library** — no NumPy, pandas or scikit-learn — and carries
+`MODEL_VERSION = "1.0.0"`. Every response is a pure function of the hotel, the requested dates
+and the model version, so the same question always returns the same answer.
+
+Two properties are deliberate. The forecast method is **returned per point** rather than hidden
+behind one header, so a caller can see which points fell back to the window median. And the
+trend response returns both window medians *and* the threshold, so its classification can be
+recomputed by hand.
+
+**There is no LLM, no embedding, no vector database, no retrieval-augmented generation, no
+agent framework and no external AI service anywhere in this repository.** See §5.2.
+
+### 5.1 The offline / online boundary (structure only, not yet used)
 
 ```
 operational tables ---> pipelines (offline) ---> artifact + metrics.json
@@ -111,12 +169,18 @@ operational tables ---> pipelines (offline) ---> artifact + metrics.json
                                           backend loads artifact, serves predictions
 ```
 
-Four planned modules, none of them built:
+`ml/` holds this structure — `data/`, `pipelines/`, `models/`, `notebooks/` — and **all of it is
+empty**. No pipeline, no trained artifact, no dataset and no `metrics.json` exists. The
+dependencies in `ml/requirements-ml.txt` are declared and installed by nothing.
+
+### 5.2 FUTURE — NOT IMPLEMENTED
+
+None of the following exists. They are recorded as direction, not as capability:
 
 | Module | Input | Output |
 |---|---|---|
 | Review sentiment | review text | polarity, aspect breakdown |
-| Occupancy forecasting | booking history | occupancy per future date, with intervals |
+| Trained occupancy forecasting | booking history | a learned model replacing the statistical baseline |
 | Room image classification | room photographs | room type / feature tags |
 | Recommendations | user and hotel history | ranked hotel suggestions |
 
@@ -184,3 +248,42 @@ and requires every shipped file to be byte-identical; what that does and does no
 Not present, and not claimed here: automated certificate issuance or renewal, and any multi-host
 or orchestrated deployment. This is a single-host Compose deployment, and CI proves its TLS with
 a self-signed certificate, which is not the same as public-internet readiness.
+
+---
+
+## 7. Frontend / backend separation
+
+The browser client is a separate application that knows the HTTP contract and nothing else. It
+holds no database connection, no ORM, no SQL and no shared code with `backend/`; the only thing
+crossing between them is JSON over `/api/v1`.
+
+Two consequences are enforced rather than encouraged:
+
+- **One HTTP seam.** `frontend/src/services/api/client.ts` is the only module that calls
+  `fetch`, and the only place an `Authorization` header is constructed. A feature module cannot
+  reach the network past it.
+- **No client-side authority.** Money is never computed in the browser. `frontend/src/lib/decimal.ts`
+  works on strings and compares digit by digit; a monetary value becomes a JavaScript number only
+  at the display edge, to be handed to `Intl.NumberFormat`. Prices, totals, refunds and
+  permissions are all decided server-side, and the browser renders what it is told.
+
+In production both are served from **one origin**: nginx serves the built SPA and proxies
+`/api/` to the API, so the bundle is built with an empty API base URL and no CORS is involved.
+
+### 7.1 Session handling, and its limitation
+
+The backend authenticates with a bearer JWT and exposes no cookie-session endpoint. A token the
+browser must attach to a header is a token JavaScript must be able to read, so the access token
+is kept in **`sessionStorage`** (`frontend/src/session/tokenStorage.ts`).
+
+**This is a documented limitation, not a solved problem.** Any cross-site-scripting flaw in the
+application could read that token; no choice of Web Storage changes that, because `localStorage`
+and `sessionStorage` are equally readable by script on the origin. `sessionStorage` is chosen
+over `localStorage` only for lifetime — it is scoped to the tab and cleared when the tab closes,
+while still surviving a reload — and the access token lives 30 minutes.
+
+What reduces the exposure today: the content security policy is `script-src 'self'` with no
+inline script and no `eval` in the bundle, and every storage access is confined to four
+functions in one module. **The genuine fix is an `HttpOnly; Secure; SameSite` cookie issued by
+the backend, which script cannot read at all. That is a backend change and is V2 work** — see
+[development-roadmap.md](development-roadmap.md).

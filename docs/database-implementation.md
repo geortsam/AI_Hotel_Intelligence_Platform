@@ -1,5 +1,12 @@
 # Database implementation — Stage 2B
 
+> **Stage snapshot, not a current-state document.** This records how the Stage 2A schema was
+> built, and is not maintained since. Five migrations have been added after it — users,
+> memberships, platform admins, audit events and the audit archive — taking the head to
+> `0009_audit_booking_deleted`. In particular, §9's environment notes describe the machine as it
+> was at Stage 2B, not as it is. See [architecture.md](architecture.md) and
+> [../database/README.md](../database/README.md).
+
 Implementation notes for the approved schema. The design and its rationale live in
 [database-design.md](database-design.md); this document covers how it was built, which
 PostgreSQL features it depends on, and what could and could not be verified here.

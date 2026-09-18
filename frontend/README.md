@@ -1,7 +1,12 @@
 # Frontend
 
-React 18 + TypeScript 5.7 + Vite 6. The application foundation: routing, centralised
-configuration and the API client. Feature areas arrive in later stages.
+React 18 + TypeScript 5.7 + Vite 6. The complete dashboard: authentication, protected routing,
+centralised configuration and one API client, plus feature areas for bookings and booking
+mutations, payments, financials, reviews, guests, rooms, availability, hotel and room-type
+management, membership administration, platform administration and intelligence.
+
+Routes are code-split — 13 lazy routes behind a `Suspense` boundary — so the initial payload
+carries the shell and nothing else. 998 tests run under Vitest.
 
 ## Install
 

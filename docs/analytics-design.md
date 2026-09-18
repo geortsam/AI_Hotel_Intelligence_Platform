@@ -1,5 +1,10 @@
 # Analytics design — Stage 3B.10
 
+> **Stage snapshot, not a current-state document.** This records the analytics design at Stage
+> 3B.10 and is not maintained since. The metric definitions still hold; what has changed around
+> them is that the endpoints are now authenticated and hotel-scoped by membership. For the
+> current picture see [architecture.md](architecture.md).
+
 Read-only, hotel-scoped, deterministic. Every metric below names its source table and its
 date column, so a number in a chart can always be traced back to the rows that produced it.
 

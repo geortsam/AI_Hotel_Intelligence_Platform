@@ -1,125 +1,162 @@
 # Development roadmap
 
-The platform is built in seven stages. **A stage is not started until the previous one is
-implemented, tested, verified and documented.** Each stage ends with a short report: what was
-built, which files were touched, the commands to run it, the test results, and known issues.
+**V1 is complete and verified.** This document records what V1 contains and what is deliberately
+left for V2.
 
-Status legend: **done** · **in progress** · **not started**
+The working rule throughout was: *a stage is not started until the previous one is implemented,
+tested, verified and documented*, and each stage ended with a report naming what was built, which
+files were touched, the test results and the known issues. That is how the history below was
+produced, and it is why the V2 section names nothing as done.
 
----
-
-## Stage 1 — Foundation · *done*
-
-**Goal:** a clean, scalable skeleton that runs, with the five areas separated from day one.
-
-Deliverables: repository structure · root tooling configuration (ruff, mypy, pytest,
-coverage) · pinned dependencies · environment template · `.gitignore` · Docker Compose
-topology · frontend scaffolding · architecture and roadmap documents · a settings module and
-an application entrypoint exposing a single `/health` probe · tests covering the probe and the
-settings.
-
-**Exit criteria:** `pytest`, `ruff` and `mypy` pass; `uvicorn` starts; `/health` returns 200;
-`/docs` lists no route other than `/health`.
-
-Explicitly *not* in this stage: schema, ORM models, migrations, API endpoints, authentication,
-ML code, dashboards.
+Nothing in the V2 section exists in this repository. Where a V2 item is mentioned elsewhere in
+the documentation it is labelled the same way.
 
 ---
 
-## Stage 2 — Database and domain API · *done*
+# V1 — COMPLETE / VERIFIED
 
-> Delivered as 2A–2C (schema design, implementation, live verification) and 3A–3B.12
-> (FastAPI foundation, eleven domains, analytics, intelligence, hardening).
+Verified at commit `ba770f1` by the final project audit: 4016 backend tests and 998 frontend
+tests passing, Ruff / format / mypy clean, 82 API routes, 9 linear migrations at head
+`0009_audit_booking_deleted`, and the deployment exercised on real containers in CI.
 
-**Goal:** the operational core — the system of record the analytics later read.
+## Foundation and configuration
 
-Deliverables: PostgreSQL schema with real constraints (checks, unique constraints, explicit
-foreign-key policies, indexes on the query paths later stages need) · SQLAlchemy models ·
-Alembic migration environment and an initial revision · session management and dependency
-wiring · repository and service layers · CRUD for hotels, rooms, bookings, reviews and
-amenities · pagination envelope · uniform error contract · structured logging with request IDs.
+Repository structure with the five areas separated · root tooling (ruff, mypy, pytest,
+coverage) · pinned dependencies · environment template · a validated Pydantic settings module
+that refuses to construct a production configuration without a `SECRET_KEY`.
 
-**Exit criteria:** migrations apply to an empty database and roll back; the domain rules
-(availability as half-open intervals, server-side pricing, booking state machine) are covered
-by tests.
+## Database
+
+PostgreSQL **18.6**. Nine linear Alembic migrations, head `0009_audit_booking_deleted`, no
+branch points. The schema carries its rules rather than delegating them to application code:
+55 CHECK constraints, 18 `ON DELETE RESTRICT` / 10 `CASCADE` / 3 `SET NULL` foreign keys, a GiST
+exclusion constraint over half-open date ranges for room allocation, a deferred trigger asserting
+night-completeness, a database-level append-only trigger on the audit table, generated columns
+for derived metrics, currency-format checks, and composite foreign keys carrying `hotel_id` so
+the database itself refuses a cross-tenant row.
+
+## Domain API
+
+Eleven domains over that schema — hotels, room types, rooms, amenities, guests, bookings,
+payments, reviews, the financial ledger, analytics and intelligence — as 82 routes behind a
+layered backend: routers → schemas → services → repositories → SQLAlchemy → PostgreSQL.
+Repositories never commit; services own the transaction boundary.
+
+Includes: availability search (single, multi-room and mixed room-type) · the booking state
+machine · stay modification and in-house extension · server-side pricing with per-night rates ·
+financial repricing · payments, refunds and reconciliation · a pagination envelope · a uniform
+error contract that leaks no SQL, SQLSTATE, constraint name or traceback.
+
+## Authentication and authorization
+
+Argon2id password hashing · **access tokens only** (HS256 JWT; there is no refresh token) ·
+token revocation on password change · enumeration-resistant login · per-address rate limiting on
+authentication · a four-level hotel role hierarchy — `viewer` < `staff` < `manager` < `owner` —
+with last-owner protection · platform administration as a separate capability gating the global
+catalogues and the platform audit read.
+
+Authorization is structural: every hotel-scoped service is reached through
+`HotelServiceDep → HotelAccessPolicyDep → CurrentUserDep`, so there is no path to a domain
+service that skips it. 77 of the 82 routes require authentication.
+
+## Audit trail
+
+An append-only `audit_events` table enforced by a database trigger, automatic coverage of
+mutating actions, booking-deletion auditing, hotel-scoped and platform-scoped read endpoints,
+and a retention/archive path that copies, verifies field by field, and only then commits —
+rolling back rather than letting an unverified copy become the record.
+
+## Intelligence
+
+A **deterministic statistical baseline**, computed on request, implemented in the Python
+standard library, carrying `MODEL_VERSION = "1.0.0"`:
+
+- seasonal-naive day-of-week median forecasting for occupancy and revenue
+- MAD-based prediction intervals
+- MAD modified z-score anomaly detection (Iglewicz & Hoaglin, threshold 3.5)
+- split-window median trend detection against an explicit threshold
+- deterministic insight templates
+
+**No trained model, no LLM, no embeddings, no vector database, no RAG, no agent.** See
+[`architecture.md` §5](architecture.md#5-data-and-intelligence-architecture) and the stage
+snapshot in [`ml-design.md`](ml-design.md).
+
+## Observability and web security
+
+Request IDs propagated through logs and responses, including the 500 path · structured logging
+configuration · security headers · a trusted-proxy model that believes forwarding headers from
+exactly one declared peer · HSTS gated on production plus a trusted HTTPS forwarding chain ·
+CORS · CSP, Referrer-Policy, Permissions-Policy, X-Content-Type-Options, X-Frame-Options.
+
+## Frontend
+
+React 18 + TypeScript 5.7 strict + Vite 6. Authentication flow, protected routing, and feature
+areas for dashboard, bookings and booking mutations, payments, financials, reviews, guests,
+rooms, availability, hotel and room-type management, membership administration, platform
+administration and intelligence. Route-level code splitting across 13 lazy routes; one HTTP
+seam; no client-side money arithmetic.
+
+## Deployment
+
+Docker Compose: `db` → `migrate` → `api` → `frontend`, chained on health and on the migration
+having exited 0. nginx terminates TLS and is the only published service; the API and the
+database have no host ports. Backup and restore are documented and proven by restoring into a
+separate instance and comparing the data byte for byte. Base images are pinned by digest and CI
+builds each image twice to prove every shipped file is identical.
+
+## CI
+
+Four GitHub Actions jobs on every push: `quality-gates`, `frontend-quality-gates`,
+`docker-runtime` and `image-reproducibility`. The Docker job does not lint YAML — it runs the
+real stack in a disposable project and asserts the topology, TLS, the trust boundary, backup and
+restore, and that a failed migration blocks the API from starting.
 
 ---
 
-## Stage 3 — Authentication and authorization · *not started*
+# V2 — FUTURE / NOT IMPLEMENTED
 
-> **Re-ordered in practice.** The domain API, analytics and intelligence layers were built
-> first, over a frozen schema. Authorization is now the single largest production blocker;
-> see `docs/backend-architecture.md` §11 for how it slots into the existing scope resolver.
+**None of the following exists in this repository.** No code, no dependency, no configuration.
 
-**Goal:** identity, and access decisions made against the object being touched.
+## Machine learning
 
-Deliverables: password hashing · JWT access and refresh tokens with separated token types ·
-roles (guest, hotel manager, administrator) · object-scoped authorization, so one manager
-cannot reach another's data · login that does not leak whether an account exists.
+| Item | Note |
+|---|---|
+| Trained occupancy forecasting | replacing the statistical baseline; requires a dataset, a rolling-origin backtest as the figure of record, and per-version evaluation records |
+| Richer feature pipeline | `ml/pipelines/` is an empty placeholder today |
+| Review sentiment | polarity and aspect breakdown over review text |
+| Room-image classification | class set fixed before training |
+| AI recommendations | evaluated with ranking metrics against a popularity baseline |
+| Model evaluation and versioning discipline | a metric may only be quoted from a real run written to `metrics.json` |
 
-**Exit criteria:** the authorization matrix is covered by tests, including the negative cases.
+Rules these must follow, unchanged from the original plan: predictions persisted with the model
+version that produced them; a missing artifact surfacing as an explicit unavailable-model error
+rather than a fabricated number; time-series evaluation by rolling-origin backtest, never a
+single chronological split.
 
----
+## Generative AI
 
-## Stage 4 — Review sentiment · *not started*
+| Item | Note |
+|---|---|
+| LLM hotel analyst | none of the repository's "intelligence" is generative today |
+| Retrieval-augmented generation | no vector store, no embeddings |
+| Agent / LangGraph workflows | no agent framework of any kind |
+| AI evaluation harness | would be required before any of the above could be claimed |
 
-**Goal:** the first ML module, end to end.
+## Security
 
-Deliverables: a data pipeline into `ml/data/processed/` · a baseline model · a stronger
-transformer model · aspect-level breakdown · an evaluation record per model version · a
-serving path in the backend with persisted annotations carrying model provenance.
+| Item | Note |
+|---|---|
+| `HttpOnly; Secure; SameSite` cookie sessions | replaces `sessionStorage` for the access token; a backend change — see [`architecture.md` §7.1](architecture.md#71-session-handling-and-its-limitation) |
+| Refresh tokens | V1 issues access tokens only |
+| Platform-administrator API and bootstrap | granting platform administration is an out-of-band database write today |
 
-**Exit criteria:** metrics come from a real evaluation run written to `metrics.json`; a
-missing artifact returns an explicit unavailable-model error.
+## Operations
 
----
-
-## Stage 5 — Occupancy forecasting · *partially delivered*
-
-> A deterministic statistical baseline (seasonal-naive day-of-week median, robust anomaly
-> detection, split-window trend) shipped in Stage 3B.11 — see `docs/ml-design.md`. What
-> remains for this stage is a trained model, backtesting and validation metrics.
-
-**Goal:** turn booking history into a forward view.
-
-Deliverables: a daily-occupancy dataset built from bookings · several models compared on equal
-terms · a rolling-origin backtest as the figure of record · forecasts persisted and later
-scored against actuals · feature-importance explanations.
-
-**Exit criteria:** the backtest — never a single chronological split — is what any reported
-number comes from.
-
----
-
-## Stage 6 — Computer vision and recommendations · *not started*
-
-**Goal:** the two remaining ML modules.
-
-Deliverables: room-image classification over a labelled image set, with the class set fixed
-before training · a recommender over user and hotel history, evaluated with ranking metrics
-against a popularity baseline.
-
-**Exit criteria:** each beats its baseline on a held-out split, or the result is reported as
-negative rather than quietly dropped.
-
----
-
-## Stage 7 — Dashboard and hardening · *not started*
-
-**Goal:** make the platform usable and deployable.
-
-Deliverables: the React dashboard — authentication flow, domain views, and a view per ML
-module including its explanations · loading and error states throughout · rate limiting ·
-security headers · a CI pipeline running lint, types and tests · deployment documentation.
-
-**Exit criteria:** a clean checkout can be brought up from documented commands alone, and CI
-is green.
-
----
-
-## Notes on the current development machine
-
-Node/npm and Docker are **not installed**, so frontend and container work cannot be executed
-or verified here. Anything written for them ships unverified and is labelled as such until it
-runs somewhere that has the toolchain. Backend verification runs against the local Python
-3.14 environment.
+| Item | Note |
+|---|---|
+| ACME / certificate automation | certificates are replaced by hand today |
+| Off-site encrypted backups and PITR | backup is a deliberate operator action |
+| Zero-downtime deployment | a single-nginx, single-API stack has nothing to route to during a replacement |
+| Dependency update automation | no Renovate, no Dependabot |
+| SBOM, signing, provenance | digest pinning is a prerequisite for these, not a substitute |
+| Transitive Python dependency pinning | direct dependencies are pinned; their dependencies are resolved at build time |

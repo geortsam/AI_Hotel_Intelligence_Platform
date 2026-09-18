@@ -1,5 +1,12 @@
 # Backend architecture
 
+> **Stage snapshot, not a current-state document.** This records the backend at the end of Stage
+> 3B.12 and is not maintained since. Its layering, tenant-isolation and domain rules still hold,
+> but it predates authentication, authorization, the audit trail, the front end and the
+> deployment — so anything it describes as absent may well exist now. For the current picture see
+> [architecture.md](architecture.md), and for the V1/V2 split
+> [development-roadmap.md](development-roadmap.md).
+
 The state of the backend at the end of Stage 3B.12. Eleven domains, one layering rule, one
 tenant-isolation strategy, and a deliberate list of what is *not* here.
 
@@ -311,6 +318,10 @@ In priority order.
 ---
 
 ## 12. Deliberately not present
+
+> **As of Stage 3B.12.** Three of these arrived in later stages and are part of V1: the React
+> front end, authentication with membership authorization, and the Docker Compose deployment.
+> Everything else in this list is still absent, and still deliberately so.
 
 No frontend. No authentication or authorization. No Docker, Kubernetes or deployment tooling.
 No Redis, Celery or Kafka. No background jobs or schedulers. No external AI APIs, LLMs,

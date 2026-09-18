@@ -1,5 +1,11 @@
 # Database design — Stage 2A
 
+> **Stage snapshot, not a current-state document.** This is the Stage 2A design record and is
+> not maintained since. The schema it designs was implemented and has since grown by five
+> migrations (users, memberships, platform admins, audit events, audit archive); the head is now
+> `0009_audit_booking_deleted` over 21 application tables. The "design only" status line below
+> describes this document at the time it was written, not the repository today.
+
 **Status: design only. No ORM models, no migrations, no SQL has been written.**
 
 > **Revision 2 (per-night pricing).** The original design carried a single `nightly_rate` for a
@@ -11,6 +17,9 @@
 This document specifies the relational schema for the AI Hotel Intelligence Platform before any
 implementation. It targets **PostgreSQL 16**. Section 12 lists every decision that needs your
 approval before Stage 2B begins.
+
+> **PostgreSQL 16 was the design-time target.** What is implemented, verified and deployed is
+> **PostgreSQL 18.6** — pinned in `docker-compose.yml` and asserted at runtime by CI.
 
 ---
 

@@ -1,22 +1,28 @@
 # AI Hotel Intelligence Platform
 
-An AI-powered hotel management and analytics platform: a FastAPI backend, a PostgreSQL domain
-model, a React dashboard, and four planned machine-learning modules (review sentiment,
-occupancy forecasting, room-image classification, hotel recommendations).
+A hotel management and analytics platform: a FastAPI backend over a PostgreSQL domain model, a
+React dashboard, and a deterministic statistical intelligence layer for forecasting, anomaly
+detection and demand trend.
 
-> ### Current state: **backend complete through Stage 3B.12 — no frontend, no authentication**
+> ### Current state: **V1 complete and verified**
 >
-> The backend implements eleven domains against a 16-table PostgreSQL schema: hotels, room
-> types, rooms, amenities, guests, bookings, payments, reviews, the financial ledger,
-> analytics, and a deterministic statistical intelligence layer. 38 paths, 68 operations, all
-> verified against live PostgreSQL.
+> Eleven domains over a 21-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
+> guests, bookings, payments, reviews, the financial ledger, analytics and intelligence — served
+> as **82 API routes**, of which **77 require authentication**. Authentication is Argon2id plus
+> HS256 access tokens; authorization is a four-level hotel role hierarchy with a separate
+> platform-administrator capability. There is a complete React front end, an append-only audit
+> trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
+> backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> There is **no authentication or authorization** — every endpoint is open, and that is the
-> largest remaining production blocker. There is **no dashboard**, **no Docker**, and **no
-> deployment tooling**. The ML layer is explicitly a transparent statistical baseline, not a
-> trained model: no LLMs, embeddings or agents. Nothing here is a placeholder pretending to be
-> a feature — see [docs/backend-architecture.md](docs/backend-architecture.md) for what exists
-> and what does not.
+> **4016 backend tests and 998 frontend tests pass.** Schema head is `0009_audit_booking_deleted`
+> across 9 linear migrations.
+>
+> **The intelligence layer is a transparent statistical baseline, not a trained model: no LLM,
+> no embeddings, no vector database, no RAG, no agent.** It is seasonal-naive day-of-week median
+> forecasting, MAD-based intervals and anomaly detection, and split-window trend detection,
+> implemented in the Python standard library. Nothing here is a placeholder pretending to be a
+> feature — [docs/development-roadmap.md](docs/development-roadmap.md) separates what V1 contains
+> from what is left for V2, and [Known limitations](#known-limitations) is the honest list.
 
 ---
 
@@ -32,7 +38,7 @@ occupancy forecasting, room-image classification, hotel recommendations).
 8. [First run](#first-run)
 9. [Testing and quality checks](#testing-and-quality-checks)
 10. [Environment variables](#environment-variables)
-11. [Future AI/ML components](#future-aiml-components)
+11. [What the intelligence layer is, and is not](#what-the-intelligence-layer-is-and-is-not)
 12. [Known limitations](#known-limitations)
 
 ---
@@ -89,15 +95,23 @@ Full detail, including the rules later stages must follow:
 
 | Area | Choice | Role |
 |---|---|---|
-| Backend | Python 3.12+, FastAPI, Uvicorn | Async HTTP API, OpenAPI generated from types |
+| Backend | Python 3.14, FastAPI, Uvicorn | Async HTTP API, OpenAPI generated from types |
 | Validation | Pydantic v2, pydantic-settings | Request/response schemas, environment config |
-| ORM | SQLAlchemy 2.0 | Data mapping *(declared; unused until Stage 2)* |
-| Database | PostgreSQL 16 | System of record. SQLite may back local tests later |
-| Migrations | Alembic | Schema history *(Stage 2)* |
-| Frontend | React 18, TypeScript, Vite | Dashboard SPA |
-| AI/ML | pandas, NumPy, scikit-learn | Data pipelines and models *(declared, not installed)* |
-| Infrastructure | Docker, Docker Compose | Reproducible local and deployed stack |
-| Quality | pytest, ruff, mypy | Tests, linting, static types |
+| ORM | SQLAlchemy 2.0 | Data mapping across 14 model modules |
+| Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
+| Migrations | Alembic | 9 linear revisions, head `0009_audit_booking_deleted` |
+| Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
+| Frontend | React 18, TypeScript 5.7, Vite 6 | Dashboard SPA, route-level code splitting |
+| Intelligence | Python standard library | Deterministic statistical baseline — no NumPy, pandas or scikit-learn in the shipped image |
+| Infrastructure | Docker, Docker Compose, nginx | Single-host stack; nginx terminates TLS and is the only published service |
+| Quality | pytest, ruff, mypy, Vitest | Tests, linting, static types |
+
+`pyproject.toml` declares `requires-python = ">=3.12"` as the supported floor, and ruff and mypy
+target `py312` so the gates reject anything that would break it. What actually runs — in CI and
+in the API image — is **3.14.7**.
+
+`ml/requirements-ml.txt` declares pandas, NumPy and scikit-learn for future offline work. Nothing
+installs them: they are not in the API image, not in CI, and not imported anywhere.
 
 ## Project structure
 
@@ -105,29 +119,34 @@ Full detail, including the rules later stages must follow:
 AI_Hotel_Intelligence_Platform/
 ├── backend/           FastAPI application
 │   ├── app/
-│   │   ├── api/v1/        HTTP layer      (empty — Stage 2)
-│   │   ├── core/          config.py       (the only implemented module)
-│   │   ├── db/            engine/session  (empty — Stage 2)
-│   │   ├── models/        ORM models      (empty — Stage 2)
-│   │   ├── schemas/       Pydantic I/O    (empty — Stage 2)
-│   │   ├── repositories/  data access     (empty — Stage 2)
-│   │   ├── services/      business logic  (empty — Stage 2)
-│   │   └── main.py        app factory + /health
+│   │   ├── api/           HTTP layer, deps and v1 routers   (28 files)
+│   │   ├── services/      business rules, transactions      (23 files)
+│   │   ├── schemas/       Pydantic request/response types   (20 files)
+│   │   ├── repositories/  query construction, data access   (18 files)
+│   │   ├── models/        SQLAlchemy ORM mapping            (14 files)
+│   │   ├── core/          config, errors, security, logging  (9 files)
+│   │   ├── db/            engine and request-scoped session  (3 files)
+│   │   ├── middleware/    request id, security headers       (3 files)
+│   │   ├── ml/            deterministic statistical models   (2 files)
+│   │   └── main.py        app factory
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── requirements-dev.txt
-├── frontend/          React + TypeScript + Vite scaffolding
-├── database/          migrations/ and init SQL  (empty — Stage 2)
-├── ml/                data/, pipelines/, models/, notebooks/  (empty — Stage 4+)
-├── docs/              architecture.md, development-roadmap.md
-├── tests/             root-level suite mirroring the source layout
+├── frontend/          React + TypeScript SPA, nginx production image
+├── database/          migrations/ (9 revisions) and init SQL
+├── ml/                data/, pipelines/, models/, notebooks/  (structure only — all empty)
+├── docs/              architecture, roadmap, design records, deployment runbooks
+├── tests/             backend/ and integration/ suites, mirroring the source layout
 ├── pyproject.toml     ruff · mypy · pytest · coverage
-├── docker-compose.yml db + api + frontend
+├── docker-compose.yml db · migrate · api · frontend
 ├── .env.example
 └── .gitignore
 ```
 
 ## Development stages
+
+**V1 is complete.** Every stage below was implemented, tested, verified and documented before
+the next one began.
 
 | Stage | Scope | Status |
 |---|---|---|
@@ -137,10 +156,15 @@ AI_Hotel_Intelligence_Platform/
 | 3B.10 | Analytics: KPIs, daily series, per-currency money | **done** |
 | 3B.11 | Intelligence: forecasting, trend, anomalies, insights | **done** |
 | 3B.12 | Cross-domain integration and backend hardening | **done** |
-| — | Authentication and object-scoped authorization | not started |
-| — | Review sentiment (trained model) | not started |
-| — | Room-image classification and recommendations | not started |
-| — | Dashboard, Docker, deployment, CI | not started |
+| 4.x | Authentication, membership authorization, platform administration, audit trail and retention, server-side pricing, availability | **done** |
+| 5.1–5.16 | React front end: authentication, all domain views, intelligence | **done** |
+| 5.17–5.25 | Test-database safety, quality gates, CI pipeline, frontend performance | **done** |
+| 5.26–5.38 | Production serving, Docker runtime, bootstrap, backup/restore, TLS, deployment robustness, image reproducibility | **done** |
+
+Not implemented, and not claimed anywhere in this repository: trained ML models (review
+sentiment, image classification, recommendations), any LLM/RAG/agent capability, and the
+operational items listed under [Known limitations](#known-limitations). See
+[docs/development-roadmap.md](docs/development-roadmap.md) for the V1/V2 split.
 
 Detail and exit criteria: **[docs/development-roadmap.md](docs/development-roadmap.md)**.
 
@@ -365,18 +389,41 @@ environment only — never hard-coded — so one artifact runs in every environm
 
 In production, `/docs`, `/redoc` and `/openapi.json` are disabled automatically.
 
-## Future AI/ML components
+## What the intelligence layer is, and is not
 
-None of these exist yet. Each will be built as its own stage, with its dependencies in
+**V1 — what exists.** A deterministic statistical baseline, computed on request from the
+operational tables, implemented in the Python standard library and carrying
+`MODEL_VERSION = "1.0.0"`:
+
+| Capability | Method |
+|---|---|
+| Occupancy and revenue forecasting | seasonal-naive day-of-week median, falling back to the window median where a weekday bucket is too thin |
+| Prediction intervals | median absolute deviation, scaled by 1.4826 |
+| Anomaly detection | modified z-score on the MAD (Iglewicz & Hoaglin, threshold 3.5) |
+| Demand trend | split-window median comparison against an explicit relative threshold |
+| Insights | deterministic templates over the figures above |
+
+The same question always returns the same answer. The forecast method is reported per point
+rather than hidden, and the trend response returns both window medians and the threshold, so its
+classification can be recomputed by hand.
+
+**There is no trained model, no LLM, no embeddings, no vector database, no RAG and no agent
+framework in this repository.** `ml/` holds the offline structure — `data/`, `pipelines/`,
+`models/`, `notebooks/` — and every one of those directories is empty.
+
+### V2 — NOT IMPLEMENTED
+
+None of these exist. Each would be built as its own stage, with its dependencies in
 `ml/requirements-ml.txt`, its pipeline in `ml/pipelines/`, and its artifacts plus evaluation
 record in `ml/models/<model>-<version>/`.
 
-| Module | Input | Output | Stage |
-|---|---|---|---|
-| **Review sentiment** | Review text | Polarity plus an aspect breakdown (cleanliness, staff, location, value) and token-level explanations | 4 |
-| **Occupancy forecasting** | Booking history | Occupancy per future date with prediction intervals, validated by rolling-origin backtest | 5 |
-| **Room-image classification** | Room photographs | Room type and feature tags for automatic media organisation | 6 |
-| **Recommendations** | User and hotel history | Ranked hotel suggestions, evaluated against a popularity baseline | 6 |
+| Module | Input | Output |
+|---|---|---|
+| **Trained occupancy forecasting** | Booking history | A learned model replacing the statistical baseline, validated by rolling-origin backtest |
+| **Review sentiment** | Review text | Polarity plus an aspect breakdown (cleanliness, staff, location, value) and token-level explanations |
+| **Room-image classification** | Room photographs | Room type and feature tags for automatic media organisation |
+| **Recommendations** | User and hotel history | Ranked hotel suggestions, evaluated against a popularity baseline |
+| **LLM / RAG / agent capability** | — | Nothing of the kind exists today; it is direction, not capability |
 
 Rules these must follow, fixed now so they are not negotiated later:
 
@@ -387,10 +434,35 @@ Rules these must follow, fixed now so they are not negotiated later:
 
 ## Known limitations
 
-The development machine still has **no Docker**, so nothing here is built or run locally. It is
-built and run on every push instead — see [Continuous integration](#continuous-integration) —
-which is where the frontend and the deployment are actually verified. Node 24 and npm are
-available locally; `package-lock.json` is committed.
+The development machine has **no working Docker daemon**, so no image is built or run locally.
+The Docker and Compose clients are installed, which is enough to resolve and check
+`docker compose config` but not to start anything. The deployment is therefore built and run on
+every push instead — see [Continuous integration](#continuous-integration) — which is where it
+is actually verified. Node 24 and npm are available locally; `package-lock.json` is committed.
+
+### Security posture
+
+Three things are worth knowing before this is exposed to anyone real. None is a defect in the
+sense of not working as designed; each is a deliberate V1 boundary, recorded here rather than
+left to be discovered.
+
+- **The access token is stored in `sessionStorage`.** The backend authenticates with a bearer
+  JWT and offers no cookie session, so the token must be readable by JavaScript — which means
+  **any cross-site-scripting flaw in the front end could exfiltrate it**. `sessionStorage` is
+  chosen over `localStorage` only for lifetime: it is scoped to the tab and cleared when the tab
+  closes, and the token lives 30 minutes. The content security policy is `script-src 'self'`
+  with no inline script and no `eval`, which narrows the exposure but does not remove it. The
+  real fix is an `HttpOnly; Secure; SameSite` cookie issued by the backend — a backend change,
+  and V2 work. See [docs/architecture.md §7.1](docs/architecture.md#71-session-handling-and-its-limitation).
+- **Registration is open, and creating a hotel makes you its owner.** `POST /auth/register` is
+  unauthenticated by design, and any authenticated user may `POST /hotels` and becomes that
+  hotel's `owner`. This is the documented first-run path — see [First run](#first-run) — and it
+  is appropriate for a self-hosted deployment, not for a public multi-tenant service.
+- **The two health probes are unauthenticated**, and `/health/db` opens a database connection.
+  Neither returns business data; both are reachable only through nginx, since the API has no
+  host port.
+
+### Operational
 
 What remains genuinely missing is operational rather than functional:
 
@@ -429,5 +501,6 @@ What remains genuinely missing is operational rather than functional:
 - **No platform-administrator API.** Granting platform administration is a deliberate
   out-of-band database write; see [First run](#first-run). That is by design, not an omission.
 
-The ML layer remains a transparent statistical baseline rather than a trained model, as
-described under [Future AI/ML components](#future-aiml-components).
+The intelligence layer remains a transparent statistical baseline rather than a trained model,
+as described under
+[What the intelligence layer is, and is not](#what-the-intelligence-layer-is-and-is-not).
