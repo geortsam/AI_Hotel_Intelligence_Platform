@@ -120,6 +120,41 @@
     "policy_version": "acceptance_v1",
     "result": "PASS"
   },
+  "artifact": {
+    "bytes": 711530,
+    "canonical_model_digest": "436bf6b3cc5f1a2cc1a2e7fa5e971cedcd0405aa5b7f07a84967b293118a8f70",
+    "committed": false,
+    "dataset_sha256": "904b819f84f252350ad3387db60fa8fb18f56771447b2c369f3741f65f57095d",
+    "estimator_configuration_sha256": "bbaf2881204f40c67db7a805038042e9c8de902fea8449871bd538c5566d34c5",
+    "feature_columns": [
+      "day_of_week",
+      "day_of_month",
+      "month",
+      "week_of_year",
+      "day_of_year",
+      "is_weekend",
+      "demand_lag_7",
+      "demand_lag_14",
+      "demand_lag_28"
+    ],
+    "feature_version": "v1",
+    "filename": "model.pkl",
+    "forecast_horizon_days": 7,
+    "format": "pickle",
+    "metadata_file": "artifact.json",
+    "production_ready": false,
+    "record_kind": "MODEL ARTIFACT METADATA",
+    "record_note": "Distinct from the validation record above, which is the Stage 6.4 measurement and is unchanged by this stage.",
+    "schema_version": "artifact_v1",
+    "serving_enabled": false,
+    "sha256": "bdfeb3b81b05a1884dba6b3cc687174204fe7dd13ebb26a0c65161e710fb140b",
+    "training_date_count": 414,
+    "training_end_date": "2016-11-09",
+    "training_hotel_count": 2,
+    "training_partition": "train",
+    "training_row_count": 816,
+    "training_start_date": "2015-09-23"
+  },
   "claims": {
     "cross_hotel_generalisation_established": false,
     "note": "Measured on two Portuguese hotels observed 2015-2017 by a third party. Both appear in the training data at every origin, so no held-out-hotel claim is made or possible. See docs/ml-model-card.md.",
@@ -138,7 +173,9 @@
     "rows": 1462
   },
   "generation": {
-    "content_sha256": "445c967205679192ce053bb1dd94e33d2c9e0881aa39e5ed9ebe965d702843e4",
+    "artifact_attached_at": "2026-09-19T13:04:50.386384+00:00",
+    "artifact_attached_by": "ml/pipelines/build_demand_artifact.py",
+    "content_sha256": "2e7b5db3d4c524e2ddc5bbf82833a2977c00993792ad391f86574962c8b5252e",
     "created_at": "2026-09-19T11:04:55.346358+00:00",
     "note": "Wall-clock metadata only, and outside the content checksum: re-running the validation must not look like a different registry entry.",
     "pipeline": "ml/pipelines/validate_demand_model.py"
@@ -273,7 +310,8 @@
     }
   },
   "model": {
-    "artifact_persisted": false,
+    "artifact_committed": false,
+    "artifact_persisted": true,
     "configuration": {
       "early_stopping": false,
       "estimator": "sklearn.ensemble.HistGradientBoostingRegressor",

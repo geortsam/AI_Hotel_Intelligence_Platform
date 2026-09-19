@@ -59,9 +59,15 @@ def build_registry_record(
     leakage_passed: bool,
     evaluation_record_sha256: str,
     validation_sha256: str,
+    artifact: Mapping[str, object] | None = None,
     created_at: dt.datetime | None = None,
 ) -> dict[str, object]:
-    """One registry entry. Everything outside ``generation`` is a function of the inputs."""
+    """One registry entry. Everything outside ``generation`` is a function of the inputs.
+
+    ``artifact`` is optional and is omitted entirely when absent, so a registry built without
+    one is byte-identical to what Stage 6.4 produced. Stage 6.5 supplies it; a later
+    re-validation carries whatever was already there forward rather than dropping it.
+    """
     protocol_settings = result.policy.as_dict()
     estimator = result.config.as_dict()
     train_start = min(fold.fold.train_start for fold in result.folds)
@@ -69,7 +75,7 @@ def build_registry_record(
     evaluation_start = min(fold.fold.evaluation_start for fold in result.folds)
     evaluation_end = max(fold.fold.evaluation_end for fold in result.folds)
 
-    return {
+    record: dict[str, object] = {
         "registry_version": REGISTRY_VERSION,
         "model": {
             "model_version": MODEL_VERSION,
@@ -147,3 +153,50 @@ def build_registry_record(
             "pipeline": "ml/pipelines/validate_demand_model.py",
         },
     }
+    if artifact is not None:
+        record["artifact"] = dict(artifact)
+    return record
+
+
+def attach_artifact(
+    record: Mapping[str, object], artifact: Mapping[str, object]
+) -> dict[str, object]:
+    """Add or replace the artifact block, leaving every validation fact untouched.
+
+    Stage 6.5 amends the committed registry rather than rebuilding it. Rebuilding would mean
+    re-running the 54-fold evaluation to restate facts that are already recorded, and a
+    restated fact is one that can come back subtly different. Amending cannot: every key
+    except ``artifact`` and ``generation`` is carried across by reference to the file on disk.
+    """
+    amended = dict(record)
+    amended["artifact"] = dict(artifact)
+
+    # One Stage 6.4 statement stops being true the moment an artifact exists, and leaving it
+    # would make the registry say something false about its own state. `serving_path` is
+    # untouched because nothing serves the artifact, and `artifact_committed` records the other
+    # half: the payload is written to disk and deliberately not committed.
+    model = amended.get("model")
+    if isinstance(model, dict):
+        updated = dict(model)
+        updated["artifact_persisted"] = True
+        updated["artifact_committed"] = False
+        amended["model"] = updated
+    return amended
+
+
+def without_artifact(record: Mapping[str, object]) -> dict[str, object]:
+    """The exact inverse of :func:`attach_artifact`.
+
+    Exists so that building the artifact twice produces the same ``artifact.json``: the
+    metadata records the registry state it was built *against*, and that has to mean the state
+    before any artifact block -- otherwise the second run would reference the first run's
+    output and the two would never agree.
+    """
+    stripped = {key: value for key, value in record.items() if key != "artifact"}
+    model = stripped.get("model")
+    if isinstance(model, dict):
+        stripped["model"] = {
+            **{key: value for key, value in model.items() if key != "artifact_committed"},
+            "artifact_persisted": False,
+        }
+    return stripped

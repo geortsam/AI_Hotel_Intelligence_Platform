@@ -9,7 +9,9 @@
 > which method scored better.
 >
 > The public API is unchanged at 82 operations, the schema is unchanged, `backend/` gained no
-> dependency, and no model artifact exists.
+> dependency, and no model artifact existed when this was written. [Stage 6.5](ml-model-card.md)
+> fitted one afterwards; it changed none of the measurements below, and the registry's
+> validation blocks are byte-preserved.
 
 ---
 

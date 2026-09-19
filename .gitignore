@@ -76,6 +76,10 @@ ml/models/*/*
 !ml/models/*/metrics.json
 !ml/models/*/validation.json
 !ml/models/*/registry.json
+# Stage 6.5. The fitted payload (model.pkl) is NOT here and must not be: the rule above says
+# weights are never committed, and a pickle is arbitrary code on load. artifact.json carries the
+# checksums that make a regenerated payload verifiable.
+!ml/models/*/artifact.json
 
 # --- Node / frontend -------------------------------------------------------
 node_modules/

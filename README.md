@@ -418,14 +418,18 @@ seasonal-naive baseline and one scikit-learn regressor over 54 chronological ori
 to it — PASS on 13 of 13 criteria, every one of them about reproducibility and identity rather
 than accuracy.
 
-**No model artifact is persisted and no endpoint serves one.** The public API is the same 82
-operations it was in V1, `backend/` gained no ML dependency, and the intelligence the platform
-actually serves is still the deterministic statistical baseline above. See
+Stage 6.5 fitted that candidate once and persisted it as an artifact — **generated, never
+committed, and loaded only after its metadata and digest have been checked.**
+
+**No endpoint serves it.** The public API is the same 82 operations it was in V1, `backend/`
+gained no ML dependency, nothing under `backend/app` imports the artifact or inference modules,
+and the intelligence the platform actually serves is still the deterministic statistical baseline
+above. See
 [docs/ml-training-data.md](docs/ml-training-data.md),
 [docs/ml-model-evaluation.md](docs/ml-model-evaluation.md),
 [docs/ml-model-validation.md](docs/ml-model-validation.md) and
-[docs/ml-model-card.md](docs/ml-model-card.md) — including why those numbers establish neither
-production accuracy nor cross-hotel generalisation.
+[docs/ml-model-card.md](docs/ml-model-card.md) — including the artifact's trust boundary and
+why those numbers establish neither production accuracy nor cross-hotel generalisation.
 
 ### V2 — NOT IMPLEMENTED
 

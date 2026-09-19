@@ -359,8 +359,9 @@ Stated plainly, because a number in a repository tends to outlive its caveats.
 6. **31,994 duplicate source rows are retained** (Stage 6.2 §11) and may or may not be distinct
    bookings. Every number above inherits that uncertainty.
 7. **On-the-books is day-resolution offline** and was excluded at this horizon anyway.
-8. **No model artifact exists.** Nothing was serialised, so nothing could be served even if it
-   had earned it.
+8. **No model artifact existed at this stage.** Nothing was serialised here, so nothing could
+   be served even if it had earned it. [Stage 6.5](ml-model-card.md) fitted and persisted one —
+   offline, uncommitted, and still with no endpoint that loads it.
 
 ### And why they do not establish cross-hotel generalisation
 
@@ -394,9 +395,10 @@ checked out on.
 
 - **No API endpoint, no serving path, no inference route.** The public API is 82 operations, as
   it was in V1.
-- **No model artifact.** No pickle, no joblib dump, no ONNX. `ml/models/demand_baseline_v1/`
-  contains JSON records and nothing else, and a test asserts the directory listing. (Stage 6.3
-  wrote one, `metrics.json`; Stage 6.4 added `validation.json` and `registry.json`.)
+- **No model artifact from this stage.** Stage 6.3 serialised nothing. The directory holds
+  JSON records — `metrics.json` here, `validation.json` and `registry.json` from Stage 6.4,
+  `artifact.json` from Stage 6.5 — and a test asserts the listing. Stage 6.5's `model.pkl` is
+  generated rather than committed.
 - **No schema change, no migration.** Alembic head remains `0009_audit_booking_deleted`.
 - **No LLM, no RAG, no agent, no recommendations, no sentiment.**
 - **No hyper-parameter search, no feature selection by score, no ensembling.**

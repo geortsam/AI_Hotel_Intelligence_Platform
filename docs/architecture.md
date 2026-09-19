@@ -230,6 +230,12 @@ analysis in `ml/validation.py`, and a registry entry in `ml/registry.py`. The re
 `demand_baseline_v1` as the **current offline candidate** and nothing further —
 [ml-model-validation.md](ml-model-validation.md), [ml-model-card.md](ml-model-card.md).
 
+Stage 6.5 fitted that candidate once and persisted it: `ml/artifact.py` builds and verifies the
+payload, `ml/inference.py` is the offline scoring contract. The payload is **not committed** and
+the loader checks its metadata and digest before deserialising it, because a pickle is arbitrary
+code on load. **No route loads it, no route serves it, and nothing under `backend/app` imports
+either module** — a test walks the package and asserts it.
+
 ### 5.2 The offline / online boundary (offline half only, no artifact)
 
 ```
@@ -241,9 +247,10 @@ operational tables ---> pipelines (offline) ---> artifact + metrics.json
 
 `ml/` holds this structure — `data/`, `pipelines/`, `manifests/`, `models/`, `notebooks/`. Only
 the first half of the diagram exists: data preparation (Stage 6.2), an offline backtest and its
-`metrics.json` (Stage 6.3), plus the validation and registry records (Stage 6.4). **There is no
-trained artifact**, so the arrow into the backend has nothing to carry, and the backend has no
-path that would load one. `ml/requirements-ml.txt` pins
+`metrics.json` (Stage 6.3), the validation and registry records (Stage 6.4) and `artifact.json`
+(Stage 6.5). The fitted payload exists on disk after a build and is never committed. **The arrow
+into the backend is still not drawn**: no route loads an artifact, and the backend has no path
+that would. `ml/requirements-ml.txt` pins
 scikit-learn, CI installs it and the API image does not.
 
 ### 5.3 FUTURE — NOT IMPLEMENTED

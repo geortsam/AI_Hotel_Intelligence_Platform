@@ -21,13 +21,23 @@ model. The **baseline** is pure Python arithmetic, so it is compared exactly.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from ml.artifact import (
+    build_artifact_metadata,
+    load_artifact,
+    load_artifact_metadata,
+    serialise_model,
+    train_artifact,
+)
 from ml.evaluation import EvaluationResult, evaluate, per_hotel_metrics
+from ml.inference import FeatureVector, predict_demand
 from ml.loading import (
     DEFAULT_DATASET,
     DEFAULT_DATASET_MANIFEST,
@@ -44,6 +54,7 @@ from ml.manifests import (
 )
 from ml.models import MODEL_VERSION
 from ml.policy import ACCEPTANCE_POLICY, ACCEPTANCE_POLICY_VERSION
+from ml.registry import without_artifact
 from ml.validation import assert_fold_boundaries_match, leakage_report
 from tests.ml.test_demand_model_validation import (
     STAGE_63_ESTIMATOR_SHA256,
@@ -369,15 +380,25 @@ def test_the_migration_chain_is_unchanged() -> None:
     assert revisions[-1].endswith("0009_audit_booking_deleted.py")
 
 
-def test_no_model_artifact_was_written_beside_the_record() -> None:
-    """Three JSON records and nothing else. No pickle, no joblib dump, no weights."""
+#: Committed beside the model: four JSON records. `model.pkl` is the Stage 6.5 payload, which is
+#: generated rather than committed -- it may or may not be present on a given machine, and it
+#: must never be in the repository.
+COMMITTED_MODEL_RECORDS = ("artifact.json", "metrics.json", "registry.json", "validation.json")
+GENERATED_MODEL_PAYLOAD = "model.pkl"
+
+
+def test_only_json_records_are_committed_beside_the_model() -> None:
+    """No weights in the repository. The payload is generated; everything tracked is readable."""
     directory = DEFAULT_EVALUATION_RECORD.parent
     assert directory.is_dir()
-    assert sorted(p.name for p in directory.iterdir()) == [
-        "metrics.json",
-        "registry.json",
-        "validation.json",
+    present = sorted(item.name for item in directory.iterdir() if item.is_file())
+    assert set(COMMITTED_MODEL_RECORDS) <= set(present), present
+    unexpected = [
+        name for name in present if name not in (*COMMITTED_MODEL_RECORDS, GENERATED_MODEL_PAYLOAD)
     ]
+    assert unexpected == [], unexpected
+    for name in present:
+        assert not name.endswith((".joblib", ".onnx", ".h5", ".pt", ".pb", ".bin")), name
 
 
 # --- Stage 6.4: the committed validation and registry records -------------------------------------
@@ -472,7 +493,10 @@ def test_the_registry_describes_the_committed_dataset(
     assert block["dataset_version"] == "v1"
     assert block["feature_version"] == "v1"
     assert model["model_version"] == MODEL_VERSION
-    assert model["artifact_persisted"] is False
+    # Stage 6.5 fitted and persisted an artifact, so this flag flipped -- and its companion
+    # records the other half: the payload is written to disk and deliberately not committed.
+    assert model["artifact_persisted"] is True
+    assert model["artifact_committed"] is False
     assert model["serving_path"] is None
 
 
@@ -484,3 +508,138 @@ def test_the_validation_checksum_in_the_registry_matches_the_committed_record(
     assert verification["validation_sha256"] == content_checksum(validation_record)
     assert verification["deterministic"] is True
     assert verification["leakage_checks_passed"] is True
+
+
+# --- Stage 6.5: the artifact, and what it must not have disturbed ---------------------------------
+
+
+@pytest.fixture(scope="module")
+def artifact(dataset: ProcessedDataset, tmp_path_factory: pytest.TempPathFactory) -> Any:
+    """A real artifact, built from the committed dataset into a temporary directory."""
+    directory = tmp_path_factory.mktemp("stage65")
+    trained = train_artifact(dataset, dataset_version="v1", feature_version="v1")
+    payload = serialise_model(trained.estimator)
+    payload_path = directory / "model.pkl"
+    payload_path.write_bytes(payload)
+    metadata_path = directory / "artifact.json"
+    metadata_path.write_bytes(
+        json.dumps(
+            build_artifact_metadata(
+                trained,
+                artifact_sha256=hashlib.sha256(payload).hexdigest(),
+                artifact_bytes=len(payload),
+                artifact_filename=payload_path.name,
+                dataset_path=DEFAULT_DATASET.name,
+                validation_sha256="v" * 64,
+                registry_sha256="r" * 64,
+                created_at=dt.datetime(2026, 1, 1, tzinfo=dt.UTC),
+            ),
+            indent=2,
+            sort_keys=True,
+        ).encode("utf-8")
+    )
+    return load_artifact(payload_path, metadata_path)
+
+
+def test_the_artifact_reproduces_the_stage_63_fold_it_shares_a_training_set_with(
+    artifact: Any, dataset: ProcessedDataset, result: EvaluationResult
+) -> None:
+    """The exact equivalence check.
+
+    Fold 11's origin is 2016-11-09, which is the last date of the declared training partition --
+    so that fold's model was fitted on precisely the rows the artifact was fitted on. Its
+    fourteen learned predictions are therefore reproducible **exactly**, not within a tolerance,
+    and anything less would mean the artifact is not the model Stage 6.3 measured.
+    """
+    fold = next(f for f in result.folds if f.fold.origin == dt.date(2016, 11, 9))
+    assert fold.fold.train_rows == 872
+    partition = {(r.hotel_key, r.target_date) for r in dataset.rows if r.partition == "train"}
+    trained_on = {
+        (r.hotel_key, r.target_date) for r in dataset.rows if r.target_date <= fold.fold.origin
+    }
+    assert partition == trained_on
+
+    rows = [r for r in dataset.rows if fold.fold.origin < r.target_date <= fold.fold.evaluation_end]
+    predictions = predict_demand(
+        artifact,
+        [
+            FeatureVector(
+                hotel_public_id=r.hotel_public_id,
+                target_date=r.target_date,
+                forecast_horizon_days=7,
+                features={
+                    name: float(r.features[name])  # type: ignore[arg-type]
+                    for name in artifact.feature_columns
+                },
+            )
+            for r in rows
+        ],
+    )
+    recorded = {(p.hotel_key, p.target_date): p.learned for p in fold.predictions}
+    assert len(predictions) == 14
+    for row, produced in zip(rows, predictions, strict=True):
+        assert produced.prediction == recorded[(row.hotel_key, row.target_date)]
+
+
+def test_the_registry_carries_an_artifact_block_that_points_at_the_committed_metadata(
+    registry_record: dict[str, object],
+) -> None:
+    block = registry_record.get("artifact")
+    assert isinstance(block, dict)
+    assert block["record_kind"] == "MODEL ARTIFACT METADATA"
+    assert block["serving_enabled"] is False
+    assert block["production_ready"] is False
+    assert block["committed"] is False
+
+    metadata = load_artifact_metadata()
+    artifact_block = metadata["artifact"]
+    dataset_block = metadata["dataset"]
+    assert isinstance(artifact_block, dict)
+    assert isinstance(dataset_block, dict)
+    assert block["sha256"] == artifact_block["sha256"]
+    assert block["canonical_model_digest"] == artifact_block["canonical_model_digest"]
+    assert block["dataset_sha256"] == dataset_block["dataset_sha256"]
+    assert list(block["feature_columns"]) == list(dataset_block["feature_columns"])
+
+
+def test_the_stage_64_validation_facts_survived_the_artifact_amendment(
+    registry_record: dict[str, object], validation_record: dict[str, object]
+) -> None:
+    """Amending the registry must not restate a measurement."""
+    acceptance = registry_record["acceptance"]
+    metrics = registry_record["metrics"]
+    claims = registry_record["claims"]
+    assert isinstance(acceptance, dict)
+    assert isinstance(metrics, dict)
+    assert isinstance(claims, dict)
+    assert acceptance["result"] == "PASS"
+    assert acceptance["criteria_failed"] == []
+    assert acceptance["policy_version"] == ACCEPTANCE_POLICY_VERSION
+    assert metrics["pooled"]["baseline"]["observations"] == 744
+    assert claims["production_ready"] is False
+    assert claims["production_accuracy_established"] is False
+    assert claims["cross_hotel_generalisation_established"] is False
+    assert validation_record["validation_version"] == "validation_v1"
+
+
+def test_the_artifact_metadata_references_the_stage_64_records_by_checksum(
+    registry_record: dict[str, object], validation_record: dict[str, object]
+) -> None:
+    """The validation record is referenced unconditionally; the registry, as it was at build.
+
+    The two records point at each other, so only one direction can be a checksum of the other.
+    The registry reference is therefore the state the artifact was built *against* -- and
+    reconstructing that state here proves the amendment changed exactly the artifact block and
+    the two model flags, and nothing else.
+    """
+    metadata = load_artifact_metadata()
+    protocol = metadata["protocol"]
+    assert isinstance(protocol, dict)
+    assert protocol["protocol_sha256"] == STAGE_63_PROTOCOL_SHA256
+    assert protocol["acceptance_policy_version"] == ACCEPTANCE_POLICY_VERSION
+    assert protocol["acceptance_policy_sha256"] == ACCEPTANCE_POLICY.checksum()
+    assert protocol["validation_record_sha256"] == content_checksum(validation_record)
+
+    assert protocol["registry_record_sha256_at_build"] == content_checksum(
+        without_artifact(registry_record)
+    )

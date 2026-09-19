@@ -2,15 +2,17 @@
 
 > **This model is an offline research candidate and is not a production forecasting model.**
 >
-> No artifact is persisted. No endpoint serves it. Nothing in the running platform loads it, and
-> the API image contains none of the code or dependencies that produced it. The numbers below
-> describe a backtest over two hotels that belong to somebody else.
+> Stage 6.5 fitted and persisted an artifact. **No endpoint serves it**, nothing in the running
+> platform loads it, and the API image contains none of the code or dependencies that produced
+> it. The numbers below describe a backtest over two hotels that belong to somebody else.
 
 | | |
 |---|---|
 | Model version | `demand_baseline_v1` |
 | Status | `offline_research_candidate` |
 | Registry entry | [`ml/models/demand_baseline_v1/registry.json`](../ml/models/demand_baseline_v1/registry.json) |
+| Artifact metadata | [`ml/models/demand_baseline_v1/artifact.json`](../ml/models/demand_baseline_v1/artifact.json) |
+| Artifact payload | `ml/models/demand_baseline_v1/model.pkl` — **generated, never committed** |
 | Metric of record | [`ml/models/demand_baseline_v1/metrics.json`](../ml/models/demand_baseline_v1/metrics.json) |
 | Validation record | [`ml/models/demand_baseline_v1/validation.json`](../ml/models/demand_baseline_v1/validation.json) |
 | Acceptance policy | `acceptance_v1` — [`ml/policy.py`](../ml/policy.py) |
@@ -36,7 +38,7 @@ Appropriate uses:
 - forecasting for any real hotel;
 - quoting any metric below as an expected accuracy;
 - inferring what the platform's own hotels would do;
-- treating the configuration as tuned. It is not — see §11.
+- treating the configuration as tuned. It is not — see §14.
 
 ---
 
@@ -89,7 +91,7 @@ Full detail: [`ml-training-data.md`](ml-training-data.md).
 
 ## 5. Dataset limitations
 
-- **Two hotels.** See §10.
+- **Two hotels.** See §13.
 - **Two years.** Two summers and one complete winter. The December–January transition — the
   period where both methods err most — is observed once.
 - **Duplicate source rows.** 31,994 exact duplicate rows (extra copies across 8,171 distinct
@@ -210,7 +212,115 @@ Full breakdown by month, quarter and hotel, and the ten worst days for each meth
 
 ---
 
-## 10. Two-hotel limitation and the absence of a generalisation claim
+## 10. Artifact
+
+Stage 6.5 fitted the model **once**, on the dataset's declared training partition, and kept it.
+
+| | |
+|---|---|
+| Format | Python `pickle`, protocol 5, written by the standard library |
+| Payload | `model.pkl`, 711,530 bytes (695 KB) |
+| Payload SHA-256 | `bdfeb3b81b05a1884dba6b3cc687174204fe7dd13ebb26a0c65161e710fb140b` |
+| Canonical model digest | `436bf6b3cc5f1a2cc1a2e7fa5e971cedcd0405aa5b7f07a84967b293118a8f70` |
+| Committed? | **No.** `.gitignore` has excluded model weights since Stage 1 |
+| Load time | 1.9 ms |
+| Prediction time | 2.8 ms for 200 rows |
+
+### Why `pickle` and not `joblib`
+
+joblib is present in the environment as one of scikit-learn's own requirements, but *declaring*
+it would add a direct dependency for a capability the standard library already covers. Its
+advantage is memory-mapped NumPy arrays for artifacts far larger than 695 KB. **No dependency
+was added in this stage.**
+
+### Two checksums, because they answer different questions
+
+`artifact_sha256` is the digest of the serialised bytes. On this build, refitting from scratch
+reproduces them **byte for byte** — measured, not assumed. Pickle output is a property of the
+interpreter, the scikit-learn build and the NumPy build, so **no claim is made that this holds
+across toolchains**.
+
+`canonical_model_digest` is the reproducibility claim: a hash over the feature columns, the
+estimator configuration, the training extent and the model's predictions on a fixed synthetic
+probe grid of 64 rows, each formatted to six decimal places. It fingerprints *what the model
+computes* rather than how it was written down, so it survives a serialisation change and would
+not survive a change to the model. Room-night predictions are of order 100, so six decimals is
+roughly five orders of magnitude finer than a compiler difference could reach.
+
+### Exact training-data provenance
+
+| | |
+|---|---|
+| Partition | `train` — the column Stage 6.2 wrote, not a date rule re-derived here |
+| Partition rows | 872 |
+| Rows fitted | **816** |
+| Held out for a missing feature | 56 — the first 28 dates of each hotel have no `demand_lag_28` |
+| Training dates | 2015-09-23 → 2016-11-09, 414 distinct dates |
+| Hotels | 2 |
+| Held-out partitions | `validation`, `test` — never fitted |
+
+Two independent checks enforce the boundary: a partition check catches a mislabelled row, and a
+date check catches a correctly labelled row from the wrong side. The artifact's training extent
+ends 2016-11-09; held-out data starts 2016-11-10.
+
+### Equivalence with the Stage 6.3 measurement
+
+Fold 11 of the rolling-origin backtest has origin 2016-11-09 — the last date of the training
+partition — so that fold's model was fitted on precisely the rows the artifact was fitted on.
+The artifact reproduces its fourteen learned predictions **exactly**, to the last bit, not within
+a tolerance. Nothing else in the backtest is reproducible by this artifact, because every other
+fold used a different training window; that is the protocol working, not a discrepancy.
+
+---
+
+## 11. Offline inference contract
+
+`ml/inference.py`. Deliberately small and deliberately unhelpful.
+
+```
+predict_demand(artifact, rows) -> tuple[DemandPrediction, ...]
+```
+
+Input is a `FeatureVector` per row: the hotel's **public UUID**, the target date, the horizon,
+and the exact feature mapping. Output is a `DemandPrediction`: public UUID, target date, model
+version, horizon, prediction. **No field on the output could hold an internal `BIGINT` key**, and
+a test asserts the field list.
+
+Refused, each with its own message: a missing column, an unexpected column, a **permuted** column
+list (the matrix is positional, so re-ordering would score the wrong numbers), a NaN, an
+infinity, a `bool`, a string, a wrong horizon, a non-UUID identifier, a `datetime` where a date
+belongs, a model-version mismatch and a feature-version mismatch.
+
+Never done: no database, no network, no feature engineering, no silent filling, no silent
+re-ordering, no artifact mutation, and **no training** — `fit`, `fit_predict` and `partial_fit`
+are never called, which a test proves by monkey-patching `fit` to raise and requiring inference
+to succeed anyway.
+
+---
+
+## 12. Artifact trust boundary
+
+**A pickle executes arbitrary code when it is loaded.** The loader therefore validates
+`artifact.json` — schema version, model version, feature version, dataset checksum, feature
+columns, horizon, format, the `serving_enabled` flag — and compares the payload's SHA-256
+against the metadata **before a single byte is deserialised**. A digest compared afterwards
+would be a digest compared too late.
+
+- Only artifacts produced by this project are loadable: the metadata check is the gate.
+- The repository **never distributes a payload**; it distributes the metadata that makes a
+  regenerated one verifiable.
+- **No artifact is loaded by the FastAPI application** in this stage, and nothing in
+  `backend/app` imports the artifact or inference modules — a test walks the package and asserts
+  it.
+- **No code path takes an artifact location from a request.** There is no generic
+  artifact-loading entry point anywhere.
+- An artifact whose metadata claims `serving_enabled` is refused outright.
+
+Tested refusals: a flipped byte, a truncated file, a different object pickled under the same
+metadata, a missing payload, a missing metadata block, an unsupported format and a wrong schema
+version.
+
+## 13. Two-hotel limitation and the absence of a generalisation claim
 
 **No cross-hotel generalisation claim is made, and none could be.**
 
@@ -225,7 +335,7 @@ not create a generalisation claim either.
 
 ---
 
-## 11. Limitations
+## 14. Limitations
 
 - **This model is an offline research candidate and is not a production forecasting model.**
 - **No acceptance criterion concerns accuracy.** The policy asks whether the measurement is
@@ -241,12 +351,18 @@ not create a generalisation claim either.
 - **The learned model's worst days are one-directional.** All ten of its largest errors are
   under-forecasts, concentrated in late October–November 2016 and the turn of the year — the
   regime changes for which it had the least prior history.
-- **No artifact, no serving path, no endpoint.** `ml/models/demand_baseline_v1/` contains three
-  JSON records and nothing else, and a test asserts it.
+- **An artifact exists; a serving path does not.** Stage 6.5 fitted and persisted one. There is
+  still no endpoint, no loading path in `backend/`, and no committed payload —
+  `ml/models/demand_baseline_v1/` holds four JSON records, and `model.pkl` when it has been
+  built.
+- **The artifact is fitted on 816 rows.** That is the training partition minus the 56 rows whose
+  `demand_lag_28` does not exist yet, and it is a small fit by any standard.
+- **Byte-level artifact reproducibility is a same-build observation**, not a cross-toolchain
+  guarantee; the canonical digest is the claim that travels.
 
 ---
 
-## 12. Non-production status
+## 15. Non-production status
 
 | Claim | Established? |
 |---|---|
@@ -254,6 +370,7 @@ not create a generalisation claim either.
 | Production accuracy established | **No** |
 | Cross-hotel generalisation established | **No** |
 | Reproducible offline measurement | **Yes** — deterministic, checksummed, re-verified in CI |
+| Serving enabled | **No** — `serving_enabled: false`, and the loader refuses an artifact that claims otherwise |
 
 The registry entry carries these four answers as data, so a consumer reads them rather than
 inferring them.
@@ -264,14 +381,19 @@ across repeated runs, with every leakage check re-verified. It supports nothing 
 
 ---
 
-## 13. Maintenance
+## 16. Maintenance
 
 Re-generate the records with:
 
 ```
 python -m ml.pipelines.evaluate_demand_model --verify
 python -m ml.pipelines.validate_demand_model
+python -m ml.pipelines.build_demand_artifact --verify
 ```
+
+The artifact build is idempotent: run it twice and `artifact.json` comes out identical apart
+from its wall clock, because the registry reference it records is the registry's state *before*
+any artifact block was attached.
 
 A change to the dataset checksum, the feature version, the dataset version, the horizon or the
 model version makes the validation **refuse to run** rather than quietly produce a record about

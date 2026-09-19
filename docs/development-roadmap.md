@@ -161,7 +161,7 @@ different weeks. **No winner is declared and no accuracy is claimed.**
 
 The forecast horizon costs features and the cost is computed, not assumed: at seven days only 9
 of the 15 contract columns are knowable, and `rooms_existing_at_cutoff` is excluded outright
-rather than imputed. **No model artifact is persisted**, no API endpoint exists, the schema and
+rather than imputed. **No model artifact was persisted in that stage** (Stage 6.5 later fitted one), no API endpoint exists, the schema and
 the 82-operation public API are untouched, and `backend/` gained no ML dependency —
 `.dockerignore` keeps `ml/` out of the API image and a test asserts the application imports none
 of it.
@@ -193,6 +193,33 @@ A registry entry and a model card were added; **no artifact was persisted and no
 serves anything**. Detail: **[ml-model-validation.md](ml-model-validation.md)** and
 **[ml-model-card.md](ml-model-card.md)**.
 
+## Stage 6.5 — Model artifact and offline inference contract · *done*
+
+The first fitted artifact. The exact Stage 6.3 estimator, fitted **once** on the dataset's
+declared training partition — 816 rows of 872, 2015-09-23 to 2016-11-09, two hotels, 414 dates —
+and persisted as a 695 KB standard-library pickle. **No dependency was added**: joblib is present
+only as a scikit-learn requirement and is deliberately not used directly.
+
+**The payload is not committed.** `.gitignore` has excluded model weights since Stage 1, and a
+pickle is arbitrary code on load. What is committed is `artifact.json`, whose checksums make a
+regenerated payload verifiable. The loader validates that metadata — schema, versions, dataset
+checksum, feature columns, horizon, payload digest — **before** it deserialises anything, which
+is the whole of the trust boundary.
+
+Two checksums, because they answer different questions: the payload's SHA-256 (byte-identical
+across refits on this build — an observation, not a cross-toolchain claim) and a **canonical
+model digest** over the feature columns, the configuration, the training extent and the model's
+predictions on a fixed probe grid. Fold 11 of the Stage 6.3 backtest shares the artifact's exact
+training set, and the artifact reproduces its fourteen learned predictions **exactly**.
+
+`ml/inference.py` is the offline contract: typed in, typed out, keyed by public UUID, and
+deliberately unhelpful — a missing, extra, permuted, NaN, infinite, boolean or wrongly-typed
+feature is an error rather than something to fix silently, and `fit` is never called. **Stage 6.5
+establishes an offline artifact and an inference contract. It establishes no production serving,
+no production accuracy, no online inference, no API, no monitoring and no drift detection.**
+
+Detail: **[ml-model-card.md](ml-model-card.md)** §§10–12.
+
 ---
 
 # V2 — FUTURE / NOT IMPLEMENTED
@@ -203,7 +230,7 @@ serves anything**. Detail: **[ml-model-validation.md](ml-model-validation.md)** 
 
 | Item | Note |
 |---|---|
-| A **served** trained forecast | Stage 6.3 backtested one offline; serving it needs an artifact, a loading path, an unavailable-model error and an endpoint, none of which exists |
+| A **served** trained forecast | Stage 6.5 produced the artifact; serving it still needs a loading path in the application, an unavailable-model error, an endpoint and a schema — none of which exists |
 | Richer feature pipeline | the 7-day horizon admits 9 of 15 contract columns; a horizon-matched on-the-books and rolling-window feature set does not exist |
 | Review sentiment | polarity and aspect breakdown over review text |
 | Room-image classification | class set fixed before training |

@@ -839,15 +839,36 @@ def test_the_record_holds_no_credential_shaped_value() -> None:
 
 
 def test_the_record_states_that_no_artifact_was_written() -> None:
+    """Stage 6.3 persisted nothing, and its record still says so.
+
+    Stage 6.5 later fitted and wrote ``model.pkl``, which is why this no longer asserts that no
+    payload exists anywhere -- it asserts the two things that remain true: the Stage 6.3 record
+    is unchanged, and no payload is *committed*. The gitignore whitelist is the enforcement, and
+    the directory listing is checked in `test_demand_model_integration.py`.
+    """
     record = evaluation_record()
     model = record["model"]
     assert isinstance(model, dict)
     assert model["model_artifact_persisted"] is False
-    root = Path(__file__).resolve().parents[2] / "ml" / "models"
-    artifacts = [
-        p for p in root.rglob("*") if p.is_file() and p.suffix in {".pkl", ".joblib", ".onnx"}
+
+    root = Path(__file__).resolve().parents[2]
+    ignored = (root / ".gitignore").read_text(encoding="utf-8")
+    assert "!ml/models/*/model.pkl" not in ignored
+    # Only the per-model file whitelist matters here:  and the bare
+    #  re-include exist so git descends into the directory at all.
+    committed_records = [
+        line.strip()
+        for line in ignored.splitlines()
+        if line.startswith("!ml/models/*/") and not line.rstrip().endswith("/")
     ]
-    assert artifacts == []
+    assert committed_records, ignored
+    assert all(name.endswith(".json") for name in committed_records), committed_records
+    stray = [
+        path
+        for path in (root / "ml" / "models").rglob("*")
+        if path.is_file() and path.suffix in {".joblib", ".onnx", ".h5", ".pt", ".pb"}
+    ]
+    assert stray == []
 
 
 # --- 21. insufficient data ------------------------------------------------------------------------

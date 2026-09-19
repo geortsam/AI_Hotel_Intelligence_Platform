@@ -252,9 +252,12 @@ attacked.
 Other limitations:
 
 - **No trained model in this stage.** Stage 6.2 acquired an offline training dataset
-  ([ml-training-data.md](ml-training-data.md)) and Stage 6.3 backtested a baseline and one
-  learned regressor against it ([ml-model-evaluation.md](ml-model-evaluation.md)) — offline,
-  with no artifact persisted and no endpoint. Nothing in *this* document anticipates either.
+  ([ml-training-data.md](ml-training-data.md)), Stage 6.3 backtested a baseline and one learned
+  regressor against it ([ml-model-evaluation.md](ml-model-evaluation.md)), Stage 6.4 validated
+  that measurement ([ml-model-validation.md](ml-model-validation.md)) and Stage 6.5 fitted and
+  persisted the artifact ([ml-model-card.md](ml-model-card.md)) — all offline, with no endpoint
+  and no loading path in the application. Nothing in *this* document anticipates any of it, and
+  the contract it defines is unchanged at `feature_version = v1`.
 - **No backtest, no metric, no baseline comparison here.** Those arrived in Stage 6.3, and they
   measure the offline dataset rather than the production database.
 - `on_books_room_nights_at_cutoff` is an upper bound (§5), not a confirmed count.
