@@ -1,0 +1,2221 @@
+{
+  "acceptance": {
+    "checks": [
+      {
+        "criterion": "minimum_paired_observations",
+        "observed": 744,
+        "passed": true,
+        "rationale": "500 paired hotel-days. Below roughly a year of two-hotel coverage the pooled metrics describe a season rather than a year.",
+        "requirement": ">= 500"
+      },
+      {
+        "criterion": "minimum_folds",
+        "observed": 54,
+        "passed": true,
+        "rationale": "40 origins. Fewer, and a single unusual week moves the pooled figure enough that the backtest is measuring that week.",
+        "requirement": ">= 40"
+      },
+      {
+        "criterion": "maximum_skipped_predictions",
+        "observed": 0,
+        "passed": true,
+        "rationale": "zero. A method that declines to forecast some days and is scored only on the rest is being graded on a set it chose; if any day is skipped the result must be read differently, so it fails the gate rather than being averaged over.",
+        "requirement": "<= 0"
+      },
+      {
+        "criterion": "maximum_incomplete_windows",
+        "observed": 1,
+        "passed": true,
+        "rationale": "one. The final evaluation window is truncated whenever the remaining dates are not a multiple of the step, which is arithmetic rather than a defect. A second incomplete window would mean something else is wrong.",
+        "requirement": "<= 1"
+      },
+      {
+        "criterion": "minimum_hotels_with_sufficient_coverage",
+        "observed": 2,
+        "passed": true,
+        "rationale": "two, which is every hotel in the dataset. This is a completeness check, NOT a generalisation claim: see the model card.",
+        "requirement": ">= 2"
+      },
+      {
+        "criterion": "required_dataset_version",
+        "observed": "v1",
+        "passed": true,
+        "rationale": "identity: a different contract is a different question.",
+        "requirement": "== 'v1'"
+      },
+      {
+        "criterion": "required_feature_version",
+        "observed": "v1",
+        "passed": true,
+        "rationale": "identity: the feature contract must be the one measured.",
+        "requirement": "== 'v1'"
+      },
+      {
+        "criterion": "required_dataset_sha256",
+        "observed": "904b819f84f252350ad3387db60fa8fb18f56771447b2c369f3741f65f57095d",
+        "passed": true,
+        "rationale": "identity by content rather than by name. A dataset that hashes differently is a different dataset whatever it is called.",
+        "requirement": "== '904b819f84f252350ad3387db60fa8fb18f56771447b2c369f3741f65f57095d'"
+      },
+      {
+        "criterion": "required_forecast_horizon_days",
+        "observed": 7,
+        "passed": true,
+        "rationale": "seven, the Stage 6.3 horizon. A different horizon admits a different feature set and produces numbers that are not comparable.",
+        "requirement": "== 7"
+      },
+      {
+        "criterion": "required_model_version",
+        "observed": "demand_baseline_v1",
+        "passed": true,
+        "rationale": "the candidate under validation. A mismatch must stop the run rather than silently validate something else.",
+        "requirement": "== 'demand_baseline_v1'"
+      },
+      {
+        "criterion": "require_deterministic_execution",
+        "observed": true,
+        "passed": true,
+        "rationale": "two full evaluations of the same bytes must agree exactly, predictions and content checksum alike. Without this nothing else in the record can be reproduced.",
+        "requirement": "== True"
+      },
+      {
+        "criterion": "require_leakage_checks",
+        "observed": true,
+        "passed": true,
+        "rationale": "every fold's chronology, every window's disjointness and every selected feature's lead time, re-checked on this run rather than inherited from the last one.",
+        "requirement": "== True"
+      },
+      {
+        "criterion": "require_all_metrics",
+        "observed": true,
+        "passed": true,
+        "rationale": "MAE, RMSE and sMAPE must all be present for both methods. A missing metric is a measurement that did not happen, not a zero.",
+        "requirement": "== True"
+      }
+    ],
+    "criteria_failed": [],
+    "criteria_passed": 13,
+    "criteria_total": 13,
+    "evidence": {
+      "baseline_skipped": 0,
+      "dataset_sha256": "904b819f84f252350ad3387db60fa8fb18f56771447b2c369f3741f65f57095d",
+      "dataset_version": "v1",
+      "deterministic": true,
+      "feature_version": "v1",
+      "folds": 54,
+      "forecast_horizon_days": 7,
+      "hotels_with_sufficient_coverage": 2,
+      "incomplete_windows": 1,
+      "leakage_checks_passed": true,
+      "learned_skipped": 0,
+      "metrics_present": true,
+      "model_version": "demand_baseline_v1",
+      "paired_observations": 744
+    },
+    "excluded_criteria": {
+      "learned_model_beats_baseline": "NOT a criterion. Acceptance here asks whether the measurement is trustworthy, not which method won. The learned model leads on a bare majority of folds with a pooled gap far smaller than the fold-to-fold spread, so such a gate would encode a coin flip. It is also structurally impossible: AcceptanceEvidence carries no metric value.",
+      "metric_threshold": "NOT a criterion. No MAE, RMSE or sMAPE ceiling is declared, because no operational requirement exists to derive one from. A number invented here would become a 'target accuracy' the moment it was written down."
+    },
+    "policy_sha256": "afc47c4f3c5962b8debabc006bfefc7e3de412e32c758015850dcd7367f13c70",
+    "policy_version": "acceptance_v1",
+    "result": "PASS"
+  },
+  "cross_hotel_claim": "NONE. Both hotels appear in the training data at every origin; there is no held-out hotel and, with two, there could not be a meaningful one. The per-hotel numbers say the result is not driven by one of them, and say nothing about a third.",
+  "errors": {
+    "methods": {
+      "baseline": [
+        {
+          "absolute_error": 127.0,
+          "actual": 224,
+          "fold": 17,
+          "hotel_key": "city_hotel",
+          "method": "baseline",
+          "origin": "2016-12-21",
+          "prediction": 97.0,
+          "signed_error": -127.0,
+          "target_date": "2016-12-27"
+        },
+        {
+          "absolute_error": 114.0,
+          "actual": 214,
+          "fold": 18,
+          "hotel_key": "city_hotel",
+          "method": "baseline",
+          "origin": "2016-12-28",
+          "prediction": 100.0,
+          "signed_error": -114.0,
+          "target_date": "2016-12-29"
+        },
+        {
+          "absolute_error": 112.0,
+          "actual": 222,
+          "fold": 18,
+          "hotel_key": "city_hotel",
+          "method": "baseline",
+          "origin": "2016-12-28",
+          "prediction": 110.0,
+          "signed_error": -112.0,
+          "target_date": "2016-12-30"
+        },
+        {
+          "absolute_error": 109.0,
+          "actual": 111,
+          "fold": 19,
+          "hotel_key": "city_hotel",
+          "method": "baseline",
+          "origin": "2017-01-04",
+          "prediction": 220.0,
+          "signed_error": 109.0,
+          "target_date": "2017-01-08"
+        },
+        {
+          "absolute_error": 107.0,
+          "actual": 67,
+          "fold": 16,
+          "hotel_key": "city_hotel",
+          "method": "baseline",
+          "origin": "2016-12-14",
+          "prediction": 174.0,
+          "signed_error": 107.0,
+          "target_date": "2016-12-15"
+        },
+        {
+          "absolute_error": 105.0,
+          "actual": 63,
+          "fold": 15,
+          "hotel_key": "city_hotel",
+          "method": "baseline",
+          "origin": "2016-12-07",
+          "prediction": 168.0,
+          "signed_error": 105.0,
+          "target_date": "2016-12-12"
+        },
+        {
+          "absolute_error": 104.0,
+          "actual": 203,
+          "fold": 17,
+          "hotel_key": "city_hotel",
+          "method": "baseline",
+          "origin": "2016-12-21",
+          "prediction": 99.0,
+          "signed_error": -104.0,
+          "target_date": "2016-12-28"
+        },
+        {
+          "absolute_error": 100.0,
+          "actual": 85,
+          "fold": 16,
+          "hotel_key": "city_hotel",
+          "method": "baseline",
+          "origin": "2016-12-14",
+          "prediction": 185.0,
+          "signed_error": 100.0,
+          "target_date": "2016-12-17"
+        },
+        {
+          "absolute_error": 99.0,
+          "actual": 156,
+          "fold": 17,
+          "hotel_key": "resort_hotel",
+          "method": "baseline",
+          "origin": "2016-12-21",
+          "prediction": 57.0,
+          "signed_error": -99.0,
+          "target_date": "2016-12-25"
+        },
+        {
+          "absolute_error": 98.0,
+          "actual": 88,
+          "fold": 16,
+          "hotel_key": "city_hotel",
+          "method": "baseline",
+          "origin": "2016-12-14",
+          "prediction": 186.0,
+          "signed_error": 98.0,
+          "target_date": "2016-12-16"
+        }
+      ],
+      "learned": [
+        {
+          "absolute_error": 120.497469,
+          "actual": 210,
+          "fold": 9,
+          "hotel_key": "city_hotel",
+          "method": "learned",
+          "origin": "2016-10-26",
+          "prediction": 89.502531,
+          "signed_error": -120.497469,
+          "target_date": "2016-11-02"
+        },
+        {
+          "absolute_error": 117.793807,
+          "actual": 224,
+          "fold": 17,
+          "hotel_key": "city_hotel",
+          "method": "learned",
+          "origin": "2016-12-21",
+          "prediction": 106.206193,
+          "signed_error": -117.793807,
+          "target_date": "2016-12-27"
+        },
+        {
+          "absolute_error": 101.125509,
+          "actual": 220,
+          "fold": 9,
+          "hotel_key": "city_hotel",
+          "method": "learned",
+          "origin": "2016-10-26",
+          "prediction": 118.874491,
+          "signed_error": -101.125509,
+          "target_date": "2016-10-31"
+        },
+        {
+          "absolute_error": 99.542617,
+          "actual": 190,
+          "fold": 9,
+          "hotel_key": "city_hotel",
+          "method": "learned",
+          "origin": "2016-10-26",
+          "prediction": 90.457383,
+          "signed_error": -99.542617,
+          "target_date": "2016-11-01"
+        },
+        {
+          "absolute_error": 97.56862,
+          "actual": 218,
+          "fold": 9,
+          "hotel_key": "city_hotel",
+          "method": "learned",
+          "origin": "2016-10-26",
+          "prediction": 120.43138,
+          "signed_error": -97.56862,
+          "target_date": "2016-10-30"
+        },
+        {
+          "absolute_error": 96.4356,
+          "actual": 194,
+          "fold": 20,
+          "hotel_key": "city_hotel",
+          "method": "learned",
+          "origin": "2017-01-11",
+          "prediction": 97.5644,
+          "signed_error": -96.4356,
+          "target_date": "2017-01-18"
+        },
+        {
+          "absolute_error": 93.502744,
+          "actual": 168,
+          "fold": 9,
+          "hotel_key": "resort_hotel",
+          "method": "learned",
+          "origin": "2016-10-26",
+          "prediction": 74.497256,
+          "signed_error": -93.502744,
+          "target_date": "2016-11-01"
+        },
+        {
+          "absolute_error": 93.497344,
+          "actual": 203,
+          "fold": 17,
+          "hotel_key": "city_hotel",
+          "method": "learned",
+          "origin": "2016-12-21",
+          "prediction": 109.502656,
+          "signed_error": -93.497344,
+          "target_date": "2016-12-28"
+        },
+        {
+          "absolute_error": 92.831239,
+          "actual": 198,
+          "fold": 10,
+          "hotel_key": "city_hotel",
+          "method": "learned",
+          "origin": "2016-11-02",
+          "prediction": 105.168761,
+          "signed_error": -92.831239,
+          "target_date": "2016-11-08"
+        },
+        {
+          "absolute_error": 91.750052,
+          "actual": 193,
+          "fold": 11,
+          "hotel_key": "city_hotel",
+          "method": "learned",
+          "origin": "2016-11-09",
+          "prediction": 101.249948,
+          "signed_error": -91.750052,
+          "target_date": "2016-11-13"
+        }
+      ]
+    },
+    "ordering": "absolute error descending, then target date, then hotel key",
+    "sample_size": 10,
+    "signed_error_definition": "forecast - actual; positive means the method predicted more demand than was realised",
+    "treatment": "diagnostic only; no observation was removed, clipped, winsorised or altered, and no model configuration was changed in response"
+  },
+  "fold_comparison_counts": {
+    "mae": {
+      "baseline_lower": 22,
+      "folds": 54,
+      "learned_lower": 32,
+      "not_comparable": 0,
+      "ties": 0
+    },
+    "rmse": {
+      "baseline_lower": 20,
+      "folds": 54,
+      "learned_lower": 34,
+      "not_comparable": 0,
+      "ties": 0
+    },
+    "smape": {
+      "baseline_lower": 21,
+      "folds": 54,
+      "learned_lower": 33,
+      "not_comparable": 0,
+      "ties": 0
+    }
+  },
+  "folds": {
+    "boundaries": [
+      {
+        "evaluation_end": "2016-08-31",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-08-25",
+        "fold": 0,
+        "origin": "2016-08-24",
+        "train_end": "2016-08-24",
+        "train_rows": 718,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-09-07",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-09-01",
+        "fold": 1,
+        "origin": "2016-08-31",
+        "train_end": "2016-08-31",
+        "train_rows": 732,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-09-14",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-09-08",
+        "fold": 2,
+        "origin": "2016-09-07",
+        "train_end": "2016-09-07",
+        "train_rows": 746,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-09-21",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-09-15",
+        "fold": 3,
+        "origin": "2016-09-14",
+        "train_end": "2016-09-14",
+        "train_rows": 760,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-09-28",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-09-22",
+        "fold": 4,
+        "origin": "2016-09-21",
+        "train_end": "2016-09-21",
+        "train_rows": 774,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-10-05",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-09-29",
+        "fold": 5,
+        "origin": "2016-09-28",
+        "train_end": "2016-09-28",
+        "train_rows": 788,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-10-12",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-10-06",
+        "fold": 6,
+        "origin": "2016-10-05",
+        "train_end": "2016-10-05",
+        "train_rows": 802,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-10-19",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-10-13",
+        "fold": 7,
+        "origin": "2016-10-12",
+        "train_end": "2016-10-12",
+        "train_rows": 816,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-10-26",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-10-20",
+        "fold": 8,
+        "origin": "2016-10-19",
+        "train_end": "2016-10-19",
+        "train_rows": 830,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-11-02",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-10-27",
+        "fold": 9,
+        "origin": "2016-10-26",
+        "train_end": "2016-10-26",
+        "train_rows": 844,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-11-09",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-11-03",
+        "fold": 10,
+        "origin": "2016-11-02",
+        "train_end": "2016-11-02",
+        "train_rows": 858,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-11-16",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-11-10",
+        "fold": 11,
+        "origin": "2016-11-09",
+        "train_end": "2016-11-09",
+        "train_rows": 872,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-11-23",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-11-17",
+        "fold": 12,
+        "origin": "2016-11-16",
+        "train_end": "2016-11-16",
+        "train_rows": 886,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-11-30",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-11-24",
+        "fold": 13,
+        "origin": "2016-11-23",
+        "train_end": "2016-11-23",
+        "train_rows": 900,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-12-07",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-12-01",
+        "fold": 14,
+        "origin": "2016-11-30",
+        "train_end": "2016-11-30",
+        "train_rows": 914,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-12-14",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-12-08",
+        "fold": 15,
+        "origin": "2016-12-07",
+        "train_end": "2016-12-07",
+        "train_rows": 928,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-12-21",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-12-15",
+        "fold": 16,
+        "origin": "2016-12-14",
+        "train_end": "2016-12-14",
+        "train_rows": 942,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2016-12-28",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-12-22",
+        "fold": 17,
+        "origin": "2016-12-21",
+        "train_end": "2016-12-21",
+        "train_rows": 956,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-01-04",
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-12-29",
+        "fold": 18,
+        "origin": "2016-12-28",
+        "train_end": "2016-12-28",
+        "train_rows": 970,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-01-11",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-01-05",
+        "fold": 19,
+        "origin": "2017-01-04",
+        "train_end": "2017-01-04",
+        "train_rows": 984,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-01-18",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-01-12",
+        "fold": 20,
+        "origin": "2017-01-11",
+        "train_end": "2017-01-11",
+        "train_rows": 998,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-01-25",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-01-19",
+        "fold": 21,
+        "origin": "2017-01-18",
+        "train_end": "2017-01-18",
+        "train_rows": 1012,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-02-01",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-01-26",
+        "fold": 22,
+        "origin": "2017-01-25",
+        "train_end": "2017-01-25",
+        "train_rows": 1026,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-02-08",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-02-02",
+        "fold": 23,
+        "origin": "2017-02-01",
+        "train_end": "2017-02-01",
+        "train_rows": 1040,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-02-15",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-02-09",
+        "fold": 24,
+        "origin": "2017-02-08",
+        "train_end": "2017-02-08",
+        "train_rows": 1054,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-02-22",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-02-16",
+        "fold": 25,
+        "origin": "2017-02-15",
+        "train_end": "2017-02-15",
+        "train_rows": 1068,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-03-01",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-02-23",
+        "fold": 26,
+        "origin": "2017-02-22",
+        "train_end": "2017-02-22",
+        "train_rows": 1082,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-03-08",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-03-02",
+        "fold": 27,
+        "origin": "2017-03-01",
+        "train_end": "2017-03-01",
+        "train_rows": 1096,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-03-15",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-03-09",
+        "fold": 28,
+        "origin": "2017-03-08",
+        "train_end": "2017-03-08",
+        "train_rows": 1110,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-03-22",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-03-16",
+        "fold": 29,
+        "origin": "2017-03-15",
+        "train_end": "2017-03-15",
+        "train_rows": 1124,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-03-29",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-03-23",
+        "fold": 30,
+        "origin": "2017-03-22",
+        "train_end": "2017-03-22",
+        "train_rows": 1138,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-04-05",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-03-30",
+        "fold": 31,
+        "origin": "2017-03-29",
+        "train_end": "2017-03-29",
+        "train_rows": 1152,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-04-12",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-04-06",
+        "fold": 32,
+        "origin": "2017-04-05",
+        "train_end": "2017-04-05",
+        "train_rows": 1166,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-04-19",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-04-13",
+        "fold": 33,
+        "origin": "2017-04-12",
+        "train_end": "2017-04-12",
+        "train_rows": 1180,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-04-26",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-04-20",
+        "fold": 34,
+        "origin": "2017-04-19",
+        "train_end": "2017-04-19",
+        "train_rows": 1194,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-05-03",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-04-27",
+        "fold": 35,
+        "origin": "2017-04-26",
+        "train_end": "2017-04-26",
+        "train_rows": 1208,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-05-10",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-05-04",
+        "fold": 36,
+        "origin": "2017-05-03",
+        "train_end": "2017-05-03",
+        "train_rows": 1222,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-05-17",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-05-11",
+        "fold": 37,
+        "origin": "2017-05-10",
+        "train_end": "2017-05-10",
+        "train_rows": 1236,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-05-24",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-05-18",
+        "fold": 38,
+        "origin": "2017-05-17",
+        "train_end": "2017-05-17",
+        "train_rows": 1250,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-05-31",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-05-25",
+        "fold": 39,
+        "origin": "2017-05-24",
+        "train_end": "2017-05-24",
+        "train_rows": 1264,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-06-07",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-06-01",
+        "fold": 40,
+        "origin": "2017-05-31",
+        "train_end": "2017-05-31",
+        "train_rows": 1278,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-06-14",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-06-08",
+        "fold": 41,
+        "origin": "2017-06-07",
+        "train_end": "2017-06-07",
+        "train_rows": 1292,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-06-21",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-06-15",
+        "fold": 42,
+        "origin": "2017-06-14",
+        "train_end": "2017-06-14",
+        "train_rows": 1306,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-06-28",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-06-22",
+        "fold": 43,
+        "origin": "2017-06-21",
+        "train_end": "2017-06-21",
+        "train_rows": 1320,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-07-05",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-06-29",
+        "fold": 44,
+        "origin": "2017-06-28",
+        "train_end": "2017-06-28",
+        "train_rows": 1334,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-07-12",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-07-06",
+        "fold": 45,
+        "origin": "2017-07-05",
+        "train_end": "2017-07-05",
+        "train_rows": 1348,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-07-19",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-07-13",
+        "fold": 46,
+        "origin": "2017-07-12",
+        "train_end": "2017-07-12",
+        "train_rows": 1362,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-07-26",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-07-20",
+        "fold": 47,
+        "origin": "2017-07-19",
+        "train_end": "2017-07-19",
+        "train_rows": 1376,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-08-02",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-07-27",
+        "fold": 48,
+        "origin": "2017-07-26",
+        "train_end": "2017-07-26",
+        "train_rows": 1390,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-08-09",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-08-03",
+        "fold": 49,
+        "origin": "2017-08-02",
+        "train_end": "2017-08-02",
+        "train_rows": 1404,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-08-16",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-08-10",
+        "fold": 50,
+        "origin": "2017-08-09",
+        "train_end": "2017-08-09",
+        "train_rows": 1418,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-08-23",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-08-17",
+        "fold": 51,
+        "origin": "2017-08-16",
+        "train_end": "2017-08-16",
+        "train_rows": 1432,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-08-30",
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-08-24",
+        "fold": 52,
+        "origin": "2017-08-23",
+        "train_end": "2017-08-23",
+        "train_rows": 1446,
+        "train_start": "2015-08-26"
+      },
+      {
+        "evaluation_end": "2017-08-31",
+        "evaluation_rows": 2,
+        "evaluation_start": "2017-08-31",
+        "fold": 53,
+        "origin": "2017-08-30",
+        "train_end": "2017-08-30",
+        "train_rows": 1460,
+        "train_start": "2015-08-26"
+      }
+    ],
+    "count": 54,
+    "incomplete_windows": [
+      53
+    ],
+    "skipped": []
+  },
+  "generation": {
+    "content_sha256": "19c880bd9ac7d7a060435b3d1fc6d496dddec29bcdd4671a62279e7e80c31959",
+    "created_at": "2026-09-19T11:04:55.336415+00:00",
+    "note": "Wall-clock metadata only, and outside the content checksum: re-running the validation must not look like a different result.",
+    "pipeline": "ml/pipelines/validate_demand_model.py"
+  },
+  "leakage": {
+    "checks": {
+      "evaluation_window_within_horizon": true,
+      "every_selected_feature_knowable_at_the_horizon": true,
+      "no_hotel_day_evaluated_twice": true,
+      "no_shuffle_or_random_split": true,
+      "train_end_at_or_before_origin_before_evaluation_start": true,
+      "training_window_never_contracts": true
+    },
+    "passed": true
+  },
+  "purpose": "descriptive robustness analysis of the Stage 6.3 backtest; no method is ranked, no regime is labelled good or bad, and no model configuration was changed",
+  "regimes": {
+    "hotel": {
+      "city_hotel": {
+        "baseline": {
+          "mae": 20.502688,
+          "observations": 372,
+          "rmse": 31.345413,
+          "skipped": 0,
+          "smape": 12.669259
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 20.502688,
+            "observations": 372,
+            "rmse": 31.345413,
+            "skipped": 0,
+            "smape": 12.669259
+          },
+          "learned": {
+            "mae": 19.621061,
+            "observations": 372,
+            "rmse": 30.461218,
+            "skipped": 0,
+            "smape": 12.386957
+          },
+          "learned_minus_baseline": {
+            "mae": -0.881627,
+            "rmse": -0.884196,
+            "smape": -0.282302
+          },
+          "paired_observations": 372
+        },
+        "learned": {
+          "mae": 19.621061,
+          "observations": 372,
+          "rmse": 30.461218,
+          "skipped": 0,
+          "smape": 12.386957
+        },
+        "observations": 372,
+        "sufficient_coverage": true
+      },
+      "resort_hotel": {
+        "baseline": {
+          "mae": 16.239247,
+          "observations": 372,
+          "rmse": 24.5792,
+          "skipped": 0,
+          "smape": 12.635706
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 16.239247,
+            "observations": 372,
+            "rmse": 24.5792,
+            "skipped": 0,
+            "smape": 12.635706
+          },
+          "learned": {
+            "mae": 15.383799,
+            "observations": 372,
+            "rmse": 23.024131,
+            "skipped": 0,
+            "smape": 12.559161
+          },
+          "learned_minus_baseline": {
+            "mae": -0.855449,
+            "rmse": -1.555069,
+            "smape": -0.076545
+          },
+          "paired_observations": 372
+        },
+        "learned": {
+          "mae": 15.383799,
+          "observations": 372,
+          "rmse": 23.024131,
+          "skipped": 0,
+          "smape": 12.559161
+        },
+        "observations": 372,
+        "sufficient_coverage": true
+      }
+    },
+    "month": {
+      "01": {
+        "baseline": {
+          "mae": 40.564516,
+          "observations": 62,
+          "rmse": 48.197008,
+          "skipped": 0,
+          "smape": 31.364297
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 40.564516,
+            "observations": 62,
+            "rmse": 48.197008,
+            "skipped": 0,
+            "smape": 31.364297
+          },
+          "learned": {
+            "mae": 32.644759,
+            "observations": 62,
+            "rmse": 41.117262,
+            "skipped": 0,
+            "smape": 29.764071
+          },
+          "learned_minus_baseline": {
+            "mae": -7.919757,
+            "rmse": -7.079747,
+            "smape": -1.600225
+          },
+          "paired_observations": 62
+        },
+        "learned": {
+          "mae": 32.644759,
+          "observations": 62,
+          "rmse": 41.117262,
+          "skipped": 0,
+          "smape": 29.764071
+        },
+        "observations": 62,
+        "sufficient_coverage": true
+      },
+      "02": {
+        "baseline": {
+          "mae": 29.892857,
+          "observations": 56,
+          "rmse": 36.292955,
+          "skipped": 0,
+          "smape": 22.086615
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 29.892857,
+            "observations": 56,
+            "rmse": 36.292955,
+            "skipped": 0,
+            "smape": 22.086615
+          },
+          "learned": {
+            "mae": 27.227109,
+            "observations": 56,
+            "rmse": 34.646514,
+            "skipped": 0,
+            "smape": 19.112118
+          },
+          "learned_minus_baseline": {
+            "mae": -2.665748,
+            "rmse": -1.646441,
+            "smape": -2.974497
+          },
+          "paired_observations": 56
+        },
+        "learned": {
+          "mae": 27.227109,
+          "observations": 56,
+          "rmse": 34.646514,
+          "skipped": 0,
+          "smape": 19.112118
+        },
+        "observations": 56,
+        "sufficient_coverage": true
+      },
+      "03": {
+        "baseline": {
+          "mae": 19.274194,
+          "observations": 62,
+          "rmse": 24.625911,
+          "skipped": 0,
+          "smape": 11.039342
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 19.274194,
+            "observations": 62,
+            "rmse": 24.625911,
+            "skipped": 0,
+            "smape": 11.039342
+          },
+          "learned": {
+            "mae": 16.341582,
+            "observations": 62,
+            "rmse": 20.197145,
+            "skipped": 0,
+            "smape": 9.070067
+          },
+          "learned_minus_baseline": {
+            "mae": -2.932612,
+            "rmse": -4.428766,
+            "smape": -1.969275
+          },
+          "paired_observations": 62
+        },
+        "learned": {
+          "mae": 16.341582,
+          "observations": 62,
+          "rmse": 20.197145,
+          "skipped": 0,
+          "smape": 9.070067
+        },
+        "observations": 62,
+        "sufficient_coverage": true
+      },
+      "04": {
+        "baseline": {
+          "mae": 14.316667,
+          "observations": 60,
+          "rmse": 18.599731,
+          "skipped": 0,
+          "smape": 8.224793
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 14.316667,
+            "observations": 60,
+            "rmse": 18.599731,
+            "skipped": 0,
+            "smape": 8.224793
+          },
+          "learned": {
+            "mae": 12.060003,
+            "observations": 60,
+            "rmse": 14.767117,
+            "skipped": 0,
+            "smape": 6.713595
+          },
+          "learned_minus_baseline": {
+            "mae": -2.256664,
+            "rmse": -3.832614,
+            "smape": -1.511198
+          },
+          "paired_observations": 60
+        },
+        "learned": {
+          "mae": 12.060003,
+          "observations": 60,
+          "rmse": 14.767117,
+          "skipped": 0,
+          "smape": 6.713595
+        },
+        "observations": 60,
+        "sufficient_coverage": true
+      },
+      "05": {
+        "baseline": {
+          "mae": 10.451613,
+          "observations": 62,
+          "rmse": 15.062236,
+          "skipped": 0,
+          "smape": 5.641416
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 10.451613,
+            "observations": 62,
+            "rmse": 15.062236,
+            "skipped": 0,
+            "smape": 5.641416
+          },
+          "learned": {
+            "mae": 8.426838,
+            "observations": 62,
+            "rmse": 10.79565,
+            "skipped": 0,
+            "smape": 4.537875
+          },
+          "learned_minus_baseline": {
+            "mae": -2.024775,
+            "rmse": -4.266587,
+            "smape": -1.103541
+          },
+          "paired_observations": 62
+        },
+        "learned": {
+          "mae": 8.426838,
+          "observations": 62,
+          "rmse": 10.79565,
+          "skipped": 0,
+          "smape": 4.537875
+        },
+        "observations": 62,
+        "sufficient_coverage": true
+      },
+      "06": {
+        "baseline": {
+          "mae": 8.466667,
+          "observations": 60,
+          "rmse": 11.741664,
+          "skipped": 0,
+          "smape": 4.373804
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 8.466667,
+            "observations": 60,
+            "rmse": 11.741664,
+            "skipped": 0,
+            "smape": 4.373804
+          },
+          "learned": {
+            "mae": 7.923953,
+            "observations": 60,
+            "rmse": 10.519105,
+            "skipped": 0,
+            "smape": 4.097428
+          },
+          "learned_minus_baseline": {
+            "mae": -0.542713,
+            "rmse": -1.222558,
+            "smape": -0.276376
+          },
+          "paired_observations": 60
+        },
+        "learned": {
+          "mae": 7.923953,
+          "observations": 60,
+          "rmse": 10.519105,
+          "skipped": 0,
+          "smape": 4.097428
+        },
+        "observations": 60,
+        "sufficient_coverage": true
+      },
+      "07": {
+        "baseline": {
+          "mae": 6.33871,
+          "observations": 62,
+          "rmse": 8.550608,
+          "skipped": 0,
+          "smape": 3.224444
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 6.33871,
+            "observations": 62,
+            "rmse": 8.550608,
+            "skipped": 0,
+            "smape": 3.224444
+          },
+          "learned": {
+            "mae": 5.009438,
+            "observations": 62,
+            "rmse": 6.528853,
+            "skipped": 0,
+            "smape": 2.561242
+          },
+          "learned_minus_baseline": {
+            "mae": -1.329272,
+            "rmse": -2.021755,
+            "smape": -0.663202
+          },
+          "paired_observations": 62
+        },
+        "learned": {
+          "mae": 5.009438,
+          "observations": 62,
+          "rmse": 6.528853,
+          "skipped": 0,
+          "smape": 2.561242
+        },
+        "observations": 62,
+        "sufficient_coverage": true
+      },
+      "08": {
+        "baseline": {
+          "mae": 4.868421,
+          "observations": 76,
+          "rmse": 7.703383,
+          "skipped": 0,
+          "smape": 2.423538
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 4.868421,
+            "observations": 76,
+            "rmse": 7.703383,
+            "skipped": 0,
+            "smape": 2.423538
+          },
+          "learned": {
+            "mae": 4.841933,
+            "observations": 76,
+            "rmse": 6.731174,
+            "skipped": 0,
+            "smape": 2.445885
+          },
+          "learned_minus_baseline": {
+            "mae": -0.026488,
+            "rmse": -0.972208,
+            "smape": 0.022347
+          },
+          "paired_observations": 76
+        },
+        "learned": {
+          "mae": 4.841933,
+          "observations": 76,
+          "rmse": 6.731174,
+          "skipped": 0,
+          "smape": 2.445885
+        },
+        "observations": 76,
+        "sufficient_coverage": true
+      },
+      "09": {
+        "baseline": {
+          "mae": 5.85,
+          "observations": 60,
+          "rmse": 8.980535,
+          "skipped": 0,
+          "smape": 2.944811
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 5.85,
+            "observations": 60,
+            "rmse": 8.980535,
+            "skipped": 0,
+            "smape": 2.944811
+          },
+          "learned": {
+            "mae": 7.59208,
+            "observations": 60,
+            "rmse": 10.121234,
+            "skipped": 0,
+            "smape": 3.826228
+          },
+          "learned_minus_baseline": {
+            "mae": 1.74208,
+            "rmse": 1.140699,
+            "smape": 0.881417
+          },
+          "paired_observations": 60
+        },
+        "learned": {
+          "mae": 7.59208,
+          "observations": 60,
+          "rmse": 10.121234,
+          "skipped": 0,
+          "smape": 3.826228
+        },
+        "observations": 60,
+        "sufficient_coverage": true
+      },
+      "10": {
+        "baseline": {
+          "mae": 11.435484,
+          "observations": 62,
+          "rmse": 15.702373,
+          "skipped": 0,
+          "smape": 5.956746
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 11.435484,
+            "observations": 62,
+            "rmse": 15.702373,
+            "skipped": 0,
+            "smape": 5.956746
+          },
+          "learned": {
+            "mae": 22.695123,
+            "observations": 62,
+            "rmse": 34.621009,
+            "skipped": 0,
+            "smape": 13.17936
+          },
+          "learned_minus_baseline": {
+            "mae": 11.25964,
+            "rmse": 18.918636,
+            "smape": 7.222614
+          },
+          "paired_observations": 62
+        },
+        "learned": {
+          "mae": 22.695123,
+          "observations": 62,
+          "rmse": 34.621009,
+          "skipped": 0,
+          "smape": 13.17936
+        },
+        "observations": 62,
+        "sufficient_coverage": true
+      },
+      "11": {
+        "baseline": {
+          "mae": 27.783333,
+          "observations": 60,
+          "rmse": 34.672516,
+          "skipped": 0,
+          "smape": 18.517842
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 27.783333,
+            "observations": 60,
+            "rmse": 34.672516,
+            "skipped": 0,
+            "smape": 18.517842
+          },
+          "learned": {
+            "mae": 37.051979,
+            "observations": 60,
+            "rmse": 46.416812,
+            "skipped": 0,
+            "smape": 26.28761
+          },
+          "learned_minus_baseline": {
+            "mae": 9.268646,
+            "rmse": 11.744296,
+            "smape": 7.769768
+          },
+          "paired_observations": 60
+        },
+        "learned": {
+          "mae": 37.051979,
+          "observations": 60,
+          "rmse": 46.416812,
+          "skipped": 0,
+          "smape": 26.28761
+        },
+        "observations": 60,
+        "sufficient_coverage": true
+      },
+      "12": {
+        "baseline": {
+          "mae": 44.822581,
+          "observations": 62,
+          "rmse": 55.42548,
+          "skipped": 0,
+          "smape": 38.721057
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 44.822581,
+            "observations": 62,
+            "rmse": 55.42548,
+            "skipped": 0,
+            "smape": 38.721057
+          },
+          "learned": {
+            "mae": 31.840678,
+            "observations": 62,
+            "rmse": 40.615432,
+            "skipped": 0,
+            "smape": 30.698648
+          },
+          "learned_minus_baseline": {
+            "mae": -12.981903,
+            "rmse": -14.810048,
+            "smape": -8.022409
+          },
+          "paired_observations": 62
+        },
+        "learned": {
+          "mae": 31.840678,
+          "observations": 62,
+          "rmse": 40.615432,
+          "skipped": 0,
+          "smape": 30.698648
+        },
+        "observations": 62,
+        "sufficient_coverage": true
+      }
+    },
+    "quarter": {
+      "Q1": {
+        "baseline": {
+          "mae": 29.911111,
+          "observations": 180,
+          "rmse": 37.666962,
+          "skipped": 0,
+          "smape": 21.477089
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 29.911111,
+            "observations": 180,
+            "rmse": 37.666962,
+            "skipped": 0,
+            "smape": 21.477089
+          },
+          "learned": {
+            "mae": 25.343729,
+            "observations": 180,
+            "rmse": 33.110226,
+            "skipped": 0,
+            "smape": 19.322196
+          },
+          "learned_minus_baseline": {
+            "mae": -4.567382,
+            "rmse": -4.556735,
+            "smape": -2.154893
+          },
+          "paired_observations": 180
+        },
+        "learned": {
+          "mae": 25.343729,
+          "observations": 180,
+          "rmse": 33.110226,
+          "skipped": 0,
+          "smape": 19.322196
+        },
+        "observations": 180,
+        "sufficient_coverage": true
+      },
+      "Q2": {
+        "baseline": {
+          "mae": 11.071429,
+          "observations": 182,
+          "rmse": 15.387843,
+          "skipped": 0,
+          "smape": 6.075185
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 11.071429,
+            "observations": 182,
+            "rmse": 15.387843,
+            "skipped": 0,
+            "smape": 6.075185
+          },
+          "learned": {
+            "mae": 9.458799,
+            "observations": 182,
+            "rmse": 12.168464,
+            "skipped": 0,
+            "smape": 5.109943
+          },
+          "learned_minus_baseline": {
+            "mae": -1.61263,
+            "rmse": -3.219379,
+            "smape": -0.965242
+          },
+          "paired_observations": 182
+        },
+        "learned": {
+          "mae": 9.458799,
+          "observations": 182,
+          "rmse": 12.168464,
+          "skipped": 0,
+          "smape": 5.109943
+        },
+        "observations": 182,
+        "sufficient_coverage": true
+      },
+      "Q3": {
+        "baseline": {
+          "mae": 5.626263,
+          "observations": 198,
+          "rmse": 8.373238,
+          "skipped": 0,
+          "smape": 2.832288
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 5.626263,
+            "observations": 198,
+            "rmse": 8.373238,
+            "skipped": 0,
+            "smape": 2.832288
+          },
+          "learned": {
+            "mae": 5.727762,
+            "observations": 198,
+            "rmse": 7.860087,
+            "skipped": 0,
+            "smape": 2.900293
+          },
+          "learned_minus_baseline": {
+            "mae": 0.101499,
+            "rmse": -0.513151,
+            "smape": 0.068005
+          },
+          "paired_observations": 198
+        },
+        "learned": {
+          "mae": 5.727762,
+          "observations": 198,
+          "rmse": 7.860087,
+          "skipped": 0,
+          "smape": 2.900293
+        },
+        "observations": 198,
+        "sufficient_coverage": true
+      },
+      "Q4": {
+        "baseline": {
+          "mae": 28.016304,
+          "observations": 184,
+          "rmse": 38.861585,
+          "skipped": 0,
+          "smape": 21.092904
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 28.016304,
+            "observations": 184,
+            "rmse": 38.861585,
+            "skipped": 0,
+            "smape": 21.092904
+          },
+          "learned": {
+            "mae": 30.458361,
+            "observations": 184,
+            "rmse": 40.771189,
+            "skipped": 0,
+            "smape": 23.357028
+          },
+          "learned_minus_baseline": {
+            "mae": 2.442057,
+            "rmse": 1.909604,
+            "smape": 2.264124
+          },
+          "paired_observations": 184
+        },
+        "learned": {
+          "mae": 30.458361,
+          "observations": 184,
+          "rmse": 40.771189,
+          "skipped": 0,
+          "smape": 23.357028
+        },
+        "observations": 184,
+        "sufficient_coverage": true
+      }
+    },
+    "year_month": {
+      "2016-08": {
+        "evaluated_observations": 14,
+        "minimum_required": 30,
+        "observations": 14,
+        "reason": "insufficient coverage; no metric is reported for this group",
+        "sufficient_coverage": false
+      },
+      "2016-09": {
+        "baseline": {
+          "mae": 5.85,
+          "observations": 60,
+          "rmse": 8.980535,
+          "skipped": 0,
+          "smape": 2.944811
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 5.85,
+            "observations": 60,
+            "rmse": 8.980535,
+            "skipped": 0,
+            "smape": 2.944811
+          },
+          "learned": {
+            "mae": 7.59208,
+            "observations": 60,
+            "rmse": 10.121234,
+            "skipped": 0,
+            "smape": 3.826228
+          },
+          "learned_minus_baseline": {
+            "mae": 1.74208,
+            "rmse": 1.140699,
+            "smape": 0.881417
+          },
+          "paired_observations": 60
+        },
+        "learned": {
+          "mae": 7.59208,
+          "observations": 60,
+          "rmse": 10.121234,
+          "skipped": 0,
+          "smape": 3.826228
+        },
+        "observations": 60,
+        "sufficient_coverage": true
+      },
+      "2016-10": {
+        "baseline": {
+          "mae": 11.435484,
+          "observations": 62,
+          "rmse": 15.702373,
+          "skipped": 0,
+          "smape": 5.956746
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 11.435484,
+            "observations": 62,
+            "rmse": 15.702373,
+            "skipped": 0,
+            "smape": 5.956746
+          },
+          "learned": {
+            "mae": 22.695123,
+            "observations": 62,
+            "rmse": 34.621009,
+            "skipped": 0,
+            "smape": 13.17936
+          },
+          "learned_minus_baseline": {
+            "mae": 11.25964,
+            "rmse": 18.918636,
+            "smape": 7.222614
+          },
+          "paired_observations": 62
+        },
+        "learned": {
+          "mae": 22.695123,
+          "observations": 62,
+          "rmse": 34.621009,
+          "skipped": 0,
+          "smape": 13.17936
+        },
+        "observations": 62,
+        "sufficient_coverage": true
+      },
+      "2016-11": {
+        "baseline": {
+          "mae": 27.783333,
+          "observations": 60,
+          "rmse": 34.672516,
+          "skipped": 0,
+          "smape": 18.517842
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 27.783333,
+            "observations": 60,
+            "rmse": 34.672516,
+            "skipped": 0,
+            "smape": 18.517842
+          },
+          "learned": {
+            "mae": 37.051979,
+            "observations": 60,
+            "rmse": 46.416812,
+            "skipped": 0,
+            "smape": 26.28761
+          },
+          "learned_minus_baseline": {
+            "mae": 9.268646,
+            "rmse": 11.744296,
+            "smape": 7.769768
+          },
+          "paired_observations": 60
+        },
+        "learned": {
+          "mae": 37.051979,
+          "observations": 60,
+          "rmse": 46.416812,
+          "skipped": 0,
+          "smape": 26.28761
+        },
+        "observations": 60,
+        "sufficient_coverage": true
+      },
+      "2016-12": {
+        "baseline": {
+          "mae": 44.822581,
+          "observations": 62,
+          "rmse": 55.42548,
+          "skipped": 0,
+          "smape": 38.721057
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 44.822581,
+            "observations": 62,
+            "rmse": 55.42548,
+            "skipped": 0,
+            "smape": 38.721057
+          },
+          "learned": {
+            "mae": 31.840678,
+            "observations": 62,
+            "rmse": 40.615432,
+            "skipped": 0,
+            "smape": 30.698648
+          },
+          "learned_minus_baseline": {
+            "mae": -12.981903,
+            "rmse": -14.810048,
+            "smape": -8.022409
+          },
+          "paired_observations": 62
+        },
+        "learned": {
+          "mae": 31.840678,
+          "observations": 62,
+          "rmse": 40.615432,
+          "skipped": 0,
+          "smape": 30.698648
+        },
+        "observations": 62,
+        "sufficient_coverage": true
+      },
+      "2017-01": {
+        "baseline": {
+          "mae": 40.564516,
+          "observations": 62,
+          "rmse": 48.197008,
+          "skipped": 0,
+          "smape": 31.364297
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 40.564516,
+            "observations": 62,
+            "rmse": 48.197008,
+            "skipped": 0,
+            "smape": 31.364297
+          },
+          "learned": {
+            "mae": 32.644759,
+            "observations": 62,
+            "rmse": 41.117262,
+            "skipped": 0,
+            "smape": 29.764071
+          },
+          "learned_minus_baseline": {
+            "mae": -7.919757,
+            "rmse": -7.079747,
+            "smape": -1.600225
+          },
+          "paired_observations": 62
+        },
+        "learned": {
+          "mae": 32.644759,
+          "observations": 62,
+          "rmse": 41.117262,
+          "skipped": 0,
+          "smape": 29.764071
+        },
+        "observations": 62,
+        "sufficient_coverage": true
+      },
+      "2017-02": {
+        "baseline": {
+          "mae": 29.892857,
+          "observations": 56,
+          "rmse": 36.292955,
+          "skipped": 0,
+          "smape": 22.086615
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 29.892857,
+            "observations": 56,
+            "rmse": 36.292955,
+            "skipped": 0,
+            "smape": 22.086615
+          },
+          "learned": {
+            "mae": 27.227109,
+            "observations": 56,
+            "rmse": 34.646514,
+            "skipped": 0,
+            "smape": 19.112118
+          },
+          "learned_minus_baseline": {
+            "mae": -2.665748,
+            "rmse": -1.646441,
+            "smape": -2.974497
+          },
+          "paired_observations": 56
+        },
+        "learned": {
+          "mae": 27.227109,
+          "observations": 56,
+          "rmse": 34.646514,
+          "skipped": 0,
+          "smape": 19.112118
+        },
+        "observations": 56,
+        "sufficient_coverage": true
+      },
+      "2017-03": {
+        "baseline": {
+          "mae": 19.274194,
+          "observations": 62,
+          "rmse": 24.625911,
+          "skipped": 0,
+          "smape": 11.039342
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 19.274194,
+            "observations": 62,
+            "rmse": 24.625911,
+            "skipped": 0,
+            "smape": 11.039342
+          },
+          "learned": {
+            "mae": 16.341582,
+            "observations": 62,
+            "rmse": 20.197145,
+            "skipped": 0,
+            "smape": 9.070067
+          },
+          "learned_minus_baseline": {
+            "mae": -2.932612,
+            "rmse": -4.428766,
+            "smape": -1.969275
+          },
+          "paired_observations": 62
+        },
+        "learned": {
+          "mae": 16.341582,
+          "observations": 62,
+          "rmse": 20.197145,
+          "skipped": 0,
+          "smape": 9.070067
+        },
+        "observations": 62,
+        "sufficient_coverage": true
+      },
+      "2017-04": {
+        "baseline": {
+          "mae": 14.316667,
+          "observations": 60,
+          "rmse": 18.599731,
+          "skipped": 0,
+          "smape": 8.224793
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 14.316667,
+            "observations": 60,
+            "rmse": 18.599731,
+            "skipped": 0,
+            "smape": 8.224793
+          },
+          "learned": {
+            "mae": 12.060003,
+            "observations": 60,
+            "rmse": 14.767117,
+            "skipped": 0,
+            "smape": 6.713595
+          },
+          "learned_minus_baseline": {
+            "mae": -2.256664,
+            "rmse": -3.832614,
+            "smape": -1.511198
+          },
+          "paired_observations": 60
+        },
+        "learned": {
+          "mae": 12.060003,
+          "observations": 60,
+          "rmse": 14.767117,
+          "skipped": 0,
+          "smape": 6.713595
+        },
+        "observations": 60,
+        "sufficient_coverage": true
+      },
+      "2017-05": {
+        "baseline": {
+          "mae": 10.451613,
+          "observations": 62,
+          "rmse": 15.062236,
+          "skipped": 0,
+          "smape": 5.641416
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 10.451613,
+            "observations": 62,
+            "rmse": 15.062236,
+            "skipped": 0,
+            "smape": 5.641416
+          },
+          "learned": {
+            "mae": 8.426838,
+            "observations": 62,
+            "rmse": 10.79565,
+            "skipped": 0,
+            "smape": 4.537875
+          },
+          "learned_minus_baseline": {
+            "mae": -2.024775,
+            "rmse": -4.266587,
+            "smape": -1.103541
+          },
+          "paired_observations": 62
+        },
+        "learned": {
+          "mae": 8.426838,
+          "observations": 62,
+          "rmse": 10.79565,
+          "skipped": 0,
+          "smape": 4.537875
+        },
+        "observations": 62,
+        "sufficient_coverage": true
+      },
+      "2017-06": {
+        "baseline": {
+          "mae": 8.466667,
+          "observations": 60,
+          "rmse": 11.741664,
+          "skipped": 0,
+          "smape": 4.373804
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 8.466667,
+            "observations": 60,
+            "rmse": 11.741664,
+            "skipped": 0,
+            "smape": 4.373804
+          },
+          "learned": {
+            "mae": 7.923953,
+            "observations": 60,
+            "rmse": 10.519105,
+            "skipped": 0,
+            "smape": 4.097428
+          },
+          "learned_minus_baseline": {
+            "mae": -0.542713,
+            "rmse": -1.222558,
+            "smape": -0.276376
+          },
+          "paired_observations": 60
+        },
+        "learned": {
+          "mae": 7.923953,
+          "observations": 60,
+          "rmse": 10.519105,
+          "skipped": 0,
+          "smape": 4.097428
+        },
+        "observations": 60,
+        "sufficient_coverage": true
+      },
+      "2017-07": {
+        "baseline": {
+          "mae": 6.33871,
+          "observations": 62,
+          "rmse": 8.550608,
+          "skipped": 0,
+          "smape": 3.224444
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 6.33871,
+            "observations": 62,
+            "rmse": 8.550608,
+            "skipped": 0,
+            "smape": 3.224444
+          },
+          "learned": {
+            "mae": 5.009438,
+            "observations": 62,
+            "rmse": 6.528853,
+            "skipped": 0,
+            "smape": 2.561242
+          },
+          "learned_minus_baseline": {
+            "mae": -1.329272,
+            "rmse": -2.021755,
+            "smape": -0.663202
+          },
+          "paired_observations": 62
+        },
+        "learned": {
+          "mae": 5.009438,
+          "observations": 62,
+          "rmse": 6.528853,
+          "skipped": 0,
+          "smape": 2.561242
+        },
+        "observations": 62,
+        "sufficient_coverage": true
+      },
+      "2017-08": {
+        "baseline": {
+          "mae": 5.129032,
+          "observations": 62,
+          "rmse": 8.022147,
+          "skipped": 0,
+          "smape": 2.554273
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 5.129032,
+            "observations": 62,
+            "rmse": 8.022147,
+            "skipped": 0,
+            "smape": 2.554273
+          },
+          "learned": {
+            "mae": 4.000942,
+            "observations": 62,
+            "rmse": 5.532299,
+            "skipped": 0,
+            "smape": 2.024382
+          },
+          "learned_minus_baseline": {
+            "mae": -1.128091,
+            "rmse": -2.489848,
+            "smape": -0.529891
+          },
+          "paired_observations": 62
+        },
+        "learned": {
+          "mae": 4.000942,
+          "observations": 62,
+          "rmse": 5.532299,
+          "skipped": 0,
+          "smape": 2.024382
+        },
+        "observations": 62,
+        "sufficient_coverage": true
+      }
+    }
+  },
+  "stability": {
+    "methods": {
+      "baseline": {
+        "mae": {
+          "folds": 54,
+          "max": 63.0,
+          "mean": 18.18254,
+          "median": 13.678571,
+          "min": 2.642857,
+          "stdev": 15.154487
+        },
+        "rmse": {
+          "folds": 54,
+          "max": 69.977547,
+          "mean": 22.36767,
+          "median": 17.925075,
+          "min": 4.16619,
+          "stdev": 16.780391
+        },
+        "smape": {
+          "folds": 54,
+          "max": 54.070623,
+          "mean": 12.509329,
+          "median": 7.210421,
+          "min": 1.369186,
+          "stdev": 12.744283
+        }
+      },
+      "learned": {
+        "mae": {
+          "folds": 54,
+          "max": 69.898727,
+          "mean": 17.368254,
+          "median": 10.910964,
+          "min": 2.605314,
+          "stdev": 14.11952
+        },
+        "rmse": {
+          "folds": 54,
+          "max": 77.927058,
+          "mean": 21.100927,
+          "median": 13.992422,
+          "min": 3.318334,
+          "stdev": 16.537417
+        },
+        "smape": {
+          "folds": 54,
+          "max": 46.864926,
+          "mean": 12.349629,
+          "median": 6.067981,
+          "min": 1.278482,
+          "stdev": 11.851037
+        }
+      }
+    },
+    "stdev_definition": "population standard deviation over the evaluated folds; these folds are the whole population the protocol produces, not a sample from a larger one"
+  },
+  "validation_version": "validation_v1"
+}

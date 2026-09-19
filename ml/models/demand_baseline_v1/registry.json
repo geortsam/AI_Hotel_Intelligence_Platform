@@ -1,0 +1,374 @@
+{
+  "acceptance": {
+    "checks": [
+      {
+        "criterion": "minimum_paired_observations",
+        "observed": 744,
+        "passed": true,
+        "rationale": "500 paired hotel-days. Below roughly a year of two-hotel coverage the pooled metrics describe a season rather than a year.",
+        "requirement": ">= 500"
+      },
+      {
+        "criterion": "minimum_folds",
+        "observed": 54,
+        "passed": true,
+        "rationale": "40 origins. Fewer, and a single unusual week moves the pooled figure enough that the backtest is measuring that week.",
+        "requirement": ">= 40"
+      },
+      {
+        "criterion": "maximum_skipped_predictions",
+        "observed": 0,
+        "passed": true,
+        "rationale": "zero. A method that declines to forecast some days and is scored only on the rest is being graded on a set it chose; if any day is skipped the result must be read differently, so it fails the gate rather than being averaged over.",
+        "requirement": "<= 0"
+      },
+      {
+        "criterion": "maximum_incomplete_windows",
+        "observed": 1,
+        "passed": true,
+        "rationale": "one. The final evaluation window is truncated whenever the remaining dates are not a multiple of the step, which is arithmetic rather than a defect. A second incomplete window would mean something else is wrong.",
+        "requirement": "<= 1"
+      },
+      {
+        "criterion": "minimum_hotels_with_sufficient_coverage",
+        "observed": 2,
+        "passed": true,
+        "rationale": "two, which is every hotel in the dataset. This is a completeness check, NOT a generalisation claim: see the model card.",
+        "requirement": ">= 2"
+      },
+      {
+        "criterion": "required_dataset_version",
+        "observed": "v1",
+        "passed": true,
+        "rationale": "identity: a different contract is a different question.",
+        "requirement": "== 'v1'"
+      },
+      {
+        "criterion": "required_feature_version",
+        "observed": "v1",
+        "passed": true,
+        "rationale": "identity: the feature contract must be the one measured.",
+        "requirement": "== 'v1'"
+      },
+      {
+        "criterion": "required_dataset_sha256",
+        "observed": "904b819f84f252350ad3387db60fa8fb18f56771447b2c369f3741f65f57095d",
+        "passed": true,
+        "rationale": "identity by content rather than by name. A dataset that hashes differently is a different dataset whatever it is called.",
+        "requirement": "== '904b819f84f252350ad3387db60fa8fb18f56771447b2c369f3741f65f57095d'"
+      },
+      {
+        "criterion": "required_forecast_horizon_days",
+        "observed": 7,
+        "passed": true,
+        "rationale": "seven, the Stage 6.3 horizon. A different horizon admits a different feature set and produces numbers that are not comparable.",
+        "requirement": "== 7"
+      },
+      {
+        "criterion": "required_model_version",
+        "observed": "demand_baseline_v1",
+        "passed": true,
+        "rationale": "the candidate under validation. A mismatch must stop the run rather than silently validate something else.",
+        "requirement": "== 'demand_baseline_v1'"
+      },
+      {
+        "criterion": "require_deterministic_execution",
+        "observed": true,
+        "passed": true,
+        "rationale": "two full evaluations of the same bytes must agree exactly, predictions and content checksum alike. Without this nothing else in the record can be reproduced.",
+        "requirement": "== True"
+      },
+      {
+        "criterion": "require_leakage_checks",
+        "observed": true,
+        "passed": true,
+        "rationale": "every fold's chronology, every window's disjointness and every selected feature's lead time, re-checked on this run rather than inherited from the last one.",
+        "requirement": "== True"
+      },
+      {
+        "criterion": "require_all_metrics",
+        "observed": true,
+        "passed": true,
+        "rationale": "MAE, RMSE and sMAPE must all be present for both methods. A missing metric is a measurement that did not happen, not a zero.",
+        "requirement": "== True"
+      }
+    ],
+    "criteria_failed": [],
+    "criteria_passed": 13,
+    "criteria_total": 13,
+    "evidence": {
+      "baseline_skipped": 0,
+      "dataset_sha256": "904b819f84f252350ad3387db60fa8fb18f56771447b2c369f3741f65f57095d",
+      "dataset_version": "v1",
+      "deterministic": true,
+      "feature_version": "v1",
+      "folds": 54,
+      "forecast_horizon_days": 7,
+      "hotels_with_sufficient_coverage": 2,
+      "incomplete_windows": 1,
+      "leakage_checks_passed": true,
+      "learned_skipped": 0,
+      "metrics_present": true,
+      "model_version": "demand_baseline_v1",
+      "paired_observations": 744
+    },
+    "excluded_criteria": {
+      "learned_model_beats_baseline": "NOT a criterion. Acceptance here asks whether the measurement is trustworthy, not which method won. The learned model leads on a bare majority of folds with a pooled gap far smaller than the fold-to-fold spread, so such a gate would encode a coin flip. It is also structurally impossible: AcceptanceEvidence carries no metric value.",
+      "metric_threshold": "NOT a criterion. No MAE, RMSE or sMAPE ceiling is declared, because no operational requirement exists to derive one from. A number invented here would become a 'target accuracy' the moment it was written down."
+    },
+    "policy_sha256": "afc47c4f3c5962b8debabc006bfefc7e3de412e32c758015850dcd7367f13c70",
+    "policy_version": "acceptance_v1",
+    "result": "PASS"
+  },
+  "claims": {
+    "cross_hotel_generalisation_established": false,
+    "note": "Measured on two Portuguese hotels observed 2015-2017 by a third party. Both appear in the training data at every origin, so no held-out-hotel claim is made or possible. See docs/ml-model-card.md.",
+    "production_accuracy_established": false,
+    "production_ready": false
+  },
+  "dataset": {
+    "dataset_sha256": "904b819f84f252350ad3387db60fa8fb18f56771447b2c369f3741f65f57095d",
+    "dataset_version": "v1",
+    "feature_version": "v1",
+    "hotels": [
+      "city_hotel",
+      "resort_hotel"
+    ],
+    "path": "demand_daily_v1.csv",
+    "rows": 1462
+  },
+  "generation": {
+    "content_sha256": "445c967205679192ce053bb1dd94e33d2c9e0881aa39e5ed9ebe965d702843e4",
+    "created_at": "2026-09-19T11:04:55.346358+00:00",
+    "note": "Wall-clock metadata only, and outside the content checksum: re-running the validation must not look like a different registry entry.",
+    "pipeline": "ml/pipelines/validate_demand_model.py"
+  },
+  "metrics": {
+    "definitions": {
+      "denominator": "the number of observations for which a forecast was produced",
+      "mae": "mean(|actual - forecast|) over evaluated observations; unit: room nights",
+      "rmse": "sqrt(mean((actual - forecast)^2)) over evaluated observations; unit: room nights",
+      "skipped": "observations for which the method could not produce a forecast; excluded from every metric above and reported separately, never counted as zero error",
+      "smape": "100 * mean(2 * |actual - forecast| / (|actual| + |forecast|)); a term whose denominator is zero (actual and forecast both zero, i.e. an exact match) contributes 0.0; range 0..200"
+    },
+    "per_hotel": {
+      "city_hotel": {
+        "baseline": {
+          "mae": 20.502688,
+          "observations": 372,
+          "rmse": 31.345413,
+          "skipped": 0,
+          "smape": 12.669259
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 20.502688,
+            "observations": 372,
+            "rmse": 31.345413,
+            "skipped": 0,
+            "smape": 12.669259
+          },
+          "learned": {
+            "mae": 19.621061,
+            "observations": 372,
+            "rmse": 30.461218,
+            "skipped": 0,
+            "smape": 12.386957
+          },
+          "learned_minus_baseline": {
+            "mae": -0.881627,
+            "rmse": -0.884196,
+            "smape": -0.282302
+          },
+          "paired_observations": 372
+        },
+        "learned": {
+          "mae": 19.621061,
+          "observations": 372,
+          "rmse": 30.461218,
+          "skipped": 0,
+          "smape": 12.386957
+        },
+        "predictions": 372,
+        "sufficient_coverage": true
+      },
+      "resort_hotel": {
+        "baseline": {
+          "mae": 16.239247,
+          "observations": 372,
+          "rmse": 24.5792,
+          "skipped": 0,
+          "smape": 12.635706
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 16.239247,
+            "observations": 372,
+            "rmse": 24.5792,
+            "skipped": 0,
+            "smape": 12.635706
+          },
+          "learned": {
+            "mae": 15.383799,
+            "observations": 372,
+            "rmse": 23.024131,
+            "skipped": 0,
+            "smape": 12.559161
+          },
+          "learned_minus_baseline": {
+            "mae": -0.855449,
+            "rmse": -1.555069,
+            "smape": -0.076545
+          },
+          "paired_observations": 372
+        },
+        "learned": {
+          "mae": 15.383799,
+          "observations": 372,
+          "rmse": 23.024131,
+          "skipped": 0,
+          "smape": 12.559161
+        },
+        "predictions": 372,
+        "sufficient_coverage": true
+      }
+    },
+    "pooled": {
+      "baseline": {
+        "mae": 18.370968,
+        "observations": 744,
+        "rmse": 28.166221,
+        "skipped": 0,
+        "smape": 12.652483
+      },
+      "comparison": {
+        "baseline": {
+          "mae": 18.370968,
+          "observations": 744,
+          "rmse": 28.166221,
+          "skipped": 0,
+          "smape": 12.652483
+        },
+        "learned": {
+          "mae": 17.50243,
+          "observations": 744,
+          "rmse": 26.999967,
+          "skipped": 0,
+          "smape": 12.473059
+        },
+        "learned_minus_baseline": {
+          "mae": -0.868538,
+          "rmse": -1.166255,
+          "smape": -0.179424
+        },
+        "paired_observations": 744
+      },
+      "learned": {
+        "mae": 17.50243,
+        "observations": 744,
+        "rmse": 26.999967,
+        "skipped": 0,
+        "smape": 12.473059
+      }
+    }
+  },
+  "model": {
+    "artifact_persisted": false,
+    "configuration": {
+      "early_stopping": false,
+      "estimator": "sklearn.ensemble.HistGradientBoostingRegressor",
+      "l2_regularization": 0.0,
+      "learning_rate": 0.05,
+      "loss": "squared_error",
+      "max_bins": 255,
+      "max_iter": 200,
+      "max_leaf_nodes": 31,
+      "min_samples_leaf": 20,
+      "random_state": 0
+    },
+    "configuration_sha256": "bbaf2881204f40c67db7a805038042e9c8de902fea8449871bd538c5566d34c5",
+    "features": {
+      "excluded": [
+        {
+          "feature": "demand_lag_1",
+          "reason": "knowable only 1 day(s) before the target date, which is inside a 7-day forecast horizon"
+        },
+        {
+          "feature": "demand_rolling_mean_7",
+          "reason": "knowable only 1 day(s) before the target date, which is inside a 7-day forecast horizon"
+        },
+        {
+          "feature": "demand_rolling_mean_14",
+          "reason": "knowable only 1 day(s) before the target date, which is inside a 7-day forecast horizon"
+        },
+        {
+          "feature": "demand_rolling_mean_28",
+          "reason": "knowable only 1 day(s) before the target date, which is inside a 7-day forecast horizon"
+        },
+        {
+          "feature": "on_books_room_nights_at_cutoff",
+          "reason": "knowable only 1 day(s) before the target date, which is inside a 7-day forecast horizon"
+        },
+        {
+          "feature": "rooms_existing_at_cutoff",
+          "reason": "the published source carries no room inventory, so the column is None on every offline row; excluded from the model matrix rather than fabricated or imputed"
+        }
+      ],
+      "horizon_days": 7,
+      "selected": [
+        "day_of_week",
+        "day_of_month",
+        "month",
+        "week_of_year",
+        "day_of_year",
+        "is_weekend",
+        "demand_lag_7",
+        "demand_lag_14",
+        "demand_lag_28"
+      ]
+    },
+    "forecast_horizon_days": 7,
+    "methods": {
+      "baseline": "seasonal_naive_7",
+      "learned": "hist_gradient_boosting"
+    },
+    "model_name": "demand_baseline",
+    "model_version": "demand_baseline_v1",
+    "serving_path": null,
+    "status": "offline_research_candidate",
+    "status_note": "offline research candidate. Not a production forecasting model: nothing is served, no artifact is persisted, and no endpoint loads one."
+  },
+  "protocol": {
+    "evaluation_data_range": {
+      "end": "2017-08-31",
+      "start": "2016-08-25"
+    },
+    "folds": 54,
+    "paired_observations": 744,
+    "protocol_version": "rolling_origin_v1",
+    "settings": {
+      "horizon_days": 7,
+      "minimum_train_days": 365,
+      "origin_rule": "first origin = the date with minimum_train_days distinct dates at or before it; subsequent origins advance by step_days until the last dataset date; evaluation window = (origin, origin + horizon_days]",
+      "random_cross_validation": false,
+      "scheme": "expanding-window rolling origin",
+      "shuffle": false,
+      "step_days": 7,
+      "windows_tile": true
+    },
+    "sha256": "118fe2bce37828238ff1ff448dc9ab5c7f720aab557eb70cba2183c3b1f9c26a",
+    "skipped_folds": 0,
+    "training_data_range": {
+      "end": "2017-08-30",
+      "start": "2015-08-26"
+    }
+  },
+  "registry_version": "registry_v1",
+  "verification": {
+    "deterministic": true,
+    "evaluation_record_sha256": "7bdee200dcacd58336d96e1d502bd7fd23ca8276e11f26b3f8a75630cf769345",
+    "leakage_checks_passed": true,
+    "validation_sha256": "19c880bd9ac7d7a060435b3d1fc6d496dddec29bcdd4671a62279e7e80c31959",
+    "validation_version": "validation_v1"
+  }
+}

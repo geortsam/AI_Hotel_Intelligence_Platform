@@ -170,6 +170,29 @@ Detail, including the protocol, the fold table, the metric definitions and a sec
 numbers establish neither production accuracy nor cross-hotel generalisation:
 **[ml-model-evaluation.md](ml-model-evaluation.md)**.
 
+## Stage 6.4 — Model validation and offline registry · *done*
+
+Stage 6.3 measured. Stage 6.4 asks whether that measurement can be trusted, under an acceptance
+policy **declared in code before the result was computed** — and structurally incapable of
+seeing which method won, because `AcceptanceEvidence` carries no metric value at all. **Result:
+PASS, 13 of 13 criteria**, all of them about reproducibility, identity and leakage rather than
+accuracy. There is deliberately no "the learned model must beat the baseline" criterion.
+
+Nothing was tuned, no origin was re-chosen and the Stage 6.3 record was not rewritten: the
+protocol and the estimator configuration are pinned by checksum, and the re-run reproduced all
+54 fold boundaries field by field.
+
+What the robustness analysis found, and it is the point of the stage: the per-fold standard
+deviation of MAE is **15.15 / 14.12** against a pooled difference of **0.87** — roughly
+seventeen times larger. The two methods fail in different months (the learned model is ahead
+December–August and behind September–November) and in different directions (all ten of its worst
+days are under-forecasts; the baseline's run both ways). `demand_baseline_v1` is therefore the
+**current offline candidate** — reproducible, pinned and re-verified — and nothing more.
+
+A registry entry and a model card were added; **no artifact was persisted and no endpoint
+serves anything**. Detail: **[ml-model-validation.md](ml-model-validation.md)** and
+**[ml-model-card.md](ml-model-card.md)**.
+
 ---
 
 # V2 — FUTURE / NOT IMPLEMENTED
@@ -185,7 +208,7 @@ numbers establish neither production accuracy nor cross-hotel generalisation:
 | Review sentiment | polarity and aspect breakdown over review text |
 | Room-image classification | class set fixed before training |
 | AI recommendations | evaluated with ranking metrics against a popularity baseline |
-| Model evaluation and versioning discipline | `ml/models/demand_baseline_v1/metrics.json` is the first such record; a registry for several coexisting versions is not built |
+| A registry for several coexisting model versions | Stage 6.4 added a single-entry registry and a model card; nothing selects between versions, and no artifact is stored |
 
 Rules these must follow, unchanged from the original plan: predictions persisted with the model
 version that produced them; a missing artifact surfacing as an explicit unavailable-model error

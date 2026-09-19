@@ -70,7 +70,12 @@ ml/models/*
 !ml/models/.gitkeep
 !ml/models/*/
 ml/models/*/*
+# Three names, each a deliberate decision rather than a blanket `*.json`: the metric of record
+# (Stage 6.3), the robustness analysis and the registry entry (Stage 6.4). Weights, pickles and
+# any other payload stay ignored, which is what keeps "no serving artifact" structural.
 !ml/models/*/metrics.json
+!ml/models/*/validation.json
+!ml/models/*/registry.json
 
 # --- Node / frontend -------------------------------------------------------
 node_modules/

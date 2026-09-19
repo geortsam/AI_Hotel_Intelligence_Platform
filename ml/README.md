@@ -1,11 +1,12 @@
 # AI / ML
 
-> ### Two pipelines here, and still no model artifact.
+> ### Three pipelines' worth of work here, and still no model artifact.
 >
 > Stage 6.2 prepares an offline dataset; Stage 6.3 backtests a seasonal-naive baseline and one
-> learned regressor against it and writes `models/demand_baseline_v1/metrics.json`. **Nothing is
-> serialised.** No pickle, no joblib dump, no weights — there is no artifact that could be
-> loaded and served, and the API has no path that would load one.
+> learned regressor against it; Stage 6.4 validates that measurement under a pre-declared
+> acceptance policy and records a registry entry. **Nothing is serialised.** No pickle, no
+> joblib dump, no weights — there is no artifact that could be loaded and served, and the API
+> has no path that would load one.
 >
 > `requirements-ml.txt` pins exactly one dependency, scikit-learn, installed by CI's
 > quality-gates job and **not** by the API image.
@@ -36,7 +37,7 @@ held to the same rules as one built from the production database.
 | `data/external/` | Third-party reference data. |
 | `pipelines/` | Reproducible data-preparation, training and evaluation scripts. **Stage 6.2 added data preparation, Stage 6.3 the offline evaluation.** |
 | `manifests/` | Dataset manifests. **Committed**, unlike the payloads they describe. |
-| `models/` | One directory per model version, each with its `metrics.json`. Weights would live here too; none exists. |
+| `models/` | One directory per model version: `metrics.json`, `validation.json`, `registry.json`. Weights would live here too; none exists, and `.gitignore` names the three records individually so a weights file would be ignored rather than committed. |
 | `notebooks/` | Exploration only. Findings graduate into `pipelines/` before they count. |
 | `requirements-ml.txt` | ML dependencies. Kept separate so the API image stays small. |
 
@@ -65,15 +66,23 @@ library, deep-learning framework or LLM client is imported anywhere.
 | `pipelines/build_demand_dataset.py` | the command that acquires, verifies, builds and writes |
 | `loading.py`, `metrics.py`, `models.py`, `evaluation.py`, `manifests.py` | Stage 6.3 — dataset verification, MAE/RMSE/sMAPE, the baseline and the learned model, the rolling-origin backtest, the evaluation record |
 | `pipelines/evaluate_demand_model.py` | the command that backtests and writes the record |
+| `policy.py`, `validation.py`, `registry.py` | Stage 6.4 — the acceptance policy (declared before the result and blind to it), robustness/regime/error analysis, the registry entry |
+| `pipelines/validate_demand_model.py` | the command that validates and writes the registry |
 | `manifests/demand_daily_v1.json` | the dataset's committed record: checksums, ranges, partitions, rejections |
 | `models/demand_baseline_v1/metrics.json` | the **metric of record**: 54 folds, 744 predictions, both methods |
+| `models/demand_baseline_v1/validation.json` | robustness, regimes, the ten worst days per method, the leakage re-check |
+| `models/demand_baseline_v1/registry.json` | the registry entry: versions, checksums, metrics, acceptance result, claim flags |
 | `data/` | raw payload ignored; the 263 KB processed dataset is committed so the evaluation can run in CI |
 
 ```
 python -m ml.pipelines.build_demand_dataset --download --verify
 python -m ml.pipelines.evaluate_demand_model --verify
+python -m ml.pipelines.validate_demand_model
 ```
 
 Detail: [`../docs/ml-training-data.md`](../docs/ml-training-data.md) for the dataset and its
 provenance, [`../docs/ml-model-evaluation.md`](../docs/ml-model-evaluation.md) for the backtest,
-the measured results and what they do **not** establish.
+[`../docs/ml-model-validation.md`](../docs/ml-model-validation.md) for the robustness analysis
+and the acceptance result, and [`../docs/ml-model-card.md`](../docs/ml-model-card.md) for the
+model card — which states, in those words, that this is an offline research candidate and not a
+production forecasting model.

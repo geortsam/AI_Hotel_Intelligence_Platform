@@ -1,0 +1,279 @@
+# Model card — `demand_baseline_v1`
+
+> **This model is an offline research candidate and is not a production forecasting model.**
+>
+> No artifact is persisted. No endpoint serves it. Nothing in the running platform loads it, and
+> the API image contains none of the code or dependencies that produced it. The numbers below
+> describe a backtest over two hotels that belong to somebody else.
+
+| | |
+|---|---|
+| Model version | `demand_baseline_v1` |
+| Status | `offline_research_candidate` |
+| Registry entry | [`ml/models/demand_baseline_v1/registry.json`](../ml/models/demand_baseline_v1/registry.json) |
+| Metric of record | [`ml/models/demand_baseline_v1/metrics.json`](../ml/models/demand_baseline_v1/metrics.json) |
+| Validation record | [`ml/models/demand_baseline_v1/validation.json`](../ml/models/demand_baseline_v1/validation.json) |
+| Acceptance policy | `acceptance_v1` — [`ml/policy.py`](../ml/policy.py) |
+| Protocol | `rolling_origin_v1` |
+| Dataset | `demand_daily_v1`, `dataset_version = v1`, `feature_version = v1` |
+
+---
+
+## 1. Intended use
+
+**Research and engineering evidence, offline.** This candidate exists to answer one question:
+can the repository measure a demand forecaster honestly, end to end — versioned data, a
+leakage-safe protocol, a declared acceptance policy, a reproducible record?
+
+Appropriate uses:
+
+- reading the measured numbers as a statement about *this dataset under this protocol*;
+- reviewing the protocol, the feature-admissibility rule and the leakage checks;
+- as the starting point for a later stage that would fit a model on the platform's own data.
+
+**Inappropriate uses**, and the card is explicit because the distinction is easy to lose:
+
+- forecasting for any real hotel;
+- quoting any metric below as an expected accuracy;
+- inferring what the platform's own hotels would do;
+- treating the configuration as tuned. It is not — see §11.
+
+---
+
+## 2. Target
+
+**Daily hotel room-night demand**: one observation is one hotel on one calendar date, and the
+value is the number of occupied room nights realised on that date.
+
+The definition comes from Stage 6.1 and is not restated here — the offline pipeline imports it.
+Occupancy offline means the source's `reservation_status == "Check-Out"`, which is the same line
+the production `OCCUPANCY_STATUSES` (`confirmed`, `checked_in`, `checked_out`) draws, expressed
+in the source's vocabulary. Bookings are expanded across `[arrival, arrival + nights)`; the
+check-out day is not a night.
+
+---
+
+## 3. Forecast horizon
+
+**Seven days.** A forecast for date *D* may use only facts knowable at *D − 7*.
+
+This is enforced rather than intended: `feature_lead_days()` records how far ahead each feature
+becomes knowable, `select_model_features()` admits only those whose lead is at least the
+horizon, and a feature name the code does not recognise raises instead of being assumed safe.
+
+---
+
+## 4. Data source and provenance
+
+| | |
+|---|---|
+| Publication | Antonio, N., de Almeida, A., & Nunes, L. (2019). *Hotel booking demand datasets*. Data in Brief 22, 41–49 |
+| DOI | [10.1016/j.dib.2018.11.126](https://doi.org/10.1016/j.dib.2018.11.126) |
+| Licence | CC BY 4.0, read from the Crossref record for the DOI |
+| Redistribution | R4DS TidyTuesday 2020-02-11, repository CC0 1.0, URL pinned to a commit |
+| Raw SHA-256 | `7c2ae42a7353905ea136e5c2287f17c92c5435826598bfbb8491c6f0c7b1fc06` |
+| Processed SHA-256 | `904b819f84f252350ad3387db60fa8fb18f56771447b2c369f3741f65f57095d` |
+
+**Geography and period: two hotels in Portugal — one city, one resort — observed 2015 to 2017.**
+Arrivals run 2015-07-01 to 2017-08-31; after the truncation rule the dataset covers 2015-08-26
+to 2017-08-31, 737 dates, 1,462 rows.
+
+**This is not the platform's own data**, and the record says so structurally as well as in prose:
+offline hotel identity is a UUID version 5 in the pipeline's own namespace, while production
+`hotels.public_id` values are random version-4 UUIDs, so the two are distinguishable by the
+version field alone.
+
+Full detail: [`ml-training-data.md`](ml-training-data.md).
+
+---
+
+## 5. Dataset limitations
+
+- **Two hotels.** See §10.
+- **Two years.** Two summers and one complete winter. The December–January transition — the
+  period where both methods err most — is observed once.
+- **Duplicate source rows.** 31,994 exact duplicate rows (extra copies across 8,171 distinct
+  row values) are **retained**. The source carries no booking identifier, and two transient
+  bookings for the same room type, dates and rate are an ordinary thing to sell on one day, so
+  removing them would delete real demand on the strength of a guess. This is the largest
+  unresolved uncertainty in the data and every number in this card inherits it.
+- **Boundary truncation.** 143 hotel-days were dropped as targets because the source could not
+  account for them in full; the bookings behind them still feed lags for dates that remain.
+- **No zero-demand day exists** in this dataset. That is a property of these two hotels, not a
+  property to rely on.
+
+---
+
+## 6. Feature limitations
+
+Nine of the fifteen Stage 6.1 contract columns are used. Six are not, and the reasons differ:
+
+| Feature | Status |
+|---|---|
+| `day_of_week`, `day_of_month`, `month`, `week_of_year`, `day_of_year`, `is_weekend` | used |
+| `demand_lag_7`, `demand_lag_14`, `demand_lag_28` | used |
+| `demand_lag_1`, `demand_rolling_mean_7/14/28`, `on_books_room_nights_at_cutoff` | **excluded — knowable only one day ahead, inside the seven-day horizon** |
+| `rooms_existing_at_cutoff` | **excluded — unavailable offline** |
+
+**`rooms_existing_at_cutoff` is `None` on all 1,462 rows**: the published source carries no room
+inventory. It is excluded from the model matrix rather than imputed, and the Stage 6.1 contract
+is left untouched. Feeding it to the estimator as a missing value was considered and rejected —
+a column entirely absent offline and entirely present in production is not a missing value, it
+is a different feature wearing the same name.
+
+**`on_books_room_nights_at_cutoff` is day-resolution offline.** Production reconstructs it from
+timestamps (`booked_at < cutoff`, `cancelled_at IS NULL OR cancelled_at >= cutoff`); the source
+records `lead_time` in whole days, so the offline equivalent has one day of resolution instead of
+one second. It is also **status-agnostic** — an upper bound on confirmed on-the-books demand
+rather than a confirmed count — because neither the source nor the production schema records
+booking-status history. At a seven-day horizon it is excluded anyway.
+
+**A production model would therefore not be this model**: it would see a wider feature vector.
+
+---
+
+## 7. Leakage constraints
+
+The constraint the whole stack is built around: **a feature may never use information that
+postdates its prediction cutoff.** The target may — it is the supervised label.
+
+Re-checked on every validation run, not inherited:
+
+| Check | Result |
+|---|---|
+| `train_end <= origin < evaluation_start` for every fold | pass |
+| Every evaluation window within the horizon | pass |
+| No hotel-day evaluated twice | pass |
+| Every selected feature knowable at the horizon | pass |
+| Training window never contracts | pass |
+| No shuffle, no random split, no random cross-validation | pass |
+
+Behavioural leakage tests, from Stage 6.1 through 6.4, mutate the future and require the past to
+come back byte-identical. The estimator's `early_stopping` is fixed at `False` and cannot be
+constructed as `True`, because its default of `"auto"` would carve an internal validation split
+at random.
+
+---
+
+## 8. Evaluation protocol
+
+`rolling_origin_v1` — expanding-window rolling origin.
+
+```
+first origin   the date with 365 distinct dates at or before it   = 2016-08-24
+origin(k)      first origin + k * 7 days, while origin < last date
+train(k)       every row with target_date <= origin(k)
+evaluate(k)    every row with origin(k) < target_date <= origin(k) + 7
+```
+
+| | |
+|---|---|
+| Folds | 54, none skipped |
+| Paired observations | 744 (372 per hotel), none skipped by either method |
+| Training data range | 2015-08-26 → 2017-08-30 |
+| Evaluation data range | 2016-08-25 → 2017-08-31 |
+| Incomplete windows | 1 — the final fold, because 372 dates is not a multiple of 7 |
+
+All origins are generated before any model is fitted. Stage 6.4 re-ran the protocol and required
+all 54 fold boundaries to match the Stage 6.3 record field by field.
+
+Compared method: **`seasonal_naive_7`** — demand seven days earlier, read from the dataset's own
+`demand_lag_7` column, producing no forecast where that observation does not exist.
+
+Learned method: **`HistGradientBoostingRegressor`**, refit from scratch at every origin,
+`random_state=0`, `early_stopping=False`, 200 iterations at learning rate 0.05.
+
+---
+
+## 9. Metrics
+
+Pooled over all 744 paired observations. Room nights per hotel-day, against a median demand of
+178.
+
+| | MAE | RMSE | sMAPE |
+|---|---|---|---|
+| `seasonal_naive_7` | 18.371 | 28.166 | 12.652 % |
+| `hist_gradient_boosting` | 17.502 | 27.000 | 12.473 % |
+| learned − baseline | −0.869 | −1.166 | −0.179 |
+
+**Read the difference against the dispersion, not on its own.** The per-fold standard deviation
+of MAE is 15.15 for the baseline and 14.12 for the learned model — roughly seventeen times the
+pooled gap between them. The learned model scores lower on 32 of 54 folds for MAE, 34 for RMSE,
+33 for sMAPE. **No winner is declared**, and the acceptance policy contains no criterion that
+would reward one.
+
+MAPE is deliberately absent: its denominator is the actual value, and a metric that is safe only
+because one dataset happens to have no zero day is not worth keeping.
+
+Full breakdown by month, quarter and hotel, and the ten worst days for each method:
+[`ml-model-validation.md`](ml-model-validation.md).
+
+---
+
+## 10. Two-hotel limitation and the absence of a generalisation claim
+
+**No cross-hotel generalisation claim is made, and none could be.**
+
+Both hotels appear in the training data at **every** origin. There is no **held-out hotel**, and
+with two of them there could not be a meaningful one. The per-hotel numbers (city MAE 20.503
+baseline / 19.621 learned; resort 16.239 / 15.384) show that the pooled result is not driven by
+one hotel — they say nothing whatsoever about a third.
+
+Hotel identity is deliberately **not** a model feature: with two hotels a categorical for it
+would be memorisation, and the lag features already carry each hotel's level. That choice does
+not create a generalisation claim either.
+
+---
+
+## 11. Limitations
+
+- **This model is an offline research candidate and is not a production forecasting model.**
+- **No acceptance criterion concerns accuracy.** The policy asks whether the measurement is
+  trustworthy — counts, versions, checksums, determinism, leakage — not whether a number is
+  good. There is no declared MAE ceiling, because no operational requirement exists to derive
+  one from.
+- **Nothing was tuned.** The hyper-parameters were set once, before any metric was computed, and
+  Stage 6.4 changed none of them: the configuration checksum is pinned by test.
+- **The error analysis changed nothing.** The worst days were listed and left alone — not
+  clipped, not winsorised, not dropped, and no configuration was altered in response.
+- **Errors are strongly seasonal for both methods.** December–January MAE is roughly 40–45;
+  July–August is roughly 5–6. A single pooled number averages across an eightfold difference.
+- **The learned model's worst days are one-directional.** All ten of its largest errors are
+  under-forecasts, concentrated in late October–November 2016 and the turn of the year — the
+  regime changes for which it had the least prior history.
+- **No artifact, no serving path, no endpoint.** `ml/models/demand_baseline_v1/` contains three
+  JSON records and nothing else, and a test asserts it.
+
+---
+
+## 12. Non-production status
+
+| Claim | Established? |
+|---|---|
+| Production ready | **No** |
+| Production accuracy established | **No** |
+| Cross-hotel generalisation established | **No** |
+| Reproducible offline measurement | **Yes** — deterministic, checksummed, re-verified in CI |
+
+The registry entry carries these four answers as data, so a consumer reads them rather than
+inferring them.
+
+What the acceptance result *does* support: `demand_baseline_v1` is a **reproducible offline
+candidate** — measured under a declared protocol against a checksummed dataset, deterministic
+across repeated runs, with every leakage check re-verified. It supports nothing about deployment.
+
+---
+
+## 13. Maintenance
+
+Re-generate the records with:
+
+```
+python -m ml.pipelines.evaluate_demand_model --verify
+python -m ml.pipelines.validate_demand_model
+```
+
+A change to the dataset checksum, the feature version, the dataset version, the horizon or the
+model version makes the validation **refuse to run** rather than quietly produce a record about
+something else. A change to any acceptance threshold changes `acceptance_v1`'s checksum, which a
+test pins, so the policy cannot move without the change being visible in a diff.

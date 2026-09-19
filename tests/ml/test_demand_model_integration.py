@@ -43,6 +43,12 @@ from ml.manifests import (
     content_checksum,
 )
 from ml.models import MODEL_VERSION
+from ml.policy import ACCEPTANCE_POLICY, ACCEPTANCE_POLICY_VERSION
+from ml.validation import assert_fold_boundaries_match, leakage_report
+from tests.ml.test_demand_model_validation import (
+    STAGE_63_ESTIMATOR_SHA256,
+    STAGE_63_PROTOCOL_SHA256,
+)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
@@ -364,6 +370,117 @@ def test_the_migration_chain_is_unchanged() -> None:
 
 
 def test_no_model_artifact_was_written_beside_the_record() -> None:
+    """Three JSON records and nothing else. No pickle, no joblib dump, no weights."""
     directory = DEFAULT_EVALUATION_RECORD.parent
     assert directory.is_dir()
-    assert sorted(p.name for p in directory.iterdir()) == ["metrics.json"]
+    assert sorted(p.name for p in directory.iterdir()) == [
+        "metrics.json",
+        "registry.json",
+        "validation.json",
+    ]
+
+
+# --- Stage 6.4: the committed validation and registry records -------------------------------------
+
+
+@pytest.fixture(scope="module")
+def validation_record() -> dict[str, object]:
+    path = DEFAULT_EVALUATION_RECORD.parent / "validation.json"
+    assert path.is_file(), (
+        f"{path} is missing; regenerate it with `python -m ml.pipelines.validate_demand_model`"
+    )
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    return loaded
+
+
+@pytest.fixture(scope="module")
+def registry_record() -> dict[str, object]:
+    path = DEFAULT_EVALUATION_RECORD.parent / "registry.json"
+    assert path.is_file(), (
+        f"{path} is missing; regenerate it with `python -m ml.pipelines.validate_demand_model`"
+    )
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    return loaded
+
+
+def test_the_committed_validation_reproduces_this_runs_fold_boundaries(
+    validation_record: dict[str, object], result: EvaluationResult
+) -> None:
+    folds = validation_record["folds"]
+    assert isinstance(folds, dict)
+    assert_fold_boundaries_match(result, folds["boundaries"])
+    assert folds["count"] == 54
+    assert folds["skipped"] == []
+    assert folds["incomplete_windows"] == [53]
+
+
+def test_the_committed_validation_records_a_passing_leakage_re_check(
+    validation_record: dict[str, object],
+) -> None:
+    leakage = validation_record["leakage"]
+    assert isinstance(leakage, dict)
+    assert leakage["passed"] is True
+    checks = leakage["checks"]
+    assert isinstance(checks, dict)
+    assert all(checks.values()), checks
+    assert leakage_report(_fresh_result()) == leakage
+
+
+def _fresh_result() -> EvaluationResult:
+    dataset = load_processed_dataset(DEFAULT_DATASET)
+    return evaluate(dataset.rows, feature_names=dataset.feature_names)
+
+
+def test_the_registry_pins_the_stage_63_protocol_and_configuration(
+    registry_record: dict[str, object],
+) -> None:
+    protocol = registry_record["protocol"]
+    model = registry_record["model"]
+    assert isinstance(protocol, dict)
+    assert isinstance(model, dict)
+    assert protocol["sha256"] == STAGE_63_PROTOCOL_SHA256
+    assert model["configuration_sha256"] == STAGE_63_ESTIMATOR_SHA256
+    assert protocol["folds"] == 54
+    assert protocol["paired_observations"] == 744
+    assert protocol["training_data_range"] == {"start": "2015-08-26", "end": "2017-08-30"}
+    assert protocol["evaluation_data_range"] == {"start": "2016-08-25", "end": "2017-08-31"}
+
+
+def test_the_registry_records_the_acceptance_result_and_its_policy(
+    registry_record: dict[str, object],
+) -> None:
+    acceptance = registry_record["acceptance"]
+    assert isinstance(acceptance, dict)
+    assert acceptance["policy_version"] == ACCEPTANCE_POLICY_VERSION
+    assert acceptance["policy_sha256"] == ACCEPTANCE_POLICY.checksum()
+    assert acceptance["result"] == "PASS"
+    assert acceptance["criteria_failed"] == []
+    assert acceptance["criteria_passed"] == acceptance["criteria_total"] == 13
+
+
+def test_the_registry_describes_the_committed_dataset(
+    registry_record: dict[str, object], dataset: ProcessedDataset
+) -> None:
+    block = registry_record["dataset"]
+    model = registry_record["model"]
+    assert isinstance(block, dict)
+    assert isinstance(model, dict)
+    assert block["dataset_sha256"] == dataset.sha256
+    assert block["rows"] == len(dataset.rows)
+    assert block["dataset_version"] == "v1"
+    assert block["feature_version"] == "v1"
+    assert model["model_version"] == MODEL_VERSION
+    assert model["artifact_persisted"] is False
+    assert model["serving_path"] is None
+
+
+def test_the_validation_checksum_in_the_registry_matches_the_committed_record(
+    registry_record: dict[str, object], validation_record: dict[str, object]
+) -> None:
+    verification = registry_record["verification"]
+    assert isinstance(verification, dict)
+    assert verification["validation_sha256"] == content_checksum(validation_record)
+    assert verification["deterministic"] is True
+    assert verification["leakage_checks_passed"] is True

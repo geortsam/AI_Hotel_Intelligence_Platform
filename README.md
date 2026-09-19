@@ -137,7 +137,7 @@ AI_Hotel_Intelligence_Platform/
 │   └── requirements-dev.txt
 ├── frontend/          React + TypeScript SPA, nginx production image
 ├── database/          migrations/ (9 revisions) and init SQL
-├── ml/                offline data preparation and evaluation; manifests and metrics tracked
+├── ml/                offline data prep, evaluation and validation; records tracked, payloads not
 ├── docs/              architecture, roadmap, design records, deployment runbooks
 ├── tests/             backend/ and integration/ suites, mirroring the source layout
 ├── pyproject.toml     ruff · mypy · pytest · coverage
@@ -412,16 +412,20 @@ classification can be recomputed by hand.
 
 **There is no served model, no LLM, no embeddings, no vector database, no RAG and no agent
 framework in this repository.** `ml/` holds the offline half: Stage 6.2 prepares a versioned
-training dataset from a published, CC BY 4.0 hotel-booking dataset, and Stage 6.3 backtests a
-seasonal-naive baseline and one scikit-learn regressor over 54 chronological origins, recording
-what it measured in `ml/models/demand_baseline_v1/metrics.json`.
+training dataset from a published, CC BY 4.0 hotel-booking dataset, Stage 6.3 backtests a
+seasonal-naive baseline and one scikit-learn regressor over 54 chronological origins, and Stage
+6.4 validates that measurement under an acceptance policy declared before the result and blind
+to it — PASS on 13 of 13 criteria, every one of them about reproducibility and identity rather
+than accuracy.
 
 **No model artifact is persisted and no endpoint serves one.** The public API is the same 82
 operations it was in V1, `backend/` gained no ML dependency, and the intelligence the platform
 actually serves is still the deterministic statistical baseline above. See
-[docs/ml-training-data.md](docs/ml-training-data.md) and
-[docs/ml-model-evaluation.md](docs/ml-model-evaluation.md) — including why those numbers
-establish neither production accuracy nor cross-hotel generalisation.
+[docs/ml-training-data.md](docs/ml-training-data.md),
+[docs/ml-model-evaluation.md](docs/ml-model-evaluation.md),
+[docs/ml-model-validation.md](docs/ml-model-validation.md) and
+[docs/ml-model-card.md](docs/ml-model-card.md) — including why those numbers establish neither
+production accuracy nor cross-hotel generalisation.
 
 ### V2 — NOT IMPLEMENTED
 

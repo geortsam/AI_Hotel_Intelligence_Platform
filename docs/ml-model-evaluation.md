@@ -8,6 +8,12 @@
 >
 > The V1 intelligence layer is unchanged, the production schema is unchanged, the public API is
 > unchanged at 82 operations, and `backend/` gained no ML dependency.
+>
+> **Stage 6.4 validated this measurement** under a pre-declared acceptance policy and added the
+> robustness, regime and error analysis these pooled numbers cannot give:
+> [ml-model-validation.md](ml-model-validation.md). The short version is that the per-fold
+> standard deviation of MAE is about seventeen times the pooled difference between the two
+> methods.
 
 ---
 
@@ -21,7 +27,7 @@
 | Rolling-origin backtest | `ml/evaluation.py` |
 | Evaluation record and its content checksum | `ml/manifests.py` |
 | The command that runs it | `ml/pipelines/evaluate_demand_model.py` |
-| **The record of what it measured** | `ml/models/demand_baseline_v1/metrics.json` (committed) |
+| **The record of what it measured** | `ml/models/demand_baseline_v1/metrics.json` (committed; Stage 6.4 added two more records beside it) |
 
 ```
 python -m ml.pipelines.evaluate_demand_model --verify
@@ -389,11 +395,13 @@ checked out on.
 - **No API endpoint, no serving path, no inference route.** The public API is 82 operations, as
   it was in V1.
 - **No model artifact.** No pickle, no joblib dump, no ONNX. `ml/models/demand_baseline_v1/`
-  contains `metrics.json` and nothing else, and a test asserts it.
+  contains JSON records and nothing else, and a test asserts the directory listing. (Stage 6.3
+  wrote one, `metrics.json`; Stage 6.4 added `validation.json` and `registry.json`.)
 - **No schema change, no migration.** Alembic head remains `0009_audit_booking_deleted`.
 - **No LLM, no RAG, no agent, no recommendations, no sentiment.**
 - **No hyper-parameter search, no feature selection by score, no ensembling.**
-- **No acceptance criteria**, and therefore no claim of passing any.
+- **No acceptance criteria in this stage**, and therefore no claim of passing any.
+  [Stage 6.4](ml-model-validation.md) declared them — and declared none about accuracy.
 
 ---
 

@@ -223,6 +223,13 @@ module under `backend/app` imports it or NumPy or SciPy.
 The measured numbers, and a section on why they establish neither production accuracy nor
 cross-hotel generalisation: [ml-model-evaluation.md](ml-model-evaluation.md).
 
+Stage 6.4 added the validation half: an acceptance policy declared in `ml/policy.py` before any
+result was computed and structurally unable to see which method won, a robustness and regime
+analysis in `ml/validation.py`, and a registry entry in `ml/registry.py`. The result is PASS on
+13 of 13 criteria, all about reproducibility and identity rather than accuracy, which qualifies
+`demand_baseline_v1` as the **current offline candidate** and nothing further —
+[ml-model-validation.md](ml-model-validation.md), [ml-model-card.md](ml-model-card.md).
+
 ### 5.2 The offline / online boundary (offline half only, no artifact)
 
 ```
@@ -234,8 +241,9 @@ operational tables ---> pipelines (offline) ---> artifact + metrics.json
 
 `ml/` holds this structure — `data/`, `pipelines/`, `manifests/`, `models/`, `notebooks/`. Only
 the first half of the diagram exists: data preparation (Stage 6.2), an offline backtest and its
-`metrics.json` (Stage 6.3). **There is no trained artifact**, so the arrow into the backend has
-nothing to carry, and the backend has no path that would load one. `ml/requirements-ml.txt` pins
+`metrics.json` (Stage 6.3), plus the validation and registry records (Stage 6.4). **There is no
+trained artifact**, so the arrow into the backend has nothing to carry, and the backend has no
+path that would load one. `ml/requirements-ml.txt` pins
 scikit-learn, CI installs it and the API image does not.
 
 ### 5.3 FUTURE — NOT IMPLEMENTED
