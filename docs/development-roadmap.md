@@ -6,10 +6,20 @@ left for V2.
 The working rule throughout was: *a stage is not started until the previous one is implemented,
 tested, verified and documented*, and each stage ended with a report naming what was built, which
 files were touched, the test results and the known issues. That is how the history below was
-produced, and it is why the V2 section names nothing as done.
+produced.
 
-Nothing in the V2 section exists in this repository. Where a V2 item is mentioned elsewhere in
-the documentation it is labelled the same way.
+**There are two V2 sections and they mean different things.** *V2 — IN PROGRESS* holds numbered
+stages, each carrying its state in its heading:
+
+| Marker | Meaning |
+|---|---|
+| `· done` | implemented, tested, verified, documented, and locked |
+| `· defined, not started` | specified in enough detail to be reviewed and built, and **no code exists** |
+
+*V2 — FUTURE / NOT IMPLEMENTED* is a backlog of capabilities, not stages: one-line notes with no
+objective, no acceptance criteria and no commitment. Nothing in it exists in this repository, and
+an item only becomes a stage when it is written up as one. Where a V2 item is mentioned elsewhere
+in the documentation it is labelled the same way.
 
 ---
 
@@ -296,6 +306,59 @@ in the model's poor scale behaviour for small hotels. Deployment changed where i
 
 Detail: **[ml-production-runtime.md](ml-production-runtime.md)**.
 
+## Stage 6.8 — Production prediction persistence and observability foundation · *defined, not started*
+
+> **No code exists for this stage.** There is no table, no migration, no service change and no
+> test. Alembic head is `0009_audit_booking_deleted` and the API is 51 paths / 83 operations;
+> neither moves until this stage is implemented, and the API never does.
+
+**Objective: make every production demand prediction a durable, attributable record, and emit the
+minimum signal needed to observe the serving path — without changing the model, the API contract
+or a single number the endpoint returns.** A prediction served today is computed, returned and
+forgotten; this closes that, and makes drift and accuracy work *possible later* without
+attempting either.
+
+It discharges the roadmap's standing V2 rule that predictions are persisted with the model
+version that produced them.
+
+**In scope.** One table, `demand_predictions`, written inside the transaction that serves the
+request: hotel, target date, horizon, prediction cutoff, the predicted value, the full model
+identity, the nine feature values, and the request id. One new Alembic migration, `0010_*`. One
+structured log event per serving attempt, carrying outcome, model version, horizon and duration
+and nothing else.
+
+**The identity question, and the answer.** A prediction is keyed by
+`(hotel_id, target_date, forecast_horizon_days, model_version, feature_digest)` — *not* by the
+first four alone. A booking recorded late changes `demand_lag_7`, so the same hotel, date, horizon
+and model can legitimately produce a different number tomorrow; keying without the inputs would
+force a choice between overwriting history and rejecting a legitimate new prediction. With the
+digest, a repeated request writes no second row and a changed input writes a new one. Same
+instinct as Stage 6.5's canonical digest: hash the inputs, not the bytes.
+
+**Model identity is unchanged.** `436bf6b3…` remains the approved model's identity and is stored
+on every row. The artifact payload SHA-256 is deliberately **not** stored — Stage 6.7 measured
+that it changes with the build machine's thread count, so it would record which CPU served the
+request rather than anything about the prediction.
+
+**Nothing is fabricated and nothing is half-recorded.** 401, 404, 422 and 503 all write no row,
+and a persistence failure fails the request rather than serving a prediction nobody recorded — the
+table's whole value is that it is complete.
+
+**Explicitly not in this stage:** retraining, drift detection, accuracy measurement or any
+production accuracy claim, a metrics exporter or dashboard, a read API for stored predictions,
+retention policy, a new or replacement model, and any frontend. The richer feature pipeline,
+multi-model registry, review sentiment, room-image classification and AI recommendations remain
+separate backlog capabilities and are **not** folded in here.
+
+**One architectural consequence, flagged in advance:** `DemandPredictionService` stops being
+read-only and gains a transaction boundary. The precedent is Stage 4.5.12's audit trail, which
+writes a record of what happened inside the transaction of the thing that happened. The endpoint
+stays idempotent — a repeated request creates no second row.
+
+Twenty-one concrete acceptance criteria, the full record shape, the observability and drift
+contracts, and the distinction between operational monitoring, data drift, prediction drift and
+actual accuracy: **[ml-prediction-persistence-design.md](ml-prediction-persistence-design.md)**.
+
 ---
 
 # V2 — FUTURE / NOT IMPLEMENTED
@@ -306,7 +369,7 @@ Detail: **[ml-production-runtime.md](ml-production-runtime.md)**.
 
 | Item | Note |
 |---|---|
-| A **served** trained forecast | *Done in Stages 6.6 and 6.7* — loading path, unavailable-model error, endpoint, schema, and a production image that carries and executes the approved model. What remains V2 is everything around it: persisted predictions, monitoring, drift detection and retraining |
+| A **served** trained forecast | *Done in Stages 6.6 and 6.7* — loading path, unavailable-model error, endpoint, schema, and a production image that carries and executes the approved model. Persisted predictions and the observability foundation are now **Stage 6.8**, *defined and not started*. Drift detection, accuracy measurement and retraining remain backlog, and each needs Stage 6.8's data before it can begin |
 | Richer feature pipeline | the 7-day horizon admits 9 of 15 contract columns; a horizon-matched on-the-books and rolling-window feature set does not exist |
 | Review sentiment | polarity and aspect breakdown over review text |
 | Room-image classification | class set fixed before training |
