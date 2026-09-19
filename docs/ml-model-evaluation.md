@@ -45,6 +45,13 @@ else, and `.dockerignore` excludes `ml/` from the build context entirely — so 
 provably cannot reach the running API. `backend/requirements.txt` says the same thing in
 words: *"ML libraries live in ml/requirements-ml.txt so the API image stays small."*
 
+> *Stage 6.7 update.* That separation held for four stages and was the right default; it is no
+> longer the current state. The production image now installs scikit-learn and carries an
+> allowlist of thirteen `ml/` modules plus the approved artifact, because Stage 6.6's serving
+> endpoint has to execute somewhere. What has not changed is the reasoning above about where
+> *training* code belongs: no dataset and none of the pipeline entry points ship. See
+> [ml-serving.md](ml-serving.md).
+
 The dependency runs one way: `ml/` imports the pure Stage 6.1 contract from `app.ml.dataset`.
 Nothing in `backend/app` imports anything from `ml/`, and a parametrised test asserts that no
 module under `backend/app` imports sklearn, NumPy, SciPy, joblib, pandas, PyTorch or

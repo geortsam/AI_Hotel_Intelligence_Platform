@@ -117,6 +117,30 @@ every direct dependency on each run, and the full suite runs against whatever wa
 
 `--require-hashes` is not used, for the same reason.
 
+### Stage 6.7: the model, and six more transitive packages
+
+The backend image now carries a trained model and the runtime that executes it. Three things
+about that are worth stating here rather than in the ML documentation.
+
+**One new direct pin.** `scikit-learn==1.9.1`, the same version `ml/requirements-ml.txt` has
+carried since Stage 6.3, so the model is served by the library it was fitted with. It widens the
+transitive gap above by six packages — NumPy, SciPy, joblib, threadpoolctl, narwhals and
+cloudpickle — none of which is declared, for the reason the section above gives. The image grows
+by roughly 150 MB, and the `image-reproducibility` job prints its size on every run.
+
+**The model is regenerated, not copied.** A disposable `artifact-builder` stage refits it from
+the committed dataset and refuses to produce an image unless twenty approved values match. Two
+builds of one commit on one runner therefore produce byte-identical payloads: the fit is seeded
+and the thread count is the same. Across *machines* the payload bytes may differ while the model
+is identical — the reason is measured and written up in
+[../ml-production-runtime.md](../ml-production-runtime.md) §1, and it is why the model's
+identity is its canonical digest rather than its payload hash.
+
+**The shipped metadata carries no wall clock.** `artifact.json` in the image is the approved
+metadata with the payload digest and byte count replaced, plus a `production_build` block. A
+timestamp there would make two builds of one commit differ and fail the experiment in §5; a test
+forbids one.
+
 ### The one thing the experiment caught
 
 The first run of the `image-reproducibility` job (35221886583) failed, and it was right to.
@@ -199,6 +223,15 @@ Both contexts are checked against the real tree before anything is built:
   previously ignored by neither.
 - Every dotenv form is excluded at every depth, with `.env.example` re-admitted at the root only.
 - `.git` is excluded, so no git metadata reaches an image.
+- **Pickles cannot enter, at any depth** (Stage 6.7). `ml/` is no longer excluded wholesale —
+  the build needs the committed dataset to regenerate the model — so a developer's working tree,
+  which usually holds `ml/models/demand_baseline_v1/model.pkl`, would otherwise sweep an
+  unverified payload into the context. `**/*.pkl` closes that. `ml/data/raw`, `ml/data/external`
+  and `ml/notebooks` are excluded too: no stage reads them.
+- The context is not the image. `ml/data/processed/demand_daily_v1.csv` is *in the context*,
+  because the disposable build stage fits the model from it, and is *not in the image*: the
+  runtime stage copies thirteen `ml/` modules and two artifact files by name, and a CI step
+  audits the built image for any `.csv` at all.
 
 ## 7. What this does not claim
 

@@ -1,7 +1,11 @@
-# Offline ML dependencies. Installed by CI's quality-gates job (so that Python 3.14
-# compatibility is verified rather than assumed) and NOT by the API image: the backend
-# Dockerfile copies only `backend/app`, and `.dockerignore` excludes `ml/` from its build
-# context entirely.
+# Offline ML dependencies. Installed by CI's quality-gates job, so that Python 3.14
+# compatibility is verified rather than assumed.
+#
+# Stage 6.7 note: this is no longer the only place scikit-learn is declared. The production
+# image needs it too -- to deserialise the approved artifact and call `predict` -- so
+# `backend/requirements.txt` now carries the SAME pin, and a test asserts the two agree. This
+# file remains the offline declaration: it is what the evaluation, validation and artifact
+# pipelines install, and it is not what the image installs.
 #
 #   pip install -r ml/requirements-ml.txt
 #

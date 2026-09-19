@@ -4,13 +4,20 @@ Stage 6.3 fitted a model 54 times and kept none of them. Stage 6.5 fits it **onc
 dataset's declared training partition, and keeps that one -- so that a later stage has something
 to load rather than something to re-derive.
 
-## What this is not
+## What this is, and what it still is not
 
-It is not a deployment artifact. It is not loaded by the API, it is not reachable over HTTP, and
-nothing in ``backend/`` imports this module -- a test asserts it. The metadata says so in
-machine-readable form: ``production_ready``, ``production_accuracy_established``,
-``cross_hotel_generalisation_established`` and ``serving_enabled`` are all ``false``, and tests
-require them to stay that way.
+Stage 6.5 wrote that this was not a deployment artifact, that the API did not load it and that
+nothing in ``backend/`` imported this module. The first two of those changed at Stage 6.6 and
+the third with them: ``app.ml.artifact_store`` imports :func:`load_artifact` and
+:func:`probe_predictions` from here, and since Stage 6.7 the production image carries this
+module and a regenerated payload beside it.
+
+What has **not** changed is every claim the metadata makes. ``production_ready``,
+``production_accuracy_established``, ``cross_hotel_generalisation_established`` and
+``serving_enabled`` are all still ``false``, tests still require them to stay that way, and
+:func:`load_artifact` still refuses an artifact that claims otherwise. Being served is not an
+accuracy claim, and the approval to serve lives in reviewed application code rather than in this
+file -- see ``docs/ml-serving.md``.
 
 ## Format: the standard library, deliberately
 

@@ -20,6 +20,32 @@ SQLAlchemy==2.0.52
 psycopg[binary]==3.3.4
 alembic==1.19.1
 
+# Stage 6.7: the production ML runtime.
+#
+# Until this stage the API image carried no ML dependency at all, and the demand endpoint that
+# Stage 6.6 added answered 503 inside it for exactly that reason. This is the one package that
+# changes, and it is the same pin `ml/requirements-ml.txt` has carried since Stage 6.3, so the
+# model is served by the library version it was fitted with rather than a nearby one.
+#
+# What it is needed for, precisely: deserialising the artifact (the pickle names
+# sklearn.ensemble._hist_gradient_boosting classes, so the module must be importable before the
+# object exists) and calling `predict`. Nothing here trains.
+#
+# NumPy and SciPy are NOT declared separately, and that is deliberate. They arrive as
+# scikit-learn's own requirements. Two shipped modules -- ml/artifact.py and ml/manifests.py --
+# do import them by name, but only to read `__version__` into build metadata; no array or
+# linear-algebra call in backend/app or on the serving path touches either. Pinning them beside
+# scikit-learn would assert a combination scikit-learn itself has not been tested against, and
+# letting its own metadata resolve them is the safer pin.
+#
+# pandas is required nowhere at inference time and is not installed. It was declared here until
+# Stage 6.3, imported by nothing, and removed then.
+#
+# The cost is real and is recorded rather than hidden: scikit-learn brings NumPy, SciPy, joblib,
+# threadpoolctl, narwhals and cloudpickle, and the image grows by roughly 150 MB. See
+# docs/deployment/reproducibility.md.
+scikit-learn==1.9.1
+
 # Stage 4.1: authentication.
 #   Argon2id is the Password Hashing Competition winner and OWASP's first recommendation;
 #   argon2-cffi's PasswordHasher defaults (t=3, m=64 MiB, p=4) are the tuned parameters.

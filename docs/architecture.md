@@ -93,8 +93,14 @@ the two health probes.
 **Since V1:** Stage 6.6 added one read-only, hotel-scoped, authenticated route — the demand
 model's serving boundary — taking the surface to **83 routes, 78 of which require
 authentication**. It is the only place the application reaches the offline `ml/` package,
-and it does so through a single module behind a lazy import; the API image and its
-dependencies are unchanged. See [ml-serving.md](ml-serving.md).
+and it does so through a single module behind a lazy import. See [ml-serving.md](ml-serving.md).
+
+Stage 6.7 then made that route executable in the deployed image: `backend/Dockerfile` became a
+three-stage build whose middle stage regenerates the approved model from the committed dataset
+and refuses to produce an image unless it matches the Stage 6.5 identity. The image gained one
+dependency (`scikit-learn`), thirteen `ml/` modules and the artifact — and no dataset, no
+notebook and no training entry point. The HTTP surface did not change.
+See [ml-production-runtime.md](ml-production-runtime.md).
 
 ---
 

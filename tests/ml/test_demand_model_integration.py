@@ -343,11 +343,34 @@ def test_no_forbidden_library_appears_anywhere_in_the_repository(library: str) -
             assert not pattern.search(source.read_text(encoding="utf-8")), f"{source}: {library}"
 
 
-def test_the_backend_requirements_declare_no_ml_library() -> None:
-    for name in ("requirements.txt", "requirements-dev.txt"):
-        text = (REPOSITORY_ROOT / "backend" / name).read_text(encoding="utf-8").lower()
-        for library in ("scikit-learn", "sklearn", "numpy", "scipy", "pandas", "torch"):
-            assert library not in text, f"{name}: {library}"
+def test_the_backend_requirements_declare_exactly_one_ml_library() -> None:
+    """Stage 6.3 asserted none. Stage 6.7 adds one, and this says which and no more.
+
+    The production image has to deserialise the approved artifact and call `predict`, which
+    needs scikit-learn importable. Nothing else was added: NumPy, SciPy, joblib and
+    threadpoolctl arrive as its own requirements rather than as declarations here, and pandas
+    is installed nowhere.
+
+    Comments are stripped first. requirements.txt DISCUSSES pandas at length -- to say it is not
+    installed -- and a substring search would read that as an installation.
+    """
+
+    def declared(name: str) -> list[str]:
+        text = (REPOSITORY_ROOT / "backend" / name).read_text(encoding="utf-8")
+        return [
+            line.strip().lower()
+            for line in text.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+
+    runtime = declared("requirements.txt")
+    assert [line for line in runtime if line.startswith("scikit-learn")] == ["scikit-learn==1.9.1"]
+    for library in ("sklearn", "numpy", "scipy", "pandas", "torch"):
+        assert not [line for line in runtime if line.startswith(library)], (library, runtime)
+
+    development = declared("requirements-dev.txt")
+    for library in ("scikit-learn", "sklearn", "numpy", "scipy", "pandas", "torch"):
+        assert not [line for line in development if line.startswith(library)], library
 
 
 def test_scikit_learn_is_declared_once_and_pinned() -> None:

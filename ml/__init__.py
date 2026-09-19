@@ -1,13 +1,19 @@
 """Offline machine-learning work: data acquisition, preparation and (later) training.
 
-Deliberately OUTSIDE ``backend/``. Nothing here is imported by the application, and the
-repository's ``.dockerignore`` excludes this whole directory from the backend build context, so
-neither the code below nor the data it writes can reach the API image.
+Deliberately OUTSIDE ``backend/``, and for most of this project's life nothing here could
+reach the API image at all. Two stages changed that, and the change is narrow in both cases:
 
-The dependency runs one way only: this package imports :mod:`app.ml.dataset` -- the pure Stage
+* **Stage 6.6** let the application import this package through exactly one module,
+  ``backend/app/ml/artifact_store.py``, which loads the approved artifact behind a lazy import.
+  A test enumerates that module as the only importer.
+* **Stage 6.7** let ``ml/`` into the backend build context, because the production image
+  regenerates the approved model from the committed dataset in a disposable build stage. The
+  *image* still receives only an explicit allowlist: thirteen modules and two artifact files.
+  No dataset, no notebook, and none of the five pipeline entry points ship.
+
+The dependency still runs one way: this package imports :mod:`app.ml.dataset` -- the pure Stage
 6.1 contract -- so that an offline dataset is held to the same rules as one built from the
-production database. It imports nothing from the web layer, and the web layer imports nothing
-from here.
+production database. It imports nothing from the web layer.
 """
 
 from __future__ import annotations

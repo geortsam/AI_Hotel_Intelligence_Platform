@@ -51,9 +51,14 @@ of its own: it imports `build_rows`, `validate_rows`, `split_chronologically` an
 therefore consumes the same columns, in the same order, with the same cutoff semantics as a
 model served against the production database would.
 
-Nothing runs in the other direction. `ml/` is excluded from the backend Docker build context by
-`.dockerignore`, and the backend image copies only `backend/app`, `alembic.ini` and
-`database/migrations` — so neither this code nor the data it writes can reach the API image.
+Nothing runs in the other direction: this code reads the application's feature contract and the
+application never reads this code's pipelines.
+
+As of Stage 6.7 the *build context* does reach `ml/` — the production image regenerates the
+approved model from the committed dataset in a disposable build stage. **The data it writes
+still cannot reach the API image.** `ml/data/` is copied into that throwaway stage and into
+nothing else; the runtime stage takes thirteen modules and two artifact files by name, and a CI
+step audits the built image to confirm no dataset is in it.
 
 **The external dataset is not the production hotel's history and is never presented as such.**
 Offline hotel identity is a deterministic UUID **version 5** in this pipeline's own namespace;

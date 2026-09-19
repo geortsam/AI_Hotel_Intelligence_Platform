@@ -22,9 +22,37 @@
 # that ship beside the code the API then runs.
 #
 # Everything else the root context would pull in -- .git, .venv, node_modules, frontend/,
-# tests/, docs/, scripts/, ml/, every cache and every .env -- is excluded by the root
-# .dockerignore. Note that backend/.dockerignore is no longer consulted: Docker reads only the
-# .dockerignore found at the context root.
+# tests/, docs/, scripts/, every cache and every .env -- is excluded by the root .dockerignore.
+# Note that backend/.dockerignore is no longer consulted: Docker reads only the .dockerignore
+# found at the context root.
+#
+# ## Three stages, and what each one is for (Stage 6.7)
+#
+#   base              the interpreter and the pinned runtime dependencies. Nothing else.
+#   artifact-builder  DISPOSABLE. Holds the training dataset and the whole offline `ml/`
+#                     package, refits the approved demand model from them, and verifies the
+#                     result against the Stage 6.5 record. Its filesystem is thrown away.
+#   runtime           what ships. Copies the application, the migrations, an explicit
+#                     allowlist of thirteen `ml/` modules, and the two artifact files the
+#                     builder produced -- and nothing else.
+#
+# The training dataset therefore exists in the build, and does not exist in the image. That is
+# the whole reason the middle stage is here rather than the work being done in `runtime`.
+#
+# ## Why the model is rebuilt rather than copied in
+#
+# The payload is not committed and must not be: .gitignore has excluded model weights since
+# Stage 1, and a pickle is arbitrary code on load. So the image regenerates it from the
+# committed dataset and the pinned configuration, and `ml/pipelines/build_production_artifact.py`
+# refuses to let the build continue unless twenty approved values match -- versions, dataset
+# checksum, feature columns and their order, horizon, estimator configuration and its checksum,
+# claims, training extent, the probe predictions and the canonical model digest.
+#
+# What it deliberately does NOT require is that the payload hash to the byte digest Stage 6.5
+# recorded. That digest changes with the OpenMP thread count of whatever machine does the fit
+# -- five thread counts, five digests, same 711,530 bytes, same canonical digest, measured --
+# so requiring it would be requiring a CPU topology rather than a model. The canonical model
+# digest is the identity that travels; see docs/ml-serving.md.
 # ## Pinned by DIGEST, and to the interpreter this project actually tests
 #
 # Two changes in one line, and they are really the same change.
@@ -48,7 +76,7 @@
 # and arm64 alike -- and the image's own config blob, fetched back BY that digest, reports
 # PYTHON_VERSION=3.14.7. Pinning it also pins the pip and setuptools the image ships, so neither
 # needs a pin of its own. docs/deployment/reproducibility.md records how to re-resolve it.
-FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
+FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6 AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -118,21 +146,77 @@ RUN PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ROOT_USER_ACTION=ignore \
  && python -m compileall -q --invalidation-mode unchecked-hash \
         "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
 
-# The three things the image contains, named one by one rather than swept in with `COPY . .`,
-# so the contents of the image are a statement in this file rather than a consequence of
-# whatever the context happened to hold on the day it was built.
+
+# =================================================================================================
+# artifact-builder -- disposable. Nothing below this line reaches the shipped image except the
+# two files explicitly copied out of it.
+# =================================================================================================
+FROM base AS artifact-builder
+
+# The offline package imports `app.ml.dataset` -- the pure Stage 6.1 feature contract -- so the
+# application has to be importable here too. It is the same source the runtime stage copies.
+COPY backend/app ./app
+
+# The whole offline package AND the committed training dataset, which is the one place in this
+# repository they are allowed to be together. `.dockerignore` keeps the raw and external data
+# out of the context entirely, and keeps every *.pkl out, so this cannot pick up a payload that
+# somebody happened to have built on their own machine.
+COPY ml ./ml
+
+# The build fails here if the regenerated model is not the approved one. Twenty values are
+# compared and every mismatch is fatal; there is no flag that turns one off. The output is the
+# payload plus the metadata that describes THIS payload -- same approved identity, its own byte
+# digest -- which is what lets the runtime loader verify the pair before deserialising it.
+RUN python -m ml.pipelines.build_production_artifact --out /artifact \
+ && test -s /artifact/model.pkl \
+ && test -s /artifact/artifact.json
+
+
+# =================================================================================================
+# runtime -- what ships.
+# =================================================================================================
+FROM base AS runtime
+
+# The things the image contains, named one by one rather than swept in with `COPY . .`, so the
+# contents of the image are a statement in this file rather than a consequence of whatever the
+# context happened to hold on the day it was built.
 COPY backend/app ./app
 COPY alembic.ini ./
 COPY database/migrations ./database/migrations
 
+# The offline package, as an explicit allowlist rather than `COPY ml ./ml`.
+#
+# These thirteen modules are exactly the import closure of `ml.artifact` and `ml.inference` --
+# the two the serving boundary reaches for -- computed rather than guessed, and asserted by
+# tests/backend/test_production_packaging.py so it cannot drift. What is NOT here is the five
+# pipeline entry points: build_demand_dataset, build_demand_artifact, evaluate_demand_model,
+# validate_demand_model and build_production_artifact. Those are the commands that fit, evaluate
+# and accept a model, and the image that serves one has no business carrying them.
+#
+# `ml/pipelines/offline_demand.py` does ship, and it is the awkward one: it is dataset-building
+# code, and `ml.loading` imports a single helper from it. It is here because the import graph
+# says so, not because inference uses it -- and it can build nothing, because no dataset ships.
+COPY ml/__init__.py ml/artifact.py ml/evaluation.py ml/inference.py ml/loading.py \
+     ml/manifests.py ml/metrics.py ml/models.py ml/policy.py ml/registry.py \
+     ml/validation.py ./ml/
+COPY ml/pipelines/__init__.py ml/pipelines/offline_demand.py ./ml/pipelines/
+
+# The model, out of the disposable stage and into the one place `ml.artifact` looks for it:
+# DEFAULT_ARTIFACT_DIRECTORY resolves to <ml package>/models/<model version>, so no environment
+# variable, no setting and no code change is needed to point the runtime at it -- and there is
+# still no path a request can name.
+COPY --from=artifact-builder /artifact/model.pkl /artifact/artifact.json \
+     ./ml/models/demand_baseline_v1/
+
 # Run as a non-root user rather than root.
 #
 # Created AFTER the copies, so every file above is owned by root and world-readable but not
-# writable by this user: the process cannot rewrite its own source or its migration scripts.
-# That is enough for both commands -- `alembic upgrade` reads the revision files and writes
-# only to the database -- and PYTHONDONTWRITEBYTECODE=1 above means Python will not try to
-# leave a __pycache__ beside them either, which is the one thing that would otherwise want a
-# writable directory here.
+# writable by this user: the process cannot rewrite its own source, its migration scripts or the
+# model it serves. That last one matters more than it used to -- an artifact the process could
+# rewrite is an artifact an exploit could replace. That is enough for both commands --
+# `alembic upgrade` reads the revision files and writes only to the database -- and
+# PYTHONDONTWRITEBYTECODE=1 above means Python will not try to leave a __pycache__ beside them
+# either, which is the one thing that would otherwise want a writable directory here.
 RUN useradd --create-home --uid 1000 appuser
 USER appuser
 

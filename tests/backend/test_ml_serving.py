@@ -612,12 +612,24 @@ def test_the_application_package_imports_no_ml_library_directly(library: str) ->
         assert not pattern.search(source.read_text(encoding="utf-8")), f"{source}: {library}"
 
 
-def test_the_backend_requirements_still_declare_no_ml_library() -> None:
-    """Unchanged by this stage, deliberately. The API image is what it was."""
-    for name in ("requirements.txt", "requirements-dev.txt"):
-        text = (REPOSITORY_ROOT / "backend" / name).read_text(encoding="utf-8").lower()
-        for library in ("scikit-learn", "sklearn", "numpy", "scipy", "pandas", "torch", "joblib"):
-            assert library not in text, f"{name}: {library}"
+def test_the_backend_requirements_declare_only_the_serving_dependency() -> None:
+    """Stage 6.6 left this at zero; Stage 6.7 added scikit-learn so the image can serve.
+
+    The full packaging contract lives in tests/backend/test_production_packaging.py. What this
+    keeps is the narrow claim the serving boundary depends on: one ML package, pinned, and no
+    second one arriving alongside it.
+    """
+    declared = [
+        line.strip().lower()
+        for line in (REPOSITORY_ROOT / "backend" / "requirements.txt")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+    assert [line for line in declared if line.startswith("scikit-learn")] == ["scikit-learn==1.9.1"]
+    for library in ("pandas", "torch", "tensorflow", "xgboost", "lightgbm"):
+        assert not [line for line in declared if line.startswith(library)], library
 
 
 @pytest.mark.parametrize(

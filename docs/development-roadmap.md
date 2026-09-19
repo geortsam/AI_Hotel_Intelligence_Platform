@@ -259,6 +259,43 @@ monitoring, drift detection or any frontend surface.
 
 Detail: **[ml-serving.md](ml-serving.md)**.
 
+## Stage 6.7 — Production ML runtime and artifact delivery · *done*
+
+Stage 6.6 built the endpoint; inside the production image it answered 503, because the image had
+neither an ML runtime nor a model. This closes that, and **changes nothing about the model**.
+
+**The artifact is regenerated, not shipped.** The payload is not committed and must not be, so
+`backend/Dockerfile` gained a disposable `artifact-builder` stage that refits the approved model
+from the committed dataset and **fails the build unless twenty approved values match** —
+versions, dataset checksum, feature columns and order, horizon, estimator configuration and its
+checksum, claims, training extent, the probe predictions and the canonical model digest.
+Seventeen tampering cases are tested, one per value.
+
+**The identity is the canonical model digest, and that is a measured decision rather than a
+convenience.** Refitting this model produces a different payload SHA-256 for every OpenMP thread
+count — 1, 2, 4, 8 and 12 threads give five digests, all 711,530 bytes, all with the same
+canonical digest `436bf6b3…`. The Stage 6.5 value was produced at twelve threads, this machine's
+physical core count, which `artifact.json` never recorded. So the payload hash identifies a CPU
+topology as much as a model; it is recorded as a build fact and the digest is enforced. Nothing
+was relaxed: the payload is still verified against its own metadata before deserialisation, and
+every Stage 6.6 runtime check still runs.
+
+**One dependency** — `scikit-learn==1.9.1`, the pin the offline file already used — and roughly
+150 MB. The image carries thirteen `ml/` modules, computed as the import closure of
+`ml.artifact` and `ml.inference` and asserted against the Dockerfile, plus the artifact. It
+carries **no dataset, no notebook and none of the five pipeline entry points**.
+
+CI proves it in the real container against real PostgreSQL: a 200 with a real prediction through
+nginx and TLS, byte-identical repeats, 8 concurrent requests agreeing, 401 / 404 / 404 / 422,
+the served number equal to what the artifact computes directly, the model loaded exactly once
+per process, the model loading with `--network none` and sockets disabled, no `.csv` anywhere in
+the image, and a throwaway image with a truncated payload answering a clean 503.
+
+**Still not established:** production accuracy, cross-hotel generalisation, or any improvement
+in the model's poor scale behaviour for small hotels. Deployment changed where it runs.
+
+Detail: **[ml-production-runtime.md](ml-production-runtime.md)**.
+
 ---
 
 # V2 — FUTURE / NOT IMPLEMENTED
@@ -269,7 +306,7 @@ Detail: **[ml-serving.md](ml-serving.md)**.
 
 | Item | Note |
 |---|---|
-| A **served** trained forecast | *Done in Stage 6.6* — loading path, unavailable-model error, endpoint and schema all exist. What remains V2 is everything around it: persisted predictions, monitoring, drift detection, and a runtime that actually ships the model |
+| A **served** trained forecast | *Done in Stages 6.6 and 6.7* — loading path, unavailable-model error, endpoint, schema, and a production image that carries and executes the approved model. What remains V2 is everything around it: persisted predictions, monitoring, drift detection and retraining |
 | Richer feature pipeline | the 7-day horizon admits 9 of 15 contract columns; a horizon-matched on-the-books and rolling-window feature set does not exist |
 | Review sentiment | polarity and aspect breakdown over review text |
 | Room-image classification | class set fixed before training |

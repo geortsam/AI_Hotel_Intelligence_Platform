@@ -388,12 +388,12 @@ Stated plainly, because the endpoint's existence is not a claim that the number 
    (`test_the_model_cannot_tell_small_hotels_apart`) pins the behaviour so it cannot be
    forgotten. **Cross-hotel generalisation is explicitly not established**, and this is what
    that sentence means in practice.
-3. **The shipped API image cannot serve this endpoint.** `.dockerignore` excludes `ml/` from the
-   build context, `backend/requirements.txt` names no ML package, and the payload is never
-   committed. In that image the endpoint answers `503`. That is the honest state: enabling it is
-   a deployment decision — shipping the runtime and a verified artifact — and this stage is not
-   authorised to take one. The endpoint is fully exercised where both are present, which is
-   development and CI.
+3. **~~The shipped API image cannot serve this endpoint.~~ Resolved by Stage 6.7.** The
+   production image now installs scikit-learn, carries an allowlist of thirteen `ml/` modules,
+   and regenerates the approved model in a disposable build stage that refuses to produce an
+   image unless twenty approved values match. The endpoint returns a real prediction in the
+   production container, and CI proves it against real PostgreSQL. A missing or corrupted
+   artifact still answers `503`. See [ml-production-runtime.md](ml-production-runtime.md).
 4. **Twenty-eight days of recorded occupancy are required**, specifically on *T*−7, *T*−14 and
    *T*−28. A new property, or one with a gap, is refused rather than guessed at.
 5. **One hotel and one date per request.** There is no batch route and no date range, for the

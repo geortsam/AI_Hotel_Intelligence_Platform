@@ -63,15 +63,42 @@ htmlcov
 
 # --- not inputs to the API image --------------------------------------------
 #
-# The frontend builds from its own context. tests/, docs/, scripts/ and the top-level ml/ are
-# not imported by backend/app -- verified rather than assumed: app/ imports only the standard
-# library plus the declared third-party packages, and the one ML module it does use lives at
-# backend/app/ml/timeseries.py, inside the application package.
+# The frontend builds from its own context. tests/, docs/ and scripts/ are not imported by
+# backend/app -- verified rather than assumed: app/ imports only the standard library, the
+# declared third-party packages, and (since Stage 6.6) the offline `ml` package through exactly
+# one module, backend/app/ml/artifact_store.py.
 frontend
 tests
 docs
 scripts
-ml
+
+# --- the offline ML package, narrowed rather than excluded (Stage 6.7) ------
+#
+# `ml` was excluded outright until Stage 6.7. It no longer can be: backend/Dockerfile's
+# disposable `artifact-builder` stage regenerates the approved model from the committed dataset,
+# which means the dataset and the offline package both have to be reachable IN THE CONTEXT.
+#
+# The context is not the image. The builder stage is thrown away, and the `runtime` stage copies
+# an explicit allowlist of thirteen modules plus the two artifact files -- so nothing below is
+# what keeps the dataset out of what ships. That is the Dockerfile's job, and a CI step audits
+# the built image for it.
+#
+# What IS excluded here is everything no stage has any use for:
+#
+#   ml/data/raw, ml/data/external   17 MB of source data the processed CSV was derived from.
+#                                   Nothing in the build reads them.
+#   ml/notebooks                    exploratory work; never an input to anything.
+#   **/*.pkl                        the safety line. The payload is generated, never committed,
+#                                   and a developer's working tree usually HAS one at
+#                                   ml/models/demand_baseline_v1/model.pkl. Without this, a
+#                                   local `docker build` would sweep that file into the context
+#                                   and the image could end up carrying a payload nobody
+#                                   verified. Excluded at every depth, so no future COPY can
+#                                   reach one either.
+ml/data/raw
+ml/data/external
+ml/notebooks
+**/*.pkl
 
 # database/init/ is bind-mounted into the db service at runtime and is not part of this image.
 # database/migrations/ IS part of it, and is deliberately not matched here.
