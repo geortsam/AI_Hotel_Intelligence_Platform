@@ -1257,376 +1257,6 @@ jobs:
           fi
           echo "  OK   /api/ is proxied, not swallowed by try_files"
 
-      - name: Serve a real prediction from the production stack
-        run: |
-          set -euo pipefail
-
-          # Stage 6.7's reason for existing. Until this stage the demand endpoint answered 503
-          # inside the production image, because the image had neither the ML runtime nor the
-          # model. This drives it through nginx and TLS, exactly as a client would, against the
-          # real PostgreSQL this job started.
-          #
-          # The history is the minimum the model requires and no more: occupancy on the three
-          # days its lags read -- target-7, target-14 and target-28 -- created through the real
-          # booking endpoint, one room for one night each. Everything else about those weeks is
-          # deliberately empty, which is also what makes the 422 case below meaningful.
-          base="https://127.0.0.1:${HTTPS_PORT}"
-          CA="$CERT_DIR/fullchain.pem"
-          TARGET=2026-12-01
-
-          api() { curl -sS --cacert "$CA" --max-time 20 "$@"; }
-          json() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$@"; }
-
-          echo "--- an owner, a hotel, a room and three nights ---"
-          api -o "$RUNNER_TEMP/ml-reg.json" -X POST "$base/api/v1/auth/register" \
-            -H 'Content-Type: application/json' \
-            -d '{"email":"ml-probe@example.test","full_name":"ML Probe","password":"ci-only-not-a-real-password"}' > /dev/null
-          api -o "$RUNNER_TEMP/ml-login.json" -X POST "$base/api/v1/auth/login" \
-            -H 'Content-Type: application/json' \
-            -d '{"email":"ml-probe@example.test","password":"ci-only-not-a-real-password"}' > /dev/null
-          token="$(json "$RUNNER_TEMP/ml-login.json" access_token)"
-          echo "::add-mask::$token"
-          rm -f "$RUNNER_TEMP/ml-login.json"
-          auth="Authorization: Bearer $token"
-
-          api -o "$RUNNER_TEMP/ml-hotel.json" -X POST "$base/api/v1/hotels" -H "$auth" \
-            -H 'Content-Type: application/json' \
-            -d '{"name":"ML Probe Hotel","slug":"ml-probe-hotel","address_line1":"1 Test Street","city":"Testville","country_code":"GR","currency":"EUR"}' > /dev/null
-          hotel="$(json "$RUNNER_TEMP/ml-hotel.json" public_id)"
-          echo "  hotel $hotel"
-
-          api -X POST "$base/api/v1/hotels/$hotel/room-types" -H "$auth" \
-            -H 'Content-Type: application/json' \
-            -d '{"code":"DLX","name":"Deluxe","max_occupancy":3,"standard_occupancy":2,"bed_count":1,"base_price":"100.00","currency":"EUR"}' -o /dev/null
-          api -X POST "$base/api/v1/hotels/$hotel/room-types/DLX/rooms" -H "$auth" \
-            -H 'Content-Type: application/json' -d '{"room_number":"101"}' -o /dev/null
-          api -o "$RUNNER_TEMP/ml-guest.json" -X POST "$base/api/v1/hotels/$hotel/guests" -H "$auth" \
-            -H 'Content-Type: application/json' -d '{"first_name":"Ada","last_name":"Lovelace"}' > /dev/null
-          guest="$(json "$RUNNER_TEMP/ml-guest.json" public_id)"
-
-          for night in 2026-11-03 2026-11-17 2026-11-24; do
-            out="$(python3 -c 'import datetime,sys; print(datetime.date.fromisoformat(sys.argv[1]) + datetime.timedelta(days=1))' "$night")"
-            code="$(api -o "$RUNNER_TEMP/ml-booking.json" -w '%{http_code}' \
-              -X POST "$base/api/v1/hotels/$hotel/bookings" -H "$auth" \
-              -H 'Content-Type: application/json' \
-              -d "{\"guest_public_id\":\"$guest\",\"reference\":\"BK-ML-${night//-/}\",\"check_in_date\":\"$night\",\"check_out_date\":\"$out\",\"status\":\"confirmed\",\"total_amount\":\"100.00\",\"currency\":\"EUR\",\"rooms\":[{\"room_number\":\"101\",\"nights\":[{\"stay_date\":\"$night\"}]}]}")"
-            echo "  booking for $night -> $code"
-            [ "$code" = "201" ] || { echo "::error::booking for $night returned $code"; cat "$RUNNER_TEMP/ml-booking.json"; exit 1; }
-          done
-
-          echo
-          echo "--- 1. an authenticated member gets a real prediction ---"
-          url="$base/api/v1/hotels/$hotel/ml/demand-forecast?target_date=$TARGET"
-          code="$(api -o "$RUNNER_TEMP/ml-pred.json" -w '%{http_code}' -H "$auth" "$url")"
-          echo "  GET .../ml/demand-forecast -> $code"
-          if [ "$code" != "200" ]; then
-            echo "::error::the production stack did not serve a prediction ($code)"
-            cat "$RUNNER_TEMP/ml-pred.json"
-            exit 1
-          fi
-          python3 - "$RUNNER_TEMP/ml-pred.json" <<'PY'
-          import json, sys
-          body = json.load(open(sys.argv[1]))
-          print("  body:", json.dumps(body, indent=2)[:700])
-          assert isinstance(body["predicted_room_nights"], float), body
-          assert body["forecast_horizon_days"] == 7, body
-          assert body["target_date"] == "2026-12-01", body
-          assert body["cutoff_date"] == "2026-11-24", body
-          assert body["prediction_cutoff"] == "2026-11-25T00:00:00Z", body
-          assert body["model"]["model_version"] == "demand_baseline_v1", body
-          assert body["model"]["feature_version"] == "v1", body
-          assert body["model"]["dataset_version"] == "v1", body
-          assert body["model"]["production_ready"] is False, body
-          assert body["model"]["status"] == "offline_research_candidate", body
-          assert len(body["features_used"]) == 9, body
-          for banned in ("hotel_id", "guest_id", "booking_id", "room_id"):
-              assert banned not in json.dumps(body), banned
-          print("  OK   a real prediction, with its provenance and no internal identifier")
-          PY
-          predicted="$(json "$RUNNER_TEMP/ml-pred.json" predicted_room_nights)"
-          echo "PREDICTED=$predicted" >> "$GITHUB_ENV"
-          echo "ML_HOTEL=$hotel" >> "$GITHUB_ENV"
-
-          echo
-          echo "--- 2. repeated identical requests are byte-identical ---"
-          for n in 1 2 3; do api -o "$RUNNER_TEMP/ml-rep-$n.json" -H "$auth" "$url" > /dev/null; done
-          if ! cmp -s "$RUNNER_TEMP/ml-pred.json" "$RUNNER_TEMP/ml-rep-1.json" \
-            || ! cmp -s "$RUNNER_TEMP/ml-rep-1.json" "$RUNNER_TEMP/ml-rep-2.json" \
-            || ! cmp -s "$RUNNER_TEMP/ml-rep-2.json" "$RUNNER_TEMP/ml-rep-3.json"; then
-            echo "::error::four identical requests did not return identical bodies"
-            exit 1
-          fi
-          echo "  OK   four identical requests, one body"
-
-          echo
-          echo "--- 3. concurrent requests agree ---"
-          for n in $(seq 8); do
-            api -o "$RUNNER_TEMP/ml-conc-$n.json" -H "$auth" "$url" &
-          done
-          wait
-          distinct="$(md5sum "$RUNNER_TEMP"/ml-conc-*.json | awk '{print $1}' | sort -u | wc -l)"
-          echo "  distinct bodies across 8 concurrent requests: $distinct"
-          [ "$distinct" = "1" ] || { echo "::error::concurrent requests disagreed"; exit 1; }
-
-          echo
-          echo "--- 4. an invalid token is 401 ---"
-          code="$(api -o /dev/null -w '%{http_code}' -H "Authorization: Bearer not-a-token" "$url")"
-          echo "  invalid token -> $code"
-          [ "$code" = "401" ] || { echo "::error::expected 401, got $code"; exit 1; }
-
-          echo
-          echo "--- 5. an unknown hotel is 404 ---"
-          unknown="$base/api/v1/hotels/11111111-2222-3333-4444-555555555555/ml/demand-forecast?target_date=$TARGET"
-          code="$(api -o "$RUNNER_TEMP/ml-unknown.json" -w '%{http_code}' -H "$auth" "$unknown")"
-          echo "  unknown hotel -> $code"
-          [ "$code" = "404" ] || { echo "::error::expected 404, got $code"; exit 1; }
-
-          echo
-          echo "--- 6. a non-member gets the same 404, byte for byte ---"
-          api -o /dev/null -X POST "$base/api/v1/auth/register" -H 'Content-Type: application/json' \
-            -d '{"email":"ml-stranger@example.test","full_name":"Stranger","password":"ci-only-not-a-real-password"}'
-          api -o "$RUNNER_TEMP/ml-slogin.json" -X POST "$base/api/v1/auth/login" \
-            -H 'Content-Type: application/json' \
-            -d '{"email":"ml-stranger@example.test","password":"ci-only-not-a-real-password"}' > /dev/null
-          stranger="$(json "$RUNNER_TEMP/ml-slogin.json" access_token)"
-          echo "::add-mask::$stranger"
-          rm -f "$RUNNER_TEMP/ml-slogin.json"
-          code="$(api -o "$RUNNER_TEMP/ml-nonmember.json" -w '%{http_code}' \
-            -H "Authorization: Bearer $stranger" "$url")"
-          echo "  non-member -> $code"
-          [ "$code" = "404" ] || { echo "::error::expected 404, got $code"; exit 1; }
-          cmp -s "$RUNNER_TEMP/ml-nonmember.json" "$RUNNER_TEMP/ml-unknown.json" || {
-            echo "::error::a non-member and an unknown hotel are distinguishable"; exit 1; }
-          echo "  OK   cross-hotel access is indistinguishable from a hotel that does not exist"
-
-          echo
-          echo "--- 7. a hotel without history is 422, not a guess ---"
-          api -o "$RUNNER_TEMP/ml-empty.json" -X POST "$base/api/v1/hotels" -H "$auth" \
-            -H 'Content-Type: application/json' \
-            -d '{"name":"ML Empty Hotel","slug":"ml-empty-hotel","address_line1":"2 Test Street","city":"Testville","country_code":"GR","currency":"EUR"}' > /dev/null
-          empty="$(json "$RUNNER_TEMP/ml-empty.json" public_id)"
-          code="$(api -o "$RUNNER_TEMP/ml-422.json" -w '%{http_code}' -H "$auth" \
-            "$base/api/v1/hotels/$empty/ml/demand-forecast?target_date=$TARGET")"
-          echo "  no history -> $code"
-          [ "$code" = "422" ] || { echo "::error::expected 422, got $code"; exit 1; }
-          python3 - "$RUNNER_TEMP/ml-422.json" <<'PY'
-          import json, sys
-          body = json.load(open(sys.argv[1]))
-          assert body["error"]["code"] == "INSUFFICIENT_HISTORY", body
-          text = json.dumps(body).lower()
-          for leak in ("select ", "psycopg", "sqlalchemy", "sklearn", "traceback", "/app/", "demand_lag"):
-              assert leak not in text, leak
-          print("  OK   a safe domain error:", body["error"]["code"])
-          PY
-
-          echo
-          echo "--- 8. a horizon this model does not forecast is 422 ---"
-          code="$(api -o /dev/null -w '%{http_code}' -H "$auth" "$url&horizon_days=14")"
-          echo "  horizon_days=14 -> $code"
-          [ "$code" = "422" ] || { echo "::error::expected 422, got $code"; exit 1; }
-
-          echo
-          echo "--- 9. request-time cost ---"
-          total=0
-          for n in $(seq 10); do
-            t="$(api -o /dev/null -w '%{time_total}' -H "$auth" "$url")"
-            total="$(python3 -c "print($total + $t)")"
-          done
-          mean="$(python3 -c "print(round($total / 10 * 1000, 1))")"
-          echo "  mean round trip over 10 requests, through nginx and TLS: ${mean} ms"
-          python3 -c "
-          mean = $mean
-          assert mean < 2000, f'{mean} ms per request is not a bounded inference path'
-          print('  OK   bounded')
-          "
-
-      - name: Prove the served number is the approved model's own output
-        run: |
-          set -euo pipefail
-
-          # The endpoint returned A number. This shows it is THE number -- the one the approved
-          # artifact computes for this hotel's history -- by driving the inference contract
-          # directly inside the same image and comparing. The HTTP path and the library path
-          # must not be able to disagree.
-          dc run --rm --no-deps -e PYTHONPATH=/app -e SERVED="$PREDICTED" \
-            --entrypoint python api -c '
-          import datetime as dt, os, uuid
-
-          from app.ml.artifact_store import approved_model, predict_room_nights
-          from app.ml.serving import build_feature_values
-
-          target = dt.date(2026, 12, 1)
-          history = {
-              dt.date(2026, 11, 24): 1,
-              dt.date(2026, 11, 17): 1,
-              dt.date(2026, 11, 3): 1,
-          }
-          features = build_feature_values(history, target)
-          print("  features:", features)
-          direct = predict_room_nights(
-              approved_model(),
-              hotel_public_id=uuid.UUID("11111111-2222-3333-4444-555555555555"),
-              target_date=target,
-              features=features,
-          )
-          served = float(os.environ["SERVED"])
-          print("  served over HTTP :", served)
-          print("  artifact directly:", direct)
-          assert direct == served, (direct, served)
-          print("  OK   the API returns exactly what the approved artifact computes")
-          '
-
-      - name: Prove the production runtime loads the model once and never trains
-        run: |
-          set -euo pipefail
-
-          # A disposable API container on the compose network, logging at INFO so the one line
-          # the artifact store writes when it loads becomes countable. The live stack runs at
-          # WARNING, which is correct for it and useless for this measurement.
-          network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' \
-            "$(dc ps -q api | head -1)")"
-          url="postgresql+psycopg://${POSTGRES_USER}:${PG_PASSWORD}@db:5432/${POSTGRES_DB}"
-          echo "::add-mask::$url"
-
-          probe="hotel-intelligence-ci-${GITHUB_RUN_ID}-mlprobe"
-          docker run -d --name "$probe" --network "$network" \
-            -e DATABASE_URL="$url" -e ENVIRONMENT=production -e SECRET_KEY="$APP_SECRET" \
-            -e LOG_LEVEL=INFO hotel-intelligence-api:local > /dev/null
-
-          for _ in $(seq 45); do
-            if docker exec "$probe" python -c "
-          import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)" \
-              > /dev/null 2>&1; then break; fi
-            sleep 2
-          done
-
-          # Six requests, from inside the container, through the real ASGI stack.
-          docker exec "$probe" python -c "
-          import json, urllib.request, urllib.error
-          token = None
-          def call(path, method='GET', body=None, auth=None):
-              data = json.dumps(body).encode() if body is not None else None
-              request = urllib.request.Request('http://127.0.0.1:8000' + path, data=data, method=method)
-              request.add_header('Content-Type', 'application/json')
-              if auth:
-                  request.add_header('Authorization', 'Bearer ' + auth)
-              try:
-                  with urllib.request.urlopen(request, timeout=10) as response:
-                      return response.status, json.load(response)
-              except urllib.error.HTTPError as error:
-                  return error.code, json.load(error)
-
-          status, body = call('/api/v1/auth/login', 'POST', {'email': 'ml-probe@example.test', 'password': 'ci-only-not-a-real-password'})
-          assert status == 200, (status, body)
-          token = body['access_token']
-          status, hotels = call('/api/v1/hotels', auth=token)
-          hotel = [h for h in hotels['items'] if h['slug'] == 'ml-probe-hotel'][0]['public_id']
-          seen = set()
-          for _ in range(6):
-              status, body = call('/api/v1/hotels/' + hotel + '/ml/demand-forecast?target_date=2026-12-01', auth=token)
-              assert status == 200, (status, body)
-              seen.add(json.dumps(body, sort_keys=True))
-          assert len(seen) == 1, seen
-          print('  six requests, one distinct body')
-          "
-
-          echo "--- how many times the artifact was read ---"
-          loads="$(docker logs "$probe" 2>&1 | grep -c 'Demand model serving loaded' || true)"
-          echo "  'Demand model serving loaded' lines: $loads"
-          [ "$loads" = "1" ] || {
-            echo "::error::the artifact was loaded $loads times for six requests"
-            docker logs --tail 40 "$probe"; docker rm -f "$probe" > /dev/null; exit 1; }
-          echo "  OK   loaded once per process, reused for every request"
-
-          trained="$(docker logs "$probe" 2>&1 | grep -ci 'fitting\|n_iter_\|early stopping' || true)"
-          [ "$trained" = "0" ] || { echo "::error::the runtime logged training activity"; exit 1; }
-          echo "  OK   no training activity in the serving process"
-
-          docker rm -f "$probe" > /dev/null
-
-      - name: Prove a corrupted artifact fails closed
-        run: |
-          set -euo pipefail
-
-          # The production artifact is never touched. This derives a THROWAWAY image from the
-          # built one, truncates the payload inside it, and shows the endpoint answers the safe
-          # 503 rather than serving a model nobody verified.
-          corrupt="hotel-intelligence-ci-${GITHUB_RUN_ID}-corrupt"
-
-          # An EMPTY build context, deliberately. $RUNNER_TEMP holds this job's TLS private key,
-          # and handing that directory to `docker build` would put it in a build context for no
-          # reason at all.
-          ctx="$RUNNER_TEMP/corrupt-context"
-          mkdir -p "$ctx"
-          cat > "$ctx/Dockerfile" <<'DOCKER'
-          FROM hotel-intelligence-api:local
-          USER root
-          RUN head -c 400000 /app/ml/models/demand_baseline_v1/model.pkl > /tmp/truncated \
-           && mv /tmp/truncated /app/ml/models/demand_baseline_v1/model.pkl \
-           && chown root:root /app/ml/models/demand_baseline_v1/model.pkl
-          USER appuser
-          DOCKER
-          docker build -q -f "$ctx/Dockerfile" -t "$corrupt" "$ctx" > /dev/null
-          echo "  built a throwaway image with a truncated payload"
-
-          network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' \
-            "$(dc ps -q api | head -1)")"
-          url="postgresql+psycopg://${POSTGRES_USER}:${PG_PASSWORD}@db:5432/${POSTGRES_DB}"
-          echo "::add-mask::$url"
-
-          docker run -d --name "$corrupt" --network "$network" \
-            -e DATABASE_URL="$url" -e ENVIRONMENT=production -e SECRET_KEY="$APP_SECRET" \
-            -e LOG_LEVEL=WARNING "$corrupt" > /dev/null
-
-          alive=no
-          for _ in $(seq 45); do
-            if docker exec "$corrupt" python -c "
-          import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)" \
-              > /dev/null 2>&1; then alive=yes; break; fi
-            sleep 2
-          done
-          [ "$alive" = yes ] || { echo "::error::the API did not start with a corrupted artifact"; \
-            docker logs --tail 40 "$corrupt"; exit 1; }
-          echo "  OK   the application still STARTS -- a bad model is not a boot failure"
-
-          docker exec "$corrupt" python -c "
-          import json, urllib.request, urllib.error
-          def call(path, method='GET', body=None, auth=None):
-              data = json.dumps(body).encode() if body is not None else None
-              request = urllib.request.Request('http://127.0.0.1:8000' + path, data=data, method=method)
-              request.add_header('Content-Type', 'application/json')
-              if auth:
-                  request.add_header('Authorization', 'Bearer ' + auth)
-              try:
-                  with urllib.request.urlopen(request, timeout=10) as response:
-                      return response.status, json.load(response), dict(response.headers)
-              except urllib.error.HTTPError as error:
-                  return error.code, json.load(error), dict(error.headers)
-
-          status, body, _ = call('/api/v1/auth/login', 'POST', {'email': 'ml-probe@example.test', 'password': 'ci-only-not-a-real-password'})
-          token = body['access_token']
-          status, hotels, _ = call('/api/v1/hotels', auth=token)
-          hotel = [h for h in hotels['items'] if h['slug'] == 'ml-probe-hotel'][0]['public_id']
-
-          status, body, headers = call('/api/v1/hotels/' + hotel + '/ml/demand-forecast?target_date=2026-12-01', auth=token)
-          print('  corrupted artifact ->', status, json.dumps(body))
-          assert status == 503, (status, body)
-          assert body['error']['code'] == 'MODEL_UNAVAILABLE', body
-          text = json.dumps(body).lower()
-          for leak in ('pickle', 'sklearn', 'traceback', '/app/', 'model.pkl', 'sha256', '.py'):
-              assert leak not in text, leak
-          assert 'x-request-id' in {k.lower() for k in headers}, headers
-          print('  OK   503, one fixed sentence, no path, no traceback, request id intact')
-
-          status, body, _ = call('/health', auth=None)
-          assert status == 200, (status, body)
-          print('  OK   the rest of the API is unaffected')
-          "
-
-          docker rm -f "$corrupt" > /dev/null
-          docker image rm -f "$corrupt" > /dev/null
-          echo "  throwaway image and container removed"
-
       - name: Verify secrets do not reach the frontend
         run: |
           set -euo pipefail
@@ -2731,6 +2361,386 @@ jobs:
           fdc down -v --remove-orphans
           rm -f "$override"
           echo "  failgate project and its override removed"
+
+      # --- Stage 6.7 ------------------------------------------------------------------
+      #
+      # The ML endpoint steps run HERE, at the end, rather than beside the other API
+      # checks. They create users, hotels and bookings, and two assertions in the
+      # backup/restore steps above expect the database to hold exactly the one user and
+      # the one membership the backup probe seeds. Running last keeps those proofs
+      # untouched without relaxing either of them.
+      #
+      # The stack is still up: the migration-gate step above runs in a separate compose
+      # project and asserts that this one keeps serving throughout.
+      - name: Serve a real prediction from the production stack
+        run: |
+          set -euo pipefail
+
+          # Stage 6.7's reason for existing. Until this stage the demand endpoint answered 503
+          # inside the production image, because the image had neither the ML runtime nor the
+          # model. This drives it through nginx and TLS, exactly as a client would, against the
+          # real PostgreSQL this job started.
+          #
+          # The history is the minimum the model requires and no more: occupancy on the three
+          # days its lags read -- target-7, target-14 and target-28 -- created through the real
+          # booking endpoint, one room for one night each. Everything else about those weeks is
+          # deliberately empty, which is also what makes the 422 case below meaningful.
+          base="https://127.0.0.1:${HTTPS_PORT}"
+          CA="$CERT_DIR/fullchain.pem"
+          TARGET=2026-12-01
+
+          api() { curl -sS --cacert "$CA" --max-time 20 "$@"; }
+          json() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$@"; }
+
+          echo "--- an owner, a hotel, a room and three nights ---"
+          api -o "$RUNNER_TEMP/ml-reg.json" -X POST "$base/api/v1/auth/register" \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"ml-probe@example.test","full_name":"ML Probe","password":"ci-only-not-a-real-password"}' > /dev/null
+          api -o "$RUNNER_TEMP/ml-login.json" -X POST "$base/api/v1/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"ml-probe@example.test","password":"ci-only-not-a-real-password"}' > /dev/null
+          token="$(json "$RUNNER_TEMP/ml-login.json" access_token)"
+          echo "::add-mask::$token"
+          rm -f "$RUNNER_TEMP/ml-login.json"
+          auth="Authorization: Bearer $token"
+
+          api -o "$RUNNER_TEMP/ml-hotel.json" -X POST "$base/api/v1/hotels" -H "$auth" \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"ML Probe Hotel","slug":"ml-probe-hotel","address_line1":"1 Test Street","city":"Testville","country_code":"GR","currency":"EUR"}' > /dev/null
+          hotel="$(json "$RUNNER_TEMP/ml-hotel.json" public_id)"
+          echo "  hotel $hotel"
+
+          api -X POST "$base/api/v1/hotels/$hotel/room-types" -H "$auth" \
+            -H 'Content-Type: application/json' \
+            -d '{"code":"DLX","name":"Deluxe","max_occupancy":3,"standard_occupancy":2,"bed_count":1,"base_price":"100.00","currency":"EUR"}' -o /dev/null
+          api -X POST "$base/api/v1/hotels/$hotel/room-types/DLX/rooms" -H "$auth" \
+            -H 'Content-Type: application/json' -d '{"room_number":"101"}' -o /dev/null
+          api -o "$RUNNER_TEMP/ml-guest.json" -X POST "$base/api/v1/hotels/$hotel/guests" -H "$auth" \
+            -H 'Content-Type: application/json' -d '{"first_name":"Ada","last_name":"Lovelace"}' > /dev/null
+          guest="$(json "$RUNNER_TEMP/ml-guest.json" public_id)"
+
+          for night in 2026-11-03 2026-11-17 2026-11-24; do
+            out="$(python3 -c 'import datetime,sys; print(datetime.date.fromisoformat(sys.argv[1]) + datetime.timedelta(days=1))' "$night")"
+            code="$(api -o "$RUNNER_TEMP/ml-booking.json" -w '%{http_code}' \
+              -X POST "$base/api/v1/hotels/$hotel/bookings" -H "$auth" \
+              -H 'Content-Type: application/json' \
+              -d "{\"guest_public_id\":\"$guest\",\"reference\":\"BK-ML-${night//-/}\",\"check_in_date\":\"$night\",\"check_out_date\":\"$out\",\"status\":\"confirmed\",\"total_amount\":\"100.00\",\"currency\":\"EUR\",\"rooms\":[{\"room_number\":\"101\",\"nights\":[{\"stay_date\":\"$night\"}]}]}")"
+            echo "  booking for $night -> $code"
+            [ "$code" = "201" ] || { echo "::error::booking for $night returned $code"; cat "$RUNNER_TEMP/ml-booking.json"; exit 1; }
+          done
+
+          echo
+          echo "--- 1. an authenticated member gets a real prediction ---"
+          url="$base/api/v1/hotels/$hotel/ml/demand-forecast?target_date=$TARGET"
+          code="$(api -o "$RUNNER_TEMP/ml-pred.json" -w '%{http_code}' -H "$auth" "$url")"
+          echo "  GET .../ml/demand-forecast -> $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::the production stack did not serve a prediction ($code)"
+            cat "$RUNNER_TEMP/ml-pred.json"
+            exit 1
+          fi
+          python3 - "$RUNNER_TEMP/ml-pred.json" <<'PY'
+          import json, sys
+          body = json.load(open(sys.argv[1]))
+          print("  body:", json.dumps(body, indent=2)[:700])
+          assert isinstance(body["predicted_room_nights"], float), body
+          assert body["forecast_horizon_days"] == 7, body
+          assert body["target_date"] == "2026-12-01", body
+          assert body["cutoff_date"] == "2026-11-24", body
+          assert body["prediction_cutoff"] == "2026-11-25T00:00:00Z", body
+          assert body["model"]["model_version"] == "demand_baseline_v1", body
+          assert body["model"]["feature_version"] == "v1", body
+          assert body["model"]["dataset_version"] == "v1", body
+          assert body["model"]["production_ready"] is False, body
+          assert body["model"]["status"] == "offline_research_candidate", body
+          assert len(body["features_used"]) == 9, body
+          for banned in ("hotel_id", "guest_id", "booking_id", "room_id"):
+              assert banned not in json.dumps(body), banned
+          print("  OK   a real prediction, with its provenance and no internal identifier")
+          PY
+          predicted="$(json "$RUNNER_TEMP/ml-pred.json" predicted_room_nights)"
+          echo "PREDICTED=$predicted" >> "$GITHUB_ENV"
+          echo "ML_HOTEL=$hotel" >> "$GITHUB_ENV"
+
+          echo
+          echo "--- 2. repeated identical requests are byte-identical ---"
+          for n in 1 2 3; do api -o "$RUNNER_TEMP/ml-rep-$n.json" -H "$auth" "$url" > /dev/null; done
+          if ! cmp -s "$RUNNER_TEMP/ml-pred.json" "$RUNNER_TEMP/ml-rep-1.json" \
+            || ! cmp -s "$RUNNER_TEMP/ml-rep-1.json" "$RUNNER_TEMP/ml-rep-2.json" \
+            || ! cmp -s "$RUNNER_TEMP/ml-rep-2.json" "$RUNNER_TEMP/ml-rep-3.json"; then
+            echo "::error::four identical requests did not return identical bodies"
+            exit 1
+          fi
+          echo "  OK   four identical requests, one body"
+
+          echo
+          echo "--- 3. concurrent requests agree ---"
+          for n in $(seq 8); do
+            api -o "$RUNNER_TEMP/ml-conc-$n.json" -H "$auth" "$url" &
+          done
+          wait
+          distinct="$(md5sum "$RUNNER_TEMP"/ml-conc-*.json | awk '{print $1}' | sort -u | wc -l)"
+          echo "  distinct bodies across 8 concurrent requests: $distinct"
+          [ "$distinct" = "1" ] || { echo "::error::concurrent requests disagreed"; exit 1; }
+
+          echo
+          echo "--- 4. an invalid token is 401 ---"
+          code="$(api -o /dev/null -w '%{http_code}' -H "Authorization: Bearer not-a-token" "$url")"
+          echo "  invalid token -> $code"
+          [ "$code" = "401" ] || { echo "::error::expected 401, got $code"; exit 1; }
+
+          echo
+          echo "--- 5. an unknown hotel is 404 ---"
+          unknown="$base/api/v1/hotels/11111111-2222-3333-4444-555555555555/ml/demand-forecast?target_date=$TARGET"
+          code="$(api -o "$RUNNER_TEMP/ml-unknown.json" -w '%{http_code}' -H "$auth" "$unknown")"
+          echo "  unknown hotel -> $code"
+          [ "$code" = "404" ] || { echo "::error::expected 404, got $code"; exit 1; }
+
+          echo
+          echo "--- 6. a non-member gets the same 404, byte for byte ---"
+          api -o /dev/null -X POST "$base/api/v1/auth/register" -H 'Content-Type: application/json' \
+            -d '{"email":"ml-stranger@example.test","full_name":"Stranger","password":"ci-only-not-a-real-password"}'
+          api -o "$RUNNER_TEMP/ml-slogin.json" -X POST "$base/api/v1/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"ml-stranger@example.test","password":"ci-only-not-a-real-password"}' > /dev/null
+          stranger="$(json "$RUNNER_TEMP/ml-slogin.json" access_token)"
+          echo "::add-mask::$stranger"
+          rm -f "$RUNNER_TEMP/ml-slogin.json"
+          code="$(api -o "$RUNNER_TEMP/ml-nonmember.json" -w '%{http_code}' \
+            -H "Authorization: Bearer $stranger" "$url")"
+          echo "  non-member -> $code"
+          [ "$code" = "404" ] || { echo "::error::expected 404, got $code"; exit 1; }
+          cmp -s "$RUNNER_TEMP/ml-nonmember.json" "$RUNNER_TEMP/ml-unknown.json" || {
+            echo "::error::a non-member and an unknown hotel are distinguishable"; exit 1; }
+          echo "  OK   cross-hotel access is indistinguishable from a hotel that does not exist"
+
+          echo
+          echo "--- 7. a hotel without history is 422, not a guess ---"
+          api -o "$RUNNER_TEMP/ml-empty.json" -X POST "$base/api/v1/hotels" -H "$auth" \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"ML Empty Hotel","slug":"ml-empty-hotel","address_line1":"2 Test Street","city":"Testville","country_code":"GR","currency":"EUR"}' > /dev/null
+          empty="$(json "$RUNNER_TEMP/ml-empty.json" public_id)"
+          code="$(api -o "$RUNNER_TEMP/ml-422.json" -w '%{http_code}' -H "$auth" \
+            "$base/api/v1/hotels/$empty/ml/demand-forecast?target_date=$TARGET")"
+          echo "  no history -> $code"
+          [ "$code" = "422" ] || { echo "::error::expected 422, got $code"; exit 1; }
+          python3 - "$RUNNER_TEMP/ml-422.json" <<'PY'
+          import json, sys
+          body = json.load(open(sys.argv[1]))
+          assert body["error"]["code"] == "INSUFFICIENT_HISTORY", body
+          text = json.dumps(body).lower()
+          for leak in ("select ", "psycopg", "sqlalchemy", "sklearn", "traceback", "/app/", "demand_lag"):
+              assert leak not in text, leak
+          print("  OK   a safe domain error:", body["error"]["code"])
+          PY
+
+          echo
+          echo "--- 8. a horizon this model does not forecast is 422 ---"
+          code="$(api -o /dev/null -w '%{http_code}' -H "$auth" "$url&horizon_days=14")"
+          echo "  horizon_days=14 -> $code"
+          [ "$code" = "422" ] || { echo "::error::expected 422, got $code"; exit 1; }
+
+          echo
+          echo "--- 9. request-time cost ---"
+          total=0
+          for n in $(seq 10); do
+            t="$(api -o /dev/null -w '%{time_total}' -H "$auth" "$url")"
+            total="$(python3 -c "print($total + $t)")"
+          done
+          mean="$(python3 -c "print(round($total / 10 * 1000, 1))")"
+          echo "  mean round trip over 10 requests, through nginx and TLS: ${mean} ms"
+          python3 -c "
+          mean = $mean
+          assert mean < 2000, f'{mean} ms per request is not a bounded inference path'
+          print('  OK   bounded')
+          "
+
+      - name: Prove the served number is the approved model's own output
+        run: |
+          set -euo pipefail
+
+          # The endpoint returned A number. This shows it is THE number -- the one the approved
+          # artifact computes for this hotel's history -- by driving the inference contract
+          # directly inside the same image and comparing. The HTTP path and the library path
+          # must not be able to disagree.
+          dc run --rm --no-deps -e PYTHONPATH=/app -e SERVED="$PREDICTED" \
+            --entrypoint python api -c '
+          import datetime as dt, os, uuid
+
+          from app.ml.artifact_store import approved_model, predict_room_nights
+          from app.ml.serving import build_feature_values
+
+          target = dt.date(2026, 12, 1)
+          history = {
+              dt.date(2026, 11, 24): 1,
+              dt.date(2026, 11, 17): 1,
+              dt.date(2026, 11, 3): 1,
+          }
+          features = build_feature_values(history, target)
+          print("  features:", features)
+          direct = predict_room_nights(
+              approved_model(),
+              hotel_public_id=uuid.UUID("11111111-2222-3333-4444-555555555555"),
+              target_date=target,
+              features=features,
+          )
+          served = float(os.environ["SERVED"])
+          print("  served over HTTP :", served)
+          print("  artifact directly:", direct)
+          assert direct == served, (direct, served)
+          print("  OK   the API returns exactly what the approved artifact computes")
+          '
+
+      - name: Prove the production runtime loads the model once and never trains
+        run: |
+          set -euo pipefail
+
+          # A disposable API container on the compose network, logging at INFO so the one line
+          # the artifact store writes when it loads becomes countable. The live stack runs at
+          # WARNING, which is correct for it and useless for this measurement.
+          network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' \
+            "$(dc ps -q api | head -1)")"
+          url="postgresql+psycopg://${POSTGRES_USER}:${PG_PASSWORD}@db:5432/${POSTGRES_DB}"
+          echo "::add-mask::$url"
+
+          probe="hotel-intelligence-ci-${GITHUB_RUN_ID}-mlprobe"
+          docker run -d --name "$probe" --network "$network" \
+            -e DATABASE_URL="$url" -e ENVIRONMENT=production -e SECRET_KEY="$APP_SECRET" \
+            -e LOG_LEVEL=INFO hotel-intelligence-api:local > /dev/null
+
+          for _ in $(seq 45); do
+            if docker exec "$probe" python -c "
+          import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)" \
+              > /dev/null 2>&1; then break; fi
+            sleep 2
+          done
+
+          # Six requests, from inside the container, through the real ASGI stack.
+          docker exec "$probe" python -c "
+          import json, urllib.request, urllib.error
+          token = None
+          def call(path, method='GET', body=None, auth=None):
+              data = json.dumps(body).encode() if body is not None else None
+              request = urllib.request.Request('http://127.0.0.1:8000' + path, data=data, method=method)
+              request.add_header('Content-Type', 'application/json')
+              if auth:
+                  request.add_header('Authorization', 'Bearer ' + auth)
+              try:
+                  with urllib.request.urlopen(request, timeout=10) as response:
+                      return response.status, json.load(response)
+              except urllib.error.HTTPError as error:
+                  return error.code, json.load(error)
+
+          status, body = call('/api/v1/auth/login', 'POST', {'email': 'ml-probe@example.test', 'password': 'ci-only-not-a-real-password'})
+          assert status == 200, (status, body)
+          token = body['access_token']
+          status, hotels = call('/api/v1/hotels', auth=token)
+          hotel = [h for h in hotels['items'] if h['slug'] == 'ml-probe-hotel'][0]['public_id']
+          seen = set()
+          for _ in range(6):
+              status, body = call('/api/v1/hotels/' + hotel + '/ml/demand-forecast?target_date=2026-12-01', auth=token)
+              assert status == 200, (status, body)
+              seen.add(json.dumps(body, sort_keys=True))
+          assert len(seen) == 1, seen
+          print('  six requests, one distinct body')
+          "
+
+          echo "--- how many times the artifact was read ---"
+          loads="$(docker logs "$probe" 2>&1 | grep -c 'Demand model serving loaded' || true)"
+          echo "  'Demand model serving loaded' lines: $loads"
+          [ "$loads" = "1" ] || {
+            echo "::error::the artifact was loaded $loads times for six requests"
+            docker logs --tail 40 "$probe"; docker rm -f "$probe" > /dev/null; exit 1; }
+          echo "  OK   loaded once per process, reused for every request"
+
+          trained="$(docker logs "$probe" 2>&1 | grep -ci 'fitting\|n_iter_\|early stopping' || true)"
+          [ "$trained" = "0" ] || { echo "::error::the runtime logged training activity"; exit 1; }
+          echo "  OK   no training activity in the serving process"
+
+          docker rm -f "$probe" > /dev/null
+
+      - name: Prove a corrupted artifact fails closed
+        run: |
+          set -euo pipefail
+
+          # The production artifact is never touched. This derives a THROWAWAY image from the
+          # built one, truncates the payload inside it, and shows the endpoint answers the safe
+          # 503 rather than serving a model nobody verified.
+          corrupt="hotel-intelligence-ci-${GITHUB_RUN_ID}-corrupt"
+
+          # An EMPTY build context, deliberately. $RUNNER_TEMP holds this job's TLS private key,
+          # and handing that directory to `docker build` would put it in a build context for no
+          # reason at all.
+          ctx="$RUNNER_TEMP/corrupt-context"
+          mkdir -p "$ctx"
+          cat > "$ctx/Dockerfile" <<'DOCKER'
+          FROM hotel-intelligence-api:local
+          USER root
+          RUN head -c 400000 /app/ml/models/demand_baseline_v1/model.pkl > /tmp/truncated \
+           && mv /tmp/truncated /app/ml/models/demand_baseline_v1/model.pkl \
+           && chown root:root /app/ml/models/demand_baseline_v1/model.pkl
+          USER appuser
+          DOCKER
+          docker build -q -f "$ctx/Dockerfile" -t "$corrupt" "$ctx" > /dev/null
+          echo "  built a throwaway image with a truncated payload"
+
+          network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' \
+            "$(dc ps -q api | head -1)")"
+          url="postgresql+psycopg://${POSTGRES_USER}:${PG_PASSWORD}@db:5432/${POSTGRES_DB}"
+          echo "::add-mask::$url"
+
+          docker run -d --name "$corrupt" --network "$network" \
+            -e DATABASE_URL="$url" -e ENVIRONMENT=production -e SECRET_KEY="$APP_SECRET" \
+            -e LOG_LEVEL=WARNING "$corrupt" > /dev/null
+
+          alive=no
+          for _ in $(seq 45); do
+            if docker exec "$corrupt" python -c "
+          import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)" \
+              > /dev/null 2>&1; then alive=yes; break; fi
+            sleep 2
+          done
+          [ "$alive" = yes ] || { echo "::error::the API did not start with a corrupted artifact"; \
+            docker logs --tail 40 "$corrupt"; exit 1; }
+          echo "  OK   the application still STARTS -- a bad model is not a boot failure"
+
+          docker exec "$corrupt" python -c "
+          import json, urllib.request, urllib.error
+          def call(path, method='GET', body=None, auth=None):
+              data = json.dumps(body).encode() if body is not None else None
+              request = urllib.request.Request('http://127.0.0.1:8000' + path, data=data, method=method)
+              request.add_header('Content-Type', 'application/json')
+              if auth:
+                  request.add_header('Authorization', 'Bearer ' + auth)
+              try:
+                  with urllib.request.urlopen(request, timeout=10) as response:
+                      return response.status, json.load(response), dict(response.headers)
+              except urllib.error.HTTPError as error:
+                  return error.code, json.load(error), dict(error.headers)
+
+          status, body, _ = call('/api/v1/auth/login', 'POST', {'email': 'ml-probe@example.test', 'password': 'ci-only-not-a-real-password'})
+          token = body['access_token']
+          status, hotels, _ = call('/api/v1/hotels', auth=token)
+          hotel = [h for h in hotels['items'] if h['slug'] == 'ml-probe-hotel'][0]['public_id']
+
+          status, body, headers = call('/api/v1/hotels/' + hotel + '/ml/demand-forecast?target_date=2026-12-01', auth=token)
+          print('  corrupted artifact ->', status, json.dumps(body))
+          assert status == 503, (status, body)
+          assert body['error']['code'] == 'MODEL_UNAVAILABLE', body
+          text = json.dumps(body).lower()
+          for leak in ('pickle', 'sklearn', 'traceback', '/app/', 'model.pkl', 'sha256', '.py'):
+              assert leak not in text, leak
+          assert 'x-request-id' in {k.lower() for k in headers}, headers
+          print('  OK   503, one fixed sentence, no path, no traceback, request id intact')
+
+          status, body, _ = call('/health', auth=None)
+          assert status == 200, (status, body)
+          print('  OK   the rest of the API is unaffected')
+          "
+
+          docker rm -f "$corrupt" > /dev/null
+          docker image rm -f "$corrupt" > /dev/null
+          echo "  throwaway image and container removed"
 
       - name: Tear down the disposable environment
         # always(), so a failed assertion above still leaves the runner clean -- and it does
