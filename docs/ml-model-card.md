@@ -249,27 +249,50 @@ roughly five orders of magnitude finer than a compiler difference could reach.
 
 ### Exact training-data provenance
 
+**Three row counts, three names.** They are different quantities and using one word for all of
+them is how an inconsistency gets into a report.
+
+| Quantity | Count | What it means |
+|---|---|---|
+| **Partition rows** | **872** | the declared `train` partition — the column Stage 6.2 wrote, not a date rule re-derived here. This is what `LearnedModel.fit` is *handed*, and it is what `Fold.train_rows` reports in the backtest. |
+| **Rows without feature history** | **56** | held out because `demand_lag_28` does not exist yet: the first 28 dates of each hotel, 28 × 2. |
+| **Rows passed to `estimator.fit()`** | **816** | 872 − 56. The number the model was actually fitted on, and the one `training_row_count` records. |
+
 | | |
 |---|---|
-| Partition | `train` — the column Stage 6.2 wrote, not a date rule re-derived here |
-| Partition rows | 872 |
-| Rows fitted | **816** |
-| Held out for a missing feature | 56 — the first 28 dates of each hotel have no `demand_lag_28` |
-| Training dates | 2015-09-23 → 2016-11-09, 414 distinct dates |
-| Hotels | 2 |
+| Fitted date range | 2015-09-23 → 2016-11-09, 414 distinct dates |
+| Hotels fitted | 2 |
+| Row order | `(target_date, hotel_key)` — the protocol's order, **not** the dataset file's |
 | Held-out partitions | `validation`, `test` — never fitted |
 
-Two independent checks enforce the boundary: a partition check catches a mislabelled row, and a
-date check catches a correctly labelled row from the wrong side. The artifact's training extent
+Two independent checks enforce the partition boundary: a partition check catches a mislabelled
+row, and a date check catches a correctly labelled row from the wrong side. The fitted extent
 ends 2016-11-09; held-out data starts 2016-11-10.
 
 ### Equivalence with the Stage 6.3 measurement
 
 Fold 11 of the rolling-origin backtest has origin 2016-11-09 — the last date of the training
-partition — so that fold's model was fitted on precisely the rows the artifact was fitted on.
-The artifact reproduces its fourteen learned predictions **exactly**, to the last bit, not within
-a tolerance. Nothing else in the backtest is reproducible by this artifact, because every other
-fold used a different training window; that is the protocol working, not a discrepancy.
+partition — so it is handed the same 872 partition rows, and the same 816 of them survive
+feature-validity filtering and reach the estimator.
+
+The claim is checked **at the call boundary**, not inferred: a test records the arguments of
+every `HistGradientBoostingRegressor.fit` in the real 54-fold backtest and of the artifact
+build, then requires fold 11's feature matrix and target vector to equal the artifact's **as
+sequences** — 816 × 9 values and 816 targets, in the same order, with the same row identities.
+The artifact then reproduces the fold's fourteen learned predictions **exactly**, to the last
+bit, not within a tolerance.
+
+Nothing else in the backtest is reproducible by this artifact, because every other fold used a
+different training window; that is the protocol working, not a discrepancy.
+
+> **Correction, made after review.** The two paths originally selected the same 816 rows in
+> *different orders*: the dataset file is sorted by `(target_date, str(hotel_public_id))` and the
+> evaluation protocol re-sorts by `(target_date, hotel_key)`, which disagree within a date
+> because `resort_hotel` is `c31c4e41…` and `city_hotel` is `c7fb00b8…`. The predictions matched
+> anyway, because this estimator is row-order invariant for this configuration — a fact now
+> measured and asserted rather than relied on. `training_rows()` adopts the protocol's order, so
+> the matrices are identical as sequences. **The fitted model did not change**: the payload
+> SHA-256 and the canonical digest are byte-for-byte what they were before the correction.
 
 ---
 

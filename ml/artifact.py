@@ -120,14 +120,35 @@ class ArtifactError(Exception):
 # --- training ------------------------------------------------------------------------------------
 
 
+#: The order the rolling-origin protocol presents rows to the estimator in. It is **not** the
+#: dataset file's order: Stage 6.1 writes rows sorted by ``(target_date, str(hotel_public_id))``,
+#: while ``ml.evaluation.evaluate`` re-sorts by ``(target_date, hotel_key)``. Those disagree
+#: within a date -- ``resort_hotel`` is ``c31c4e41...`` and ``city_hotel`` ``c7fb00b8...``, so the
+#: public-id order is the reverse of the key order -- and the artifact adopts the protocol's,
+#: because the point of the artifact is to be the model the protocol measured.
+TRAINING_ROW_ORDER = ("target_date", "hotel_key")
+
+
 def training_rows(dataset: ProcessedDataset) -> tuple[ProcessedRow, ...]:
-    """The declared training partition, and nothing else.
+    """The declared training partition, in the protocol's row order, and nothing else.
 
     Not "rows before some date" -- the partition column Stage 6.2 wrote. Deriving the boundary
     here would create a second definition of where training stops, and two definitions of one
     boundary is how a validation row ends up in a fit.
+
+    The sort matters and is not cosmetic. ``HistGradientBoostingRegressor`` turns out to be
+    row-order invariant for this configuration -- measured, and asserted by a test -- so the
+    fitted model is the same either way. But relying on that would make "the artifact is the
+    Stage 6.3 fold-11 model" an accident of the estimator's internals rather than a property of
+    the inputs. Sorting here makes the two estimator input matrices identical **as sequences**,
+    which is the claim the equivalence test actually needs.
     """
-    rows = tuple(row for row in dataset.rows if row.partition == TRAINING_PARTITION)
+    rows = tuple(
+        sorted(
+            (row for row in dataset.rows if row.partition == TRAINING_PARTITION),
+            key=lambda row: (row.target_date, row.hotel_key),
+        )
+    )
     if not rows:
         raise ArtifactError(f"the dataset carries no rows in the {TRAINING_PARTITION!r} partition")
     return rows
@@ -403,6 +424,19 @@ def build_artifact_metadata(
             "training_hotels": list(trained.training_hotels),
             "training_date_count": trained.training_dates,
             "held_out_partitions": list(HELD_OUT_PARTITIONS),
+            "row_order": list(TRAINING_ROW_ORDER),
+            "row_order_note": (
+                "The rolling-origin protocol's order, not the dataset file's. The two "
+                "disagree within a date, and the artifact adopts the protocol's so that "
+                "its estimator input matrix is identical to fold 11's as a sequence, not "
+                "merely as a set."
+            ),
+            "accounting_note": (
+                "partition_rows counts the declared training partition; training_row_count "
+                "counts the rows that actually reached estimator.fit() after rows with a "
+                "missing selected feature were held out. They are different numbers and are "
+                "reported separately."
+            ),
             "note": (
                 "Fitted once on the dataset's declared training partition. Validation and test "
                 "rows never reach fit, and two independent checks enforce it."

@@ -104,7 +104,7 @@
     "path": "demand_daily_v1.csv"
   },
   "generation": {
-    "created_at": "2026-09-19T13:04:50.384793+00:00",
+    "created_at": "2026-09-19T13:42:40.215053+00:00",
     "created_by": "ml/pipelines/build_demand_artifact.py",
     "environment": {
       "numpy": "2.5.3",
@@ -147,6 +147,7 @@
   },
   "schema_version": "artifact_v1",
   "training": {
+    "accounting_note": "partition_rows counts the declared training partition; training_row_count counts the rows that actually reached estimator.fit() after rows with a missing selected feature were held out. They are different numbers and are reported separately.",
     "held_out_for_missing_features": 56,
     "held_out_partitions": [
       "validation",
@@ -155,6 +156,11 @@
     "note": "Fitted once on the dataset's declared training partition. Validation and test rows never reach fit, and two independent checks enforce it.",
     "partition": "train",
     "partition_rows": 872,
+    "row_order": [
+      "target_date",
+      "hotel_key"
+    ],
+    "row_order_note": "The rolling-origin protocol's order, not the dataset file's. The two disagree within a date, and the artifact adopts the protocol's so that its estimator input matrix is identical to fold 11's as a sequence, not merely as a set.",
     "training_date_count": 414,
     "training_end_date": "2016-11-09",
     "training_hotel_count": 2,

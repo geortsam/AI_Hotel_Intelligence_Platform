@@ -196,8 +196,9 @@ serves anything**. Detail: **[ml-model-validation.md](ml-model-validation.md)** 
 ## Stage 6.5 — Model artifact and offline inference contract · *done*
 
 The first fitted artifact. The exact Stage 6.3 estimator, fitted **once** on the dataset's
-declared training partition — 816 rows of 872, 2015-09-23 to 2016-11-09, two hotels, 414 dates —
-and persisted as a 695 KB standard-library pickle. **No dependency was added**: joblib is present
+declared training partition: 872 partition rows are selected, 56 are held out for having no
+`demand_lag_28` yet, and **816 reach `estimator.fit()`** — 2015-09-23 to 2016-11-09, two hotels,
+414 dates — persisted as a 695 KB standard-library pickle. **No dependency was added**: joblib is present
 only as a scikit-learn requirement and is deliberately not used directly.
 
 **The payload is not committed.** `.gitignore` has excluded model weights since Stage 1, and a
@@ -209,8 +210,9 @@ is the whole of the trust boundary.
 Two checksums, because they answer different questions: the payload's SHA-256 (byte-identical
 across refits on this build — an observation, not a cross-toolchain claim) and a **canonical
 model digest** over the feature columns, the configuration, the training extent and the model's
-predictions on a fixed probe grid. Fold 11 of the Stage 6.3 backtest shares the artifact's exact
-training set, and the artifact reproduces its fourteen learned predictions **exactly**.
+predictions on a fixed probe grid. Fold 11 of the Stage 6.3 backtest is handed the same partition, the
+same 816 rows reach the estimator in the same order, and a test compares both `fit` calls at the
+call boundary; the artifact reproduces the fold's fourteen learned predictions **exactly**.
 
 `ml/inference.py` is the offline contract: typed in, typed out, keyed by public UUID, and
 deliberately unhelpful — a missing, extra, permuted, NaN, infinite, boolean or wrongly-typed

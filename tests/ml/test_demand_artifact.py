@@ -41,6 +41,7 @@ from ml.artifact import (
     PROBE_DIGITS,
     PROBE_ROWS,
     TRAINING_PARTITION,
+    TRAINING_ROW_ORDER,
     ArtifactError,
     TrainedArtifact,
     assert_all_finite,
@@ -62,7 +63,7 @@ from ml.inference import (
     predict_demand,
 )
 from ml.loading import DEFAULT_DATASET, ProcessedDataset, ProcessedRow, load_processed_dataset
-from ml.models import MODEL_NAME, MODEL_VERSION, EstimatorConfig
+from ml.models import MODEL_NAME, MODEL_VERSION, EstimatorConfig, LearnedModel, design_matrix
 from ml.pipelines.build_demand_artifact import registry_artifact_block
 from ml.validation import CANONICAL_FEATURE_ORDER, ValidationError
 from tests.ml.test_demand_model_validation import STAGE_63_ESTIMATOR_SHA256
@@ -611,7 +612,110 @@ def test_a_training_set_containing_a_held_out_row_is_refused(
 def test_training_rows_are_only_the_declared_partition(dataset: ProcessedDataset) -> None:
     rows = training_rows(dataset)
     assert {row.partition for row in rows} == {TRAINING_PARTITION}
-    assert len(rows) == 872
+    assert len(rows) == PARTITION_ROWS
+
+
+# --- row accounting: three different numbers, three different names -----------------------------
+
+
+#: The declared training partition, before any feature-validity filtering.
+PARTITION_ROWS = 872
+#: Rows of that partition with every selected feature present -- what `design_matrix` keeps.
+FEATURE_VALID_ROWS = 816
+#: Rows held out because `demand_lag_28` does not exist yet: 28 dates x 2 hotels.
+ROWS_WITHOUT_FEATURE_HISTORY = 56
+
+
+def test_the_three_row_counts_are_distinct_and_add_up(dataset: ProcessedDataset) -> None:
+    """872 rows enter the selection; 816 reach the estimator. Both numbers are real.
+
+    They are not interchangeable, and the earlier Stage 6.5 report used one word for both.
+    `Fold.train_rows` in the evaluation protocol is the PRE-filter count; `fitted_rows` on the
+    artifact is the POST-filter count.
+    """
+    rows = training_rows(dataset)
+    matrix = design_matrix(rows, EXPECTED_FEATURE_COLUMNS)
+    assert len(rows) == PARTITION_ROWS
+    assert len(matrix.used) == FEATURE_VALID_ROWS
+    assert len(matrix.skipped) == ROWS_WITHOUT_FEATURE_HISTORY
+    assert len(matrix.used) + len(matrix.skipped) == len(rows)
+    assert len(matrix.features) == len(matrix.targets) == FEATURE_VALID_ROWS
+    # Every skipped row is skipped for the one documented reason.
+    for index in matrix.skipped:
+        assert rows[index].features["demand_lag_28"] is None
+
+
+def test_the_artifact_reports_the_post_filter_count_as_its_training_rows(
+    trained: TrainedArtifact,
+) -> None:
+    assert trained.partition_rows == PARTITION_ROWS
+    assert trained.fitted_rows == FEATURE_VALID_ROWS
+    assert trained.held_out_for_missing_features == ROWS_WITHOUT_FEATURE_HISTORY
+    assert trained.model.training_rows == FEATURE_VALID_ROWS
+    assert trained.training_start == dt.date(2015, 9, 23)
+    assert trained.training_end == dt.date(2016, 11, 9)
+    assert len(trained.training_hotels) == 2
+    assert trained.training_dates == 414
+
+
+def test_the_number_that_reaches_the_estimator_is_the_post_filter_one(
+    dataset: ProcessedDataset, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Measured at the call boundary, not inferred from a dataclass field."""
+    captured: list[int] = []
+    original = HistGradientBoostingRegressor.fit
+
+    def recording_fit(self: Any, X: Any, y: Any, **kwargs: Any) -> Any:  # noqa: N803
+        captured.append(len(X))
+        return original(self, X, y, **kwargs)
+
+    monkeypatch.setattr(HistGradientBoostingRegressor, "fit", recording_fit)
+    train_artifact(dataset, dataset_version="v1", feature_version="v1")
+    assert captured == [FEATURE_VALID_ROWS]
+
+
+def test_training_rows_are_in_the_evaluation_protocols_order(dataset: ProcessedDataset) -> None:
+    """Not the dataset file's order -- the two disagree within a date."""
+    assert TRAINING_ROW_ORDER == ("target_date", "hotel_key")
+    rows = training_rows(dataset)
+    assert list(rows) == sorted(rows, key=lambda row: (row.target_date, row.hotel_key))
+
+    file_order = [row for row in dataset.rows if row.partition == TRAINING_PARTITION]
+    assert {(r.hotel_key, r.target_date) for r in rows} == {
+        (r.hotel_key, r.target_date) for r in file_order
+    }
+    # The orders really are different, so the sort above is doing work.
+    assert [(r.hotel_key, r.target_date) for r in rows] != [
+        (r.hotel_key, r.target_date) for r in file_order
+    ]
+
+
+def test_the_estimator_is_row_order_invariant_for_this_configuration(
+    dataset: ProcessedDataset,
+) -> None:
+    """Why the equivalence held even before the orders were aligned -- recorded, not relied on.
+
+    The artifact now feeds the estimator the protocol's row order, so the equivalence no longer
+    depends on this. Keeping the measurement means a scikit-learn change that broke it would be
+    visible here rather than as a mysterious digest drift.
+    """
+    ordered = training_rows(dataset)
+    shuffled = sorted(ordered, key=lambda row: (row.target_date, str(row.hotel_public_id)))
+    assert list(ordered) != shuffled
+    config = EstimatorConfig()
+    first = LearnedModel.fit(list(ordered), EXPECTED_FEATURE_COLUMNS, config)
+    second = LearnedModel.fit(shuffled, EXPECTED_FEATURE_COLUMNS, config)
+    assert first.training_rows == second.training_rows == FEATURE_VALID_ROWS
+    assert probe_predictions(first.estimator) == probe_predictions(second.estimator)
+
+
+def test_the_metadata_names_the_two_counts_apart(artifact_paths: tuple[Path, Path]) -> None:
+    training = json.loads(artifact_paths[1].read_text(encoding="utf-8"))["training"]
+    assert training["partition_rows"] == PARTITION_ROWS
+    assert training["training_row_count"] == FEATURE_VALID_ROWS
+    assert training["held_out_for_missing_features"] == ROWS_WITHOUT_FEATURE_HISTORY
+    assert training["row_order"] == list(TRAINING_ROW_ORDER)
+    assert "different numbers" in str(training["accounting_note"])
 
 
 def test_a_non_finite_feature_stops_the_fit(dataset: ProcessedDataset) -> None:

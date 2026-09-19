@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from sklearn.ensemble import HistGradientBoostingRegressor
 
 from ml.artifact import (
     build_artifact_metadata,
@@ -35,6 +36,7 @@ from ml.artifact import (
     load_artifact_metadata,
     serialise_model,
     train_artifact,
+    training_rows,
 )
 from ml.evaluation import EvaluationResult, evaluate, per_hotel_metrics
 from ml.inference import FeatureVector, predict_demand
@@ -52,7 +54,7 @@ from ml.manifests import (
     build_evaluation_manifest,
     content_checksum,
 )
-from ml.models import MODEL_VERSION
+from ml.models import MODEL_VERSION, design_matrix
 from ml.policy import ACCEPTANCE_POLICY, ACCEPTANCE_POLICY_VERSION
 from ml.registry import without_artifact
 from ml.validation import assert_fold_boundaries_match, leakage_report
@@ -552,7 +554,10 @@ def test_the_artifact_reproduces_the_stage_63_fold_it_shares_a_training_set_with
     and anything less would mean the artifact is not the model Stage 6.3 measured.
     """
     fold = next(f for f in result.folds if f.fold.origin == dt.date(2016, 11, 9))
-    assert fold.fold.train_rows == 872
+    # `Fold.train_rows` is the PRE-filter count: the rows handed to `LearnedModel.fit`, before
+    # rows with a missing selected feature are held out. 816 of these 872 reach the estimator,
+    # which `test_the_two_paths_hand_the_estimator_the_same_matrix` measures at the call itself.
+    assert fold.fold.train_rows == PARTITION_ROWS
     partition = {(r.hotel_key, r.target_date) for r in dataset.rows if r.partition == "train"}
     trained_on = {
         (r.hotel_key, r.target_date) for r in dataset.rows if r.target_date <= fold.fold.origin
@@ -643,3 +648,80 @@ def test_the_artifact_metadata_references_the_stage_64_records_by_checksum(
     assert protocol["registry_record_sha256_at_build"] == content_checksum(
         without_artifact(registry_record)
     )
+
+
+#: Pre-filter: the declared training partition, which is also fold 11's training input.
+PARTITION_ROWS = 872
+#: Post-filter: the rows that actually reach `HistGradientBoostingRegressor.fit`.
+FIT_ROWS = 816
+
+
+def test_the_two_paths_hand_the_estimator_the_same_matrix(
+    dataset: ProcessedDataset, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The reproducibility invariant, measured where it actually matters.
+
+    Not "the same rows were selected" but "the same numbers were passed to ``fit``". Both calls
+    are captured at the estimator boundary: fold 11 of the real backtest, and the artifact
+    build. The feature matrices, the target vectors, the row counts and the row identities must
+    all match **as sequences**.
+
+    This is what the earlier report conflated. `Fold.train_rows` is 872 -- the partition handed
+    to `LearnedModel.fit` -- while 816 rows survive feature-validity filtering and reach the
+    estimator. Both numbers are real; only one of them is a training-row count.
+    """
+    captured: list[tuple[list[list[float]], list[float]]] = []
+    original = HistGradientBoostingRegressor.fit
+
+    def recording_fit(self: Any, X: Any, y: Any, **kwargs: Any) -> Any:  # noqa: N803
+        captured.append(([list(row) for row in X], [float(value) for value in y]))
+        return original(self, X, y, **kwargs)
+
+    monkeypatch.setattr(HistGradientBoostingRegressor, "fit", recording_fit)
+
+    backtest = evaluate(dataset.rows, feature_names=dataset.feature_names)
+    fold_index = next(
+        index
+        for index, fold in enumerate(backtest.folds)
+        if fold.fold.origin == dt.date(2016, 11, 9)
+    )
+    assert len(captured) == len(backtest.folds) == 54
+    fold_x, fold_y = captured[fold_index]
+
+    captured.clear()
+    trained = train_artifact(dataset, dataset_version="v1", feature_version="v1")
+    assert len(captured) == 1
+    artifact_x, artifact_y = captured[0]
+
+    # Counts, named apart.
+    assert backtest.folds[fold_index].fold.train_rows == PARTITION_ROWS
+    assert trained.partition_rows == PARTITION_ROWS
+    assert len(fold_x) == len(artifact_x) == FIT_ROWS
+    assert trained.fitted_rows == FIT_ROWS
+    assert trained.held_out_for_missing_features == PARTITION_ROWS - FIT_ROWS
+
+    # The matrices themselves.
+    assert artifact_x == fold_x
+    assert artifact_y == fold_y
+    assert all(len(row) == 9 for row in artifact_x)
+
+    # And the identities behind them.
+    fold_rows = sorted(
+        (r for r in dataset.rows if r.target_date <= dt.date(2016, 11, 9)),
+        key=lambda r: (r.target_date, r.hotel_key),
+    )
+    fold_ids = [
+        (fold_rows[i].hotel_key, fold_rows[i].target_date)
+        for i in design_matrix(fold_rows, trained.feature_columns).used
+    ]
+    partition = training_rows(dataset)
+    artifact_ids = [
+        (partition[i].hotel_key, partition[i].target_date)
+        for i in design_matrix(partition, trained.feature_columns).used
+    ]
+    assert artifact_ids == fold_ids
+    assert len(artifact_ids) == FIT_ROWS
+    assert min(date for _, date in artifact_ids) == dt.date(2015, 9, 23)
+    assert max(date for _, date in artifact_ids) == dt.date(2016, 11, 9)
+    assert len({hotel for hotel, _ in artifact_ids}) == 2
+    assert len({date for _, date in artifact_ids}) == 414
