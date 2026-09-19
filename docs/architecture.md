@@ -90,6 +90,12 @@ identifiers at the API boundary are UUIDs; internal `BIGINT` keys are never seri
 authentication; the 5 that do not are the version-metadata endpoint, registration, login and
 the two health probes.
 
+**Since V1:** Stage 6.6 added one read-only, hotel-scoped, authenticated route — the demand
+model's serving boundary — taking the surface to **83 routes, 78 of which require
+authentication**. It is the only place the application reaches the offline `ml/` package,
+and it does so through a single module behind a lazy import; the API image and its
+dependencies are unchanged. See [ml-serving.md](ml-serving.md).
+
 ---
 
 ## 3. Configuration

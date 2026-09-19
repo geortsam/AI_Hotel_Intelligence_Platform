@@ -133,20 +133,47 @@ def test_the_voided_statuses_are_the_two_expected() -> None:
 # ======================================================================================
 
 
+#: Modules that legitimately handle a floating-point number, each named so the exemption is
+#: explicit rather than a hole in the pattern. None of them touches currency, which is what
+#: :func:`test_the_exempt_modules_are_nowhere_near_money` establishes rather than assumes.
+#:
+#:   core/rate_limit.py      a clock reading
+#:   schemas/health.py       a latency measurement
+#:   ml/serving.py           a feature vector -- room-night counts on their way to an estimator
+#:   ml/artifact_store.py    the estimator's output, a predicted room-night count
+#:
+#: The last two arrived with Stage 6.6. A regression output is a real number by nature: it is a
+#: count that is not an integer, it is never added to a ledger, and rounding it to two places at
+#: the boundary would be inventing a precision the model does not have.
+FLOAT_EXEMPT = {
+    "core/rate_limit.py",
+    "schemas/health.py",
+    "ml/serving.py",
+    "ml/artifact_store.py",
+}
+
+
 def test_no_money_path_uses_float() -> None:
-    """Binary floating point cannot represent 0.10, and money is the one place that matters.
-
-    The two modules exempted below use ``float`` for a clock reading and a latency
-    measurement; neither is currency, and both are named here so the exemption is explicit
-    rather than a hole in the pattern.
-    """
-    allowed = {"core/rate_limit.py", "schemas/health.py"}
-
+    """Binary floating point cannot represent 0.10, and money is the one place that matters."""
     for name, source in sources().items():
-        if name in allowed:
+        if name in FLOAT_EXEMPT:
             continue
         assert not re.search(r"\bfloat\(", source), f"{name} calls float()"
         assert not re.search(r"->\s*float\b", source), f"{name} returns float"
+
+
+def test_the_exempt_modules_are_nowhere_near_money() -> None:
+    """The exemption is only safe while those modules have nothing to do with currency.
+
+    Asserted rather than trusted: a later edit that taught one of them about an amount, a rate
+    or a payment would make its float exemption a money bug, and this is what would say so.
+    """
+    vocabulary = ("Decimal", "currency", "amount", "payment", "price", "revenue", "expense")
+    for name in sorted(FLOAT_EXEMPT):
+        source = sources()[name]
+        for money in vocabulary:
+            found = re.search(rf"{money}", source, re.IGNORECASE)
+            assert not found, f"{name} is exempt from the float rule yet mentions {money!r}"
 
 
 def test_the_money_columns_are_numeric_not_float() -> None:

@@ -168,6 +168,13 @@ APPROVED_RESOURCE_SEGMENTS = {
     # hotel_id IS NULL by definition, and inventing a hotel for the URL would be the same
     # falsehood the nullable column exists to avoid.
     "platform",
+    # Stage 6.6. The versioned demand model's serving boundary. Its own segment rather than a
+    # child of /intelligence, because the two share a question and nothing else: that one
+    # computes a seasonal median per request, this one scores an artifact fitted offline. One
+    # prefix for both would imply a lineage they do not have.
+    "ml",
+    # The single route under it. A noun, and a read: nothing here fits, promotes or schedules.
+    "demand-forecast",
 }
 
 #: Resources the SCHEMA models as global -- no hotel_id column, and a unique constraint with
@@ -284,6 +291,7 @@ def test_domain_surface_is_exactly_the_approved_hierarchy() -> None:
         "/api/v1/hotels/{hotel_public_id}/intelligence/demand-trend",
         "/api/v1/hotels/{hotel_public_id}/intelligence/anomalies",
         "/api/v1/hotels/{hotel_public_id}/intelligence/insights",
+        "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast",
         "/api/v1/hotels/{hotel_public_id}/audit-events",
         "/api/v1/platform/audit-events",
         "/api/v1/auth/register",

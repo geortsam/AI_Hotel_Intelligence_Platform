@@ -9,6 +9,10 @@
 > The V1 intelligence layer is unchanged, the production schema is unchanged, the public API is
 > unchanged at 82 operations, and `backend/` gained no ML dependency.
 >
+> *(Both API statements describe Stage 6.3 and remain true of it. Stage 6.6 later added one
+> read-only serving route, taking the surface to 83 operations — see
+> [ml-serving.md](ml-serving.md). Nothing else here is affected.)*
+>
 > **Stage 6.4 validated this measurement** under a pre-declared acceptance policy and added the
 > robustness, regime and error analysis these pooled numbers cannot give:
 > [ml-model-validation.md](ml-model-validation.md). The short version is that the per-fold
@@ -393,7 +397,7 @@ checked out on.
 
 ## 13. What is not here
 
-- **No API endpoint, no serving path, no inference route.** The public API is 82 operations, as
+- **No API endpoint, no serving path, no inference route** *(as of Stage 6.3; Stage 6.6 added one read-only serving route — see [ml-serving.md](ml-serving.md))*. The public API is 82 operations, as
   it was in V1.
 - **No model artifact from this stage.** Stage 6.3 serialised nothing. The directory holds
   JSON records — `metrics.json` here, `validation.json` and `registry.json` from Stage 6.4,

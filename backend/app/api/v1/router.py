@@ -23,6 +23,7 @@ from app.api.v1.endpoints import (
     intelligence,
     members,
     meta,
+    ml_predictions,
     payments,
     platform_audit,
     revenue,
@@ -76,6 +77,12 @@ api_router.include_router(analytics.router)
 # Statistical forecasting, trend and anomaly detection over the analytics series. Read-only
 # and hotel-scoped, like analytics itself; it adds no metric definitions of its own.
 api_router.include_router(intelligence.router)
+# Stage 6.6. The versioned demand model's serving boundary. A SEPARATE router from
+# intelligence above, deliberately: that one computes a seasonal median per request, this one
+# scores an artifact fitted offline and loaded from disk. Same question, different means,
+# different version vocabulary -- one prefix for both would imply a lineage they do not share.
+# Read-only and hotel-scoped like everything around it.
+api_router.include_router(ml_predictions.router)
 # The audit trail. Hotel-scoped like everything else that is a property's own data, and
 # read-only: there is no route that writes, edits or deletes an event, because a history a
 # client can append to is not evidence. Registered last because it observes every domain

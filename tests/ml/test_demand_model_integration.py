@@ -359,7 +359,13 @@ def test_scikit_learn_is_declared_once_and_pinned() -> None:
 # --- the public API and the schema are where V1 left them ----------------------------------------
 
 
-def test_the_public_api_is_unchanged_and_has_no_model_endpoint() -> None:
+def test_the_public_api_gained_only_the_serving_endpoint() -> None:
+    """Stage 6.3 asserted 82 operations and no ML path at all. Stage 6.6 added one route.
+
+    What this still holds is the part Stage 6.3 cared about: no training surface. There is no
+    route that fits a model, launches a run or promotes an artifact, and the one ML route that
+    now exists is a read.
+    """
     from app.core.config import Settings
     from app.main import create_app
 
@@ -367,11 +373,12 @@ def test_the_public_api_is_unchanged_and_has_no_model_endpoint() -> None:
     paths = schema["paths"]
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     operations = sum(len([m for m in spec if m in methods]) for spec in paths.values())
-    assert operations == 82
+    assert operations == 83
+    assert [path for path in paths if "/ml" in path] == [
+        "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast"
+    ]
     assert not [
-        path
-        for path in paths
-        if any(word in path for word in ("/ml", "model", "train", "forecast/run"))
+        path for path in paths if any(word in path for word in ("train", "fit", "forecast/run"))
     ]
 
 

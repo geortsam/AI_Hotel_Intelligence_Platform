@@ -39,6 +39,7 @@ from app.repositories.guest import GuestRepository
 from app.repositories.health import HealthRepository
 from app.repositories.hotel import HotelRepository
 from app.repositories.membership import MembershipRepository
+from app.repositories.ml_demand import MlDemandRepository
 from app.repositories.payment import PaymentRepository
 from app.repositories.platform_admin import PlatformAdminRepository
 from app.repositories.pricing import PricingRepository
@@ -64,6 +65,7 @@ from app.services.health import HealthService
 from app.services.hotel import HotelService
 from app.services.intelligence import IntelligenceService
 from app.services.membership import MembershipService
+from app.services.ml_serving import DemandPredictionService
 from app.services.payment import PaymentService
 from app.services.pricing import PricingService
 from app.services.reconciliation import ReconciliationService
@@ -397,6 +399,32 @@ def get_intelligence_service(db: DbSession, scope: ScopeResolverDep) -> Intellig
 IntelligenceServiceDep = Annotated[IntelligenceService, Depends(get_intelligence_service)]
 
 
+def get_demand_prediction_service(
+    db: DbSession, scope: ScopeResolverDep
+) -> DemandPredictionService:
+    """Assemble the read-only demand-model serving service (Stage 6.6).
+
+    It is handed the SAME ``MlDemandRepository`` the Stage 6.1 dataset pipeline uses, not one of
+    its own. The features a model is served are the features it was trained on, or they are not
+    the same model -- and a serving-only copy of "realised occupied room nights" is exactly how
+    the two stop agreeing without anything failing.
+
+    No session is passed to the service itself, only to its repository: scoring a model writes
+    nothing, so there is no unit of work to own. The same asymmetry as the analytics and
+    intelligence services above.
+
+    The artifact is NOT a dependency. It is loaded at most once per process, behind
+    ``app.ml.artifact_store``, rather than per request -- a request-scoped dependency would
+    unpickle 700 KB and rebuild the estimator on every call.
+    """
+    return DemandPredictionService(MlDemandRepository(db), scope)
+
+
+DemandPredictionServiceDep = Annotated[
+    DemandPredictionService, Depends(get_demand_prediction_service)
+]
+
+
 def get_auth_service(db: DbSession, settings: SettingsDep) -> AuthService:
     """Assemble the authentication service.
 
@@ -587,6 +615,7 @@ __all__ = [
     "BookingServiceDep",
     "CurrentUserDep",
     "DbSession",
+    "DemandPredictionServiceDep",
     "ExpenseCategoryServiceDep",
     "ExpenseServiceDep",
     "GuestServiceDep",
@@ -619,6 +648,7 @@ __all__ = [
     "get_booking_service",
     "get_current_user",
     "get_db",
+    "get_demand_prediction_service",
     "get_expense_category_service",
     "get_expense_service",
     "get_guest_service",

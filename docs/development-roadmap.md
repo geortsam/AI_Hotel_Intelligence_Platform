@@ -222,6 +222,43 @@ no production accuracy, no online inference, no API, no monitoring and no drift 
 
 Detail: **[ml-model-card.md](ml-model-card.md)** §§10–12.
 
+## Stage 6.6 — ML serving boundary and API contract · *done*
+
+The artifact becomes reachable over HTTP, and **nothing about the model changes**. One
+read-only route —
+
+    GET /api/v1/hotels/{hotel_public_id}/ml/demand-forecast?target_date=…
+
+— authenticated, hotel-scoped, membership-checked through the existing policy, taking the public
+API from 82 operations to **83**. No migration, no schema change, no frontend change, and no new
+production dependency: `backend/requirements.txt` is untouched and the API image still excludes
+`ml/`, so the endpoint answers 503 there and is exercised where the runtime and a verified
+artifact are present.
+
+**The request carries no model internals.** A hotel and a date. There is no parameter for an
+artifact, a path, a version, a column or an estimator, and `horizon_days` exists only so a caller
+expecting something other than seven days is told so. The server owns artifact selection, every
+version, the feature set and integrity verification.
+
+**Features come from the Stage 6.1 primitives, not a second implementation**, and leakage is
+prevented by the bounds of the one grouped query: the window is `[T-28, T-7]` and its upper bound
+*is* the cutoff date, so the extraction is never handed a day the forecaster may not see. An
+integration test writes bookings on the target day and the six before it and requires the
+prediction to be byte-identical.
+
+**Loading is validate-then-deserialise**, nine checks before a byte is unpickled and seven after
+— including a behavioural one: the deserialised estimator is asked what it computes on a fixed
+probe grid and must answer what the artifact recorded. The artifact still declares
+`serving_enabled: false`; the approval lives in reviewed application code, so a file on disk
+cannot authorise itself and Stage 6.5's records were not edited. Loaded once per process behind a
+lock, never mutated, and every refusal collapses to one fixed 503 sentence.
+
+**Not established by this stage:** production accuracy, cross-hotel generalisation, calibration
+for a hotel of a different scale from the two it was fitted on, persistence of predictions,
+monitoring, drift detection or any frontend surface.
+
+Detail: **[ml-serving.md](ml-serving.md)**.
+
 ---
 
 # V2 — FUTURE / NOT IMPLEMENTED
@@ -232,7 +269,7 @@ Detail: **[ml-model-card.md](ml-model-card.md)** §§10–12.
 
 | Item | Note |
 |---|---|
-| A **served** trained forecast | Stage 6.5 produced the artifact; serving it still needs a loading path in the application, an unavailable-model error, an endpoint and a schema — none of which exists |
+| A **served** trained forecast | *Done in Stage 6.6* — loading path, unavailable-model error, endpoint and schema all exist. What remains V2 is everything around it: persisted predictions, monitoring, drift detection, and a runtime that actually ships the model |
 | Richer feature pipeline | the 7-day horizon admits 9 of 15 contract columns; a horizon-matched on-the-books and rolling-window feature set does not exist |
 | Review sentiment | polarity and aspect breakdown over review text |
 | Room-image classification | class set fixed before training |

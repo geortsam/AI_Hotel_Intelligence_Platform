@@ -89,6 +89,9 @@ EXPECTED_FEATURE_COLUMNS: tuple[str, ...] = (
 #: so any real change to the model moves it.
 CANONICAL_DIGEST = "436bf6b3cc5f1a2cc1a2e7fa5e971cedcd0405aa5b7f07a84967b293118a8f70"
 
+#: The one route Stage 6.6 added. Named here so the two guards below cannot drift apart.
+SERVING_ENDPOINT = "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast"
+
 
 # --- fixtures ------------------------------------------------------------------------------------
 
@@ -491,27 +494,46 @@ def test_no_offline_module_imports_the_running_application() -> None:
             assert module == "app.ml.dataset", f"{path.name} imports {module}"
 
 
-def test_the_application_package_imports_nothing_from_ml() -> None:
-    """The artifact cannot reach the API, structurally rather than by convention."""
+def test_exactly_one_application_module_imports_ml() -> None:
+    """Stage 6.5 asserted that none did; Stage 6.6 introduced one, and this names it.
+
+    The guard is re-pointed rather than removed. What made it worth having was never the number
+    zero -- it was that the set of modules able to unpickle an artifact is enumerated, so a
+    second one has to be argued for in the commit that adds it.
+    """
     pattern = re.compile(r"^\s*(?:from|import)\s+ml\b", re.MULTILINE)
-    for path in sorted((REPOSITORY_ROOT / "backend" / "app").rglob("*.py")):
-        if "__pycache__" in path.parts:
-            continue
-        assert not pattern.search(path.read_text(encoding="utf-8")), path
+    application = REPOSITORY_ROOT / "backend" / "app"
+    importers = sorted(
+        path.relative_to(application).as_posix()
+        for path in application.rglob("*.py")
+        if "__pycache__" not in path.parts and pattern.search(path.read_text(encoding="utf-8"))
+    )
+
+    assert importers == ["ml/artifact_store.py"]
 
 
-def test_no_route_loads_or_serves_an_artifact() -> None:
+def test_exactly_one_route_serves_the_model_and_none_names_an_artifact() -> None:
+    """Stage 6.6 added the serving endpoint. One route, GET only, and no artifact in a path.
+
+    The second half is the part that still matters: a path segment naming an artifact, a file
+    or an estimator would be a path a client could vary, and the whole point of the loading
+    boundary is that no request chooses what is loaded.
+    """
     from app.core.config import Settings
     from app.main import create_app
 
     schema = create_app(Settings(environment="test", debug=True)).openapi()
     paths = schema["paths"]
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
-    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 82
+    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 83
+
+    serving = [path for path in paths if "/ml/" in path]
+    assert serving == [SERVING_ENDPOINT]
+    assert set(paths[SERVING_ENDPOINT]) == {"get"}
     assert not [
         path
         for path in paths
-        if any(word in path.lower() for word in ("artifact", "model", "predict", "/ml", "infer"))
+        if any(word in path.lower() for word in ("artifact", "infer", "pickle", "estimator"))
     ]
 
 

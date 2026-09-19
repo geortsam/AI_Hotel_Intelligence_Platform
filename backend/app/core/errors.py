@@ -273,6 +273,51 @@ class DatabaseUnavailableError(AppError):
     message = GENERIC_DATABASE_MESSAGE
 
 
+class ModelUnavailableError(AppError):
+    """The approved demand model cannot be served right now (Stage 6.6).
+
+    503 rather than 500, for the same reason :class:`DatabaseUnavailableError` is: the request
+    was well-formed and the fault is a dependency the server could not reach rather than
+    something the caller did. It is also the honest signal to an orchestrator -- this instance
+    cannot answer this route, and a later attempt may.
+
+    **One sentence for every cause**, exactly as ``AuthenticationError`` has one for four. The
+    model may be unavailable because the ML runtime is not installed, because the artifact is
+    absent, because its digest does not match its metadata, because it declares the wrong model
+    or feature version, because it was built from a different dataset, because its claims have
+    been edited, or because the deserialised estimator does not compute what the metadata says
+    it computes. Which of those it was is an operator's question, answered in the log. A client
+    able to tell them apart would be reading the server's deployment state off an error body.
+
+    The message names no path, no filename, no version, no checksum and no library.
+    """
+
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    code = "MODEL_UNAVAILABLE"
+    message = "The demand model is not available on this server."
+
+
+class InsufficientHistoryError(AppError):
+    """Too little recorded history to compute the model's features (Stage 6.6).
+
+    422 rather than 404 or 503: the hotel exists, the server is healthy, and the request is
+    understood -- it simply cannot be satisfied for this date, and a different date may well
+    work. That makes it the caller's to act on, which is what puts it in the 4xx class.
+
+    **No number is invented to fill the gap.** The alternative to this error is a prediction
+    computed from a fabricated zero, and zero is a real demand value here: a hotel that sold
+    nothing is not a hotel with no record. The training dataset dropped incomplete rows rather
+    than imputing them, so imputing at serving time would score a row of a kind the model was
+    never fitted on.
+
+    The message names no feature, no table, no query and no row count.
+    """
+
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    code = "INSUFFICIENT_HISTORY"
+    message = "There is not enough recorded demand history to forecast this date."
+
+
 def internal_fault(error: Exception) -> InternalFaultError:
     """Classify an unattributable integrity failure, record it, and return what to raise.
 

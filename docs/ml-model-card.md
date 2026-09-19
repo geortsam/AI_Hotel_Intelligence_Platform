@@ -374,10 +374,19 @@ not create a generalisation claim either.
 - **The learned model's worst days are one-directional.** All ten of its largest errors are
   under-forecasts, concentrated in late October–November 2016 and the turn of the year — the
   regime changes for which it had the least prior history.
-- **An artifact exists; a serving path does not.** Stage 6.5 fitted and persisted one. There is
-  still no endpoint, no loading path in `backend/`, and no committed payload —
-  `ml/models/demand_baseline_v1/` holds four JSON records, and `model.pkl` when it has been
-  built.
+- **A serving path exists as of Stage 6.6, and it changes nothing about the model.** One
+  read-only endpoint, `GET /hotels/{hotel_public_id}/ml/demand-forecast`, scores this artifact
+  through `ml/inference.py` unchanged. The artifact, its checksums and its claims were not
+  touched; the approval to serve lives in the application, not in the file. The payload is still
+  not committed — `ml/models/demand_baseline_v1/` holds four JSON records, and `model.pkl` when
+  it has been built — so the shipped API image, which also carries no `ml/`, answers 503. See
+  **[ml-serving.md](ml-serving.md)**.
+- **The model carries no hotel identity and no capacity normalisation, and the cost of that is
+  measured.** It was fitted on two hotels whose daily demand runs to the hundreds, and it bins
+  its inputs from that data: a flat history of 1, 3, 5, 10 or 40 room nights a night all score
+  the same ≈ 165.83, because all five fall below the lowest bin edge. Serving it does not make it
+  transferable; cross-hotel generalisation remains unestablished, and
+  **[ml-serving.md](ml-serving.md) §9** states what that means for a small property.
 - **The artifact is fitted on 816 rows.** That is the training partition minus the 56 rows whose
   `demand_lag_28` does not exist yet, and it is a small fit by any standard.
 - **Byte-level artifact reproducibility is a same-build observation**, not a cross-toolchain
@@ -393,7 +402,7 @@ not create a generalisation claim either.
 | Production accuracy established | **No** |
 | Cross-hotel generalisation established | **No** |
 | Reproducible offline measurement | **Yes** — deterministic, checksummed, re-verified in CI |
-| Serving enabled | **No** — `serving_enabled: false`, and the loader refuses an artifact that claims otherwise |
+| Serving enabled *(the artifact's own claim)* | **No** — `serving_enabled: false`, and the loader refuses an artifact that claims otherwise. Stage 6.6 left the flag alone: the approval to serve is a reviewed constant in `backend/app/ml/serving.py`, so an artifact still cannot authorise itself |
 
 The registry entry carries these four answers as data, so a consumer reads them rather than
 inferring them.

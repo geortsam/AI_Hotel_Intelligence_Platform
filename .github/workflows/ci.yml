@@ -23,11 +23,15 @@
 #                  narrow what it covers.
 #
 # ml/requirements-ml.txt IS installed in quality-gates as of Stage 6.3, and only there. It
-# holds one pinned dependency, scikit-learn, for the offline demand evaluation in `ml/`. The
-# application still needs none of it: app/ml/timeseries.py and app/ml/dataset.py are standard
-# library only, backend/requirements.txt names no ML package, and the API image does not copy
-# `ml/` -- .dockerignore excludes it from the build context. Installing it here verifies the
-# Python 3.14 wheel rather than assuming one, and lets the Stage 6.3 tests run for real.
+# holds one pinned dependency, scikit-learn, for the offline demand work in `ml/`.
+#
+# The API image is unchanged by that and by Stage 6.6: backend/requirements.txt still names no
+# ML package, and .dockerignore still keeps `ml/` out of the build context. What Stage 6.6 added
+# is ONE application module, backend/app/ml/artifact_store.py, which imports `ml` lazily inside
+# its loader -- so where the runtime is absent, which includes that image, the demand endpoint
+# answers 503 and the application starts normally. A test enumerates that module as the only
+# importer. Installing the requirements here verifies the Python 3.14 wheel rather than assuming
+# one, and is what lets the Stage 6.3-6.6 tests run for real instead of being skipped.
 
 name: CI
 
