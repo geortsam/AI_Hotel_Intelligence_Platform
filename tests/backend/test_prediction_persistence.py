@@ -361,6 +361,25 @@ def field(record: logging.LogRecord, name: str) -> Any:
     return record.__dict__[name]
 
 
+#: Attribute names every LogRecord carries whatever the caller does. Taken from a real record
+#: rather than hand-listed, so a future Python that adds one does not quietly turn the leakage
+#: test below into a check on the standard library's bookkeeping.
+STDLIB_RECORD_FIELDS = frozenset(
+    logging.LogRecord("n", logging.INFO, "p", 1, "m", None, None).__dict__
+) | {"message", "asctime"}
+
+
+def attached(record: logging.LogRecord) -> dict[str, object]:
+    """Only what this stage put on the record through ``extra``.
+
+    The whole ``__dict__`` is the wrong thing to scan. It carries ``pathname``, which on a Linux
+    CI runner is an absolute source path containing the substring ``/app/`` -- so a check for a
+    leaked container path failed on the test's own source location, while Windows separators hid
+    it locally. What this stage is answerable for is the message and the fields it attaches.
+    """
+    return {k: v for k, v in record.__dict__.items() if k not in STDLIB_RECORD_FIELDS}
+
+
 def outcomes(records: list[logging.LogRecord]) -> list[str]:
     return [str(field(record, "outcome")) for record in records if hasattr(record, "outcome")]
 
@@ -402,6 +421,16 @@ def test_the_event_carries_the_four_approved_fields(
     assert field(event, "model_version") == "demand_baseline_v1"
     assert field(event, "forecast_horizon_days") == 7
     assert isinstance(field(event, "duration_ms"), float)
+
+    # Four, and only four. This is also what keeps `test_the_event_names_nothing_a_hotel_owns`
+    # honest: that test scans exactly these fields, so if the set ever emptied it would pass
+    # by having nothing left to look at.
+    assert set(attached(event)) == {
+        "outcome",
+        "model_version",
+        "forecast_horizon_days",
+        "duration_ms",
+    }
 
 
 @pytest.mark.parametrize(
@@ -463,9 +492,7 @@ def test_the_event_names_nothing_a_hotel_owns(
     response = service.forecast_demand(uuid.uuid4(), TARGET, 7)
 
     assert events.records, "nothing was captured -- the assertion below would be vacuous"
-    rendered = "\n".join(
-        record.getMessage() + " " + repr(record.__dict__) for record in events.records
-    )
+    rendered = "\n".join(f"{record.getMessage()} {attached(record)!r}" for record in events.records)
     for forbidden in (
         str(response.predicted_room_nights),
         str(hotel.public_id),
