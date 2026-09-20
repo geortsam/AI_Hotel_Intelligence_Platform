@@ -223,13 +223,21 @@ def test_the_insert_is_race_safe_by_construction() -> None:
     The forbidden list is checked against CALLS rather than against the text, because this
     module's docstring explains at length that it neither commits nor rolls back -- and a
     substring search would read that explanation as the thing it rules out.
+
+    Scoped to ``record`` rather than to the module, which is what it was always about. Stage
+    6.9 added two read methods to the same repository, and they legitimately issue ``select``;
+    the claim being defended here is that the WRITE is one statement with no read in front of
+    it, not that the file contains no query at all.
     """
     source = (REPOSITORY_ROOT / "backend" / "app" / "repositories" / "ml_prediction.py").read_text(
         encoding="utf-8"
     )
-    calls = {
-        ast.unparse(node.func) for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)
-    }
+    record = next(
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.FunctionDef) and node.name == "record"
+    )
+    calls = {ast.unparse(node.func) for node in ast.walk(record) if isinstance(node, ast.Call)}
 
     assert "on_conflict_do_nothing" in source
     assert "constraint=IDENTITY_CONSTRAINT" in source

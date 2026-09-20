@@ -541,12 +541,15 @@ def application_sources() -> list[Path]:
     return sorted(p for p in APP.rglob("*.py") if "__pycache__" not in p.parts)
 
 
-def test_exactly_one_application_module_imports_the_offline_package() -> None:
-    """Stage 6.5 asserted that none did. Stage 6.6 introduces exactly one, and names it.
+def test_only_the_named_application_modules_import_the_offline_package() -> None:
+    """Stage 6.5 asserted that none did. Stage 6.6 introduced one. Stage 6.9 named a second.
 
-    The boundary is worth something only while it is one file. A second importer -- a
-    convenience in a service, a shortcut in a router -- is how "the API cannot reach an
-    artifact" quietly becomes "the API reaches one from four places".
+    The boundary is worth something only while the importers are named. A bridge nobody
+    declared -- a convenience in a service, a shortcut in a router -- is how "the API cannot
+    reach the offline package" quietly becomes "the API reaches it from four places".
+
+    So this is an allowlist rather than a count, and the test below it pins **which** offline
+    module each one may reach.
     """
     pattern = re.compile(r"^\s*(?:from|import)\s+ml\b", re.MULTILINE)
     importers = [
@@ -555,7 +558,28 @@ def test_exactly_one_application_module_imports_the_offline_package() -> None:
         if pattern.search(source.read_text(encoding="utf-8"))
     ]
 
-    assert importers == ["ml/artifact_store.py"]
+    assert sorted(importers) == ["ml/accuracy.py", "ml/artifact_store.py"]
+
+
+def test_each_bridge_reaches_only_its_own_offline_module() -> None:
+    """Two bridges, two disjoint targets, and nothing else anywhere in the application.
+
+    ``ml.metrics`` is pure standard library and is already one of the thirteen modules the
+    production image ships, so the Stage 6.9 bridge adds no dependency and no image content --
+    but it would still be wrong for a service, a schema or a repository to reach it directly,
+    and this is what says so. A type-only import counts: it is still this file naming that
+    module, and the value of "one bridge" is that grepping for it finds one place.
+    """
+    allowed = {
+        "ml/artifact_store.py": {"ml.artifact", "ml.inference"},
+        "ml/accuracy.py": {"ml.metrics"},
+    }
+    pattern = re.compile(r"^\s*(?:from|import)\s+(ml(?:\.[\w.]+)?)\b", re.MULTILINE)
+
+    for source in application_sources():
+        name = source.relative_to(APP).as_posix()
+        reached = set(pattern.findall(source.read_text(encoding="utf-8")))
+        assert reached <= allowed.get(name, set()), f"{name} reaches {reached}"
 
 
 def test_the_offline_import_is_deferred_and_guarded() -> None:
