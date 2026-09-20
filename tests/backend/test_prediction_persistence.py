@@ -361,12 +361,18 @@ def field(record: logging.LogRecord, name: str) -> Any:
     return record.__dict__[name]
 
 
-#: Attribute names every LogRecord carries whatever the caller does. Taken from a real record
-#: rather than hand-listed, so a future Python that adds one does not quietly turn the leakage
-#: test below into a check on the standard library's bookkeeping.
-STDLIB_RECORD_FIELDS = frozenset(
+#: Field names on a record that this stage did not put there.
+#:
+#: The standard library's own set, read from a real record rather than hand-listed so a future
+#: Python that adds one cannot quietly turn the leakage test into a check on logging's
+#: bookkeeping -- plus ``request_id``, which `RequestIdFilter` stamps on every record as it
+#: passes the SHARED console handler. That one is not this stage's field and its presence here
+#: is not even stable: the filter mutates the same record object our handler already holds, so
+#: whether it has arrived depends on whether some earlier test in the session called
+#: `configure_logging`. Excluding it is what makes these assertions order-independent.
+FIELDS_NOT_ATTACHED_BY_THIS_STAGE = frozenset(
     logging.LogRecord("n", logging.INFO, "p", 1, "m", None, None).__dict__
-) | {"message", "asctime"}
+) | {"message", "asctime", "request_id"}
 
 
 def attached(record: logging.LogRecord) -> dict[str, object]:
@@ -377,7 +383,7 @@ def attached(record: logging.LogRecord) -> dict[str, object]:
     leaked container path failed on the test's own source location, while Windows separators hid
     it locally. What this stage is answerable for is the message and the fields it attaches.
     """
-    return {k: v for k, v in record.__dict__.items() if k not in STDLIB_RECORD_FIELDS}
+    return {k: v for k, v in record.__dict__.items() if k not in FIELDS_NOT_ATTACHED_BY_THIS_STAGE}
 
 
 def outcomes(records: list[logging.LogRecord]) -> list[str]:
