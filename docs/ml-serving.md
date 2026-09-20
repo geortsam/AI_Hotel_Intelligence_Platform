@@ -373,6 +373,12 @@ Stated plainly, because the endpoint's existence is not a claim that the number 
    about accuracy, and with no "must beat the baseline" criterion. Offline it was 17.5 MAE
    against a seasonal-naive 18.4 over 744 predictions, a gap of 0.87 room nights inside a
    per-fold spread of roughly ±50.
+
+   *Stage 6.9 added the ability to **measure** served predictions against realised demand,
+   under a protocol declared in advance. That is a measurement, not a certification: it
+   evaluates no threshold, compares against no baseline and ranks nothing, and this sentence
+   stands unchanged by any number it produces. See
+   [ml-accuracy-measurement.md](ml-accuracy-measurement.md).*
 2. **The model cannot tell small hotels apart, and this is measured rather than suspected.**
    It was fitted on two hotels whose daily demand runs to the hundreds of room nights, it
    carries **no hotel identity feature and no capacity normalisation**, and
@@ -402,9 +408,11 @@ Stated plainly, because the endpoint's existence is not a claim that the number 
    authorised.
 6. **~~Predictions are not persisted~~ — resolved by Stage 6.8.** Every served prediction is
    now recorded with its full model identity and the nine inputs it was computed from, which is
-   what a later drift or accuracy comparison would need. Still absent, and still out of scope:
-   drift detection, accuracy measurement, alerting, a feedback loop and any retraining. See
-   [ml-prediction-persistence-design.md](ml-prediction-persistence-design.md).
+   what a later drift or accuracy comparison would need. Stage 6.9 then built the accuracy
+   half — retrospective, programmatic, and establishing nothing about production accuracy.
+   Still absent, and still out of scope: drift detection, alerting, a feedback loop and any
+   retraining. See [ml-prediction-persistence-design.md](ml-prediction-persistence-design.md)
+   and [ml-accuracy-measurement.md](ml-accuracy-measurement.md).
 7. **No frontend surface.** Nothing in `frontend/` was touched; the endpoint is independently
    testable and is currently exercised only by tests.
 8. **The model is never retrained by the application.** A new artifact is an offline build,

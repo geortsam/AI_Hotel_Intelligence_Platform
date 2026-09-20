@@ -371,6 +371,53 @@ Twenty-one concrete acceptance criteria, the full record shape, the observabilit
 contracts, and the distinction between operational monitoring, data drift, prediction drift and
 actual accuracy: **[ml-prediction-persistence-design.md](ml-prediction-persistence-design.md)**.
 
+## Stage 6.9 — Retrospective forecast accuracy measurement · *done*
+
+> **No table, no migration, no endpoint, no CLI and no dependency.** Head stays
+> `0010_demand_predictions`; the API stays at 51 paths / 83 operations. The result is computed
+> and returned, never persisted.
+
+**Objective: measure served predictions against realised demand under a protocol declared before
+any number was computed — and report the result as a measurement, not as a production accuracy
+claim.** Stage 6.8 named three gaps and closed the first; this is the second, *how far off were
+we*. Drift remains the third and is untouched.
+
+**The protocol is frozen and content-checksummed** in `backend/app/ml/accuracy_protocol.py`, and
+carries no threshold, no pass mark, no baseline and no ranking field — so the evaluation cannot
+reach a verdict, because there is nothing in its rules to reach one against.
+
+**The 28-day settlement lag is an operational assumption and says so.** The transition graph
+settles more than it looks: `checked_in` leads only to `checked_out` and both are occupancy, so
+a night is already final for every checked-in or terminal allocation however long the guest
+stays. Only `pending` and `confirmed` are volatile, and the protocol *derives* exactly those
+two rather than restating occupancy. What no lag can bound is a row a property never resolves,
+or a booking entered after the stay — measured here at 133 of 166 demo bookings. So the
+evaluation measures whether its own assumption held: `unsettled_allocations` counts the
+volatile allocations over the scored window, and `settled` is false when any remain.
+
+**Selection is earliest, not latest**, for one decisive reason: once a target date has been
+scored, no later prediction can change that score. Scoring the newest row would let a hotelier
+re-requesting a forecast for a past date silently rewrite accuracy already measured.
+
+**Small hotels are reported, never hidden.** Two segments with separate denominators and no
+combined figure anywhere, split at the 40 room nights Stage 6.6 measured to sit below the
+model's lowest learned bin edge — read from stored inputs only, never from the outcome.
+
+Metrics are `ml/metrics.py`, imported and not restated, through a function-local bridge in
+`app/ml/accuracy.py` and nowhere else. It costs nothing: that module is pure standard library
+and already one of the thirteen the production image ships.
+
+**Proven against real PostgreSQL:** the selection rule as `DISTINCT ON` executes it including
+the `id` tie-break, a later prediction leaving an already-scored date untouched, the settlement
+boundary at exactly 28 days and one day short, unsettled detection against real booking
+statuses, two model versions never sharing a denominator, cross-tenant isolation with two
+hotels holding predictions for the same dates, a non-member refused before anything is read,
+and an evaluation leaving the database byte-for-byte unchanged.
+
+**It does not establish production accuracy**, evaluate a threshold, compare against a
+baseline, rank a model or trigger any retraining. Fifty acceptance criteria, the full protocol
+and its limitations: **[ml-accuracy-measurement.md](ml-accuracy-measurement.md)**.
+
 ---
 
 # V2 — FUTURE / NOT IMPLEMENTED
@@ -381,7 +428,7 @@ actual accuracy: **[ml-prediction-persistence-design.md](ml-prediction-persisten
 
 | Item | Note |
 |---|---|
-| A **served** trained forecast | *Done in Stages 6.6 and 6.7* — loading path, unavailable-model error, endpoint, schema, and a production image that carries and executes the approved model. Persisted predictions and the observability foundation are now **Stage 6.8**, *defined and not started*. Drift detection, accuracy measurement and retraining remain backlog, and each needs Stage 6.8's data before it can begin |
+| A **served** trained forecast | *Done in Stages 6.6 and 6.7* — loading path, unavailable-model error, endpoint, schema, and a production image that carries and executes the approved model. Persisted predictions and the observability foundation are **Stage 6.8**, *done*; retrospective accuracy measurement under a declared protocol is **Stage 6.9**, *done*, and establishes no production accuracy. Drift detection and retraining remain backlog |
 | Richer feature pipeline | the 7-day horizon admits 9 of 15 contract columns; a horizon-matched on-the-books and rolling-window feature set does not exist |
 | Review sentiment | polarity and aspect breakdown over review text |
 | Room-image classification | class set fixed before training |

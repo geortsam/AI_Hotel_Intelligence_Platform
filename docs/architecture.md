@@ -30,14 +30,23 @@ The dependency rules between them:
 
 | Area | May depend on | May never depend on |
 |---|---|---|
-| `backend/` | trained artifacts in `ml/models/` (read-only, at runtime) | `frontend/`, `ml/pipelines/` |
+| `backend/` | trained artifacts in `ml/models/` (read-only, at runtime), and two **named** modules of `ml/` through two **named** bridges | `frontend/`, `ml/pipelines/` |
 | `frontend/` | the HTTP API contract only | backend source, the database |
 | `ml/` | `ml/data/` | `backend/` |
 | `database/` | nothing | everything |
 
-The consequence worth stating plainly: **training code and web code never import each other.**
-The only thing that crosses between them is a file on disk -- a trained artifact plus its
-evaluation record.
+The consequence worth stating plainly: **the arrow only ever points one way.** `ml/` imports
+nothing from `backend/`, and `backend/` reaches `ml/` from exactly two modules, each with a
+function-local import and a single declared target:
+
+| Bridge | Reaches | Added by | Why it is not a dependency |
+|---|---|---|---|
+| `app/ml/artifact_store.py` | `ml.artifact`, `ml.inference` | Stage 6.6 | Deferred, so `ml` is not needed to start the app; a missing artifact is a 503 |
+| `app/ml/accuracy.py` | `ml.metrics` | Stage 6.9 | `ml/metrics.py` imports only the standard library and already ships in the image |
+
+`tests/backend/test_ml_serving.py` pins the allowlist and the target of each bridge, so a third
+importer -- a convenience in a service, a shortcut in a router -- fails the suite rather than
+quietly widening the boundary. Everything else that crosses is still a file on disk.
 
 ---
 
