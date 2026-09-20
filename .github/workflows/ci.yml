@@ -159,7 +159,7 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
         run: |
           set -euo pipefail
-          expected='0009_audit_booking_deleted'
+          expected='0010_demand_predictions'
 
           echo "--- declared head ---"
           heads="$(python -m alembic heads 2>&1)"
@@ -897,9 +897,9 @@ jobs:
           echo "--- alembic_version, read from PostgreSQL ---"
           revision="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  $revision"
-          [ "$revision" = "0009_audit_booking_deleted" ] || {
-            echo "::error::expected 0009_audit_booking_deleted, got $revision"; exit 1; }
-          echo "  OK   schema is at 0009_audit_booking_deleted"
+          [ "$revision" = "0010_demand_predictions" ] || {
+            echo "::error::expected 0010_demand_predictions, got $revision"; exit 1; }
+          echo "  OK   schema is at 0010_demand_predictions"
 
           tables="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  public tables created: $tables"
@@ -1385,7 +1385,7 @@ jobs:
 
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  after : $after"
-          [ "$after" = "0009_audit_booking_deleted" ] || {
+          [ "$after" = "0010_demand_predictions" ] || {
             echo "::error::revision moved to $after"; exit 1; }
           [ "$before" = "$after" ] || { echo "::error::revision changed"; exit 1; }
           echo "  OK   upgrade head is idempotent and the schema is unchanged"
@@ -1410,7 +1410,7 @@ jobs:
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  revision after restart: $revision"
           echo "  tables after restart  : $after"
-          [ "$revision" = "0009_audit_booking_deleted" ] || {
+          [ "$revision" = "0010_demand_predictions" ] || {
             echo "::error::schema did not survive the restart"; exit 1; }
           [ "$rows" = "$after" ] || { echo "::error::table count changed across restart"; exit 1; }
           echo "  OK   the named volume preserved the schema across stop/start"
@@ -2090,13 +2090,13 @@ jobs:
           # The diff above is the real proof. These restate the few facts that must hold
           # absolutely, so a failure names what was wrong rather than only that something was.
           revision="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc 'SELECT version_num FROM alembic_version')"
-          [ "$revision" = "0009_audit_booking_deleted" ] || {
+          [ "$revision" = "0010_demand_predictions" ] || {
             echo "::error::restored revision is $revision"; exit 1; }
-          echo "  OK   alembic_version is 0009_audit_booking_deleted -- no upgrade or downgrade happened"
+          echo "  OK   alembic_version is 0010_demand_predictions -- no upgrade or downgrade happened"
 
           tables="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")"
-          [ "$tables" -eq 22 ] || { echo "::error::restored database has $tables base tables, expected 22"; exit 1; }
-          echo "  OK   22 base tables (21 application tables + alembic_version)"
+          [ "$tables" -eq 23 ] || { echo "::error::restored database has $tables base tables, expected 23"; exit 1; }
+          echo "  OK   23 base tables (22 application tables + alembic_version)"
 
           membership="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc \
             "SELECT u.email || '/' || h.slug || '/' || uh.role FROM user_hotels uh

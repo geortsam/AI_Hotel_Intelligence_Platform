@@ -410,7 +410,10 @@ checked out on.
   JSON records — `metrics.json` here, `validation.json` and `registry.json` from Stage 6.4,
   `artifact.json` from Stage 6.5 — and a test asserts the listing. Stage 6.5's `model.pkl` is
   generated rather than committed.
-- **No schema change, no migration.** Alembic head remains `0009_audit_booking_deleted`.
+- **No schema change, no migration** *(in Stage 6.3; the head stayed at
+  `0009_audit_booking_deleted` until Stage 6.8 added `0010_demand_predictions` for the
+  prediction record — see
+  [ml-prediction-persistence-design.md](ml-prediction-persistence-design.md))*.
 - **No LLM, no RAG, no agent, no recommendations, no sentiment.**
 - **No hyper-parameter search, no feature selection by score, no ensembling.**
 - **No acceptance criteria in this stage**, and therefore no claim of passing any.

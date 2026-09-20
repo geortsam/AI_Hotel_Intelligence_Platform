@@ -306,11 +306,11 @@ in the model's poor scale behaviour for small hotels. Deployment changed where i
 
 Detail: **[ml-production-runtime.md](ml-production-runtime.md)**.
 
-## Stage 6.8 — Production prediction persistence and observability foundation · *defined, not started*
+## Stage 6.8 — Production prediction persistence and observability foundation · *done*
 
-> **No code exists for this stage.** There is no table, no migration, no service change and no
-> test. Alembic head is `0009_audit_booking_deleted` and the API is 51 paths / 83 operations;
-> neither moves until this stage is implemented, and the API never does.
+> One new table, one migration — head moves to `0010_demand_predictions` — and **no API
+> change at all**: still 51 paths / 83 operations, and the response body for a given request
+> is what Stage 6.6 published.
 
 **Objective: make every production demand prediction a durable, attributable record, and emit the
 minimum signal needed to observe the serving path — without changing the model, the API contract
@@ -354,6 +354,18 @@ separate backlog capabilities and are **not** folded in here.
 read-only and gains a transaction boundary. The precedent is Stage 4.5.12's audit trail, which
 writes a record of what happened inside the transaction of the thing that happened. The endpoint
 stays idempotent — a repeated request creates no second row.
+
+**What it cost architecturally**, as flagged when the stage was defined: the serving service is
+no longer read-only. It holds the session, commits, and rolls back — and the repository still
+does neither, because the transaction boundary belongs to the service. A persistence failure
+fails the request rather than returning a prediction nobody recorded.
+
+**Proven against real PostgreSQL:** one row per served prediction with every field matching the
+response, a repeat leaving the row and its `generated_at` untouched, a changed input writing a
+second row beside the first, a direct duplicate `INSERT` refused by the constraint with no
+Python involved, eight concurrent identical requests producing exactly one row, every refusal
+path writing nothing, and a forced persistence failure returning no prediction and no partial
+row.
 
 Twenty-one concrete acceptance criteria, the full record shape, the observability and drift
 contracts, and the distinction between operational monitoring, data drift, prediction drift and

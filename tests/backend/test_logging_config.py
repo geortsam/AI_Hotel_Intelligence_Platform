@@ -42,9 +42,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 ENV_PY = REPO_ROOT / "database" / "migrations" / "env.py"
 
-#: Every logger the application actually creates, as of this stage.
+#: Every logger the application actually creates. Checked against the source by
+#: `test_the_logger_list_is_complete`, because a stale list here is not a documentation
+#: problem -- `pristine_logging` used to restore only these names, so a logger missing from
+#: the list stayed disabled for the rest of the session once the test below ran.
 APP_LOGGERS = [
     "app.core.errors",
+    "app.ml.artifact_store",
     "app.services.amenity",
     "app.services.auth",
     "app.services.booking",
@@ -53,7 +57,9 @@ APP_LOGGERS = [
     "app.services.health",
     "app.services.hotel",
     "app.services.membership",
+    "app.services.ml_serving",
     "app.services.payment",
+    "app.services.retention",
     "app.services.review",
     "app.services.room",
     "app.services.room_type",
@@ -62,25 +68,59 @@ APP_LOGGERS = [
 
 @pytest.fixture
 def pristine_logging() -> Iterator[None]:
-    """Snapshot and restore the global logging state around a test that reconfigures it."""
+    """Snapshot and restore the global logging state around a test that reconfigures it.
+
+    Every logger, not only the listed ones. `test_the_default_would_have_disabled_them` runs
+    `fileConfig` with the default `disable_existing_loggers=True`, which disables EVERY logger
+    in the process -- so restoring a hand-written subset leaves whatever is not on it disabled
+    for the remainder of the session. That is an invisible failure: the logger still exists,
+    `logger.info(...)` still returns, and nothing is emitted. It cost this suite a full run.
+    """
     root = logging.getLogger()
     saved_handlers = list(root.handlers)
     saved_level = root.level
     saved_app_level = logging.getLogger("app").level
-    saved_disabled = {name: logging.getLogger(name).disabled for name in APP_LOGGERS}
+    # `loggerDict` also holds PlaceHolder objects for intermediate names; only real Loggers
+    # carry `disabled`, and a name created during the test is restored to enabled below.
+    saved_disabled = {
+        name: logger.disabled
+        for name, logger in logging.Logger.manager.loggerDict.items()
+        if isinstance(logger, logging.Logger)
+    }
 
     yield
 
     root.handlers[:] = saved_handlers
     root.setLevel(saved_level)
     logging.getLogger("app").setLevel(saved_app_level)
-    for name, disabled in saved_disabled.items():
-        logging.getLogger(name).disabled = disabled
+    for name, logger in logging.Logger.manager.loggerDict.items():
+        if isinstance(logger, logging.Logger):
+            logger.disabled = saved_disabled.get(name, False)
 
 
 # ======================================================================================
 # The Alembic defect
 # ======================================================================================
+
+
+def test_the_logger_list_is_complete() -> None:
+    """`APP_LOGGERS` is every module-level logger the application declares.
+
+    Read from the source rather than from imported modules, so a module this test file never
+    imports still counts. The list had gone stale by three -- `app.ml.artifact_store`,
+    `app.services.ml_serving` and `app.services.retention` -- and because `pristine_logging`
+    trusted it, each of those was left disabled for the rest of any session that ran the
+    `fileConfig` test. The fixture no longer trusts it; this keeps it true anyway, since it is
+    also what the Alembic regression below actually asserts about.
+    """
+    package = REPO_ROOT / "backend" / "app"
+    declared = sorted(
+        "app." + path.relative_to(package).with_suffix("").as_posix().replace("/", ".")
+        for path in package.rglob("*.py")
+        if "logger = logging.getLogger(__name__)" in path.read_text(encoding="utf-8")
+    )
+
+    assert declared == sorted(APP_LOGGERS)
 
 
 def test_env_py_disables_no_existing_loggers() -> None:

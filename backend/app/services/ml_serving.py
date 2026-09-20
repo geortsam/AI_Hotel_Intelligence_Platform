@@ -13,9 +13,15 @@ orchestration between four things that already exist, and it adds no ML of its o
         |
     DemandPredictionResponse
 
-**Read-only.** Nothing here commits or rolls back, because it writes nothing -- the same
-asymmetry the architecture audit checks for on the analytics and intelligence services, and the
-honest signal that asking for a forecast cannot alter operational data.
+**No longer read-only, as of Stage 6.8.** This service now owns a transaction boundary: the
+prediction it returns and the row recording it commit together, or neither happens. That is a
+deliberate change from Stages 6.6-6.7, argued in ``docs/ml-prediction-persistence-design.md``
+§16 -- the precedent is the audit trail, which writes a record of what happened inside the
+transaction of the thing that happened.
+
+It still alters no **operational** data. It writes one row to ``demand_predictions`` and nothing
+else; no booking, rate, room or ledger entry is touched by asking for a forecast, and the
+endpoint stays idempotent because a repeated request writes no second row.
 
 ## Tenant isolation
 
@@ -47,28 +53,77 @@ Every refusal below is one of the project's existing :class:`~app.core.errors.Ap
 No second error system is introduced, no exception from scikit-learn, pickle or SQLAlchemy is
 allowed to escape as itself, and no message names a path, an artifact, a version, a table or a
 library.
+
+**A refusal writes nothing.** 401, 404, 422 and 503 all leave the table exactly as they found
+it, because the row is written only after a prediction exists.
+
+**A persistence failure fails the request.** If the row cannot be written, no prediction is
+returned. A served-but-unrecorded prediction would make the table's completeness unverifiable,
+and completeness is the only thing the table is for: an absent row has to mean "not served"
+rather than "served, but we lost it".
+
+## Observability
+
+Exactly one structured event per serving attempt that got past authorization, carrying the
+outcome, the model version, the horizon and the duration -- and nothing else. No prediction
+value, no feature value, no hotel identifier, no digest, no path. Those are the hotel's business
+data and the server's internals respectively; the row holds the first and nobody needs the
+second. Counts come from the table, which is why they are not counters here.
+
+401 and 404 emit no event. The serving attempt begins once membership is established, and a
+caller who is not a member should leave no trace on the ML path at all.
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import logging
+import time
 import uuid
 
-from app.core.errors import InsufficientHistoryError, ModelUnavailableError, ValidationError
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.core.errors import (
+    InsufficientHistoryError,
+    ModelUnavailableError,
+    ValidationError,
+    internal_fault,
+)
+from app.core.request_id import current_request_id
 from app.ml.artifact_store import ServedModel, approved_model, predict_room_nights
 from app.ml.serving import (
     APPROVED_MODEL,
     METHODOLOGY,
     MODEL_STATUS,
+    ApprovedModel,
     ArtifactRejectedError,
     ArtifactUnavailableError,
+    FeatureWindow,
     InsufficientFeatureHistoryError,
     build_feature_values,
+    feature_digest,
     feature_window,
 )
+from app.models.hotel import Hotel
 from app.repositories.ml_demand import MlDemandRepository
+from app.repositories.ml_prediction import MlPredictionRepository
 from app.schemas.ml_serving import DemandModelMetadata, DemandPredictionResponse
 from app.services.scope import HotelScopeResolver
+
+logger = logging.getLogger(__name__)
+
+#: The outcomes a serving attempt can report. Five, fixed, and the vocabulary an operator reads.
+#:
+#: ``INFERENCE_FAILED`` is the terminal one: the request got past authorization and the model was
+#: available, but no prediction was returned. That covers an estimator failure and a failure to
+#: record the prediction, because from outside they are the same event -- the platform did not
+#: answer.
+SERVED = "served"
+MODEL_UNAVAILABLE = "model_unavailable"
+INSUFFICIENT_HISTORY = "insufficient_history"
+INVALID_REQUEST = "invalid_request"
+INFERENCE_FAILED = "inference_failed"
 
 
 class DemandPredictionService:
@@ -81,8 +136,19 @@ class DemandPredictionService:
     separately authorised.
     """
 
-    def __init__(self, repository: MlDemandRepository, scope: HotelScopeResolver) -> None:
+    def __init__(
+        self,
+        session: Session,
+        repository: MlDemandRepository,
+        predictions: MlPredictionRepository,
+        scope: HotelScopeResolver,
+    ) -> None:
+        # The session is held because this service owns a unit of work, exactly as every other
+        # writing service does. The repositories hold it too, for their queries; neither of
+        # them commits.
+        self._session = session
         self._repository = repository
+        self._predictions = predictions
         self._scope = scope
 
     def forecast_demand(
@@ -96,12 +162,37 @@ class DemandPredictionService:
         Deterministic: the same hotel, the same date and the same recorded history produce the
         same number on every call. There is no clock in the computation, no random state, no
         cache of previous answers, and no field in the response that varies between two
-        identical requests.
+        identical requests. ``generated_at`` is recorded on the row and deliberately kept out of
+        the response, so persistence cannot contaminate the number or the contract.
         """
         # Authorization and tenancy first, always. Everything below this line is about a hotel
-        # the caller has already been shown to be a member of.
+        # the caller has already been shown to be a member of -- and nothing above it is
+        # observed, so a caller who is not a member leaves no trace on the ML path.
         hotel = self._scope.require_hotel(hotel_public_id)
 
+        started = time.perf_counter()
+        outcome = INFERENCE_FAILED
+        try:
+            response = self._serve(hotel, target_date, horizon_days)
+        except ValidationError:
+            outcome = INVALID_REQUEST
+            raise
+        except InsufficientHistoryError:
+            outcome = INSUFFICIENT_HISTORY
+            raise
+        except ModelUnavailableError:
+            outcome = MODEL_UNAVAILABLE
+            raise
+        else:
+            outcome = SERVED
+            return response
+        finally:
+            self._observe(outcome, time.perf_counter() - started)
+
+    def _serve(
+        self, hotel: Hotel, target_date: dt.date, horizon_days: int
+    ) -> DemandPredictionResponse:
+        """Validate, acquire, score, record, commit. The order is the guarantee."""
         model = APPROVED_MODEL
         if horizon_days != model.forecast_horizon_days:
             raise ValidationError(
@@ -129,6 +220,10 @@ class DemandPredictionService:
             features=features,
         )
 
+        # The prediction and its record commit together. Nothing has been written before this
+        # point, which is what makes every refusal above leave the table untouched.
+        self._record(hotel, target_date, window, features, value, model)
+
         return DemandPredictionResponse(
             hotel_public_id=hotel.public_id,
             target_date=target_date,
@@ -146,6 +241,66 @@ class DemandPredictionService:
                 methodology=METHODOLOGY,
             ),
             features_used=list(model.feature_columns),
+        )
+
+    def _record(
+        self,
+        hotel: Hotel,
+        target_date: dt.date,
+        window: FeatureWindow,
+        features: dict[str, float],
+        value: float,
+        model: ApprovedModel,
+    ) -> None:
+        """Write the row and commit, or roll back and refuse to return a prediction.
+
+        ``ON CONFLICT DO NOTHING`` inside the repository means a repeat writes nothing and
+        raises nothing, so there is no uniqueness race to translate here -- two concurrent
+        identical requests produce one row and two identical responses. The
+        :class:`IntegrityError` branch therefore covers what is left: a hotel deleted underneath
+        the request, or a value the table's CHECK constraints refuse. Both are server faults the
+        caller cannot act on, and both are reported through the shared factory so the SQLSTATE
+        and the relation reach the log and nothing reaches the client.
+        """
+        try:
+            self._predictions.record(
+                hotel_id=hotel.id,
+                target_date=target_date,
+                forecast_horizon_days=model.forecast_horizon_days,
+                prediction_cutoff=window.cutoff,
+                predicted_room_nights=value,
+                model_name=model.model_name,
+                model_version=model.model_version,
+                feature_version=model.feature_version,
+                dataset_version=model.dataset_version,
+                canonical_model_digest=model.canonical_model_digest,
+                feature_values=dict(features),
+                feature_digest=feature_digest(features),
+                request_id=current_request_id(),
+            )
+            self._session.commit()
+        except IntegrityError as error:
+            self._session.rollback()
+            raise internal_fault(error) from error
+
+    def _observe(self, outcome: str, seconds: float) -> None:
+        """One event per serving attempt. Four fields, and nothing a hotel owns.
+
+        The request id is deliberately NOT passed here: ``RequestIdFilter`` already attaches it
+        to every record, and setting it through ``extra`` would be a second writer of one field.
+        """
+        logger.info(
+            "demand forecast %s (model=%s, horizon=%sd) in %.1f ms",
+            outcome,
+            APPROVED_MODEL.model_version,
+            APPROVED_MODEL.forecast_horizon_days,
+            seconds * 1000,
+            extra={
+                "outcome": outcome,
+                "model_version": APPROVED_MODEL.model_version,
+                "forecast_horizon_days": APPROVED_MODEL.forecast_horizon_days,
+                "duration_ms": round(seconds * 1000, 3),
+            },
         )
 
     def _require_model(self) -> ServedModel:

@@ -54,6 +54,9 @@ APPROVED_TABLES = {
     # a row as archived would be an UPDATE, which the trigger refuses -- so the archive row
     # itself IS the record that the event was archived.
     "audit_events_archive",
+    # Stage 6.8. One row per served demand prediction: what the model said, about what, and
+    # from which inputs. Hotel-scoped, never updated, and reachable through no endpoint.
+    "demand_predictions",
 }
 
 
@@ -90,13 +93,28 @@ def test_no_money_column_uses_floating_point() -> None:
     ]
     assert offenders == []
 
-    floats = [
+    # A blanket ban on sa.Float was the proxy for "money is NUMERIC" while no column in this
+    # schema was legitimately a real number. Stage 6.8 adds the first one, so the proxy gains
+    # exactly one named exception rather than being dropped.
+    #
+    # `demand_predictions.predicted_room_nights` is a regression output: a count that is not an
+    # integer, never added to a ledger, never converted to a currency, and rounding it to two
+    # places would invent a precision the model does not have. The money rule above is
+    # untouched, and this column's name is in none of its vocabulary.
+    allowed_floats = {"demand_predictions.predicted_room_nights"}
+    floats = {
         f"{table.name}.{col.name}"
         for table in Base.metadata.tables.values()
         for col in table.columns
         if isinstance(col.type, sa.Float)
-    ]
-    assert floats == []
+    }
+    assert floats == allowed_floats
+
+    # And the exception really is nowhere near money.
+    prediction_columns = {col.name for col in Base.metadata.tables["demand_predictions"].columns}
+    assert not (prediction_columns & money_names)
+    for monetary in ("currency", "amount", "price"):
+        assert not [name for name in prediction_columns if monetary in name]
 
 
 def test_every_event_timestamp_is_timezone_aware() -> None:

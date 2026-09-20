@@ -644,11 +644,27 @@ def test_the_router_holds_no_ml_or_persistence_concern(forbidden: str) -> None:
     assert "open(" not in source
 
 
-def test_the_serving_service_imports_no_http_framework_and_no_orm() -> None:
+def test_the_serving_service_imports_no_http_framework_and_no_estimator() -> None:
+    """Stage 6.6 forbade `sqlalchemy` outright here, because the service wrote nothing.
+
+    Stage 6.8 gave it a transaction boundary, so it now imports the two names every writing
+    service in this codebase imports -- `sqlalchemy.exc.IntegrityError` and
+    `sqlalchemy.orm.Session`. That is the established pattern, not an exception carved for this
+    service: `app/services/hotel.py` does exactly the same.
+
+    What has not changed is the rule underneath: a service holds a session, it does not build
+    queries with it. `test_services_build_no_sqlalchemy_queries` in the architecture audit
+    enforces that across every service, and the check below pins the narrower claim for this
+    one -- no HTTP framework, no estimator, and no route to the artifact except through the
+    store.
+    """
     source = (APP / "services" / "ml_serving.py").read_text(encoding="utf-8")
 
-    for forbidden in ("fastapi", "starlette", "sqlalchemy", "sklearn", "ml.artifact"):
+    for forbidden in ("fastapi", "starlette", "sklearn", "ml.artifact", "ml.inference"):
         assert not re.search(rf"^\s*(?:import|from)\s+{re.escape(forbidden)}\b", source, re.M)
+
+    sqlalchemy_imports = set(re.findall(r"^from (sqlalchemy[\w.]*) import", source, re.M))
+    assert sqlalchemy_imports == {"sqlalchemy.exc", "sqlalchemy.orm"}, sqlalchemy_imports
 
 
 def test_nothing_reachable_from_a_request_points_the_store_at_a_path() -> None:

@@ -408,8 +408,10 @@ def test_the_public_api_gained_only_the_serving_endpoint() -> None:
 def test_the_migration_chain_is_unchanged() -> None:
     versions = REPOSITORY_ROOT / "database" / "migrations" / "versions"
     revisions = sorted(p.name for p in versions.glob("*.py"))
-    assert len(revisions) == 9
-    assert revisions[-1].endswith("0009_audit_booking_deleted.py")
+    # Stage 6.8 added the tenth, for `demand_predictions`. What this file is responsible for is
+    # that the ML work of Stage 6.3 needed no schema change of its own, and it still did not.
+    assert len(revisions) == 10
+    assert revisions[-1].endswith("0010_demand_predictions.py")
 
 
 #: Committed beside the model: four JSON records. `model.pkl` is the Stage 6.5 payload, which is

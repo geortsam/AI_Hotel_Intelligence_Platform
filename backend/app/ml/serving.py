@@ -54,6 +54,8 @@ path, and there is no parameter through which it could.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -170,6 +172,14 @@ APPROVED_MODEL = ApprovedModel(
     lag_days=(7, 14, 28),
 )
 
+#: Decimal places a feature value is formatted to before it is hashed (Stage 6.8).
+#:
+#: Six, the same as the artifact's probe grid and for the same reason: coarse enough that a
+#: last-bit floating-point difference cannot move the digest, fine enough that a real change to
+#: an input does. The features here are room-night counts and calendar integers, so six decimals
+#: is far finer than any difference that could mean something.
+FEATURE_DIGITS = 6
+
 #: A one-line description of what produced the number, carried in every response so a
 #: prediction explains itself without a second lookup.
 METHODOLOGY = (
@@ -278,9 +288,37 @@ def build_feature_values(
     return values
 
 
+def feature_digest(features: Mapping[str, float], *, model: ApprovedModel = APPROVED_MODEL) -> str:
+    """A reproducible fingerprint of the exact inputs a prediction was computed from.
+
+    Stage 6.8 persists one row per prediction, and this is what makes two predictions the *same*
+    prediction. Hotel, target date, horizon and model version are not enough on their own: a
+    booking recorded late changes ``demand_lag_7``, so those four can legitimately describe two
+    different numbers on two different days. Including the inputs is what lets a repeat be
+    recognised as a repeat and a genuinely new prediction be recognised as new.
+
+    The rule, written out so a row can be checked by hand rather than only by the code that
+    wrote it: SHA-256, hex, over the UTF-8 encoding of a compact JSON array of ``[name, value]``
+    pairs, in the model's own column order, with every value formatted to exactly
+    :data:`FEATURE_DIGITS` decimal places.
+
+    Order is part of the digest. Two vectors with the same values under different names, or the
+    same names in a different order, are different inputs and hash differently -- which is the
+    same reason the estimator consumes its columns positionally.
+    """
+    if tuple(features) != model.feature_columns:
+        raise ServingError(
+            "a feature vector can only be fingerprinted in the model's own column order"
+        )
+    pairs = [[name, format(float(features[name]), f".{FEATURE_DIGITS}f")] for name in features]
+    canonical = json.dumps(pairs, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 __all__ = [
     "APPROVED_MODEL",
     "EXPECTED_CLAIMS",
+    "FEATURE_DIGITS",
     "METHODOLOGY",
     "MODEL_STATUS",
     "ApprovedModel",
@@ -291,5 +329,6 @@ __all__ = [
     "InsufficientFeatureHistoryError",
     "ServingError",
     "build_feature_values",
+    "feature_digest",
     "feature_window",
 ]

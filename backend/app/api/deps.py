@@ -40,6 +40,7 @@ from app.repositories.health import HealthRepository
 from app.repositories.hotel import HotelRepository
 from app.repositories.membership import MembershipRepository
 from app.repositories.ml_demand import MlDemandRepository
+from app.repositories.ml_prediction import MlPredictionRepository
 from app.repositories.payment import PaymentRepository
 from app.repositories.platform_admin import PlatformAdminRepository
 from app.repositories.pricing import PricingRepository
@@ -416,8 +417,14 @@ def get_demand_prediction_service(
     The artifact is NOT a dependency. It is loaded at most once per process, behind
     ``app.ml.artifact_store``, rather than per request -- a request-scoped dependency would
     unpickle 700 KB and rebuild the estimator on every call.
+
+    Stage 6.8 hands it the session as well as the repositories. It now owns a unit of work: the
+    prediction it returns and the row recording it commit together. That is why the session is
+    passed to the SERVICE and not only to its repositories, exactly as it is for every other
+    writing service -- the repositories query and flush, and the service decides what a complete
+    operation is.
     """
-    return DemandPredictionService(MlDemandRepository(db), scope)
+    return DemandPredictionService(db, MlDemandRepository(db), MlPredictionRepository(db), scope)
 
 
 DemandPredictionServiceDep = Annotated[

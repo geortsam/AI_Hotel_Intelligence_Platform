@@ -1,12 +1,19 @@
 # Stage 6.8 — Production prediction persistence and the observability foundation
 
-> **Status: DEFINED, NOT STARTED.** Nothing in this document exists in the repository. There is
-> no table, no migration, no service change and no test for any of it. This is the stage's
-> specification, written before the work so that the work can be reviewed against something.
+> **Status: IMPLEMENTED.** This document was written as a specification before the work and is
+> kept as the record of what was specified. Everything in it now exists: the
+> `demand_predictions` table, migration `0010_demand_predictions`, the transaction boundary, the
+> serving-attempt event, and tests for all twenty-one acceptance criteria.
 >
-> **Alembic head is `0009_audit_booking_deleted` and stays there until Stage 6.8 is
-> implemented.** The API is 51 paths / 83 operations and stays there permanently — this stage
-> adds no endpoint.
+> **Alembic head is now `0010_demand_predictions`.** The API is 51 paths / 83 operations and did
+> not move — this stage added no endpoint, no field and no status code.
+>
+> Three things the implementation settled, each recorded where it belongs below: `feature_values`
+> is stored as a JSONB **object** and the column ORDER is carried by `feature_digest` rather than
+> by the JSON, because PostgreSQL normalises `jsonb` key order (§3); the `INSERT ... ON CONFLICT
+> DO NOTHING` shape means there is no uniqueness race to translate, so no constraint name can
+> reach a client (§4); and the five log outcomes are a closed vocabulary, with `inference_failed`
+> covering a failure to record as well as a failure to predict (§8).
 
 ---
 

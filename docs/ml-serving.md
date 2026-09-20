@@ -400,9 +400,11 @@ Stated plainly, because the endpoint's existence is not a claim that the number 
    same reason the repository takes one hotel at a time: a method that answers for many is one
    edit away from a method that answers for all. Seven days means seven requests, each separately
    authorised.
-6. **Predictions are not persisted**, so there is no record to compare against outcomes later.
-   No monitoring, no drift detection, no alerting, no feedback loop and no automatic retraining
-   exist, and none is implied by this stage.
+6. **~~Predictions are not persisted~~ — resolved by Stage 6.8.** Every served prediction is
+   now recorded with its full model identity and the nine inputs it was computed from, which is
+   what a later drift or accuracy comparison would need. Still absent, and still out of scope:
+   drift detection, accuracy measurement, alerting, a feedback loop and any retraining. See
+   [ml-prediction-persistence-design.md](ml-prediction-persistence-design.md).
 7. **No frontend surface.** Nothing in `frontend/` was touched; the endpoint is independently
    testable and is currently exercised only by tests.
 8. **The model is never retrained by the application.** A new artifact is an offline build,
@@ -415,7 +417,10 @@ Stated plainly, because the endpoint's existence is not a claim that the number 
 No LLM, no RAG, no agent, no recommendation, no conversational surface, no embedding, no vector
 store, no prompt, no natural-language explanation. No retraining, no hyper-parameter search, no
 ensemble and no new algorithm. No database migration — the schema and Alembic head
-`0009_audit_booking_deleted` are untouched, and the endpoint writes nothing. No change to
+`0009_audit_booking_deleted` were untouched, and the endpoint wrote nothing. *(Stage 6.8
+changed the second half of that sentence and only that half: the same endpoint now records
+every prediction it serves, through migration `0010_demand_predictions`. Its request, its
+response and its status codes are unchanged.)* No change to
 `backend/requirements.txt`, `backend/requirements-dev.txt`, `backend/Dockerfile`,
 `.dockerignore`, `docker-compose.yml` or the frontend.
 

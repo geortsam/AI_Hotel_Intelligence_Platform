@@ -43,9 +43,9 @@ import app
 
 MIGRATIONS = Path(app.__file__).resolve().parents[2] / "database" / "migrations" / "versions"
 
-#: The nine revisions of the completed platform, in hashing order. Listed rather than
-#: discovered: a migration appearing or disappearing should fail this file, not be absorbed
-#: by it.
+#: The ten revisions of the platform, in hashing order. Listed rather than discovered: a
+#: migration appearing or disappearing should fail this file, not be absorbed by it -- which is
+#: exactly what happened when Stage 6.8 added the tenth, and is the point.
 EXPECTED_FILENAMES = (
     "20260828_0001_initial_schema.py",
     "20260828_0002_payments_public_id.py",
@@ -56,13 +56,18 @@ EXPECTED_FILENAMES = (
     "20260904_0007_audit_events.py",
     "20260904_0008_audit_retention_archive.py",
     "20260905_0009_audit_booking_deleted.py",
+    "20260920_0010_demand_predictions.py",
 )
 
 #: sha256 of the canonicalised concatenation described in this module's docstring. Derived
-#: from the nine files above; not a value chosen to make anything pass.
-CANONICAL_SHA256 = "0dc2f8b156e87d65827bd8a2d5802e53a3e91625ff3bd449b9d97e1ddc335895"
+#: from the ten files above; not a value chosen to make anything pass.
+#:
+#: Moved once, by Stage 6.8, when `demand_predictions` was added. The previous value was
+#: `0dc2f8b1...` over nine files; it is recorded here rather than discarded, because "the digest
+#: changed" should always be answerable with "yes, in that commit, for that migration".
+CANONICAL_SHA256 = "35162fde0957a2679ecd9934166853465a4ca2b2f4f02b6227b6ebbd3355f9fe"
 
-EXPECTED_HEAD = "0009_audit_booking_deleted"
+EXPECTED_HEAD = "0010_demand_predictions"
 EXPECTED_ROOT = "0001_initial_schema"
 
 REVISION = re.compile(r'^revision: str = "([^"]+)"', re.MULTILINE)
@@ -86,7 +91,7 @@ def digest_of(contents: Iterable[bytes]) -> str:
     return running.hexdigest()
 
 
-def test_the_chain_is_exactly_these_nine_files_in_this_order() -> None:
+def test_the_chain_is_exactly_these_ten_files_in_this_order() -> None:
     assert tuple(path.name for path in migration_files()) == EXPECTED_FILENAMES
 
 

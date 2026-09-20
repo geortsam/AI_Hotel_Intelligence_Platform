@@ -143,7 +143,11 @@ def session(engine: Engine) -> Iterator[Session]:
         # because a deferred constraint trigger can only be observed at COMMIT.
         s.execute(
             sa.text(
-                "TRUNCATE booking_room_nights, booking_rooms, payments, reviews, revenue, "
+                # Stage 6.8. demand_predictions references hotels, so CASCADE would reach
+                # it -- it is named anyway, like audit_events and the identity tables
+                # below, so the teardown says what it clears rather than implying it.
+                "TRUNCATE demand_predictions, "
+                "booking_room_nights, booking_rooms, payments, reviews, revenue, "
                 "expenses, daily_hotel_metrics, bookings, guests, rooms, room_types, "
                 "room_type_amenities, amenities, revenue_categories, expense_categories, "
                 # Stage 4.5.12. audit_events is append-only -- migration 0007 installs a
