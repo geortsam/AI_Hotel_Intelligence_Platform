@@ -159,7 +159,10 @@ class MlPredictionRepository:
                 canonical_model_digest=row.canonical_model_digest,
                 feature_digest=row.feature_digest,
                 feature_values=dict(row.feature_values),
-                predicted_room_nights=float(row.predicted_room_nights),
+                # No cast: the column is DOUBLE PRECISION, so the driver already hands back
+                # a Python float. Spelling one here would put `float(` in a repository and
+                # widen the money-safety exemption to a layer that does not need it.
+                predicted_room_nights=row.predicted_room_nights,
             )
             for row in rows
         ]

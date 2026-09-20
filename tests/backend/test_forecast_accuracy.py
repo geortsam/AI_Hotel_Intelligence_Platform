@@ -982,17 +982,26 @@ def test_an_evaluation_with_nothing_to_score_says_so(events: RecordingHandler) -
 
 def test_the_event_names_nothing_a_hotel_owns(events: RecordingHandler) -> None:
     """Criterion 47. Captured records, not a source scan."""
-    rows = [candidate(SETTLED, 137.5, level=42.0, feature_digest="a" * 64)]
-    service, _, _, scope = build_service(rows, {SETTLED: 99})
+    rows = [candidate(SETTLED, 8317.25, level=6143.0, feature_digest="a" * 64)]
+    service, _, _, scope = build_service(rows, {SETTLED: 5209})
 
     result = evaluate(service, window_from=SETTLED, window_to=SETTLED)
 
     assert events.records, "nothing was captured -- the assertion below would be vacuous"
-    rendered = "\n".join(f"{record.getMessage()} {attached(record)!r}" for record in events.records)
+    # `duration_ms` is excluded, and the forbidden values are deliberately distinctive. It is a
+    # machine timing whose digits are arbitrary, so a short forbidden value collides with it
+    # sooner or later and fails for a reason that is not a leak -- "99" against a duration of
+    # 0.099 did exactly that. The field is not left unchecked: it is one of the five pinned by
+    # name in `test_the_event_carries_exactly_the_five_approved_fields`.
+    rendered = "\n".join(
+        f"{record.getMessage()} "
+        f"{ {k: v for k, v in attached(record).items() if k != 'duration_ms'}!r}"
+        for record in events.records
+    )
     for forbidden in (
-        "137.5",
-        "99",
-        "42.0",
+        "8317.25",
+        "5209",
+        "6143",
         "a" * 64,
         APPROVED_DIGEST,
         str(scope._hotel.public_id),

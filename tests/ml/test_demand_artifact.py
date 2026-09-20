@@ -18,6 +18,7 @@ Three tests carry the security weight:
 
 from __future__ import annotations
 
+import ast
 import datetime as dt
 import hashlib
 import json
@@ -494,22 +495,55 @@ def test_no_offline_module_imports_the_running_application() -> None:
             assert module == "app.ml.dataset", f"{path.name} imports {module}"
 
 
-def test_exactly_one_application_module_imports_ml() -> None:
+def test_exactly_one_application_module_can_reach_an_artifact() -> None:
     """Stage 6.5 asserted that none did; Stage 6.6 introduced one, and this names it.
 
-    The guard is re-pointed rather than removed. What made it worth having was never the number
-    zero -- it was that the set of modules able to unpickle an artifact is enumerated, so a
-    second one has to be argued for in the commit that adds it.
-    """
-    pattern = re.compile(r"^\s*(?:from|import)\s+ml\b", re.MULTILINE)
-    application = REPOSITORY_ROOT / "backend" / "app"
-    importers = sorted(
-        path.relative_to(application).as_posix()
-        for path in application.rglob("*.py")
-        if "__pycache__" not in path.parts and pattern.search(path.read_text(encoding="utf-8"))
-    )
+    The guard is re-pointed rather than removed, and the claim it defends is sharpened rather
+    than widened. What made it worth having was never the number zero -- it was that the set of
+    modules **able to unpickle an artifact** is enumerated, so a second one has to be argued for
+    in the commit that adds it.
 
-    assert importers == ["ml/artifact_store.py"]
+    Stage 6.9 added a second importer of ``ml``, and it is deliberately not a second importer of
+    *this*: ``app/ml/accuracy.py`` reaches ``ml.metrics``, which is arithmetic over floats with
+    no artifact, no pickle and no estimator anywhere in it. So the two claims are separated
+    here: the artifact-reaching set is still exactly one module, and the broader allowlist of
+    who may reach ``ml`` at all is pinned by
+    ``tests/backend/test_ml_serving.py::test_each_bridge_reaches_only_its_own_offline_module``.
+    """
+    application = REPOSITORY_ROOT / "backend" / "app"
+    sources = {
+        path.relative_to(application).as_posix(): path.read_text(encoding="utf-8")
+        for path in application.rglob("*.py")
+        if "__pycache__" not in path.parts
+    }
+
+    artifact_reaching = re.compile(r"^\s*(?:from|import)\s+ml\.(?:artifact|inference)\b", re.M)
+    assert sorted(name for name, text in sources.items() if artifact_reaching.search(text)) == [
+        "ml/artifact_store.py"
+    ]
+
+    any_ml = re.compile(r"^\s*(?:from|import)\s+ml\b", re.MULTILINE)
+    assert sorted(name for name, text in sources.items() if any_ml.search(text)) == [
+        "ml/accuracy.py",
+        "ml/artifact_store.py",
+    ]
+
+    # And the new one really is nowhere near a pickle. Read from the AST, not from the text:
+    # its docstring names `ml.artifact` in order to explain which precedent it follows, and a
+    # substring search would read that explanation as the thing it rules out.
+    tree = ast.parse(sources["ml/accuracy.py"])
+    imported = {
+        node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module
+    } | {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    called = {ast.unparse(node.func) for node in ast.walk(tree) if isinstance(node, ast.Call)}
+
+    assert not [name for name in imported if "pickle" in name or "artifact" in name]
+    assert not [name for name in called if "load_artifact" in name or "predict" in name]
 
 
 def test_exactly_one_route_serves_the_model_and_none_names_an_artifact() -> None:
