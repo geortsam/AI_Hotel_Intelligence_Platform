@@ -58,6 +58,7 @@ APP_LOGGERS = [
     "app.services.hotel",
     "app.services.membership",
     "app.services.ml_accuracy",
+    "app.services.ml_drift",
     "app.services.ml_serving",
     "app.services.payment",
     "app.services.retention",

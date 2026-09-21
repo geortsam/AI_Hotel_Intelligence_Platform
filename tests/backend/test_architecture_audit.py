@@ -252,6 +252,9 @@ def test_every_writing_service_owns_its_transaction_boundary() -> None:
     # a deliberate contrast with app.services.ml_serving, which took one in Stage 6.8 because
     # it owns a unit of work.
     assert "app.services.ml_accuracy" in readers
+    # Stage 6.10, same structural argument: it holds no session either, so it observes
+    # distributions over rows it can only read.
+    assert "app.services.ml_drift" in readers
     for domain in ("hotel", "booking", "payment", "review", "finance", "guest"):
         assert f"app.services.{domain}" in writers
 
@@ -319,7 +322,7 @@ def test_the_ml_package_is_free_of_application_imports() -> None:
         assert not imported.startswith("sqlalchemy"), f"ml imports {imported}"
 
 
-@pytest.mark.parametrize("name", ["analytics", "intelligence", "ml_accuracy"])
+@pytest.mark.parametrize("name", ["analytics", "intelligence", "ml_accuracy", "ml_drift"])
 def test_the_read_only_services_cannot_write(name: str) -> None:
     module = importlib.import_module(f"app.services.{name}")
     source = code_of(module)

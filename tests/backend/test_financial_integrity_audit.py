@@ -143,8 +143,11 @@ def test_the_voided_statuses_are_the_two_expected() -> None:
 #:   ml/artifact_store.py    the estimator's output, a predicted room-night count
 #:   ml/accuracy.py          that same output, paired with a realised count and measured
 #:   ml/accuracy_protocol.py a stored feature value, compared against a room-night boundary
+#:   ml/drift.py             those same stored values, summarised -- quantiles interpolate, so
+#:                           the arithmetic is real-valued by construction
 #:
-#: The middle two arrived with Stage 6.6 and the last with Stage 6.9. A regression output is a
+#: The middle two arrived with Stage 6.6, the next with Stage 6.9 and the last with Stage
+#: 6.10. A regression output is a
 #: real number by nature: it is a count that is not an integer, it is never added to a ledger,
 #: and rounding it to two places at the boundary would be inventing a precision the model does
 #: not have. Every exemption is an `ml/` module, deliberately -- no service, no repository and
@@ -157,6 +160,7 @@ FLOAT_EXEMPT = {
     "ml/artifact_store.py",
     "ml/accuracy.py",
     "ml/accuracy_protocol.py",
+    "ml/drift.py",
 }
 
 
