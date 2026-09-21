@@ -93,6 +93,10 @@ CANONICAL_DIGEST = "436bf6b3cc5f1a2cc1a2e7fa5e971cedcd0405aa5b7f07a84967b293118a
 #: The one route Stage 6.6 added. Named here so the two guards below cannot drift apart.
 SERVING_ENDPOINT = "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast"
 
+#: The one Stage 6.11 added. On the same router, and deliberately not a serving route: it reads
+#: stored rows, loads no artifact, and declares no 503.
+STORED_PREDICTIONS_ENDPOINT = "/api/v1/hotels/{hotel_public_id}/ml/demand-predictions"
+
 
 # --- fixtures ------------------------------------------------------------------------------------
 
@@ -547,11 +551,16 @@ def test_exactly_one_application_module_can_reach_an_artifact() -> None:
 
 
 def test_exactly_one_route_serves_the_model_and_none_names_an_artifact() -> None:
-    """Stage 6.6 added the serving endpoint. One route, GET only, and no artifact in a path.
+    """Stage 6.6 added the serving endpoint. One route SCORES, GET only, no artifact in a path.
 
     The second half is the part that still matters: a path segment naming an artifact, a file
     or an estimator would be a path a client could vary, and the whole point of the loading
     boundary is that no request chooses what is loaded.
+
+    Stage 6.11 put a second route on the ML router, and it is deliberately not a second serving
+    route: it reads rows the serving route already wrote, loads no artifact and declares no 503.
+    What this file is responsible for -- that exactly one route can reach the model, and that no
+    path names an artifact -- is unchanged, and is asserted as that rather than as a route count.
     """
     from app.core.config import Settings
     from app.main import create_app
@@ -559,11 +568,17 @@ def test_exactly_one_route_serves_the_model_and_none_names_an_artifact() -> None
     schema = create_app(Settings(environment="test", debug=True)).openapi()
     paths = schema["paths"]
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
-    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 83
+    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 84
 
-    serving = [path for path in paths if "/ml/" in path]
-    assert serving == [SERVING_ENDPOINT]
+    ml_routes = sorted(path for path in paths if "/ml/" in path)
+    assert ml_routes == [SERVING_ENDPOINT, STORED_PREDICTIONS_ENDPOINT]
     assert set(paths[SERVING_ENDPOINT]) == {"get"}
+    assert set(paths[STORED_PREDICTIONS_ENDPOINT]) == {"get"}
+
+    # Only the serving route can fail for want of a model, which is what makes it the only one
+    # that reaches one.
+    assert "503" in paths[SERVING_ENDPOINT]["get"]["responses"]
+    assert "503" not in paths[STORED_PREDICTIONS_ENDPOINT]["get"]["responses"]
     assert not [
         path
         for path in paths

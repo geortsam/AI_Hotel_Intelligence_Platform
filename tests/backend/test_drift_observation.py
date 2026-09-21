@@ -1031,8 +1031,8 @@ def test_the_api_surface_did_not_move() -> None:
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     operations = sum(1 for path in schema["paths"].values() for verb in path if verb in methods)
 
-    assert len(schema["paths"]) == 51
-    assert operations == 83
+    assert len(schema["paths"]) == 52
+    assert operations == 84
     assert not [name for name in schema["components"]["schemas"] if "istribution" in name]
 
 
@@ -1054,7 +1054,12 @@ def test_the_model_identity_is_untouched() -> None:
 
 
 def test_no_repository_read_was_added_for_this_stage() -> None:
-    """Decision 3: the Stage 6.9 read provides every locked field, so nothing was added."""
+    """Decision 3: the Stage 6.9 read provides every locked field, so Stage 6.10 added nothing.
+
+    The set grew by one in Stage 6.11, which added ``stored_predictions_page`` for the read API.
+    That is a different stage's method and does not weaken this claim: what this test says is
+    that *distribution observation* introduced no read of its own, and it still did not.
+    """
     tree = ast.parse((BACKEND / "repositories" / "ml_prediction.py").read_text(encoding="utf-8"))
     methods = {
         node.name
@@ -1062,7 +1067,12 @@ def test_no_repository_read_was_added_for_this_stage() -> None:
         if isinstance(node, ast.FunctionDef) and not node.name.startswith("_")
     }
 
-    assert methods == {"record", "scorable_predictions", "unsettled_allocation_count"}
+    assert methods == {
+        "record",
+        "scorable_predictions",
+        "unsettled_allocation_count",
+        "stored_predictions_page",
+    }
 
 
 def test_the_backend_requirements_did_not_move() -> None:

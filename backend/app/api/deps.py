@@ -66,6 +66,7 @@ from app.services.health import HealthService
 from app.services.hotel import HotelService
 from app.services.intelligence import IntelligenceService
 from app.services.membership import MembershipService
+from app.services.ml_prediction_read import DemandPredictionReadService
 from app.services.ml_serving import DemandPredictionService
 from app.services.payment import PaymentService
 from app.services.pricing import PricingService
@@ -429,6 +430,28 @@ def get_demand_prediction_service(
 
 DemandPredictionServiceDep = Annotated[
     DemandPredictionService, Depends(get_demand_prediction_service)
+]
+
+
+def get_demand_prediction_read_service(
+    db: DbSession, scope: ScopeResolverDep
+) -> DemandPredictionReadService:
+    """Assemble the read-only stored-prediction service (Stage 6.11).
+
+    No session reaches the service itself, only its repository: reading a hotel's own prediction
+    history writes nothing, so there is no unit of work to own. The same asymmetry as the
+    analytics, intelligence, accuracy and distribution services -- and the deliberate opposite of
+    ``get_demand_prediction_service`` above, which hands the session to the SERVICE because
+    serving a prediction and recording it are one operation.
+
+    It is handed the same ``MlPredictionRepository`` the serving path writes through, not a
+    read-only copy of its own. One module owns what a prediction row is.
+    """
+    return DemandPredictionReadService(MlPredictionRepository(db), scope)
+
+
+DemandPredictionReadServiceDep = Annotated[
+    DemandPredictionReadService, Depends(get_demand_prediction_read_service)
 ]
 
 

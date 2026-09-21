@@ -869,8 +869,8 @@ def test_the_api_surface_did_not_move() -> None:
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     operations = sum(1 for path in schema["paths"].values() for verb in path if verb in methods)
 
-    assert len(schema["paths"]) == 51
-    assert operations == 83
+    assert len(schema["paths"]) == 52
+    assert operations == 84
     assert not [name for name in schema["components"]["schemas"] if "ccuracy" in name]
 
 

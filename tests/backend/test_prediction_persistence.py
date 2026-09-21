@@ -571,8 +571,8 @@ def test_the_api_surface_did_not_move() -> None:
     schema = create_app(Settings(environment="test", debug=True)).openapi()
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
 
-    assert len(schema["paths"]) == 51
-    assert sum(len([m for m in spec if m in methods]) for spec in schema["paths"].values()) == 83
+    assert len(schema["paths"]) == 52
+    assert sum(len([m for m in spec if m in methods]) for spec in schema["paths"].values()) == 84
 
 
 def test_the_response_schema_gained_nothing() -> None:

@@ -53,6 +53,8 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 APP = REPOSITORY_ROOT / "backend" / "app"
 
 SCHEMA_PATH = "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast"
+#: Stage 6.11 added this one. It reads stored rows and scores nothing.
+STORED_PREDICTIONS_PATH = "/api/v1/hotels/{hotel_public_id}/ml/demand-predictions"
 
 #: A fixed anchor, so every expectation below is arithmetic rather than "whatever today is".
 TARGET = dt.date(2026, 6, 1)
@@ -728,14 +730,40 @@ def openapi() -> dict:
 
 
 def test_exactly_one_serving_route_was_added() -> None:
+    """One route SCORES the model. The ML router gained a second in Stage 6.11 that does not.
+
+    The claim this test defends was never "the router has one route" -- it is that scoring the
+    model happens in exactly one place. Stage 6.11 added
+    ``GET .../ml/demand-predictions``, which reads rows the serving route already wrote and
+    never touches an artifact; the test below pins that separation rather than this one
+    quietly widening to accommodate it.
+    """
     schema = openapi()
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     operations = sum(len([m for m in spec if m in methods]) for spec in schema["paths"].values())
 
-    assert len(schema["paths"]) == 51
-    assert operations == 83
-    assert [path for path in schema["paths"] if "/ml/" in path] == [SCHEMA_PATH]
+    assert len(schema["paths"]) == 52
+    assert operations == 84
+    assert sorted(path for path in schema["paths"] if "/ml/" in path) == [
+        SCHEMA_PATH,
+        STORED_PREDICTIONS_PATH,
+    ]
     assert set(schema["paths"][SCHEMA_PATH]) == {"get"}
+    assert set(schema["paths"][STORED_PREDICTIONS_PATH]) == {"get"}
+
+
+def test_the_stored_prediction_route_reaches_no_model() -> None:
+    """Stage 6.11's route is a read path, and it cannot become a second serving path.
+
+    It declares no 503: there is no artifact for it to find missing, because it loads none.
+    That is the structural difference between the two routes, expressed in the contract rather
+    than only in the prose.
+    """
+    schema = openapi()
+    responses = set(schema["paths"][STORED_PREDICTIONS_PATH]["get"]["responses"])
+
+    assert "503" not in responses, "a read path has no model to be unavailable"
+    assert responses == {"200", "404", "422"}
 
 
 def test_the_route_declares_its_failure_modes() -> None:

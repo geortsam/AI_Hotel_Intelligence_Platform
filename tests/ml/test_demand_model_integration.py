@@ -396,7 +396,7 @@ def test_the_public_api_gained_only_the_serving_endpoint() -> None:
     paths = schema["paths"]
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     operations = sum(len([m for m in spec if m in methods]) for spec in paths.values())
-    assert operations == 83
+    assert operations == 84
     assert [path for path in paths if "/ml" in path] == [
         "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast"
     ]

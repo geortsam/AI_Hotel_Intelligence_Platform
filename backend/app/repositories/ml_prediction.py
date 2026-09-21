@@ -201,5 +201,68 @@ class MlPredictionRepository:
             ).scalar_one()
         )
 
+    # --- the read, for Stage 6.11 ----------------------------------------------------------------
+
+    def stored_predictions_page(
+        self, hotel_id: int, date_from: dt.date, date_to: dt.date, *, page: int, page_size: int
+    ) -> tuple[list[DemandPrediction], int]:
+        """One page of a hotel's stored predictions, and how many there are in total.
+
+        **Every row, deliberately.** This is the deliberate opposite of
+        :meth:`scorable_predictions`, and the difference is the whole reason the two are separate
+        methods rather than one with a flag.
+
+        That method collapses a ``(target_date, horizon, model_version)`` group to one row,
+        because an accuracy measurement that counted the same target date twice would be wrong.
+        This one collapses nothing, because a hotel asking what it was told is owed every answer
+        it was given -- and Stage 6.8 made repeat predictions legitimately distinct rows, not
+        duplicates: a booking recorded late changes ``demand_lag_7``, so the same request asked
+        twice is two genuinely different predictions. Hiding the earlier one would be hiding
+        history.
+
+        A flag on one method would put one query one edit away from serving accuracy semantics to
+        a disclosure caller, or the reverse. Two methods cannot do that.
+
+        The order is total: ``target_date``, then ``generated_at``, then ``public_id``. The first
+        two are meaningful to a reader -- chronological by subject, then by when we said it -- and
+        the third is what makes it deterministic, because ``public_id`` is unique and so no two
+        rows can tie on all three. Pagination correctness depends on that: a non-total order lets
+        two equal rows swap between pages, so a client walking the pages could see one row twice
+        and another never.
+
+        Bounded by ``hotel_id`` and the two dates, which are the caller's whole vocabulary here.
+        There is no parameter through which a second hotel could be named, and no path that
+        returns an unbounded result: ``page_size`` is applied as a ``LIMIT`` by the service's
+        contract and validated before this is reached.
+        """
+        where = and_(
+            DemandPrediction.hotel_id == hotel_id,
+            DemandPrediction.target_date >= date_from,
+            DemandPrediction.target_date <= date_to,
+        )
+
+        total = int(
+            self._session.execute(
+                select(func.count()).select_from(DemandPrediction).where(where)
+            ).scalar_one()
+        )
+
+        rows = list(
+            self._session.execute(
+                select(DemandPrediction)
+                .where(where)
+                .order_by(
+                    DemandPrediction.target_date,
+                    DemandPrediction.generated_at,
+                    DemandPrediction.public_id,
+                )
+                .limit(page_size)
+                .offset((page - 1) * page_size)
+            )
+            .scalars()
+            .all()
+        )
+        return rows, total
+
 
 __all__ = ["MlPredictionRepository"]

@@ -30,13 +30,15 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Path, Query, status
 
-from app.api.deps import DemandPredictionServiceDep
-from app.schemas.common import ErrorResponse
+from app.api.deps import DemandPredictionReadServiceDep, DemandPredictionServiceDep
+from app.schemas.common import ErrorResponse, Page
+from app.schemas.ml_prediction_read import StoredDemandPredictionResponse
 from app.schemas.ml_serving import (
     MAX_REQUESTED_HORIZON_DAYS,
     SERVED_HORIZON_DAYS,
     DemandPredictionResponse,
 )
+from app.services.ml_prediction_read import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 
 router = APIRouter(prefix="/hotels/{hotel_public_id}/ml", tags=["ml"])
 
@@ -91,6 +93,79 @@ RESPONSES: dict[int | str, dict[str, Any]] = {
         ),
     },
 }
+
+
+#: The read path's failures, which are a strict subset of the serving path's: there is no
+#: model to be unavailable when nothing is scored.
+READ_RESPONSES: dict[int | str, dict[str, Any]] = {
+    status.HTTP_404_NOT_FOUND: RESPONSES[status.HTTP_404_NOT_FOUND],
+    status.HTTP_422_UNPROCESSABLE_CONTENT: {
+        "model": ErrorResponse,
+        "description": (
+            "A malformed window or page: date_from later than date_to, a date that is not a "
+            "date, or a page size outside 1..100. An empty window is not an error -- it "
+            "returns an empty page."
+        ),
+    },
+}
+
+DateFrom = Annotated[
+    dt.date,
+    Query(
+        description=(
+            "Earliest target_date to include, inclusive. Required and explicit: a "
+            "today-relative default would make the same request mean different things on "
+            "different days."
+        )
+    ),
+]
+
+DateTo = Annotated[
+    dt.date,
+    Query(description="Latest target_date to include, inclusive."),
+]
+
+
+@router.get(
+    "/demand-predictions",
+    response_model=Page[StoredDemandPredictionResponse],
+    summary="List this hotel's stored demand predictions",
+    description=(
+        "Every prediction this property was served whose target date falls in the window, "
+        "oldest first. Read-only: there is no endpoint that writes, edits or deletes a stored "
+        "prediction. Rows are returned exactly as they were stored -- if the same target date "
+        "was forecast more than once, every one of those predictions appears, because each was "
+        "computed from different recorded history. Requires membership, the same level the "
+        "forecast route requires. The model is an offline research candidate with no "
+        "established production accuracy; listing a number is not an endorsement of it."
+    ),
+    responses=READ_RESPONSES,
+)
+def list_stored_demand_predictions(
+    hotel_public_id: HotelPath,
+    service: DemandPredictionReadServiceDep,
+    date_from: DateFrom,
+    date_to: DateTo,
+    page: int = Query(default=1, ge=1, description="1-based page number."),
+    page_size: int = Query(
+        default=DEFAULT_PAGE_SIZE,
+        ge=1,
+        le=MAX_PAGE_SIZE,
+        description=f"Rows per page (max {MAX_PAGE_SIZE}).",
+    ),
+) -> Page[StoredDemandPredictionResponse]:
+    """404 for an unknown hotel or a non-member, indistinguishably.
+
+    Identical requests over unchanged rows return identical pages: every bound is a parameter
+    and the order is total, so nothing here depends on when it is asked.
+    """
+    return service.list_predictions(
+        hotel_public_id,
+        date_from=date_from,
+        date_to=date_to,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get(
