@@ -8,7 +8,9 @@
 > produces.
 
 **Alembic head stays `0010_demand_predictions`. The API stays at 51 paths / 83 operations.**
-This stage adds no table, no migration, no endpoint, no CLI and no dependency.
+This stage adds no table, no migration, no endpoint, no CLI and no dependency. *(Stage 6.11
+later moved both, to `0011_demand_prediction_public_id` and 52 / 84. Nothing in this stage
+changed.)*
 
 ---
 

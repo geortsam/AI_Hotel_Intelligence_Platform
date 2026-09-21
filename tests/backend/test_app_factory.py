@@ -173,8 +173,11 @@ APPROVED_RESOURCE_SEGMENTS = {
     # computes a seasonal median per request, this one scores an artifact fitted offline. One
     # prefix for both would imply a lineage they do not have.
     "ml",
-    # The single route under it. A noun, and a read: nothing here fits, promotes or schedules.
+    # The two routes under it, both nouns and both reads: nothing here fits, promotes or
+    # schedules. `demand-forecast` scores the artifact; `demand-predictions` (Stage 6.11) reads
+    # rows that route already wrote and touches no model at all.
     "demand-forecast",
+    "demand-predictions",
 }
 
 #: Resources the SCHEMA models as global -- no hotel_id column, and a unique constraint with
@@ -292,6 +295,7 @@ def test_domain_surface_is_exactly_the_approved_hierarchy() -> None:
         "/api/v1/hotels/{hotel_public_id}/intelligence/anomalies",
         "/api/v1/hotels/{hotel_public_id}/intelligence/insights",
         "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast",
+        "/api/v1/hotels/{hotel_public_id}/ml/demand-predictions",
         "/api/v1/hotels/{hotel_public_id}/audit-events",
         "/api/v1/platform/audit-events",
         "/api/v1/auth/register",

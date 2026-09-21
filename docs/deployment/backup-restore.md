@@ -33,7 +33,7 @@ strategy.** Nothing in this repository can undo it. `down` without `-v` keeps th
 
 ## 3. Prerequisites
 
-- The stack is running and `migrate` has completed, so the schema is at `0010_demand_predictions`.
+- The stack is running and `migrate` has completed, so the schema is at `0011_demand_prediction_public_id`.
 - You can reach the database container, e.g. `docker compose ps db` shows it healthy.
 - Somewhere to put the archive that is **not** the same disk as the database volume. A backup
   that dies with the host it protects is not a backup.
@@ -52,7 +52,7 @@ docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
 ```
 
 Confirm the database name is the one you intend and the revision is the one you expect. If the
-revision is not `0010_demand_predictions`, stop and find out why before backing up.
+revision is not `0011_demand_prediction_public_id`, stop and find out why before backing up.
 
 ### 4.2 Take the dump
 
@@ -157,7 +157,7 @@ docker exec pg-restore-rehearsal psql -U postgres -d hotel_restore -tAc \
   "SELECT version_num FROM alembic_version"
 ```
 
-Expect `0010_demand_predictions` — the same revision as the source, with no upgrade or
+Expect `0011_demand_prediction_public_id` — the same revision as the source, with no upgrade or
 downgrade having happened.
 
 ```bash

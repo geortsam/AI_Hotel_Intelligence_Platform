@@ -506,15 +506,26 @@ def test_counting_a_model_versions_predictions_is_one_query(
 
 
 def test_the_table_exists_with_its_identity_constraint(session: Session) -> None:
-    """The suite runs `downgrade base` then `upgrade head`, so this is the migration's own work."""
-    constraint = session.execute(
-        sa.text(
-            "SELECT conname FROM pg_constraint"
-            " WHERE conrelid = 'demand_predictions'::regclass AND contype = 'u'"
-        )
-    ).scalar_one()
+    """The suite runs `downgrade base` then `upgrade head`, so this is the migration's own work.
 
-    assert constraint == "uq_demand_predictions_identity"
+    Two unique constraints since Stage 6.11 added ``public_id``, and the set is asserted whole
+    rather than as "the identity one is in there somewhere" -- a third arriving unannounced
+    should fail here. The Stage 6.8 claim is unchanged: the identity constraint exists, and it
+    is still the one this file is responsible for.
+    """
+    constraints = set(
+        session.execute(
+            sa.text(
+                "SELECT conname FROM pg_constraint"
+                " WHERE conrelid = 'demand_predictions'::regclass AND contype = 'u'"
+            )
+        ).scalars()
+    )
+
+    assert constraints == {
+        "uq_demand_predictions_identity",
+        "uq_demand_predictions_public_id",
+    }
 
 
 def test_the_head_is_the_stage_68_revision(session: Session) -> None:

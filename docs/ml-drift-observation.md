@@ -7,7 +7,8 @@
 
 **No table, no migration, no endpoint, no CLI, no dependency, no Docker change.** Alembic head
 stays `0010_demand_predictions`; the API stays at 51 paths / 83 operations. Results are computed
-and returned, never persisted.
+and returned, never persisted. *(Stage 6.11 later moved the head to
+`0011_demand_prediction_public_id` and the API to 52 / 84. Nothing in this stage changed.)*
 
 ---
 

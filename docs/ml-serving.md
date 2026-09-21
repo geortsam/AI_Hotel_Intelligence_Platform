@@ -417,7 +417,9 @@ Stated plainly, because the endpoint's existence is not a claim that the number 
    [ml-accuracy-measurement.md](ml-accuracy-measurement.md) and
    [ml-drift-observation.md](ml-drift-observation.md).
 7. **No frontend surface.** Nothing in `frontend/` was touched; the endpoint is independently
-   testable and is currently exercised only by tests.
+   testable and is currently exercised only by tests. *(Stage 6.11 added a second route to this
+   router — `GET .../ml/demand-predictions`, which reads stored predictions and scores nothing.
+   Still no frontend. See [ml-prediction-read-api.md](ml-prediction-read-api.md).)*
 8. **The model is never retrained by the application.** A new artifact is an offline build,
    reviewed, followed by a change to `APPROVED_MODEL`.
 

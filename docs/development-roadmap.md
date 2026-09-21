@@ -459,6 +459,49 @@ before anything is read, one query per window, and the database unchanged after 
 Forty-two acceptance criteria, the protocol, the quantile convention and the limitations:
 **[ml-drift-observation.md](ml-drift-observation.md)**.
 
+## Stage 6.11 — Tenant-scoped read API for stored demand predictions · *done*
+
+> **One migration and one endpoint, both deliberate.** Head moves to
+> `0011_demand_prediction_public_id`; the API moves **51 paths / 83 operations → 52 / 84** — the
+> first API change since Stage 6.6 and the first migration since Stage 6.8. No new table: the
+> base-table count stays at 23.
+
+**Objective: let an authenticated member of a hotel read that hotel's own stored demand
+predictions over an explicit bounded window.** Stage 6.8 made predictions durable, 6.9 measured
+them and 6.10 observed their distributions — three readers, all programmatic, all invoked only
+by tests. The hotels whose data those rows are had no path to a single one of them.
+
+**Stage 6.8 wrote the precondition and this stage met it.** That stage withheld `public_id` and
+said why: *"A future read API adds the column in its own migration rather than this stage
+guessing the shape of one."* Migration `0011` is that migration.
+
+**Every stored row, which is the point.** This is the deliberate opposite of Stage 6.9's
+`scorable_predictions`, whose `DISTINCT ON` collapses a target date so an accuracy measurement
+cannot count it twice. A hotel asking what it was told is owed every answer it was given, and
+Stage 6.8 made repeats genuinely distinct rows rather than duplicates — a booking recorded late
+changes `demand_lag_7`. Two repository methods, never one with a flag.
+
+The order `target_date, generated_at, public_id` is **total**, because `public_id` is unique and
+no two rows can tie on all three. Pagination rests on that: a non-total order lets equal rows
+swap between pages, so a client walking them could see one twice and another never.
+
+**Ten response fields and no internal identifier.** `feature_values`, `feature_digest`,
+`canonical_model_digest` and `request_id` are withheld with reasons recorded in the schema. The
+`public_id` is a surrogate rather than a fingerprint, so it differs between environments by
+design — the deliberate opposite of the two content-derived digests on the same table.
+
+**Proven against real PostgreSQL through the real HTTP surface:** the backfill of rows seeded
+before `0011` and the downgrade, two predictions for one target date both returned while the
+Stage 6.9 reader collapses them in the same test, inclusive boundaries, pages that concatenate to
+the full ordered set exactly once, cross-tenant isolation, unauthenticated and non-member
+refusals that are byte-identical to an unknown hotel's, two statements per read, and the database
+unchanged afterwards.
+
+**It establishes no production accuracy**, endorses no individual prediction and detects nothing.
+It also exposes the known-weak small-hotel regime to exactly the properties it is invalid for,
+which the documentation states where a reader will meet it. Retention remains out of scope and a
+separate future capability: **[ml-prediction-read-api.md](ml-prediction-read-api.md)**.
+
 ---
 
 # V2 — FUTURE / NOT IMPLEMENTED
@@ -469,7 +512,7 @@ Forty-two acceptance criteria, the protocol, the quantile convention and the lim
 
 | Item | Note |
 |---|---|
-| A **served** trained forecast | *Done in Stages 6.6 and 6.7* — loading path, unavailable-model error, endpoint, schema, and a production image that carries and executes the approved model. Persisted predictions and the observability foundation are **Stage 6.8**, *done*; retrospective accuracy measurement under a declared protocol is **Stage 6.9**, *done*, and establishes no production accuracy; distribution observation is **Stage 6.10**, *done*, and detects nothing. Drift *detection* — a statistic, a threshold, an alert — and retraining remain backlog |
+| A **served** trained forecast | *Done in Stages 6.6 and 6.7* — loading path, unavailable-model error, endpoint, schema, and a production image that carries and executes the approved model. Persisted predictions and the observability foundation are **Stage 6.8**, *done*; retrospective accuracy measurement under a declared protocol is **Stage 6.9**, *done*, and establishes no production accuracy; distribution observation is **Stage 6.10**, *done*, and detects nothing; a tenant-scoped read API over the stored rows is **Stage 6.11**, *done*. Drift *detection* — a statistic, a threshold, an alert — retraining, and retention of stored predictions remain backlog |
 | Richer feature pipeline | the 7-day horizon admits 9 of 15 contract columns; a horizon-matched on-the-books and rolling-window feature set does not exist |
 | Review sentiment | polarity and aspect breakdown over review text |
 | Room-image classification | class set fixed before training |

@@ -12,8 +12,8 @@ database *as a database*, kept separate from the application code that queries i
 
 ## Current state
 
-**Ten migrations, head `0010_demand_predictions`,** applied by `alembic upgrade head`. They
-build **22 tables** and the `historical_room_overlaps` view; with Alembic's own
+**Eleven migrations, head `0011_demand_prediction_public_id`,** applied by `alembic upgrade
+head`. They build **22 tables** and the `historical_room_overlaps` view; with Alembic's own
 `alembic_version`, a migrated database reports 24 entries in `information_schema.tables`. Every
 one of the 22 is ORM-mapped -- `tests/backend/test_model_metadata.py` pins the list, so a table
 that exists in one place and not the other fails the suite. The models live in

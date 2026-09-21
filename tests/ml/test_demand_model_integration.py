@@ -397,9 +397,18 @@ def test_the_public_api_gained_only_the_serving_endpoint() -> None:
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     operations = sum(len([m for m in spec if m in methods]) for spec in paths.values())
     assert operations == 84
-    assert [path for path in paths if "/ml" in path] == [
-        "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast"
+    # Two routes on the ML prefix since Stage 6.11, and only one of them reaches a model. The
+    # 503 is what says which: an unavailable artifact is a failure only the serving route can
+    # have, so declaring it is the structural difference rather than a naming convention.
+    assert sorted(path for path in paths if "/ml" in path) == [
+        "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast",
+        "/api/v1/hotels/{hotel_public_id}/ml/demand-predictions",
     ]
+    assert "503" in paths["/api/v1/hotels/{hotel_public_id}/ml/demand-forecast"]["get"]["responses"]
+    assert (
+        "503"
+        not in paths["/api/v1/hotels/{hotel_public_id}/ml/demand-predictions"]["get"]["responses"]
+    )
     assert not [
         path for path in paths if any(word in path for word in ("train", "fit", "forecast/run"))
     ]

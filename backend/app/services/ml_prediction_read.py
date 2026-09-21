@@ -83,9 +83,7 @@ class DemandPredictionReadService:
     for the reason every ML repository method in this codebase takes one hotel at a time.
     """
 
-    def __init__(
-        self, predictions: MlPredictionRepository, scope: HotelScopeResolver
-    ) -> None:
+    def __init__(self, predictions: MlPredictionRepository, scope: HotelScopeResolver) -> None:
         self._predictions = predictions
         self._scope = scope
 

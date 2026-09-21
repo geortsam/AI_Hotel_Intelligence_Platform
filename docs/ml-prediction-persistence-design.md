@@ -6,7 +6,9 @@
 > serving-attempt event, and tests for all twenty-one acceptance criteria.
 >
 > **Alembic head is now `0010_demand_predictions`.** The API is 51 paths / 83 operations and did
-> not move — this stage added no endpoint, no field and no status code.
+> not move — this stage added no endpoint, no field and no status code. *(Both moved later, in
+> Stage 6.11: head `0011_demand_prediction_public_id`, API 52 / 84. What that stage did not move
+> is this endpoint's own contract.)*
 >
 > Three things the implementation settled, each recorded where it belongs below: `feature_values`
 > is stored as a JSONB **object** and the column ORDER is carried by `feature_digest` rather than
@@ -77,9 +79,12 @@ importantly, reasons for the ones that are absent.
 
 ### Deliberately absent
 
-* **`public_id`.** The repository gives a public UUID to entities addressable in a URL. Stage 6.8
-  adds no endpoint, so there is nothing to address. A future read API adds the column in its own
-  migration rather than this stage guessing the shape of one.
+* **~~`public_id`~~ — the condition was met, by Stage 6.11.** The repository gives a public UUID
+  to entities addressable in a URL. Stage 6.8 adds no endpoint, so there is nothing to address;
+  a future read API adds the column in its own migration rather than this stage guessing the
+  shape of one. That read API is Stage 6.11 and that migration is `0011`, so the column exists
+  now — added on its terms rather than this stage's guess. See
+  [ml-prediction-read-api.md](ml-prediction-read-api.md).
 * **The hotel's public UUID.** Denormalising it would be a second source of tenant identity.
   `hotels` is RESTRICT-protected, so the join always resolves.
 * **The artifact payload SHA-256.** Stage 6.7 measured that it changes with the build machine's
@@ -457,7 +462,7 @@ Explicitly **not** in Stage 6.8. Each is either a separate backlog capability or
 | **Drift detection**, thresholds, alerting | a later stage; §9 defines only the data contract |
 | **Accuracy measurement** or any production accuracy claim | a later stage — §10 |
 | A **metrics exporter**, time-series store or dashboard | later; §8 is log and table only |
-| A **read API** for stored predictions | not defined here; would add its own endpoint and `public_id` |
+| ~~A **read API** for stored predictions~~ | not defined here; would add its own endpoint and `public_id` — **done in Stage 6.11**, which added both |
 | **Retention / archival** of predictions | later, once the growth rate is measured |
 | **Richer feature pipeline** | separate backlog capability |
 | **Multi-model registry** | separate backlog capability |
