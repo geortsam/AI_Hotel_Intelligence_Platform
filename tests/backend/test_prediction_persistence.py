@@ -119,10 +119,18 @@ def test_a_difference_below_the_recorded_precision_does_not_move_the_digest() ->
 
 
 def test_the_row_carries_exactly_the_defined_fields() -> None:
+    """Fifteen at Stage 6.8, sixteen since Stage 6.11 added the public handle.
+
+    The set is still exact rather than a minimum: a column arriving without a stage behind it
+    fails here, which is the whole point of writing the names out.
+    """
     columns = {column.name for column in TABLE.columns}
 
     assert columns == {
         "id",
+        # Stage 6.11. Withheld by Stage 6.8 because nothing addressed a prediction, and added
+        # by migration 0011 when the read API gave it something to address.
+        "public_id",
         "hotel_id",
         "target_date",
         "forecast_horizon_days",
@@ -140,12 +148,35 @@ def test_the_row_carries_exactly_the_defined_fields() -> None:
     }
 
 
-@pytest.mark.parametrize(
-    "absent", ["public_id", "updated_at", "actor_user_id", "user_id", "artifact_sha256"]
-)
+@pytest.mark.parametrize("absent", ["updated_at", "actor_user_id", "user_id", "artifact_sha256"])
 def test_the_deliberately_absent_fields_are_absent(absent: str) -> None:
-    """Each was considered and rejected in the design; this is what keeps them rejected."""
+    """Each was considered and rejected in the design; this is what keeps them rejected.
+
+    ``public_id`` was on this list and is deliberately off it now. Stage 6.8 did not reject the
+    column outright -- it wrote down a condition: "A future read API adds the column in its own
+    migration rather than this stage guessing the shape of one." Stage 6.11 is that read API and
+    migration 0011 is that migration, so the condition was met rather than the rule relaxed. The
+    other four were rejected without a condition and stay rejected.
+    """
     assert absent not in {column.name for column in TABLE.columns}
+
+
+def test_the_public_handle_arrived_with_its_own_stage_and_its_own_migration() -> None:
+    """What replaces the removed ``public_id`` row above, so nothing is merely dropped.
+
+    A surrogate, not a fingerprint: database-defaulted, so no caller chooses it, and unique, so
+    it can address exactly one row. It is deliberately NOT part of the Stage 6.8 identity --
+    adding it there would make every repeat a new row and destroy the idempotency that stage
+    exists to provide.
+    """
+    column = TABLE.columns["public_id"]
+
+    assert column.nullable is False
+    assert column.server_default is not None
+    assert "public_id" not in IDENTITY_COLUMNS
+    assert "uq_demand_predictions_public_id" in {
+        constraint.name for constraint in TABLE.constraints if constraint.name
+    }
 
 
 def test_the_identity_is_the_five_columns_including_the_inputs() -> None:

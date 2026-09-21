@@ -1041,8 +1041,8 @@ def test_the_migration_chain_did_not_move() -> None:
     versions = REPOSITORY_ROOT / "database" / "migrations" / "versions"
     revisions = sorted(path.name for path in versions.glob("*.py"))
 
-    assert len(revisions) == 10
-    assert revisions[-1].endswith("0010_demand_predictions.py")
+    assert len(revisions) == 11
+    assert revisions[-1].endswith("0011_demand_prediction_public_id.py")
 
 
 def test_the_model_identity_is_untouched() -> None:

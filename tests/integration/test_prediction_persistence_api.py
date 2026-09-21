@@ -520,4 +520,4 @@ def test_the_table_exists_with_its_identity_constraint(session: Session) -> None
 def test_the_head_is_the_stage_68_revision(session: Session) -> None:
     revision = session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
 
-    assert revision == "0010_demand_predictions"
+    assert revision == "0011_demand_prediction_public_id"

@@ -410,8 +410,8 @@ def test_the_migration_chain_is_unchanged() -> None:
     revisions = sorted(p.name for p in versions.glob("*.py"))
     # Stage 6.8 added the tenth, for `demand_predictions`. What this file is responsible for is
     # that the ML work of Stage 6.3 needed no schema change of its own, and it still did not.
-    assert len(revisions) == 10
-    assert revisions[-1].endswith("0010_demand_predictions.py")
+    assert len(revisions) == 11
+    assert revisions[-1].endswith("0011_demand_prediction_public_id.py")
 
 
 #: Committed beside the model: four JSON records. `model.pkl` is the Stage 6.5 payload, which is

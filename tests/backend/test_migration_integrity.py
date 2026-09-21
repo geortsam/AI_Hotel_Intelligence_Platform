@@ -57,17 +57,19 @@ EXPECTED_FILENAMES = (
     "20260904_0008_audit_retention_archive.py",
     "20260905_0009_audit_booking_deleted.py",
     "20260920_0010_demand_predictions.py",
+    "20260921_0011_demand_prediction_public_id.py",
 )
 
 #: sha256 of the canonicalised concatenation described in this module's docstring. Derived
-#: from the ten files above; not a value chosen to make anything pass.
+#: from the eleven files above; not a value chosen to make anything pass.
 #:
-#: Moved once, by Stage 6.8, when `demand_predictions` was added. The previous value was
-#: `0dc2f8b1...` over nine files; it is recorded here rather than discarded, because "the digest
+#: Moved twice. `0dc2f8b1...` over nine files was the value before Stage 6.8 added
+#: `demand_predictions`; `35162fde...` over ten was the value before Stage 6.11 added
+#: `demand_predictions.public_id`. Both are recorded rather than discarded, because "the digest
 #: changed" should always be answerable with "yes, in that commit, for that migration".
-CANONICAL_SHA256 = "35162fde0957a2679ecd9934166853465a4ca2b2f4f02b6227b6ebbd3355f9fe"
+CANONICAL_SHA256 = "5104c312275dd5975f7097a9d8957588751ec03608b43089a4011adb5a5a1a30"
 
-EXPECTED_HEAD = "0010_demand_predictions"
+EXPECTED_HEAD = "0011_demand_prediction_public_id"
 EXPECTED_ROOT = "0001_initial_schema"
 
 REVISION = re.compile(r'^revision: str = "([^"]+)"', re.MULTILINE)

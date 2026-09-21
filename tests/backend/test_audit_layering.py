@@ -734,20 +734,20 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     """
     chain = revisions()
 
-    assert len(chain) == 10
+    assert len(chain) == 11
     roots = [rev for rev, down in chain.items() if down is None]
     heads = [rev for rev in chain if rev not in set(chain.values())]
 
     assert roots == ["0001_initial_schema"]
     # Stage 6.8 added 0010. What this file is responsible for is the three audit revisions'
     # own positions, which are unchanged; the head moves because the chain grew past them.
-    assert heads == ["0010_demand_predictions"]
+    assert heads == ["0011_demand_prediction_public_id"]
     assert chain["0007_audit_events"] == "0006_users_password_changed_at"
     assert chain["0008_audit_retention_archive"] == "0007_audit_events"
     assert chain["0009_audit_booking_deleted"] == "0008_audit_retention_archive"
     # Every other revision is somebody's parent exactly once: no fork.
     parents = [down for down in chain.values() if down is not None]
-    assert len(parents) == len(set(parents)) == 9
+    assert len(parents) == len(set(parents)) == 10
 
 
 def test_the_audit_table_is_created_by_exactly_one_migration() -> None:

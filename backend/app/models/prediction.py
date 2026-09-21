@@ -26,6 +26,7 @@ schema already uses for historical records -- ``bookings -> hotels``, ``payments
 from __future__ import annotations
 
 import datetime as dt
+import uuid
 from typing import Any
 
 from sqlalchemy import (
@@ -40,8 +41,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, pk_column
@@ -77,6 +79,21 @@ class DemandPrediction(Base):
     __tablename__ = "demand_predictions"
 
     id: Mapped[int] = pk_column()
+
+    #: How a prediction is named outside this process (Stage 6.11).
+    #:
+    #: Stage 6.8 withheld this column and said why: "Stage 6.8 adds no endpoint, so there is
+    #: nothing to address. A future read API adds the column in its own migration rather than
+    #: this stage guessing the shape of one." Migration 0011 is that migration.
+    #:
+    #: A surrogate, not a fingerprint. It is not derived from the row, so two environments
+    #: holding the same logical predictions hold different values here -- deliberately, and in
+    #: deliberate contrast with ``feature_digest`` and ``canonical_model_digest`` on this same
+    #: table, both of which are content-derived and must agree everywhere. The BIGINT ``id``
+    #: above never leaves this process; this is what does.
+    public_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, server_default=text("gen_random_uuid()")
+    )
 
     #: The tenant. There is no row belonging to no hotel, and no nullable tenant column to get
     #: wrong. The hotel's PUBLIC id is deliberately not denormalised here: it would be a second
@@ -141,6 +158,8 @@ class DemandPrediction(Base):
 
     __table_args__ = (
         UniqueConstraint(*IDENTITY_COLUMNS, name=IDENTITY_CONSTRAINT),
+        # Stage 6.11. The public handle a read API addresses a row by.
+        UniqueConstraint("public_id", name="uq_demand_predictions_public_id"),
         CheckConstraint("forecast_horizon_days >= 1", name="forecast_horizon_days_positive"),
         CheckConstraint(
             f"request_id IS NULL OR request_id ~ '{REQUEST_ID_SQL_PATTERN}'",
