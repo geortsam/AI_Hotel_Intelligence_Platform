@@ -1,33 +1,44 @@
 # AI / ML
 
-> ### There is a fitted artifact here now, and still nothing that serves it.
+> ### There is a fitted artifact here, and since Stage 6.6 something serves it.
 >
 > Stage 6.2 prepares an offline dataset; Stage 6.3 backtests a seasonal-naive baseline and one
 > learned regressor against it; Stage 6.4 validates that measurement under a pre-declared
 > acceptance policy; Stage 6.5 fits the candidate once and persists it. **The payload is never
 > committed** — weights have been excluded from this repository since Stage 1, and a pickle is
 > arbitrary code on load. `artifact.json` is what is committed, and the loader checks it before
-> deserialising anything. **No endpoint serves the model and nothing in `backend/app` imports
-> the code that produced it.**
+> deserialising anything.
 >
-> `requirements-ml.txt` pins exactly one dependency, scikit-learn, installed by CI's
-> quality-gates job and **not** by the API image.
+> Stage 6.6 put one authenticated, hotel-scoped route in front of the artifact and Stage 6.7
+> packaged a regenerated copy of it into the API image, so `backend/requirements.txt` now pins the
+> same `scikit-learn==1.9.1` that `requirements-ml.txt` does. No module under `backend/app`
+> imports scikit-learn — or NumPy, SciPy, pandas, PyTorch, joblib or pickle — directly: the one
+> approved path is `app.ml.artifact_store → ml.artifact`, behind a deferred import, and a test
+> asserts there is no second one.
 >
-> **The intelligence the platform serves today is not here.** It is a deterministic statistical
-> baseline in `backend/app/ml/timeseries.py` and `backend/app/services/intelligence.py`,
+> **Being served establishes nothing about the model.** Production accuracy, reliability,
+> generalisation and superiority over the statistical baseline are all still unestablished; there
+> is no drift detection, no threshold and no retraining. See
+> [`../docs/ml-model-card.md`](../docs/ml-model-card.md) §15.
+>
+> **The V1 intelligence layer is not here and is unchanged by any of this.** It is a deterministic
+> statistical baseline in `backend/app/ml/timeseries.py` and `backend/app/services/intelligence.py`,
 > implemented in the Python standard library: seasonal-naive day-of-week median forecasting,
 > MAD-based intervals and anomaly detection, split-window trend detection, and deterministic
-> insight templates. No trained model, no LLM, no embeddings, no vector database, no RAG, no
-> agent. See [`../docs/architecture.md` §5](../docs/architecture.md#5-data-and-intelligence-architecture).
->
-> Everything below about a **served** model is still the shape it would take, not something
-> that exists. See [`../docs/development-roadmap.md`](../docs/development-roadmap.md).
+> insight templates. No LLM, no embeddings, no vector database, no RAG, no agent — anywhere in the
+> repository. See [`../docs/architecture.md` §5](../docs/architecture.md#5-data-and-intelligence-architecture)
+> and [`../docs/development-roadmap.md`](../docs/development-roadmap.md).
 
-All machine-learning work lives here, deliberately outside `backend/`, and `.dockerignore`
-excludes this directory from the backend build context so it cannot reach the API image. The
-backend may load a trained artifact and serve predictions; it never trains, and training code
-never imports the web layer. The one import that crosses the boundary goes the other way:
-`pipelines/` imports the pure Stage 6.1 contract from `app.ml.dataset`, so an offline dataset is
+All machine-learning work lives here, deliberately outside `backend/`. `.dockerignore` excluded
+this directory outright until Stage 6.7; it no longer can, because the Dockerfile's disposable
+middle stage regenerates the approved artifact from `ml/`. What is still excluded from the build
+context is `ml/data/raw`, `ml/data/external`, `ml/notebooks` and every `.pkl`, and what reaches
+the runtime image is thirteen modules — the import closure of `ml.artifact` and `ml.inference` —
+and the artifact pair, never a pipeline that fits a model.
+
+The backend loads a trained artifact and serves predictions; it never trains, and training code
+never imports the web layer. The one import that crosses the boundary in the other direction is
+`pipelines/` importing the pure Stage 6.1 contract from `app.ml.dataset`, so an offline dataset is
 held to the same rules as one built from the production database.
 
 ## Layout
@@ -39,15 +50,16 @@ held to the same rules as one built from the production database.
 | `data/external/` | Third-party reference data. |
 | `pipelines/` | Reproducible data-preparation, training and evaluation scripts. **Stage 6.2 added data preparation, Stage 6.3 the offline evaluation.** |
 | `manifests/` | Dataset manifests. **Committed**, unlike the payloads they describe. |
-| `models/` | One directory per model version: `metrics.json`, `validation.json`, `registry.json`. Weights would live here too; none exists, and `.gitignore` names the three records individually so a weights file would be ignored rather than committed. |
+| `models/` | One directory per model version: `metrics.json`, `validation.json`, `registry.json`, `artifact.json`. Weights live here too when a build has produced them; `.gitignore` names the four records individually, so `model.pkl` is ignored rather than committed. |
 | `notebooks/` | Exploration only. Findings graduate into `pipelines/` before they count. |
-| `requirements-ml.txt` | ML dependencies. Kept separate so the API image stays small. |
+| `requirements-ml.txt` | The offline ML dependency. Kept separate from `backend/requirements.txt`, which pins the same scikit-learn version for serving. |
 
 ## The offline / online boundary
 
 Training is **offline**: it reads from `data/`, writes an artifact plus its evaluation record
-to `models/`, and is run by hand or on a schedule. Serving is **online**: the backend loads an
-artifact and returns predictions. Nothing crosses that line in the other direction.
+to `models/`, and is run by hand or in the Dockerfile's disposable build stage. Serving is
+**online**: the backend loads a verified artifact and returns predictions. Nothing crosses that
+line in the other direction, and no request chooses an artifact location.
 
 A metric may only be quoted from a real evaluation run recorded in
 `models/<model>/metrics.json`. If an artifact is missing, the API must fail loudly rather than
@@ -55,12 +67,13 @@ return an invented prediction.
 
 ## Current state
 
-**No trained artifact.** `requirements-ml.txt` pins scikit-learn and nothing else; CI's
-quality-gates job installs it (so Python 3.14 compatibility is verified rather than assumed) and
-the API image does not — the backend Dockerfile copies only `backend/app`, and `.dockerignore`
-excludes this directory from its build context. Tests assert that no module under `backend/app`
-imports sklearn, NumPy, SciPy, pandas, PyTorch or TensorFlow, and that no gradient-boosting
-library, deep-learning framework or LLM client is imported anywhere.
+**One trained artifact, `demand_baseline_v1`, fitted offline and served.** `requirements-ml.txt`
+pins scikit-learn and nothing else; CI's quality-gates job installs it (so Python 3.14
+compatibility is verified rather than assumed), and since Stage 6.7 `backend/requirements.txt`
+pins the same version so the API image can deserialise and score the artifact. Tests assert that
+no module under `backend/app` imports sklearn, NumPy, SciPy, pandas, PyTorch, joblib or pickle
+directly, that the only path to the artifact is `app.ml.artifact_store`, and that no
+gradient-boosting library, deep-learning framework or LLM client is imported anywhere.
 
 | Path | |
 |---|---|

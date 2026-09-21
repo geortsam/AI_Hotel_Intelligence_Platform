@@ -8,7 +8,10 @@
 > declared in code before the result was computed, and it is structurally incapable of seeing
 > which method scored better.
 >
-> *(Stage 6.4 statement. Stage 6.6 later added one read-only serving route — 83 operations — without altering this record, the artifact or its checksums; see [ml-serving.md](ml-serving.md).)*
+> *(Stage 6.4 statement. Stage 6.6 later added one read-only serving route — 83 operations — and
+> Stage 6.11 a second, taking the surface to the current 52 paths / 84 operations. Neither altered
+> this record, the artifact or its checksums; see [ml-serving.md](ml-serving.md) and
+> [ml-prediction-read-api.md](ml-prediction-read-api.md).)*
 >
 > The public API is unchanged at 82 operations, the schema is unchanged, `backend/` gained no
 > dependency, and no model artifact existed when this was written. [Stage 6.5](ml-model-card.md)

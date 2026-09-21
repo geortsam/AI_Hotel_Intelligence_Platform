@@ -37,8 +37,10 @@ that refuses to construct a production configuration without a `SECRET_KEY`.
 
 ## Database
 
-PostgreSQL **18.6**. Nine linear Alembic migrations, head `0009_audit_booking_deleted`, no
-branch points. The schema carries its rules rather than delegating them to application code:
+PostgreSQL **18.6**. At the V1 boundary, nine linear Alembic migrations at head
+`0009_audit_booking_deleted`, no branch points. *(Stages 6.8 and 6.11 have since added two more:
+head is now `0011_demand_prediction_public_id` across 11 linear revisions, still with no branch
+points.)* The schema carries its rules rather than delegating them to application code:
 55 CHECK constraints, 18 `ON DELETE RESTRICT` / 10 `CASCADE` / 3 `SET NULL` foreign keys, a GiST
 exclusion constraint over half-open date ranges for room allocation, a deferred trigger asserting
 night-completeness, a database-level append-only trigger on the audit table, generated columns
@@ -87,7 +89,9 @@ standard library, carrying `MODEL_VERSION = "1.0.0"`:
 - split-window median trend detection against an explicit threshold
 - deterministic insight templates
 
-**No trained model, no LLM, no embeddings, no vector database, no RAG, no agent.** See
+**At V1: no trained model, no LLM, no embeddings, no vector database, no RAG, no agent.** The
+last five are still true of the repository. The first stopped being true at Stage 6.6, which serves
+a trained demand model *beside* this layer without altering any response above. See
 [`architecture.md` §5](architecture.md#5-data-and-intelligence-architecture) and the stage
 snapshot in [`ml-design.md`](ml-design.md).
 
@@ -171,10 +175,12 @@ different weeks. **No winner is declared and no accuracy is claimed.**
 
 The forecast horizon costs features and the cost is computed, not assumed: at seven days only 9
 of the 15 contract columns are knowable, and `rooms_existing_at_cutoff` is excluded outright
-rather than imputed. **No model artifact was persisted in that stage** (Stage 6.5 later fitted one), no API endpoint exists, the schema and
-the 82-operation public API are untouched, and `backend/` gained no ML dependency —
-`.dockerignore` keeps `ml/` out of the API image and a test asserts the application imports none
-of it.
+rather than imputed. **No model artifact was persisted in that stage** (Stage 6.5 later fitted one), no API endpoint
+existed, the schema and the 82-operation public API were untouched, and `backend/` gained no ML
+dependency — at Stage 6.3 `.dockerignore` kept `ml/` out of the API image entirely. *(Stage 6.6
+added the endpoint, and Stage 6.7 the dependency and a narrowed `ml/` allowlist in the image.
+What still holds is that no module under `backend/app` imports an ML library directly, and a test
+asserts it.)*
 
 Detail, including the protocol, the fold table, the metric definitions and a section on why the
 numbers establish neither production accuracy nor cross-hotel generalisation:
@@ -309,8 +315,10 @@ Detail: **[ml-production-runtime.md](ml-production-runtime.md)**.
 ## Stage 6.8 — Production prediction persistence and observability foundation · *done*
 
 > One new table, one migration — head moves to `0010_demand_predictions` — and **no API
-> change at all**: still 51 paths / 83 operations, and the response body for a given request
-> is what Stage 6.6 published.
+> change at all**: the surface stayed at 51 paths / 83 operations through this stage, and the
+> response body for a given request is what Stage 6.6 published. *(Stage 6.11 later moved the head
+> to `0011_demand_prediction_public_id` and the API to 52 / 84, without touching this endpoint's
+> contract.)*
 
 **Objective: make every production demand prediction a durable, attributable record, and emit the
 minimum signal needed to observe the serving path — without changing the model, the API contract
@@ -373,9 +381,10 @@ actual accuracy: **[ml-prediction-persistence-design.md](ml-prediction-persisten
 
 ## Stage 6.9 — Retrospective forecast accuracy measurement · *done*
 
-> **No table, no migration, no endpoint, no CLI and no dependency.** Head stays
-> `0010_demand_predictions`; the API stays at 51 paths / 83 operations. The result is computed
-> and returned, never persisted.
+> **No table, no migration, no endpoint, no CLI and no dependency.** At this stage's boundary the
+> head stayed at `0010_demand_predictions` and the API at 51 paths / 83 operations. The result is
+> computed and returned, never persisted. *(Stage 6.11 later moved both, to
+> `0011_demand_prediction_public_id` and 52 / 84. Nothing in this stage changed.)*
 
 **Objective: measure served predictions against realised demand under a protocol declared before
 any number was computed — and report the result as a measurement, not as a production accuracy
@@ -420,9 +429,10 @@ and its limitations: **[ml-accuracy-measurement.md](ml-accuracy-measurement.md)*
 
 ## Stage 6.10 — Prediction and feature distribution observation · *done*
 
-> **No table, no migration, no endpoint, no CLI, no dependency and no Docker change.** Head stays
-> `0010_demand_predictions`; the API stays at 51 paths / 83 operations. Computed and returned,
-> never persisted.
+> **No table, no migration, no endpoint, no CLI, no dependency and no Docker change.** At this
+> stage's boundary the head stayed at `0010_demand_predictions` and the API at 51 paths / 83
+> operations. Computed and returned, never persisted. *(Stage 6.11 later moved both, to
+> `0011_demand_prediction_public_id` and 52 / 84. Nothing in this stage changed.)*
 
 **Objective: make a hotel's stored model inputs and model outputs observable over an explicit
 window, and comparable against an explicit baseline window.** The third of the three gaps Stage
@@ -506,7 +516,10 @@ separate future capability: **[ml-prediction-read-api.md](ml-prediction-read-api
 
 # V2 — FUTURE / NOT IMPLEMENTED
 
-**None of the following exists in this repository.** No code, no dependency, no configuration.
+**None of the following exists in this repository** — no code, no dependency, no configuration —
+with one exception: the first row of the machine-learning table, which records what Stages 6.6-6.11
+delivered out of this backlog and what of it is still outstanding. It is kept rather than deleted
+so the served model can be read against the item it came from.
 
 ## Machine learning
 

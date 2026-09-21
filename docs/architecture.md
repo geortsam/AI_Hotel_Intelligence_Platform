@@ -93,23 +93,35 @@ cross-tenant lookup would otherwise be expressible, the repository method simply
 and the database backs this up with composite foreign keys that carry `hotel_id`. Public
 identifiers at the API boundary are UUIDs; internal `BIGINT` keys are never serialised.
 
-**Current state at V1:** every layer directory is populated —
-`api/` 28 files, `services/` 23, `schemas/` 20, `repositories/` 18, `models/` 14, `core/` 9,
-`db/` 3, `middleware/` 3, `ml/` 2. The HTTP surface is 82 routes, of which 77 require
-authentication; the 5 that do not are the version-metadata endpoint, registration, login and
-the two health probes.
+**At V1:** every layer directory was populated — `api/` 28 files, `services/` 23, `schemas/` 20,
+`repositories/` 18, `models/` 14, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 2 — and the HTTP
+surface was 82 operations, of which 77 required authentication.
 
-**Since V1:** Stage 6.6 added one read-only, hotel-scoped, authenticated route — the demand
-model's serving boundary — taking the surface to **83 routes, 78 of which require
-authentication**. It is the only place the application reaches the offline `ml/` package,
-and it does so through a single module behind a lazy import. See [ml-serving.md](ml-serving.md).
+**Current state:** `api/` 29 files, `services/` 28, `schemas/` 24, `repositories/` 20, `models/`
+15, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 9. The HTTP surface is **52 paths / 84 operations**,
+of which **79 require authentication**; the 5 that do not are the version-metadata endpoint,
+registration, login and the two health probes — the same five as at V1.
 
-Stage 6.7 then made that route executable in the deployed image: `backend/Dockerfile` became a
+**What moved it, and when.** Stage 6.6 added one read-only, hotel-scoped, authenticated route —
+the demand model's serving boundary — taking the surface to 83 operations. Stage 6.11 added a
+second, `GET .../ml/demand-predictions`, taking it to 84. Those are the only two API changes since
+V1, both on the same router, and only the first of them reaches a model: the serving route declares
+a `503` for an unavailable artifact and the read route declares none, because it loads none. The
+serving route is also the only place the application reaches the offline `ml/` package, through a
+single module behind a lazy import. See [ml-serving.md](ml-serving.md) and
+[ml-prediction-read-api.md](ml-prediction-read-api.md).
+
+Stage 6.7 made the serving route executable in the deployed image: `backend/Dockerfile` became a
 three-stage build whose middle stage regenerates the approved model from the committed dataset
 and refuses to produce an image unless it matches the Stage 6.5 identity. The image gained one
 dependency (`scikit-learn`), thirteen `ml/` modules and the artifact — and no dataset, no
 notebook and no training entry point. The HTTP surface did not change.
 See [ml-production-runtime.md](ml-production-runtime.md).
+
+Stages 6.8 and 6.11 added the only two migrations since V1 — `0010_demand_predictions` and
+`0011_demand_prediction_public_id` — taking the head to `0011` across 11 linear revisions and the
+schema to 22 application tables. Stages 6.9 and 6.10 added services and protocols only: no table,
+no migration, no route.
 
 ---
 
@@ -179,7 +191,8 @@ trend response returns both window medians *and* the threshold, so its classific
 recomputed by hand.
 
 **There is no LLM, no embedding, no vector database, no retrieval-augmented generation, no
-agent framework and no external AI service anywhere in this repository.** See §5.3.
+agent framework and no external AI service anywhere in this repository.** There *is* one trained
+model, fitted offline and served: §5.1c. See also §5.3.
 
 ### 5.1 The V2 demand dataset (Stage 6.1) — a dataset, not a model
 
@@ -234,12 +247,12 @@ ml/metrics.py      MAE, RMSE, sMAPE, with their denominators
 ml/manifests.py    the evaluation record and its content checksum
 ```
 
-Three properties matter architecturally. **The horizon decides the feature set**: at seven days
-only 9 of the 15 contract columns are knowable, and the other six are excluded with recorded
-reasons rather than by hand. **No artifact is persisted** — nothing was serialised, so nothing
-could be served. **`backend/` gained no dependency**: scikit-learn is pinned in
-`ml/requirements-ml.txt`, installed by CI and not by the API image, and a test asserts that no
-module under `backend/app` imports it or NumPy or SciPy.
+Three properties mattered architecturally at this stage. **The horizon decides the feature set**:
+at seven days only 9 of the 15 contract columns are knowable, and the other six are excluded with
+recorded reasons rather than by hand — still true. **No artifact is persisted** — nothing was
+serialised at Stage 6.3, so nothing could be served; Stage 6.5 fitted one and Stage 6.6 served it.
+**`backend/` gained no dependency** — true until Stage 6.7, which added `scikit-learn==1.9.1` to
+`backend/requirements.txt` at the same pin `ml/requirements-ml.txt` carries. §5.1c.
 
 The measured numbers, and a section on why they establish neither production accuracy nor
 cross-hotel generalisation: [ml-model-evaluation.md](ml-model-evaluation.md).
@@ -254,10 +267,75 @@ analysis in `ml/validation.py`, and a registry entry in `ml/registry.py`. The re
 Stage 6.5 fitted that candidate once and persisted it: `ml/artifact.py` builds and verifies the
 payload, `ml/inference.py` is the offline scoring contract. The payload is **not committed** and
 the loader checks its metadata and digest before deserialising it, because a pickle is arbitrary
-code on load. **No route loads it, no route serves it, and nothing under `backend/app` imports
-either module** — a test walks the package and asserts it.
+code on load. *(At Stage 6.5 no route loaded it and nothing under `backend/app` reached either
+module. Stage 6.6 drew that arrow deliberately and in one place — §5.1c.)*
 
-### 5.2 The offline / online boundary (offline half only, no artifact)
+### 5.1c Serving, packaging and the record (Stages 6.6-6.11)
+
+The arrow into the backend, drawn once and in one place. Six stages, and none of them changes the
+model:
+
+```
+client
+  |  HTTPS, bearer JWT
+  v
+api/v1/endpoints/ml_predictions.py        two routes, and only one reaches a model
+  |
+  v
+HotelScopeResolver                        membership FIRST, before anything else happens
+  |
+  +--> DemandPredictionService  ------------> app.ml.artifact_store  ---> ml.artifact
+  |          |                                  (deferred import, load-once, verified)   |
+  |          |                                                                           v
+  |          |                                                              the packaged artifact
+  |          v                                            ml/models/demand_baseline_v1/model.pkl
+  |    MlDemandRepository ---> PostgreSQL       features, one hotel, bounded by the resolved id
+  |          |
+  |          v
+  |    MlPredictionRepository ---> demand_predictions      one row per served prediction
+  |
+  +--> DemandPredictionReadService ---> MlPredictionRepository       read-only, holds no session
+```
+
+Stage by stage:
+
+- **6.6 — serving.** One authenticated, hotel-scoped `GET .../ml/demand-forecast`. The artifact is
+  loaded once per process behind `app/ml/artifact_store.py`, which imports `ml.artifact` *lazily*
+  so that a runtime without the offline package answers a served `503` rather than failing to
+  start. Authorization is resolved before the artifact is consulted, so a non-member cannot learn
+  whether the model is loaded, whether the hotel has history, or whether it exists.
+- **6.7 — packaging.** The artifact is regenerated inside a disposable Docker build stage from the
+  committed dataset and verified against twenty approved values — including the canonical model
+  digest — before any image may be built from it. The runtime image carries `scikit-learn==1.9.1`
+  (the same pin `ml/requirements-ml.txt` has held since Stage 6.3), thirteen `ml/` modules that are
+  exactly the import closure of `ml.artifact` and `ml.inference`, and the artifact pair. It carries
+  no dataset, no notebook, no manifest, no test directory and no pipeline entry point that fits a
+  model.
+- **6.8 — persistence.** Every served prediction becomes a row in `demand_predictions`
+  (`0010_demand_predictions`), carrying the model identity, the nine inputs, a feature digest and a
+  request id. The service owns the transaction: the response and the row commit together or neither
+  happens, and a repeat is idempotent through a database-level `ON CONFLICT DO NOTHING`.
+- **6.9 — accuracy measurement.** A frozen, content-checksummed protocol
+  (`app/ml/accuracy_protocol.py`) comparing stored predictions with realised demand after a 28-day
+  settlement lag. Programmatic, computed and returned, never persisted.
+- **6.10 — distribution observation.** A second frozen protocol (`app/ml/drift_protocol.py`)
+  summarising one window of stored inputs and outputs and comparing it against a baseline window.
+  Summaries and differences only.
+- **6.11 — the read API.** `GET .../ml/demand-predictions`, paginated, tenant-scoped, addressing
+  rows by a `public_id` UUID (`0011_demand_prediction_public_id`) and exposing no internal
+  identifier. `DemandPredictionReadService` holds no session and builds no query.
+
+Two architectural rules hold across all six. **Authorization precedes every read**, and an unknown
+hotel and a non-member produce byte-identical 404s. And **the artifact never authorises itself**:
+`serving_enabled` stays `false` in its metadata, the approval to serve is the reviewed
+`APPROVED_MODEL` constant in `backend/app/ml/serving.py`, and the loader refuses an artifact that
+claims otherwise.
+
+**What this does not establish:** production accuracy, reliability, generalisation, drift
+detection, a threshold, retraining, or superiority over the statistical layer above. None of the
+six stages claims any of them; §5.3 keeps them where they belong.
+
+### 5.2 The offline / online boundary
 
 ```
 operational tables ---> pipelines (offline) ---> artifact + metrics.json
@@ -266,33 +344,43 @@ operational tables ---> pipelines (offline) ---> artifact + metrics.json
                                           backend loads artifact, serves predictions
 ```
 
-`ml/` holds this structure — `data/`, `pipelines/`, `manifests/`, `models/`, `notebooks/`. Only
-the first half of the diagram exists: data preparation (Stage 6.2), an offline backtest and its
-`metrics.json` (Stage 6.3), the validation and registry records (Stage 6.4) and `artifact.json`
-(Stage 6.5). The fitted payload exists on disk after a build and is never committed. **The arrow
-into the backend is still not drawn**: no route loads an artifact, and the backend has no path
-that would. `ml/requirements-ml.txt` pins
-scikit-learn, CI installs it and the API image does not.
+`ml/` holds the offline half — `data/`, `pipelines/`, `manifests/`, `models/`, `notebooks/`: data
+preparation (Stage 6.2), the offline backtest and its `metrics.json` (Stage 6.3), the validation
+and registry records (Stage 6.4) and `artifact.json` (Stage 6.5). The fitted payload is generated,
+never committed.
+
+**The second arrow is now drawn, and it is the only one.** `app/ml/artifact_store.py` loads a
+verified artifact and `ml.inference` scores it; `backend/requirements.txt` pins the same
+scikit-learn version as `ml/requirements-ml.txt`, and the API image carries it. What did *not*
+cross the boundary is training: no pipeline that fits a model is in the image, nothing on the
+serving path calls `fit`, and the artifact the image serves was built and verified before the
+image existed. The direction of the diagram is unchanged — data flows offline to artifact to
+backend, and never the other way.
 
 ### 5.3 FUTURE — NOT IMPLEMENTED
 
-None of the following exists. They are recorded as direction, not as capability:
+Served demand forecasting has moved out of this table: Stages 6.6-6.7 implemented it, and §5.1c
+describes what that does and does not mean. None of the following exists. They are recorded as
+direction, not as capability:
 
 | Module | Input | Output |
 |---|---|---|
+| Drift detection | stored predictions and features | a statistic, a threshold, an alert. Stage 6.10 observes distributions and decides nothing |
+| Retraining and model promotion | a drift or accuracy signal | a second model version, a registry able to hold more than one, a promotion decision |
 | Review sentiment | review text | polarity, aspect breakdown |
-| Served occupancy forecasting | booking history | a learned model replacing the statistical baseline; Stage 6.3 backtested one offline and persisted nothing |
 | Room image classification | room photographs | room type / feature tags |
 | Recommendations | user and hotel history | ranked hotel suggestions |
+| An ML surface in the front end | — | no React view reads any `/ml/` route today |
 
-Rules these must follow when they are built:
+Rules these must follow when they are built — the first three are already met by the demand model:
 
 - Predictions are persisted with the model version that produced them, so a number can always
-  be traced to an artifact.
+  be traced to an artifact. Stage 6.8 is the first stage to do this.
 - A missing artifact surfaces as an explicit unavailable-model error. It never degrades into a
-  fabricated prediction.
+  fabricated prediction. Stage 6.6 answers `503`.
 - For time-series work, evaluation uses a rolling-origin backtest, not a single split. Stage 6.3
   is the first stage to do this; see [ml-model-evaluation.md](ml-model-evaluation.md).
+- An implemented capability is not a validated one, and the documentation says which it has.
 
 ---
 

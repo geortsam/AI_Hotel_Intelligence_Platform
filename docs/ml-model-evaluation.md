@@ -10,8 +10,9 @@
 > unchanged at 82 operations, and `backend/` gained no ML dependency.
 >
 > *(Both API statements describe Stage 6.3 and remain true of it. Stage 6.6 later added one
-> read-only serving route, taking the surface to 83 operations — see
-> [ml-serving.md](ml-serving.md). Nothing else here is affected.)*
+> read-only serving route, taking the surface to 83 operations, and Stage 6.11 a second, taking it
+> to the current **52 paths / 84 operations** — see [ml-serving.md](ml-serving.md) and
+> [ml-prediction-read-api.md](ml-prediction-read-api.md). Nothing else here is affected.)*
 >
 > **Stage 6.4 validated this measurement** under a pre-declared acceptance policy and added the
 > robustness, regime and error analysis these pooled numbers cannot give:
@@ -404,8 +405,10 @@ checked out on.
 
 ## 13. What is not here
 
-- **No API endpoint, no serving path, no inference route** *(as of Stage 6.3; Stage 6.6 added one read-only serving route — see [ml-serving.md](ml-serving.md))*. The public API is 82 operations, as
-  it was in V1.
+- **No API endpoint, no serving path, no inference route** *(as of Stage 6.3; Stage 6.6 added one
+  read-only serving route and Stage 6.11 a read API over the stored rows — see
+  [ml-serving.md](ml-serving.md) and [ml-prediction-read-api.md](ml-prediction-read-api.md))*. At
+  Stage 6.3 the public API was 82 operations, as it was in V1; it is 84 today.
 - **No model artifact from this stage.** Stage 6.3 serialised nothing. The directory holds
   JSON records — `metrics.json` here, `validation.json` and `registry.json` from Stage 6.4,
   `artifact.json` from Stage 6.5 — and a test asserts the listing. Stage 6.5's `model.pkl` is

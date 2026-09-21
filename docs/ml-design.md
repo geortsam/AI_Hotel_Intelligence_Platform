@@ -1,8 +1,10 @@
 # ML / Intelligence design — Stage 3B.11
 
 > **Stage snapshot, not a current-state document.** This records the design of the statistical
-> intelligence layer at Stage 3B.11 and is not maintained since. What it describes is still what
-> ships in V1 — a deterministic standard-library baseline, no trained model and no LLM — and
+> intelligence layer at Stage 3B.11 and is not maintained since. What it describes is still
+> exactly what that layer is — a deterministic standard-library baseline, with no LLM anywhere in
+> the repository — and Stages 6.1–6.11 have since added a *separate* trained demand model beside
+> it, which changes nothing in this document.
 > [architecture.md §5](architecture.md#5-data-and-intelligence-architecture) is the current
 > summary. V2 machine-learning direction is in
 > [development-roadmap.md](development-roadmap.md).

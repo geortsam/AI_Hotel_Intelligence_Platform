@@ -1,10 +1,19 @@
 # Model card — `demand_baseline_v1`
 
-> **This model is an offline research candidate and is not a production forecasting model.**
+> **This model is an offline research candidate. It is served, and it is still not a validated
+> production forecasting model.**
 >
-> Stage 6.5 fitted and persisted an artifact. **No endpoint serves it**, nothing in the running
-> platform loads it, and the API image contains none of the code or dependencies that produced
-> it. The numbers below describe a backtest over two hotels that belong to somebody else.
+> Stage 6.5 fitted and persisted an artifact. Stage 6.6 put one authenticated, hotel-scoped route
+> in front of it, Stage 6.7 packaged it into the API image, and Stage 6.8 made every served
+> prediction a durable row. **Being reachable over HTTP established nothing about it.** The numbers
+> below still describe a backtest over two hotels that belong to somebody else; production accuracy
+> remains unestablished (§15), and the model still cannot distinguish hotels at or below roughly
+> forty room nights a night (§14).
+>
+> *(Until Stage 6.6 this paragraph read "no endpoint serves it, nothing in the running platform
+> loads it, and the API image contains none of the code or dependencies that produced it". All
+> three were true of Stages 6.3–6.5 and are recorded here because the serving decision was made
+> against them, not around them. §15 has carried the current position since Stage 6.6.)*
 
 | | |
 |---|---|
@@ -378,9 +387,18 @@ not create a generalisation claim either.
   read-only endpoint, `GET /hotels/{hotel_public_id}/ml/demand-forecast`, scores this artifact
   through `ml/inference.py` unchanged. The artifact, its checksums and its claims were not
   touched; the approval to serve lives in the application, not in the file. The payload is still
-  not committed — `ml/models/demand_baseline_v1/` holds four JSON records, and `model.pkl` when
-  it has been built — so the shipped API image, which also carries no `ml/`, answers 503. See
-  **[ml-serving.md](ml-serving.md)**.
+  not committed — `ml/models/demand_baseline_v1/` holds four JSON records, and `model.pkl` when it
+  has been built. *(At Stage 6.6 the shipped API image carried no `ml/` and answered 503 for that
+  reason. Stage 6.7 regenerates this artifact inside a disposable build stage, verifies it against
+  twenty approved values and packages it, so the image now serves it — with the same identity and
+  the same claims.)* See **[ml-serving.md](ml-serving.md)** and
+  **[ml-production-runtime.md](ml-production-runtime.md)**.
+- **Served predictions are recorded, measured and readable — and none of that validates the
+  model.** Stage 6.8 persists every served prediction, Stage 6.9 measures stored predictions
+  against realised demand under a frozen protocol, Stage 6.10 summarises their distributions, and
+  Stage 6.11 lets a hotel's own members read its rows. No stage evaluates a threshold, declares a
+  verdict, detects drift, ranks a model or retrains anything, and §15's four answers are unchanged
+  by every number they produce.
 - **The model carries no hotel identity and no capacity normalisation, and the cost of that is
   measured.** It was fitted on two hotels whose daily demand runs to the hundreds, and it bins
   its inputs from that data: a flat history of 1, 3, 5, 10 or 40 room nights a night all score

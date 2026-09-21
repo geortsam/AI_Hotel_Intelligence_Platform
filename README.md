@@ -1,28 +1,43 @@
 # AI Hotel Intelligence Platform
 
 A hotel management and analytics platform: a FastAPI backend over a PostgreSQL domain model, a
-React dashboard, and a deterministic statistical intelligence layer for forecasting, anomaly
-detection and demand trend.
+React dashboard, a deterministic statistical intelligence layer for forecasting, anomaly detection
+and demand trend, and — beside it — one offline-fitted demand model served behind a hotel-scoped
+endpoint, with its predictions persisted and readable.
 
 > ### Current state: **V1 complete and verified**
 >
-> Eleven domains over a 21-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
-> guests, bookings, payments, reviews, the financial ledger, analytics and intelligence — served
-> as **82 API routes**, of which **77 require authentication**. Authentication is Argon2id plus
-> HS256 access tokens; authorization is a four-level hotel role hierarchy with a separate
+> Eleven domains over a 22-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
+> guests, bookings, payments, reviews, the financial ledger, analytics and intelligence, plus the
+> stored demand predictions the served model writes — reachable as **52 API paths / 84
+> operations**, of which **79 require authentication**. Authentication is Argon2id plus HS256
+> access tokens; authorization is a four-level hotel role hierarchy with a separate
 > platform-administrator capability. There is a complete React front end, an append-only audit
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **4016 backend tests and 998 frontend tests pass.** Schema head is `0009_audit_booking_deleted`
-> across 9 linear migrations.
+> **4999 backend tests and 998 frontend tests pass in CI.** Schema head is
+> `0011_demand_prediction_public_id` across 11 linear migrations.
 >
-> **The intelligence layer is a transparent statistical baseline, not a trained model: no LLM,
-> no embeddings, no vector database, no RAG, no agent.** It is seasonal-naive day-of-week median
-> forecasting, MAD-based intervals and anomaly detection, and split-window trend detection,
-> implemented in the Python standard library. Nothing here is a placeholder pretending to be a
-> feature — [docs/development-roadmap.md](docs/development-roadmap.md) separates what V1 contains
-> from what is left for V2, and [Known limitations](#known-limitations) is the honest list.
+> **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
+> baseline — seasonal-naive day-of-week median forecasting, MAD-based intervals and anomaly
+> detection, and split-window trend detection, implemented in the Python standard library.
+> Stages 6.1–6.11 added a second one: a scikit-learn demand model fitted offline, packaged into
+> the API image, and **served** behind one authenticated hotel-scoped endpoint, with every served
+> prediction persisted and three readers over those rows — two programmatic, one an HTTP endpoint.
+>
+> **Implemented is not the same as scientifically validated, and this repository never conflates
+> the two.** The served model is implemented and exercised by tests. Its production accuracy is
+> **not** established, its reliability is **not** established, its generalisation is **not**
+> established, and it is not claimed to be better than the statistical baseline or to deliver
+> business value. There is no drift detection, no threshold, no alerting and no retraining. A
+> passing test proves software behaviour under a declared protocol, not predictive validity —
+> [docs/ml-model-card.md](docs/ml-model-card.md) §15 carries those answers as data.
+>
+> **There is no LLM, no embeddings, no vector database, no RAG and no agent framework in this
+> repository.** Nothing here is a placeholder pretending to be a feature —
+> [docs/development-roadmap.md](docs/development-roadmap.md) separates what exists from what is
+> left for V2, and [Known limitations](#known-limitations) is the honest list.
 
 ---
 
@@ -85,8 +100,11 @@ api/  ──▶  services/  ──▶  repositories/  ──▶  db/ + models/
 ```
 
 An endpoint knows HTTP but no business rules; a service knows the domain but no SQL; a
-repository knows SQL but decides nothing. Training code and web code never import each other —
-the only thing crossing that line is a file on disk.
+repository knows SQL but decides nothing. The line between offline and online is narrower than it
+was: the backend now imports the offline package's *reading* half — `ml.artifact` and
+`ml.inference`, deferred to load time by `app.ml.artifact_store` — so the serving path can verify
+and score an artifact. The pipelines that **fit** a model do not cross it, and are not copied into
+the API image; two tests assert exactly which modules are.
 
 Full detail, including the rules later stages must follow:
 **[docs/architecture.md](docs/architecture.md)**.
@@ -97,12 +115,13 @@ Full detail, including the rules later stages must follow:
 |---|---|---|
 | Backend | Python 3.14, FastAPI, Uvicorn | Async HTTP API, OpenAPI generated from types |
 | Validation | Pydantic v2, pydantic-settings | Request/response schemas, environment config |
-| ORM | SQLAlchemy 2.0 | Data mapping across 14 model modules |
+| ORM | SQLAlchemy 2.0 | Data mapping across 15 model modules |
 | Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
-| Migrations | Alembic | 9 linear revisions, head `0009_audit_booking_deleted` |
+| Migrations | Alembic | 11 linear revisions, head `0011_demand_prediction_public_id` |
 | Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
 | Frontend | React 18, TypeScript 5.7, Vite 6 | Dashboard SPA, route-level code splitting |
-| Intelligence | Python standard library | Deterministic statistical baseline — no NumPy, pandas or scikit-learn in the shipped image |
+| Intelligence (V1) | Python standard library | Deterministic statistical baseline — no NumPy or pandas on its path |
+| Demand model (Stage 6.1–6.11) | scikit-learn 1.9.1 | One offline-fitted artifact, packaged into the API image and served behind one hotel-scoped endpoint |
 | Infrastructure | Docker, Docker Compose, nginx | Single-host stack; nginx terminates TLS and is the only published service |
 | Quality | pytest, ruff, mypy, Vitest | Tests, linting, static types |
 
@@ -110,11 +129,14 @@ Full detail, including the rules later stages must follow:
 target `py312` so the gates reject anything that would break it. What actually runs — in CI and
 in the API image — is **3.14.7**.
 
-`ml/requirements-ml.txt` pins **scikit-learn** for the offline demand evaluation in `ml/`. CI's
-quality-gates job installs it, so the Python 3.14 wheel is verified rather than assumed; the API
-image does not — the backend Dockerfile copies only `backend/app`, `alembic.ini` and
-`database/migrations`, and `.dockerignore` excludes `ml/` from its build context. Nothing under
-`backend/app` imports scikit-learn, NumPy, SciPy or pandas, and a test asserts it.
+`ml/requirements-ml.txt` pins **scikit-learn** for the offline work in `ml/`, and since Stage
+6.7 `backend/requirements.txt` pins the same version — `1.9.1` — so the model is served by the
+library it was fitted with rather than a nearby one. The API image therefore carries scikit-learn,
+thirteen `ml/` modules (the import closure of `ml.artifact` and `ml.inference`) and the regenerated
+artifact; it carries **no dataset, no notebook, no manifest, no test directory and no pipeline that
+fits a model**, and CI asserts each of those against the built image. No module under `backend/app`
+imports scikit-learn directly: `app.ml.artifact_store` defers the `ml.artifact` import to load time
+so that a runtime without it answers a served 503 rather than failing to start.
 
 ## Project structure
 
@@ -122,22 +144,23 @@ image does not — the backend Dockerfile copies only `backend/app`, `alembic.in
 AI_Hotel_Intelligence_Platform/
 ├── backend/           FastAPI application
 │   ├── app/
-│   │   ├── api/           HTTP layer, deps and v1 routers   (28 files)
-│   │   ├── services/      business rules, transactions      (23 files)
-│   │   ├── schemas/       Pydantic request/response types   (20 files)
-│   │   ├── repositories/  query construction, data access   (18 files)
-│   │   ├── models/        SQLAlchemy ORM mapping            (14 files)
+│   │   ├── api/           HTTP layer, deps and v1 routers   (29 files)
+│   │   ├── services/      business rules, transactions      (28 files)
+│   │   ├── schemas/       Pydantic request/response types   (24 files)
+│   │   ├── repositories/  query construction, data access   (20 files)
+│   │   ├── models/        SQLAlchemy ORM mapping            (15 files)
 │   │   ├── core/          config, errors, security, logging  (9 files)
 │   │   ├── db/            engine and request-scoped session  (3 files)
 │   │   ├── middleware/    request id, security headers       (3 files)
-│   │   ├── ml/            deterministic statistical models   (2 files)
+│   │   ├── ml/            statistical models, artifact store,
+│   │   │                  serving, accuracy and distribution (9 files)
 │   │   └── main.py        app factory
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── requirements-dev.txt
 ├── frontend/          React + TypeScript SPA, nginx production image
-├── database/          migrations/ (9 revisions) and init SQL
-├── ml/                offline data prep, evaluation and validation; records tracked, payloads not
+├── database/          migrations/ (11 revisions) and init SQL
+├── ml/                offline data prep, evaluation, validation and the artifact; records tracked, payloads not
 ├── docs/              architecture, roadmap, design records, deployment runbooks
 ├── tests/             backend/ and integration/ suites, mirroring the source layout
 ├── pyproject.toml     ruff · mypy · pytest · coverage
@@ -148,8 +171,9 @@ AI_Hotel_Intelligence_Platform/
 
 ## Development stages
 
-**V1 is complete.** Every stage below was implemented, tested, verified and documented before
-the next one began.
+**V1 is complete**, and Stage 6 is V2 work delivered on top of it as stages rather than left in
+the backlog. Every stage below was implemented, tested, verified and documented before the next
+one began.
 
 | Stage | Scope | Status |
 |---|---|---|
@@ -163,11 +187,13 @@ the next one began.
 | 5.1–5.16 | React front end: authentication, all domain views, intelligence | **done** |
 | 5.17–5.25 | Test-database safety, quality gates, CI pipeline, frontend performance | **done** |
 | 5.26–5.38 | Production serving, Docker runtime, bootstrap, backup/restore, TLS, deployment robustness, image reproducibility | **done** |
+| 6.1–6.11 | Demand model lifecycle: leakage-safe dataset, versioned training data, offline backtest, metric-blind acceptance, artifact, serving, packaging, prediction persistence, accuracy measurement, distribution observation, stored-prediction read API | **done** |
 
-Not implemented, and not claimed anywhere in this repository: trained ML models (review
-sentiment, image classification, recommendations), any LLM/RAG/agent capability, and the
-operational items listed under [Known limitations](#known-limitations). See
-[docs/development-roadmap.md](docs/development-roadmap.md) for the V1/V2 split.
+What is **not** implemented, and not claimed anywhere in this repository: review sentiment,
+room-image classification, recommendations, any LLM/RAG/agent capability, drift detection,
+retraining, a registry holding more than one model, and the operational items listed under
+[Known limitations](#known-limitations). See
+[docs/development-roadmap.md](docs/development-roadmap.md) for the split.
 
 Detail and exit criteria: **[docs/development-roadmap.md](docs/development-roadmap.md)**.
 
@@ -203,7 +229,7 @@ Start the API:
 |---|---|
 | http://localhost:8000/health | `{"status":"ok", ...}` |
 | http://localhost:8000/health/db | `{"status":"ok","database":"reachable", ...}`, or 503 when it is not |
-| http://localhost:8000/docs | Swagger UI — 50 paths, 82 operations. Disabled when `ENVIRONMENT=production` |
+| http://localhost:8000/docs | Swagger UI — 52 paths, 84 operations. Disabled when `ENVIRONMENT=production` |
 
 ### Frontend
 
@@ -353,7 +379,7 @@ Every push and pull request to `main` runs four jobs in parallel on `ubuntu-late
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
-PostgreSQL reports 18.6, that `migrate` exits 0 and leaves the schema at `0009`, that the API
+PostgreSQL reports 18.6, that `migrate` exits 0 and leaves the schema at `0011`, that the API
 and frontend both become healthy, that nginx serves the SPA at `/`, `/bookings`, `/reviews`
 and `/intelligence`, that `/api/v1/` is proxied through to FastAPI while an unknown `/api/`
 path still returns a real 404 rather than the SPA, that `SECRET_KEY` and `POSTGRES_PASSWORD`
@@ -410,39 +436,64 @@ The same question always returns the same answer. The forecast method is reporte
 rather than hidden, and the trend response returns both window medians and the threshold, so its
 classification can be recomputed by hand.
 
-**There is no served model, no LLM, no embeddings, no vector database, no RAG and no agent
-framework in this repository.** `ml/` holds the offline half: Stage 6.2 prepares a versioned
-training dataset from a published, CC BY 4.0 hotel-booking dataset, Stage 6.3 backtests a
-seasonal-naive baseline and one scikit-learn regressor over 54 chronological origins, and Stage
-6.4 validates that measurement under an acceptance policy declared before the result and blind
-to it — PASS on 13 of 13 criteria, every one of them about reproducibility and identity rather
-than accuracy.
+### The trained demand model — what Stages 6.1–6.11 built
 
-Stage 6.5 fitted that candidate once and persisted it as an artifact — **generated, never
-committed, and loaded only after its metadata and digest have been checked.**
+A **second** layer, beside the one above rather than replacing it. It does not feed the V1
+forecasting, trend or anomaly responses, and those are unchanged by its existence. Each stage
+draws its own boundary:
 
-**No endpoint serves it.** The public API is the same 82 operations it was in V1, `backend/`
-gained no ML dependency, nothing under `backend/app` imports the artifact or inference modules,
-and the intelligence the platform actually serves is still the deterministic statistical baseline
-above. See
-[docs/ml-training-data.md](docs/ml-training-data.md),
+| Stage | What exists |
+|---|---|
+| 6.1 | A leakage-safe demand dataset built from the operational tables: one row per hotel per date, every feature tied to an explicit prediction cutoff, chronological splits with no shuffle parameter |
+| 6.2 | A versioned training dataset from a published CC BY 4.0 hotel-booking dataset, pinned to a commit and checksum-enforced on every run |
+| 6.3 | A deterministic rolling-origin backtest of a seasonal-naive baseline and one `HistGradientBoostingRegressor` over 54 chronological origins, recorded in `metrics.json`. **No winner is declared** — the per-fold spread dwarfs the difference between the two |
+| 6.4 | An acceptance protocol declared in code *before* the result and structurally unable to read any metric value: PASS on 13 of 13 criteria, every one about reproducibility and identity rather than accuracy |
+| 6.5 | One fitted artifact — **generated, never committed**, and loaded only after its metadata and digest have been checked, because a pickle is arbitrary code on load |
+| 6.6 | One authenticated, hotel-scoped, read-only serving route. Authorization resolves the hotel first; a missing or unverifiable artifact is an explicit `503`, never a fabricated number |
+| 6.7 | The artifact regenerated inside a disposable Docker build stage and verified against 20 approved values before any image may be built from it, so the image carries the model and nothing that could fit one |
+| 6.8 | Every served prediction persisted as a durable, attributable row — model identity, the nine inputs, a feature digest — inside the same transaction as the response it describes |
+| 6.9 | A frozen, content-checksummed protocol measuring stored predictions against realised demand after a 28-day settlement lag. Computed and returned, never persisted |
+| 6.10 | A frozen protocol summarising a hotel's stored model inputs and outputs over one window and comparing them against a baseline window. Summaries and differences only |
+| 6.11 | One paginated, tenant-scoped `GET` letting a hotel's own members read that hotel's stored predictions, addressed by a public UUID and exposing no internal identifier |
+
+**What none of that establishes.** Not production accuracy, not reliability, not generalisation
+beyond the two hotels the numbers came from, not superiority over the statistical baseline, and not
+business value. Stage 6.9 evaluates no threshold and ranks nothing; Stage 6.10 **detects nothing** —
+no threshold, no verdict, no alert, no PSI, no KS, no Jensen-Shannon; nothing retrains anything; and
+returning a number endorses none of it. The model card carries those answers as data rather than as
+prose: [docs/ml-model-card.md](docs/ml-model-card.md) §15.
+
+The measured limitation to know before reading any number: the model **cannot distinguish hotels at
+or below roughly forty room nights a night** — each of them receives ≈165.83 — measured in Stage 6.6
+and unchanged since.
+
+See [docs/ml-training-data.md](docs/ml-training-data.md),
 [docs/ml-model-evaluation.md](docs/ml-model-evaluation.md),
-[docs/ml-model-validation.md](docs/ml-model-validation.md) and
-[docs/ml-model-card.md](docs/ml-model-card.md) — including the artifact's trust boundary and
-why those numbers establish neither production accuracy nor cross-hotel generalisation.
+[docs/ml-model-validation.md](docs/ml-model-validation.md),
+[docs/ml-model-card.md](docs/ml-model-card.md), [docs/ml-serving.md](docs/ml-serving.md),
+[docs/ml-production-runtime.md](docs/ml-production-runtime.md),
+[docs/ml-prediction-persistence-design.md](docs/ml-prediction-persistence-design.md),
+[docs/ml-accuracy-measurement.md](docs/ml-accuracy-measurement.md),
+[docs/ml-drift-observation.md](docs/ml-drift-observation.md) and
+[docs/ml-prediction-read-api.md](docs/ml-prediction-read-api.md).
+
+**There is no LLM, no embeddings, no vector database, no RAG and no agent framework in this
+repository.**
 
 ### V2 — NOT IMPLEMENTED
 
-None of these is served. Each would be built as its own stage, with its dependencies in
+None of these exists. Each would be built as its own stage, with its dependencies in
 `ml/requirements-ml.txt`, its pipeline in `ml/pipelines/`, and its artifacts plus evaluation
 record in `ml/models/<model_version>/` — which is where Stage 6.3 wrote the first `metrics.json`.
 
 | Module | Input | Output |
 |---|---|---|
-| **Served occupancy forecasting** | Booking history | A learned model replacing the statistical baseline. Stage 6.3 backtested one offline over 54 rolling origins and **persisted no artifact**; serving it needs one, plus a loading path, an unavailable-model error and an endpoint |
+| **Drift detection** | Stored predictions and features | A statistic, a threshold and an alert. Stage 6.10 observes distributions and deliberately decides nothing |
+| **Retraining and model promotion** | A drift or accuracy signal | A second model version, a registry able to hold more than one, and a promotion decision |
 | **Review sentiment** | Review text | Polarity plus an aspect breakdown (cleanliness, staff, location, value) and token-level explanations |
 | **Room-image classification** | Room photographs | Room type and feature tags for automatic media organisation |
 | **Recommendations** | User and hotel history | Ranked hotel suggestions, evaluated against a popularity baseline |
+| **An ML surface in the front end** | — | No React view reads any `/ml/` route today |
 | **LLM / RAG / agent capability** | — | Nothing of the kind exists today; it is direction, not capability |
 
 Rules these must follow, fixed now so they are not negotiated later:
@@ -521,6 +572,7 @@ What remains genuinely missing is operational rather than functional:
 - **No platform-administrator API.** Granting platform administration is a deliberate
   out-of-band database write; see [First run](#first-run). That is by design, not an omission.
 
-The intelligence layer remains a transparent statistical baseline rather than a trained model,
-as described under
+The V1 intelligence layer remains a transparent statistical baseline. The trained demand model
+sits beside it — served, but **not scientifically validated**, and with no front-end surface — as
+described under
 [What the intelligence layer is, and is not](#what-the-intelligence-layer-is-and-is-not).

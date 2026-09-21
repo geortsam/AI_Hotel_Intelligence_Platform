@@ -52,8 +52,10 @@ A pickle executes arbitrary code when it is loaded. :func:`load_artifact` theref
 validates ``artifact.json`` -- schema, model version, dataset checksum, feature version, feature
 columns, horizon, and the payload's own sha256 -- **before** unpickling anything. A payload whose
 digest does not match its metadata is refused untouched. The repository never distributes a
-payload, the API never loads one, and there is no code path anywhere that takes an artifact path
-from a request.
+payload; since Stage 6.6 the API loads one, and only through this function, after those checks.
+There is no code path anywhere that takes an artifact path from a request: the location is
+process configuration, and the authority to serve is ``APPROVED_MODEL`` in
+``backend/app/ml/serving.py`` rather than anything this file says about itself.
 """
 
 from __future__ import annotations
@@ -473,8 +475,11 @@ def build_artifact_metadata(
             "cross_hotel_generalisation_established": False,
             "serving_enabled": False,
             "note": (
-                "Offline research artifact. Not loaded by the API, not reachable over HTTP, and "
-                "no code path takes an artifact location from a request."
+                "Offline research artifact, loaded by the production serving path after its "
+                "metadata and digest have been verified. Being served establishes nothing about "
+                "it: the authority to serve is the reviewed APPROVED_MODEL constant in the "
+                "application, never a claim this file makes about itself, and no code path takes "
+                "an artifact location from a request."
             ),
         },
         "generation": {

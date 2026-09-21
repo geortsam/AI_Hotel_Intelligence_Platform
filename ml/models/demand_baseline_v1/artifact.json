@@ -81,7 +81,7 @@
   },
   "claims": {
     "cross_hotel_generalisation_established": false,
-    "note": "Offline research artifact. Not loaded by the API, not reachable over HTTP, and no code path takes an artifact location from a request.",
+    "note": "Offline research artifact, loaded by the production serving path after its metadata and digest have been verified. Being served establishes nothing about it: the authority to serve is the reviewed APPROVED_MODEL constant in the application, never a claim this file makes about itself, and no code path takes an artifact location from a request.",
     "production_accuracy_established": false,
     "production_ready": false,
     "serving_enabled": false
