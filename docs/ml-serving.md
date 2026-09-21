@@ -409,10 +409,13 @@ Stated plainly, because the endpoint's existence is not a claim that the number 
 6. **~~Predictions are not persisted~~ — resolved by Stage 6.8.** Every served prediction is
    now recorded with its full model identity and the nine inputs it was computed from, which is
    what a later drift or accuracy comparison would need. Stage 6.9 then built the accuracy
-   half — retrospective, programmatic, and establishing nothing about production accuracy.
-   Still absent, and still out of scope: drift detection, alerting, a feedback loop and any
-   retraining. See [ml-prediction-persistence-design.md](ml-prediction-persistence-design.md)
-   and [ml-accuracy-measurement.md](ml-accuracy-measurement.md).
+   half — retrospective, programmatic, and establishing nothing about production accuracy — and
+   Stage 6.10 made the input and output distributions observable, which detects nothing either.
+   Still absent, and still out of scope: drift *detection*, thresholds, alerting, a feedback
+   loop and any retraining. See
+   [ml-prediction-persistence-design.md](ml-prediction-persistence-design.md),
+   [ml-accuracy-measurement.md](ml-accuracy-measurement.md) and
+   [ml-drift-observation.md](ml-drift-observation.md).
 7. **No frontend surface.** Nothing in `frontend/` was touched; the endpoint is independently
    testable and is currently exercised only by tests.
 8. **The model is never retrained by the application.** A new artifact is an offline build,

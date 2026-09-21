@@ -268,8 +268,15 @@ model runs, not how good it is.
    established**, and packaging it for production does not make it transferable.
 3. **Twenty-eight days of recorded occupancy are required**, specifically on *T*−7, *T*−14 and
    *T*−28.
-4. **Predictions are not persisted**; there is no monitoring, no drift detection and no
-   retraining. None of that arrived with this stage.
+4. **~~Predictions are not persisted~~ — corrected.** That was true of Stage 6.7 and is no
+   longer true of the repository. Stage 6.8 persists every served prediction with the model
+   identity that produced it, through migration `0010_demand_predictions`; Stage 6.9 measures
+   error against realised demand under a declared protocol; Stage 6.10 makes the input and
+   output distributions observable. **Still absent: drift *detection*, thresholds, alerting and
+   retraining** — none of those arrived with any of those stages, and none is implied by them.
+   See [ml-prediction-persistence-design.md](ml-prediction-persistence-design.md),
+   [ml-accuracy-measurement.md](ml-accuracy-measurement.md) and
+   [ml-drift-observation.md](ml-drift-observation.md).
 5. **The image is ~150 MB larger.** That is the price of the runtime, and it is worth restating
    when the model it carries is an offline research candidate.
 

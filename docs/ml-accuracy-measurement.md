@@ -278,8 +278,8 @@ Stage 6.8 drew this table. Stage 6.9 moves exactly one row.
 | | Question | After Stage 6.9 |
 |---|---|---|
 | Operational monitoring | Is the endpoint serving? | **Yes**, since 6.8 |
-| Data drift | Have the inputs moved? | **Computable, still not computed.** No statistic chosen |
-| Prediction drift | Have the outputs moved? | **Computable, still not computed** |
+| Data drift | Have the inputs moved? | **Observable** since Stage 6.10, under `distribution_v1`. Still not *detected*: no statistic, no threshold |
+| Prediction drift | Have the outputs moved? | **Observable** since Stage 6.10. Still not *detected* |
 | Forecast error | How far off was the number? | **Measured, under `accuracy_v1`** |
 | *Production accuracy established* | Is the model good enough to rely on? | **No.** Unchanged |
 

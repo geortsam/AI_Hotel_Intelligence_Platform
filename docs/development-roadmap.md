@@ -418,6 +418,47 @@ and an evaluation leaving the database byte-for-byte unchanged.
 baseline, rank a model or trigger any retraining. Fifty acceptance criteria, the full protocol
 and its limitations: **[ml-accuracy-measurement.md](ml-accuracy-measurement.md)**.
 
+## Stage 6.10 — Prediction and feature distribution observation · *done*
+
+> **No table, no migration, no endpoint, no CLI, no dependency and no Docker change.** Head stays
+> `0010_demand_predictions`; the API stays at 51 paths / 83 operations. Computed and returned,
+> never persisted.
+
+**Objective: make a hotel's stored model inputs and model outputs observable over an explicit
+window, and comparable against an explicit baseline window.** The third of the three gaps Stage
+6.8 named, and the last of them.
+
+**It detects nothing.** No threshold, no verdict, no alert, no anomaly flag, no PSI, no KS, no
+Jensen-Shannon — in the protocol, in the result, or anywhere this stage reaches. That is a
+deferral Stage 6.8 §9 argued for before either stage existed: choosing a statistic before there
+is a row to look at would be guessing, and a fresh deployment still has none. What changed is
+that the distributions can now be looked at.
+
+**The reference is a second window of stored predictions, not the training set** — decided on
+evidence rather than preference. The committed manifest carries `target_statistics` and no
+per-feature statistics at all, and the image ships neither `ml/manifests/` nor `ml/data/`, so an
+absolute reference would have needed a new artifact and a Dockerfile change. A window-versus-
+window reference needs neither, and every number comes from rows the platform actually served.
+
+`distribution_v1` is frozen and checksummed, and declares all of it: the model's nine feature
+columns in its own order plus the output, five statistics, five quantiles, and **one** quantile
+convention — linear interpolation between order statistics, written out in the code that applies
+it. A test cross-checks it against `statistics.quantiles(method="inclusive")`, and the median is
+the `p50` quantile by construction. Empty series report `None` everywhere, never `0.0`.
+
+**Nothing is recomputed, and nothing new was read.** The values summarised are the ones Stage 6.8
+stored — what the model *was* given, not what it *would be* given today — and the read is Stage
+6.9's `scorable_predictions` unchanged, so one selection rule still governs this codebase and no
+repository method was added.
+
+**Proven against real PostgreSQL:** summaries over real stored rows, a baseline window and its
+absence, identical windows giving zero differences, model versions never sharing a summary, a
+foreign digest reported and pooled into nothing, cross-tenant isolation, a non-member refused
+before anything is read, one query per window, and the database unchanged after a run.
+
+Forty-two acceptance criteria, the protocol, the quantile convention and the limitations:
+**[ml-drift-observation.md](ml-drift-observation.md)**.
+
 ---
 
 # V2 — FUTURE / NOT IMPLEMENTED
@@ -428,7 +469,7 @@ and its limitations: **[ml-accuracy-measurement.md](ml-accuracy-measurement.md)*
 
 | Item | Note |
 |---|---|
-| A **served** trained forecast | *Done in Stages 6.6 and 6.7* — loading path, unavailable-model error, endpoint, schema, and a production image that carries and executes the approved model. Persisted predictions and the observability foundation are **Stage 6.8**, *done*; retrospective accuracy measurement under a declared protocol is **Stage 6.9**, *done*, and establishes no production accuracy. Drift detection and retraining remain backlog |
+| A **served** trained forecast | *Done in Stages 6.6 and 6.7* — loading path, unavailable-model error, endpoint, schema, and a production image that carries and executes the approved model. Persisted predictions and the observability foundation are **Stage 6.8**, *done*; retrospective accuracy measurement under a declared protocol is **Stage 6.9**, *done*, and establishes no production accuracy; distribution observation is **Stage 6.10**, *done*, and detects nothing. Drift *detection* — a statistic, a threshold, an alert — and retraining remain backlog |
 | Richer feature pipeline | the 7-day horizon admits 9 of 15 contract columns; a horizon-matched on-the-books and rolling-window feature set does not exist |
 | Review sentiment | polarity and aspect breakdown over review text |
 | Room-image classification | class set fixed before training |
