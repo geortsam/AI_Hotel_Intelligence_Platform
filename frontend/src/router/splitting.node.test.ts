@@ -21,6 +21,7 @@ const SOURCE = readFileSync(join(ROOT, 'src', 'router', 'AppRouter.tsx'), 'utf8'
 
 /** Deferred: every screen reachable only after navigating to it. */
 const ON_DEMAND = [
+  'AnalyticsPage',
   'AdministrationPage',
   'AvailabilityPage',
   'BookingDetailPage',

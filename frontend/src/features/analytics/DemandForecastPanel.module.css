@@ -1,0 +1,112 @@
+/* The panel is visually distinct from every KPI card on the screen, on purpose: a modelled
+   estimate must not read as one more recorded figure. A dashed border and a tinted surface do
+   that without relying on colour alone -- the eyebrow says "Modelled estimate" in words. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.targetDate {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.value {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-3xl, 2rem);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-tight);
+}
+
+.caption,
+.unavailableDetail,
+.note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.pending {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: var(--text-sm);
+}
+
+.unavailableTitle {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 600;
+}
+
+.note {
+  color: var(--color-text-subtle);
+}
+
+.provenance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-2) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.provenanceRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.provenanceRow dt {
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.provenanceRow dd {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+/* The claims boundary, given the same weight as the number itself rather than footnote size. */
+.boundary {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-text);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.boundaryIcon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}

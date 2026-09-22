@@ -34,9 +34,8 @@ more than one currency and the platform never converts between them.</sub></div>
 > stored demand predictions the served model writes — reachable as **52 API paths / 84
 > operations**, of which **79 require authentication**. Authentication is Argon2id plus HS256
 > access tokens; authorization is a four-level hotel role hierarchy with a separate
-> platform-administrator capability. There is a React front end covering eleven of its twelve
-> navigation areas — the Analytics *view* is a placeholder that says so on screen, though the
-> analytics API behind it is built — an append-only audit
+> platform-administrator capability. There is a complete React front end — all twelve
+> navigation areas, the last of them built in Stage 7.2 — an append-only audit
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
@@ -158,9 +157,16 @@ capability rather than by a hotel role.
 
 </details>
 
-> **Analytics is the one navigation area not yet built.** It renders a placeholder that names the
-> stage it is planned for and requests nothing from the backend, so it is not shown here. That is
-> the only such area; the other eleven are the screens above.
+### Analytics
+
+![Period reporting: occupancy, ADR and RevPAR over a chosen window, revenue and expense breakdowns, and the model's demand estimate](docs/screenshots/analytics.png)
+
+Period reporting, and the only screen that asks the **trained** demand model anything. Occupancy,
+ADR and RevPAR over a chosen window; revenue and expenses grouped by category and currency with no
+total row, because adding currencies together would not produce money; and — fenced off in its own
+panel, labelled *modelled estimate*, carrying the model's version and its own
+`production_ready: false` — one forecast. No confidence band is drawn, because the served model is
+a point forecaster and a band would be invented.
 
 ---
 
@@ -377,10 +383,11 @@ one began.
 | 3B.11 | Intelligence: forecasting, trend, anomalies, insights | **done** |
 | 3B.12 | Cross-domain integration and backend hardening | **done** |
 | 4.x | Authentication, membership authorization, platform administration, audit trail and retention, server-side pricing, availability | **done** |
-| 5.1–5.16 | React front end: authentication, eleven of twelve navigation areas, intelligence (Analytics remains a declared placeholder) | **done** |
+| 5.1–5.16 | React front end: authentication, domain views, intelligence | **done** |
 | 5.17–5.25 | Test-database safety, quality gates, CI pipeline, frontend performance | **done** |
 | 5.26–5.38 | Production serving, Docker runtime, bootstrap, backup/restore, TLS, deployment robustness, image reproducibility | **done** |
 | 6.1–6.11 | Demand model lifecycle: leakage-safe dataset, versioned training data, offline backtest, metric-blind acceptance, artifact, serving, packaging, prediction persistence, accuracy measurement, distribution observation, stored-prediction read API | **done** |
+| 7.1–7.2 | V2 definition and the analytics reporting view: period KPIs, category breakdowns, activity charts, and the first interface to the served demand model | **done** |
 
 What is **not** implemented, and not claimed anywhere in this repository: review sentiment,
 room-image classification, recommendations, any LLM/RAG/agent capability, drift detection,

@@ -1,7 +1,11 @@
 # V2 stage roadmap — definition, Stage 7.1
 
-> **Nothing here is implemented.** This is the ordered plan produced by Stage 7.1. Each stage is
-> specified well enough to be implemented on its own, in order, without re-deciding anything.
+> The ordered plan produced by Stage 7.1. Each stage is specified well enough to be implemented
+> on its own, in order, without re-deciding anything.
+>
+> **Implemented so far: Stage 7.2.** Every other stage below is a specification and nothing more —
+> none of its code exists. A stage carries `· *done*` in its heading once it ships, with a note
+> recording what was actually built and where that differed from the plan.
 >
 > Read [v2-architecture.md](v2-architecture.md) first: it holds the decisions these stages
 > implement — the single-deployable topology, the LLM abstraction, the RAG design, the tool
@@ -40,7 +44,19 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 
 ## Track A — product surface over existing capability
 
-### Stage 7.2 — Analytics dashboard view
+### Stage 7.2 — Analytics dashboard view · *done*
+
+> **Implemented.** `/analytics` renders a real reporting view; `PlaceholderPage` has no remaining
+> consumer and every navigation area is now built. The stage went slightly beyond its original
+> objective in one respect, for a reason found while implementing it: **every analytics and
+> intelligence endpoint was already consumed by some screen except `/ml/demand-forecast`**, which
+> had no frontend anywhere. Rebuilding the same figures in a new place would have been
+> duplication, so the screen pairs period reporting with the first interface to the served demand
+> model — fenced off in its own panel, labelled as modelled rather than recorded, carrying the
+> model's version and its own `production_ready: false`, and drawing no confidence band.
+>
+> Delivered: 4 new components, 1 new service, 1 new type module, 50 tests, 0 backend changes,
+> 0 migrations, 0 dependencies. Frontend suite 998 → 1050.
 
 | | |
 |---|---|

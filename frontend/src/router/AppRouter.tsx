@@ -57,6 +57,9 @@ const GuestDetailPage = lazy(() =>
 const GuestsPage = lazy(() =>
   import('@/pages/GuestsPage').then((module) => ({ default: module.GuestsPage })),
 )
+const AnalyticsPage = lazy(() =>
+  import('@/pages/AnalyticsPage').then((module) => ({ default: module.AnalyticsPage })),
+)
 const IntelligencePage = lazy(() =>
   import('@/pages/IntelligencePage').then((module) => ({ default: module.IntelligencePage })),
 )
@@ -100,8 +103,14 @@ function onDemand(element: ReactNode): ReactNode {
  * work outstanding is the interface, not the domain.
  */
 const AREA_DESCRIPTIONS: Readonly<Record<string, string>> = {
-  [ROUTES.analytics]:
-    'Occupancy, ADR and RevPAR reporting over a chosen period, plus revenue and expense breakdowns.',
+  /*
+   * Empty as of Stage 7.2, and deliberately kept rather than deleted.
+   *
+   * Analytics was the last unbuilt area and now has a page, so there is nothing left to
+   * describe. The mechanism stays because it is what keeps a sidebar entry from pointing at a
+   * route that does not exist: a future area added to `NAV_ITEMS` and not to `BUILT_AREAS`
+   * still renders an honest placeholder rather than a blank screen or a 404.
+   */
 }
 
 /**
@@ -134,6 +143,7 @@ const AREA_DESCRIPTIONS: Readonly<Record<string, string>> = {
  */
 const BUILT_AREAS: readonly string[] = [
   ROUTES.dashboard,
+  ROUTES.analytics,
   ROUTES.bookings,
   ROUTES.financials,
   ROUTES.reviews,
@@ -236,6 +246,12 @@ const router = createBrowserRouter([
            * set of things no hotel owns.
            */
           { path: ROUTES.platform, element: onDemand(<PlatformPage />) },
+          /*
+           * Period reporting. A sibling of Forecasting rather than a child: they answer
+           * different questions over the same data -- what happened, and what the model
+           * expects next -- and neither is a deeper view of the other.
+           */
+          { path: ROUTES.analytics, element: onDemand(<AnalyticsPage />) },
           { path: ROUTES.intelligence, element: onDemand(<IntelligencePage />) },
           ...featureRoutes,
           { path: '*', element: <NotFoundPage /> },
