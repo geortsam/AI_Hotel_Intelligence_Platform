@@ -121,12 +121,23 @@ jobs:
         # requirements-dev.txt begins with `-r requirements.txt`, so this single file
         # installs the runtime and the tooling together.
         #
-        # ml/requirements-ml.txt is installed SEPARATELY and deliberately: scikit-learn is an
-        # offline dependency, it is not in backend/requirements.txt, and the API image does not
-        # copy `ml/` at all. Installing it here is what makes "scikit-learn 1.9.1 works on
-        # Python 3.14.7" a verified fact for this repository rather than a claim read off a
-        # classifier -- and it is what lets the Stage 6.3 tests run for real instead of being
-        # skipped, which they must never be.
+        # ml/requirements-ml.txt is installed SEPARATELY and deliberately.
+        #
+        # Until Stage 6.7 the reason was that scikit-learn was an offline dependency only: it
+        # was not in backend/requirements.txt and the API image copied no `ml/` at all. Both
+        # of those stopped being true at 6.7, which pins scikit-learn==1.9.1 in
+        # backend/requirements.txt so the image can deserialise and score the artifact, and
+        # copies the thirteen-module import closure of `ml.artifact` and `ml.inference` into
+        # the runtime stage. The line below is therefore mostly a re-install of the same pin.
+        #
+        # It stays, for two reasons that still hold. It keeps the OFFLINE file honest -- the
+        # one a contributor working only in `ml/` installs -- rather than letting it drift
+        # while the production file carries the real pin. The test
+        # `test_the_two_declarations_of_scikit_learn_agree` asserts the two never disagree,
+        # and this step is what proves the offline one resolves at all. And it is what makes
+        # "scikit-learn 1.9.1 works on Python 3.14.7" a verified fact for this repository
+        # rather than a claim read off a classifier, which is what lets the Stage 6.3 tests
+        # run for real instead of being skipped, which they must never be.
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r backend/requirements-dev.txt

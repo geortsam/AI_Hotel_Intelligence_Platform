@@ -44,7 +44,7 @@
 # The payload is not committed and must not be: .gitignore has excluded model weights since
 # Stage 1, and a pickle is arbitrary code on load. So the image regenerates it from the
 # committed dataset and the pinned configuration, and `ml/pipelines/build_production_artifact.py`
-# refuses to let the build continue unless twenty approved values match -- versions, dataset
+# refuses to let the build continue unless twenty-two approved values match -- versions, dataset
 # checksum, feature columns and their order, horizon, estimator configuration and its checksum,
 # claims, training extent, the probe predictions and the canonical model digest.
 #
