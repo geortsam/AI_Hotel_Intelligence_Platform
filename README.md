@@ -450,7 +450,7 @@ draws its own boundary:
 | 6.4 | An acceptance protocol declared in code *before* the result and structurally unable to read any metric value: PASS on 13 of 13 criteria, every one about reproducibility and identity rather than accuracy |
 | 6.5 | One fitted artifact — **generated, never committed**, and loaded only after its metadata and digest have been checked, because a pickle is arbitrary code on load |
 | 6.6 | One authenticated, hotel-scoped, read-only serving route. Authorization resolves the hotel first; a missing or unverifiable artifact is an explicit `503`, never a fabricated number |
-| 6.7 | The artifact regenerated inside a disposable Docker build stage and verified against 20 approved values before any image may be built from it, so the image carries the model and nothing that could fit one |
+| 6.7 | The artifact regenerated inside a disposable Docker build stage and verified against 22 approved values before any image may be built from it, so the image carries the model and nothing that could fit one |
 | 6.8 | Every served prediction persisted as a durable, attributable row — model identity, the nine inputs, a feature digest — inside the same transaction as the response it describes |
 | 6.9 | A frozen, content-checksummed protocol measuring stored predictions against realised demand after a 28-day settlement lag. Computed and returned, never persisted |
 | 6.10 | A frozen protocol summarising a hotel's stored model inputs and outputs over one window and comparing them against a baseline window. Summaries and differences only |

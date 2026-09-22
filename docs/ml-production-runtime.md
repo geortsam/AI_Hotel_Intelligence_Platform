@@ -48,7 +48,7 @@ six decimal places. It is a fingerprint of *what the model computes*.
 > builds; the canonical digest is the cross-build claim."*
 
 **Nothing was weakened to reach that position.** The payload digest is still verified — against
-the metadata generated beside it, before any deserialisation — and twenty approved values are
+the metadata generated beside it, before any deserialisation — and twenty-two approved values are
 checked at build time that no digest comparison would have covered.
 
 ---
@@ -127,7 +127,9 @@ CI prints the built image's size on every run.
 ## 4. Build-time integrity verification
 
 `ml/pipelines/build_production_artifact.py` runs inside the disposable stage and **fails the
-build** — no warning path, no flag that turns a check off — unless all twenty match:
+build** — no warning path, no flag that turns a check off — unless all twenty-two match.
+The table groups them by subject; the count is of individual comparisons, which is also what
+the build prints (`--- 22 approved values verified ---`):
 
 | | |
 |---|---|
@@ -150,8 +152,15 @@ The two version checks are worth a note. They compare the metadata against the c
 tampered `feature_version` travelled straight through. A test caught it; the versions now come
 from code the metadata cannot influence.
 
-Seventeen tampering cases are exercised in `tests/backend/test_production_packaging.py`, one per
-approved value, and each must refuse the build and write no payload.
+Seventeen tampering cases are exercised in `tests/backend/test_production_packaging.py`. Each
+edits one field of the approved metadata, and each must refuse the build and write no payload.
+
+**They are not one per approved value, and cannot be.** There are twenty-two approved values and
+seventeen cases, and the mapping is neither injective nor surjective. Two cases — `serving_enabled`
+and `production_ready` — both trip the single `claims` comparison, because that comparison reads
+all four flags at once. Several approved values have no dedicated case at all, among them the two
+that compare the *fitted artifact* against the code constants rather than against the file: no edit
+to the metadata can reach them, which is the point of checking that way.
 
 ---
 
@@ -227,7 +236,7 @@ the runtime user cannot even write to it.
 
 The middle column is new in Stage 6.7 and is the only place `fit` runs in the delivery path. It
 runs before the image exists, in a stage that is thrown away, and its output is admitted only if
-it is indistinguishable from the approved model by twenty measures.
+it is indistinguishable from the approved model by twenty-two measures.
 
 ---
 

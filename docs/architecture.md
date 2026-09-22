@@ -305,9 +305,10 @@ Stage by stage:
   start. Authorization is resolved before the artifact is consulted, so a non-member cannot learn
   whether the model is loaded, whether the hotel has history, or whether it exists.
 - **6.7 — packaging.** The artifact is regenerated inside a disposable Docker build stage from the
-  committed dataset and verified against twenty approved values — including the canonical model
-  digest — before any image may be built from it. The runtime image carries `scikit-learn==1.9.1`
-  (the same pin `ml/requirements-ml.txt` has held since Stage 6.3), thirteen `ml/` modules that are
+  committed dataset and verified against twenty-two approved values — including the canonical
+  model digest — before any image may be built from it. The runtime image carries
+  `scikit-learn==1.9.1` (the same pin `ml/requirements-ml.txt` has held since Stage 6.3),
+  thirteen `ml/` modules that are
   exactly the import closure of `ml.artifact` and `ml.inference`, and the artifact pair. It carries
   no dataset, no notebook, no manifest, no test directory and no pipeline entry point that fits a
   model.

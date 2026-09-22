@@ -129,8 +129,8 @@ cloudpickle — none of which is declared, for the reason the section above give
 by roughly 150 MB, and the `image-reproducibility` job prints its size on every run.
 
 **The model is regenerated, not copied.** A disposable `artifact-builder` stage refits it from
-the committed dataset and refuses to produce an image unless twenty approved values match. Two
-builds of one commit on one runner therefore produce byte-identical payloads: the fit is seeded
+the committed dataset and refuses to produce an image unless twenty-two approved values match.
+Two builds of one commit on one runner therefore produce byte-identical payloads: the fit is seeded
 and the thread count is the same. Across *machines* the payload bytes may differ while the model
 is identical — the reason is measured and written up in
 [../ml-production-runtime.md](../ml-production-runtime.md) §1, and it is why the model's

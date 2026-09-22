@@ -41,11 +41,22 @@ PostgreSQL **18.6**. At the V1 boundary, nine linear Alembic migrations at head
 `0009_audit_booking_deleted`, no branch points. *(Stages 6.8 and 6.11 have since added two more:
 head is now `0011_demand_prediction_public_id` across 11 linear revisions, still with no branch
 points.)* The schema carries its rules rather than delegating them to application code:
-55 CHECK constraints, 18 `ON DELETE RESTRICT` / 10 `CASCADE` / 3 `SET NULL` foreign keys, a GiST
-exclusion constraint over half-open date ranges for room allocation, a deferred trigger asserting
-night-completeness, a database-level append-only trigger on the audit table, generated columns
-for derived metrics, currency-format checks, and composite foreign keys carrying `hotel_id` so
-the database itself refuses a cross-tenant row.
+63 CHECK constraints and 28 foreign keys — 17 `ON DELETE RESTRICT`, 8 `ON DELETE CASCADE`,
+3 `ON DELETE SET NULL` — a GiST exclusion constraint over half-open date ranges for room
+allocation, a deferred trigger asserting night-completeness, a database-level append-only trigger
+on the audit table, generated columns for derived metrics, currency-format checks, and composite
+foreign keys carrying `hotel_id` so the database itself refuses a cross-tenant row.
+
+*Those two counts are measured at migration head `0009_audit_booking_deleted`, the V1 boundary:
+CHECK constraints as `pg_constraint.contype = 'c'`, and the delete policies as
+`information_schema.referential_constraints.delete_rule`. **`delete_rule`, not `ON UPDATE`** — two
+of the eight delete-CASCADE keys also carry `ON UPDATE CASCADE`, and they are the same keys, not
+additional ones. An earlier version of this paragraph read `55 CHECK constraints, 18 RESTRICT /
+10 CASCADE / 3 SET NULL`. The 55 and the 10 are the Stage 2 figures for migration `0001`, where
+55 CHECKs and 10 composite foreign keys are exactly right and
+[database-implementation.md](database-implementation.md) still records them as such; they were
+carried into a paragraph about `0009`. The 18 matched no measured revision at the V1 boundary, and
+the 3 was correct throughout.*
 
 ## Domain API
 
@@ -282,10 +293,11 @@ neither an ML runtime nor a model. This closes that, and **changes nothing about
 
 **The artifact is regenerated, not shipped.** The payload is not committed and must not be, so
 `backend/Dockerfile` gained a disposable `artifact-builder` stage that refits the approved model
-from the committed dataset and **fails the build unless twenty approved values match** —
+from the committed dataset and **fails the build unless twenty-two approved values match** —
 versions, dataset checksum, feature columns and order, horizon, estimator configuration and its
 checksum, claims, training extent, the probe predictions and the canonical model digest.
-Seventeen tampering cases are tested, one per value.
+Seventeen tampering cases are tested. They are not one per approved value — see
+[ml-production-runtime.md](ml-production-runtime.md) §4 for why they cannot be.
 
 **The identity is the canonical model digest, and that is a measured decision rather than a
 convenience.** Refitting this model produces a different payload SHA-256 for every OpenMP thread

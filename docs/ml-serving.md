@@ -397,7 +397,7 @@ Stated plainly, because the endpoint's existence is not a claim that the number 
 3. **~~The shipped API image cannot serve this endpoint.~~ Resolved by Stage 6.7.** The
    production image now installs scikit-learn, carries an allowlist of thirteen `ml/` modules,
    and regenerates the approved model in a disposable build stage that refuses to produce an
-   image unless twenty approved values match. The endpoint returns a real prediction in the
+   image unless twenty-two approved values match. The endpoint returns a real prediction in the
    production container, and CI proves it against real PostgreSQL. A missing or corrupted
    artifact still answers `503`. See [ml-production-runtime.md](ml-production-runtime.md).
 4. **Twenty-eight days of recorded occupancy are required**, specifically on *T*−7, *T*−14 and

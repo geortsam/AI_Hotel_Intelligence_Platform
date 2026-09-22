@@ -390,8 +390,8 @@ not create a generalisation claim either.
   not committed — `ml/models/demand_baseline_v1/` holds four JSON records, and `model.pkl` when it
   has been built. *(At Stage 6.6 the shipped API image carried no `ml/` and answered 503 for that
   reason. Stage 6.7 regenerates this artifact inside a disposable build stage, verifies it against
-  twenty approved values and packages it, so the image now serves it — with the same identity and
-  the same claims.)* See **[ml-serving.md](ml-serving.md)** and
+  twenty-two approved values and packages it, so the image now serves it — with the same identity
+  and the same claims.)* See **[ml-serving.md](ml-serving.md)** and
   **[ml-production-runtime.md](ml-production-runtime.md)**.
 - **Served predictions are recorded, measured and readable — and none of that validates the
   model.** Stage 6.8 persists every served prediction, Stage 6.9 measures stored predictions
