@@ -78,7 +78,17 @@ export function Sidebar({ isOpen, onNavigate }: SidebarProps) {
         ))}
       </nav>
 
-      <div className={styles.footer}>Foundation build &middot; Stage 5.2</div>
+      {/*
+       * The product name, and deliberately nothing else.
+       *
+       * This read "Foundation build - Stage 5.2" from Stage 5.2 until Stage 6.11, by which
+       * point it was wrong by roughly thirty stages and appeared on every screen. A build or
+       * stage marker here has to be updated by hand every time either moves, which is the
+       * same as saying it will be stale; the version the running system reports is the
+       * backend's, available from the API, and this footer is not where a reader should go
+       * looking for it.
+       */}
+      <div className={styles.footer}>AI Hotel Intelligence Platform</div>
     </aside>
   )
 }
