@@ -1,9 +1,31 @@
+<div align="center">
+
 # AI Hotel Intelligence Platform
 
-A hotel management and analytics platform: a FastAPI backend over a PostgreSQL domain model, a
-React dashboard, a deterministic statistical intelligence layer for forecasting, anomaly detection
-and demand trend, and — beside it — one offline-fitted demand model served behind a hotel-scoped
-endpoint, with its predictions persisted and readable.
+**A property-management system and its analytics layer, in one codebase.**
+
+FastAPI over a constrained PostgreSQL schema · a React dashboard · a deterministic statistical
+intelligence layer for forecasting, anomaly detection and demand trend · and, beside it, one
+offline-fitted demand model served behind a hotel-scoped endpoint, with its predictions persisted
+and readable.
+
+[![CI](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.14.7-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.141.1-009688?logo=fastapi&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18.6-4169E1?logo=postgresql&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-4999%20backend%20%C2%B7%20998%20frontend-success)
+![API](https://img.shields.io/badge/API-52%20paths%20%C2%B7%2084%20operations-informational)
+
+</div>
+
+![The dashboard: occupancy, ADR, RevPAR and room revenue for one property over a chosen period](docs/screenshots/dashboard.png)
+
+<div align="center"><sub>The overview screen. Every figure is computed server-side and labelled
+with the window it covers; the multi-currency banner appears because the period holds entries in
+more than one currency and the platform never converts between them.</sub></div>
 
 > ### Current state: **V1 complete and verified**
 >
@@ -12,7 +34,9 @@ endpoint, with its predictions persisted and readable.
 > stored demand predictions the served model writes — reachable as **52 API paths / 84
 > operations**, of which **79 require authentication**. Authentication is Argon2id plus HS256
 > access tokens; authorization is a four-level hotel role hierarchy with a separate
-> platform-administrator capability. There is a complete React front end, an append-only audit
+> platform-administrator capability. There is a React front end covering eleven of its twelve
+> navigation areas — the Analytics *view* is a placeholder that says so on screen, though the
+> analytics API behind it is built — an append-only audit
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
@@ -43,18 +67,100 @@ endpoint, with its predictions persisted and readable.
 
 ## Table of contents
 
-1. [Project description](#project-description)
-2. [Objectives](#objectives)
-3. [Architecture](#architecture)
-4. [Technologies](#technologies)
-5. [Project structure](#project-structure)
-6. [Development stages](#development-stages)
-7. [How to run](#how-to-run)
-8. [First run](#first-run)
-9. [Testing and quality checks](#testing-and-quality-checks)
-10. [Environment variables](#environment-variables)
-11. [What the intelligence layer is, and is not](#what-the-intelligence-layer-is-and-is-not)
-12. [Known limitations](#known-limitations)
+1. [Screenshots](#screenshots)
+2. [Project description](#project-description)
+3. [Objectives](#objectives)
+4. [Architecture](#architecture)
+5. [Technologies](#technologies)
+6. [Project structure](#project-structure)
+7. [Development stages](#development-stages)
+8. [How to run](#how-to-run)
+9. [First run](#first-run)
+10. [Testing and quality checks](#testing-and-quality-checks)
+11. [Environment variables](#environment-variables)
+12. [What the intelligence layer is, and is not](#what-the-intelligence-layer-is-and-is-not)
+13. [Known limitations](#known-limitations)
+
+---
+
+## Screenshots
+
+Captured from the running application — the real React build against the real API against real
+PostgreSQL — on the demo dataset: two properties, 166 bookings, 16 rooms, 55 reviews and a
+populated financial ledger. No mock-ups, and no data invented for the picture.
+
+### Bookings
+
+![The bookings list: reference, occupant, stay, room, status, contracted total and booking channel](docs/screenshots/bookings.png)
+
+Arrivals, in-house stays and completed bookings, each with the channel it came from and its
+current status. The page states plainly that its filters are client-side, because the API has no
+server-side search to back them.
+
+### Availability
+
+![The availability search and its answer: sixteen rooms free across the listed types](docs/screenshots/availability.png)
+
+What the property could sell for a given stay. The answer comes from the database — a GiST
+exclusion constraint over half-open date ranges is what makes an overlapping allocation
+impossible — and the screen holds no state of its own.
+
+### Financials
+
+![The revenue journal: per-category, per-currency totals over the selected period](docs/screenshots/financials.png)
+
+Revenue and expense journals, both append-only: a posted line is corrected by posting another,
+never by editing or deleting one. Totals are grouped by category **and currency**, and no overall
+figure is shown, because adding currencies together would not produce money.
+
+### Forecasting and demand trend
+
+![The intelligence screen: forecast horizon, training history and an occupancy forecast beside what is already on the books](docs/screenshots/forecasting.png)
+
+The deterministic statistical layer: seasonal-naive day-of-week median forecasting with MAD-based
+intervals, demand trend and anomaly detection. What is already booked is shown *beside* what the
+method expects, never blended into it — and the screen says, in those words, that nothing on it is
+generated text.
+
+### Reviews
+
+![The reviews screen: rating distribution in five normalized bands and a per-channel breakdown](docs/screenshots/reviews.png)
+
+Guest reviews across every channel the property collects them from, normalized so a five-point and
+a ten-point score fall in comparable bands. Ratings and review text are the guest's and are not
+editable here.
+
+<details>
+<summary><b>More screens</b> — guests, rooms, property, membership administration, platform catalogues</summary>
+
+**Guests** — the people on file at a property, with their preferences and marketing consent.
+A guest record belongs to one property; the same person at another property is a separate record.
+
+![Guests](docs/screenshots/guests.png)
+
+**Rooms** — physical rooms per type, with operational status kept distinct from availability.
+
+![Rooms](docs/screenshots/rooms.png)
+
+**Property** — the property record, its room types and their rates and amenities.
+
+![Property](docs/screenshots/property.png)
+
+**Administration** — your own account, and who may reach the selected property. Seeing the
+member list needs the manager role; changing it needs owner.
+
+![Administration](docs/screenshots/administration.png)
+
+**Platform** — the catalogues every property shares, governed by a separate platform-admin
+capability rather than by a hotel role.
+
+![Platform](docs/screenshots/platform.png)
+
+</details>
+
+> **Analytics is the one navigation area not yet built.** It renders a placeholder that names the
+> stage it is planned for and requests nothing from the backend, so it is not shown here. That is
+> the only such area; the other eleven are the screens above.
 
 ---
 
@@ -184,7 +290,7 @@ one began.
 | 3B.11 | Intelligence: forecasting, trend, anomalies, insights | **done** |
 | 3B.12 | Cross-domain integration and backend hardening | **done** |
 | 4.x | Authentication, membership authorization, platform administration, audit trail and retention, server-side pricing, availability | **done** |
-| 5.1–5.16 | React front end: authentication, all domain views, intelligence | **done** |
+| 5.1–5.16 | React front end: authentication, eleven of twelve navigation areas, intelligence (Analytics remains a declared placeholder) | **done** |
 | 5.17–5.25 | Test-database safety, quality gates, CI pipeline, frontend performance | **done** |
 | 5.26–5.38 | Production serving, Docker runtime, bootstrap, backup/restore, TLS, deployment robustness, image reproducibility | **done** |
 | 6.1–6.11 | Demand model lifecycle: leakage-safe dataset, versioned training data, offline backtest, metric-blind acceptance, artifact, serving, packaging, prediction persistence, accuracy measurement, distribution observation, stored-prediction read API | **done** |
