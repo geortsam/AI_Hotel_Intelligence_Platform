@@ -191,26 +191,103 @@ online inference.
 
 ## Architecture
 
-Five areas, kept separate at the top level, with one-way dependencies between them:
+### The deployed system
 
-```
-frontend/  ──HTTP──▶  backend/  ──SQL──▶  database (PostgreSQL)
-                          │
-                          └──reads──▶  ml/models/  ◀──writes──  ml/pipelines/ (offline)
+One host, four services, and exactly one of them published. Every arrow below is exercised on
+real containers by CI on every push.
+
+```mermaid
+flowchart LR
+    B("Browser")
+
+    subgraph host["Docker Compose · single host"]
+        direction LR
+        N["<b>nginx</b><br/>terminates TLS<br/><i>the only published service</i>"]
+        S["<b>React SPA</b><br/>static bundle<br/>route-level code splitting"]
+        A["<b>FastAPI</b><br/>api → services → repositories"]
+        M["<b>demand_baseline_v1</b><br/>artifact, verified before load<br/>loaded once per process"]
+        D[("<b>PostgreSQL 18.6</b><br/>22 application tables<br/>constraints carry the rules")]
+    end
+
+    B -- "HTTPS" --> N
+    N -- "serves /" --> S
+    N -- "proxies /api" --> A
+    A -- "SQL, always hotel-scoped" --> D
+    A -- "loads + scores" --> M
+
+    classDef edge fill:#0f766e,stroke:#0f766e,color:#ffffff
+    classDef app fill:#1d4ed8,stroke:#1d4ed8,color:#ffffff
+    classDef data fill:#4338ca,stroke:#4338ca,color:#ffffff
+    classDef model fill:#b45309,stroke:#b45309,color:#ffffff
+    classDef ext fill:#475569,stroke:#475569,color:#ffffff
+    class N,S edge
+    class A app
+    class D data
+    class M model
+    class B ext
 ```
 
-Inside the backend, calls travel in one direction only:
+### Inside the backend
 
-```
-api/  ──▶  services/  ──▶  repositories/  ──▶  db/ + models/
+Calls travel one way. An endpoint knows HTTP but no business rules; a service knows the domain
+but no SQL; a repository knows SQL but decides nothing. Each rule is asserted by the architecture
+suite, not merely intended.
+
+```mermaid
+flowchart LR
+    R["<b>api/</b><br/>HTTP, status codes<br/><i>issues no query</i>"]
+    V["<b>services/</b><br/>domain rules<br/><i>owns the transaction</i>"]
+    Q["<b>repositories/</b><br/>query construction<br/><i>never commits</i>"]
+    O["<b>models/ + db/</b><br/>SQLAlchemy mapping<br/>request-scoped session"]
+
+    R --> V --> Q --> O
+
+    classDef l1 fill:#1d4ed8,stroke:#1d4ed8,color:#ffffff
+    classDef l2 fill:#2563eb,stroke:#2563eb,color:#ffffff
+    classDef l3 fill:#3b82f6,stroke:#3b82f6,color:#ffffff
+    classDef l4 fill:#4338ca,stroke:#4338ca,color:#ffffff
+    class R l1
+    class V l2
+    class Q l3
+    class O l4
 ```
 
-An endpoint knows HTTP but no business rules; a service knows the domain but no SQL; a
-repository knows SQL but decides nothing. The line between offline and online is narrower than it
-was: the backend now imports the offline package's *reading* half — `ml.artifact` and
-`ml.inference`, deferred to load time by `app.ml.artifact_store` — so the serving path can verify
-and score an artifact. The pipelines that **fit** a model do not cross it, and are not copied into
-the API image; two tests assert exactly which modules are.
+### The offline / online boundary
+
+Training is offline and stays offline. What crosses into the running system is a **verified
+artifact and the code that reads it** — never a pipeline that fits one.
+
+```mermaid
+flowchart LR
+    subgraph off["ml/ · offline, never reached by a request"]
+        DS["dataset<br/>6.1 · 6.2"] --> BT["backtest<br/>6.3"] --> AC["acceptance<br/>6.4<br/><i>metric-blind</i>"] --> FIT["fit once<br/>6.5"]
+    end
+
+    subgraph build["docker build · disposable stage"]
+        REG["regenerate from the<br/>committed dataset<br/><b>22 approved values<br/>must match</b>"]
+    end
+
+    subgraph on["API image · online"]
+        ART["artifact.json<br/>+ model.pkl"] --> SRV["serving route<br/>6.6 · 6.7"] --> ROW[("demand_predictions<br/>6.8")]
+        ROW --> RD["accuracy 6.9<br/>distribution 6.10<br/>read API 6.11"]
+    end
+
+    FIT --> REG --> ART
+
+    classDef offline fill:#b45309,stroke:#b45309,color:#ffffff
+    classDef gate fill:#be123c,stroke:#be123c,color:#ffffff
+    classDef online fill:#1d4ed8,stroke:#1d4ed8,color:#ffffff
+    classDef store fill:#4338ca,stroke:#4338ca,color:#ffffff
+    class DS,BT,AC,FIT offline
+    class REG gate
+    class ART,SRV,RD online
+    class ROW store
+```
+
+The backend imports the offline package's *reading* half — `ml.artifact` and `ml.inference`,
+deferred to load time by `app.ml.artifact_store` — so the serving path can verify and score an
+artifact. The pipelines that **fit** a model do not cross that line and are not copied into the
+API image; two tests assert exactly which modules are.
 
 Full detail, including the rules later stages must follow:
 **[docs/architecture.md](docs/architecture.md)**.
@@ -246,34 +323,44 @@ so that a runtime without it answers a served 503 rather than failing to start.
 
 ## Project structure
 
+Five areas at the top level, with one-way dependencies between them.
+
+| Area | What lives there | Reaches |
+|---|---|---|
+| **`backend/`** | The FastAPI application and its Dockerfile | `database/`, and `ml/`'s reading half |
+| **`frontend/`** | React + TypeScript SPA and its nginx production image | the API over HTTP, nothing else |
+| **`database/`** | 11 linear Alembic revisions and the init SQL | — |
+| **`ml/`** | Offline dataset, backtest, acceptance, artifact. Records committed, payloads never | `app.ml.dataset` only — the Stage 6.1 contract |
+| **`docs/`** | Architecture, roadmap, design records, model card, deployment runbooks | — |
+
 ```
-AI_Hotel_Intelligence_Platform/
-├── backend/           FastAPI application
-│   ├── app/
-│   │   ├── api/           HTTP layer, deps and v1 routers   (29 files)
-│   │   ├── services/      business rules, transactions      (28 files)
-│   │   ├── schemas/       Pydantic request/response types   (24 files)
-│   │   ├── repositories/  query construction, data access   (20 files)
-│   │   ├── models/        SQLAlchemy ORM mapping            (15 files)
-│   │   ├── core/          config, errors, security, logging  (9 files)
-│   │   ├── db/            engine and request-scoped session  (3 files)
-│   │   ├── middleware/    request id, security headers       (3 files)
-│   │   ├── ml/            statistical models, artifact store,
-│   │   │                  serving, accuracy and distribution (9 files)
-│   │   └── main.py        app factory
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── requirements-dev.txt
-├── frontend/          React + TypeScript SPA, nginx production image
-├── database/          migrations/ (11 revisions) and init SQL
-├── ml/                offline data prep, evaluation, validation and the artifact; records tracked, payloads not
-├── docs/              architecture, roadmap, design records, deployment runbooks
-├── tests/             backend/ and integration/ suites, mirroring the source layout
-├── pyproject.toml     ruff · mypy · pytest · coverage
-├── docker-compose.yml db · migrate · api · frontend
-├── .env.example
-└── .gitignore
+backend/app/
+├── api/            29  HTTP layer: v1 routers, dependency wiring
+├── services/       28  domain rules, transaction boundaries
+├── schemas/        24  Pydantic request and response types
+├── repositories/   20  query construction — no commits, ever
+├── models/         15  SQLAlchemy ORM mapping
+├── ml/              9  statistical layer, artifact store, serving,
+│                       accuracy and distribution protocols
+├── core/            9  config, errors, security, logging
+├── db/              3  engine and request-scoped session
+├── middleware/      3  request id, security headers
+└── main.py             app factory
+
+tests/              backend/ and integration/, mirroring the source layout
+pyproject.toml      ruff · mypy · pytest · coverage
+docker-compose.yml  db → migrate → api → frontend, each gated on the last
 ```
+
+**Where to look first**, depending on what you came for:
+
+| If you want to see… | Read |
+|---|---|
+| How a request becomes a row | [`docs/architecture.md`](docs/architecture.md) §2 and §4 |
+| Why the schema is shaped this way | [`docs/database-design.md`](docs/database-design.md) |
+| What the model is, and is not | [`docs/ml-model-card.md`](docs/ml-model-card.md) |
+| How the model reaches production | [`docs/ml-production-runtime.md`](docs/ml-production-runtime.md) |
+| What was built, stage by stage | [`docs/development-roadmap.md`](docs/development-roadmap.md) |
 
 ## Development stages
 
@@ -611,11 +698,18 @@ Rules these must follow, fixed now so they are not negotiated later:
 
 ## Known limitations
 
-The development machine has **no working Docker daemon**, so no image is built or run locally.
-The Docker and Compose clients are installed, which is enough to resolve and check
-`docker compose config` but not to start anything. The deployment is therefore built and run on
-every push instead — see [Continuous integration](#continuous-integration) — which is where it
-is actually verified. Node 24 and npm are available locally; `package-lock.json` is committed.
+**The deployment's authority is CI, not a developer's machine.** Every push builds both images,
+runs the four-service stack, migrates a real database, serves a prediction from the packaged
+model and backs the whole thing up and restores it — see
+[Continuous integration](#continuous-integration). That is where the claims in this README about
+the deployment come from.
+
+*This paragraph used to say the development machine had no working Docker daemon and could
+build nothing locally. That was true when written and is no longer: the stack has since been
+built and run end to end on the development machine, reproducing the same `22 approved values
+verified` the CI build reports, and with a payload digest that differed from the recorded one —
+which is the environment-scoped behaviour [docs/ml-production-runtime.md](docs/ml-production-runtime.md)
+predicts and the canonical digest exists to survive.*
 
 ### Security posture
 

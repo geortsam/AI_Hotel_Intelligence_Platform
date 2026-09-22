@@ -17,13 +17,37 @@ the runbooks under [`deployment/`](deployment/) are the ones maintained as curre
 
 Five areas, deliberately kept apart at the top level of the repository:
 
-```
-backend/    HTTP API and business logic (Python, FastAPI)
-frontend/   Browser client (React, TypeScript, Vite)
-database/   Migrations and raw SQL -- the database as a database
-ml/         Datasets, training pipelines and trained artifacts
-docs/       Documentation
-tests/      Test suite, mirroring the source layout
+| Area | Holds |
+|---|---|
+| `backend/` | HTTP API and business logic (Python, FastAPI) |
+| `frontend/` | Browser client (React, TypeScript, Vite) |
+| `database/` | Migrations and raw SQL -- the database as a database |
+| `ml/` | Datasets, training pipelines and the trained artifact |
+| `docs/` | Documentation |
+| `tests/` | Test suite, mirroring the source layout |
+
+```mermaid
+flowchart LR
+    FE["<b>frontend/</b><br/>React · TypeScript"]
+    BE["<b>backend/</b><br/>FastAPI"]
+    DB["<b>database/</b><br/>Alembic · SQL"]
+    ML["<b>ml/</b><br/>offline pipelines"]
+    ART["<b>ml/models/</b><br/>artifact.json<br/>+ payload"]
+
+    FE -- "the HTTP contract, nothing else" --> BE
+    BE -- "SQL" --> DB
+    BE -- "reads, at runtime" --> ART
+    ML -- "writes, offline" --> ART
+    ML -. "imports app.ml.dataset<br/><i>the Stage 6.1 contract, and only that</i>" .-> BE
+
+    classDef fe fill:#0f766e,stroke:#0f766e,color:#ffffff
+    classDef be fill:#1d4ed8,stroke:#1d4ed8,color:#ffffff
+    classDef db fill:#4338ca,stroke:#4338ca,color:#ffffff
+    classDef ml fill:#b45309,stroke:#b45309,color:#ffffff
+    class FE fe
+    class BE be
+    class DB db
+    class ML,ART ml
 ```
 
 The dependency rules between them:
@@ -275,26 +299,43 @@ module. Stage 6.6 drew that arrow deliberately and in one place — §5.1c.)*
 The arrow into the backend, drawn once and in one place. Six stages, and none of them changes the
 model:
 
-```
-client
-  |  HTTPS, bearer JWT
-  v
-api/v1/endpoints/ml_predictions.py        two routes, and only one reaches a model
-  |
-  v
-HotelScopeResolver                        membership FIRST, before anything else happens
-  |
-  +--> DemandPredictionService  ------------> app.ml.artifact_store  ---> ml.artifact
-  |          |                                  (deferred import, load-once, verified)   |
-  |          |                                                                           v
-  |          |                                                              the packaged artifact
-  |          v                                            ml/models/demand_baseline_v1/model.pkl
-  |    MlDemandRepository ---> PostgreSQL       features, one hotel, bounded by the resolved id
-  |          |
-  |          v
-  |    MlPredictionRepository ---> demand_predictions      one row per served prediction
-  |
-  +--> DemandPredictionReadService ---> MlPredictionRepository       read-only, holds no session
+```mermaid
+flowchart TB
+    C["client<br/><i>HTTPS, bearer JWT</i>"]
+    R["<b>api/v1/endpoints/ml_predictions.py</b><br/>two routes — only one reaches a model"]
+    H{"<b>HotelScopeResolver</b><br/>membership FIRST,<br/>before anything else happens"}
+
+    S["<b>DemandPredictionService</b><br/>owns the transaction"]
+    RD["<b>DemandPredictionReadService</b><br/>read-only · holds no session"]
+
+    ST["app.ml.artifact_store<br/><i>deferred import · load-once · verified</i>"]
+    ART["ml/models/demand_baseline_v1/model.pkl<br/><i>packaged into the image</i>"]
+
+    DR["MlDemandRepository<br/><i>features · one hotel · bounded by the resolved id</i>"]
+    PR["MlPredictionRepository"]
+    PG[("PostgreSQL")]
+    ROW[("demand_predictions<br/><i>one row per served prediction</i>")]
+
+    C --> R --> H
+    H -->|"GET /demand-forecast"| S
+    H -->|"GET /demand-predictions"| RD
+    S --> ST --> ART
+    S --> DR --> PG
+    S --> PR --> ROW
+    RD --> PR
+
+    classDef entry fill:#475569,stroke:#475569,color:#ffffff
+    classDef gate fill:#be123c,stroke:#be123c,color:#ffffff
+    classDef svc fill:#1d4ed8,stroke:#1d4ed8,color:#ffffff
+    classDef repo fill:#3b82f6,stroke:#3b82f6,color:#ffffff
+    classDef store fill:#4338ca,stroke:#4338ca,color:#ffffff
+    classDef model fill:#b45309,stroke:#b45309,color:#ffffff
+    class C,R entry
+    class H gate
+    class S,RD svc
+    class DR,PR repo
+    class PG,ROW store
+    class ST,ART model
 ```
 
 Stage by stage:

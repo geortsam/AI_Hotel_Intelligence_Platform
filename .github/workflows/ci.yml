@@ -2566,6 +2566,86 @@ jobs:
           print('  OK   bounded')
           "
 
+          echo
+          echo "--- 10. the stored prediction is readable, and is the one that was served ---"
+          # Stage 6.11's endpoint, against the image. Until this existed the job proved that a
+          # prediction is SERVED and (in the step below) that it is the approved model's own
+          # number, but nothing here proved the row it wrote can be read back out. The three
+          # stages only join up if the value that came out of /demand-forecast is the value
+          # /demand-predictions later discloses, so that is what this asserts -- equality
+          # against $PREDICTED, not merely a 200 with some number in it.
+          read_url="$base/api/v1/hotels/$hotel/ml/demand-predictions?date_from=2026-11-01&date_to=2026-12-31"
+          code="$(api -o "$RUNNER_TEMP/ml-read.json" -w '%{http_code}' -H "$auth" "$read_url")"
+          echo "  GET .../ml/demand-predictions -> $code"
+          [ "$code" = "200" ] || { echo "::error::the read endpoint returned $code"; cat "$RUNNER_TEMP/ml-read.json"; exit 1; }
+          python3 - "$RUNNER_TEMP/ml-read.json" "$predicted" <<'PY'
+          import json, sys
+          body = json.load(open(sys.argv[1]))
+          served = float(sys.argv[2])
+
+          assert sorted(body) == ["items", "page", "page_size", "pages", "total"], sorted(body)
+          assert body["page"] == 1 and body["page_size"] == 20, body
+          assert body["total"] >= 1, body
+
+          rows = [r for r in body["items"] if r["target_date"] == "2026-12-01"]
+          assert len(rows) == 1, f"expected exactly one row for the served target, got {len(rows)}"
+          row = rows[0]
+
+          # The contract is the field list, not a subset of it.
+          assert sorted(row) == [
+              "dataset_version", "feature_version", "forecast_horizon_days", "generated_at",
+              "model_name", "model_version", "predicted_room_nights", "prediction_cutoff",
+              "public_id", "target_date",
+          ], sorted(row)
+
+          # The same number, to the bit. A near-miss here would mean the row is not this request's.
+          assert row["predicted_room_nights"] == served, (row["predicted_room_nights"], served)
+          assert row["prediction_cutoff"] == "2026-11-25T00:00:00Z", row
+          assert row["model_version"] == "demand_baseline_v1", row
+          assert row["forecast_horizon_days"] == 7, row
+          uuid_len = len(row["public_id"])
+          assert uuid_len == 36 and row["public_id"].count("-") == 4, row["public_id"]
+
+          # Everything the design says this endpoint withholds, withheld.
+          text = json.dumps(body)
+          for withheld in ("hotel_id", "feature_values", "feature_digest",
+                           "canonical_model_digest", "request_id", "436bf6b3"):
+              assert withheld not in text, withheld
+          assert '"id"' not in text, "an internal row id reached the client"
+          print("  OK   the served number, read back, with no internal identifier")
+          PY
+
+          echo
+          echo "--- 11. the read endpoint's refusals ---"
+          code="$(api -o /dev/null -w '%{http_code}' "$read_url")"
+          echo "  unauthenticated               -> $code"
+          [ "$code" = "401" ] || { echo "::error::expected 401, got $code"; exit 1; }
+
+          code="$(api -o "$RUNNER_TEMP/ml-read-404.json" -w '%{http_code}' -H "$auth" \
+            "$base/api/v1/hotels/11111111-2222-3333-4444-555555555555/ml/demand-predictions?date_from=2026-11-01&date_to=2026-12-31")"
+          echo "  unknown hotel                 -> $code"
+          [ "$code" = "404" ] || { echo "::error::expected 404, got $code"; exit 1; }
+
+          code="$(api -o /dev/null -w '%{http_code}' -H "$auth" \
+            "$base/api/v1/hotels/$hotel/ml/demand-predictions?date_from=2026-12-31&date_to=2026-11-01")"
+          echo "  date_from after date_to       -> $code"
+          [ "$code" = "422" ] || { echo "::error::expected 422, got $code"; exit 1; }
+
+          code="$(api -o /dev/null -w '%{http_code}' -H "$auth" "${read_url}&page_size=500")"
+          echo "  page_size above the maximum   -> $code"
+          [ "$code" = "422" ] || { echo "::error::expected 422, got $code"; exit 1; }
+
+          # The same 404 body for a hotel that does not exist and one the caller cannot reach:
+          # the serving route is checked for this above, and the read route must not be the
+          # weaker of the two.
+          code="$(api -o "$RUNNER_TEMP/ml-read-403.json" -w '%{http_code}' -H "Authorization: Bearer $stranger" \
+            "$base/api/v1/hotels/$hotel/ml/demand-predictions?date_from=2026-11-01&date_to=2026-12-31")"
+          echo "  a non-member                  -> $code"
+          [ "$code" = "404" ] || { echo "::error::expected 404, got $code"; exit 1; }
+          cmp -s "$RUNNER_TEMP/ml-read-404.json" "$RUNNER_TEMP/ml-read-403.json" || {
+            echo "::error::a non-member and an unknown hotel are distinguishable"; exit 1; }
+          echo "  OK   indistinguishable, as on the serving route"
+
       - name: Prove the served number is the approved model's own output
         run: |
           set -euo pipefail
