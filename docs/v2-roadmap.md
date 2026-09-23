@@ -117,22 +117,55 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | **Acceptance** | (1) both endpoints return the services' own output unchanged — asserted by an AST walk proving the projection contains no arithmetic and imports neither pure-calculation module; (2) `accuracy_v1` and `distribution_v1` checksums identical to Stage 6.9/6.10; (3) every response carries the "no production accuracy established" statement in its payload; (4) no internal id and no digest in any response, asserted across every schema in the OpenAPI document |
 | **Caveat** | a distribution window holding a single prediction publishes that prediction's own feature vector, since the summary of one observation is the observation. Stated in §5 of the stage document rather than glossed |
 
-### Stage 7.4 — Forecast-vs-actual visualisation
+### Stage 7.4 — Forecast-vs-actual visualisation · *done*
+
+> Built as a fifth section on the intelligence page, under its own heading and fetching its own
+> data. Two things the plan above did not anticipate, both found by reading the contracts before
+> writing any code, and both settled with the user rather than improvised.
+>
+> **Neither Stage 7.3 endpoint can draw a forecast-vs-actual chart.** `forecast-accuracy` returns
+> aggregate error with no dates in it; `prediction-distribution` returns summary statistics with
+> no actuals. That is deliberate and predates this stage — Stage 6.9 wrote down that "shipping
+> the paired series would make it an export instead" — so the roadmap's acceptance criterion (1)
+> assumed data that 7.3 was specified never to return. The chart is therefore built from two
+> endpoints that already existed: `/analytics/daily` for the actual series and
+> `/ml/demand-predictions` for the stored predictions. The actual line is the *same*
+> `occupied_room_nights` definition the accuracy protocol scores against, so the picture and the
+> measured error rest on one ground truth rather than two.
+>
+> **The frontend cannot know the caller's role.** `HotelResponse` carries none, `/auth/me`
+> deliberately carries none, and `/hotels/{id}/members` — which would say — itself requires the
+> manager role. So "do not issue the request for a viewer" is not expressible without a backend
+> change. The accuracy request is issued and its **403 is treated as the answer**: the panel does
+> not render, the reader is told the rest of the section is still theirs, and the server stays the
+> only authority on access. This is the pattern every role-sensitive screen here already uses.
+>
+> A third thing worth recording: a `target_date` may legitimately carry more than one stored
+> prediction, because `uq_demand_predictions_identity` includes `feature_digest`. Choosing
+> between them is the accuracy protocol's rule (earliest `generated_at`, lowest `id`, executed by
+> the database). **This screen does not reimplement it** — such days are drawn as a gap and the
+> count is stated on screen, because picking silently would assert that one prediction existed
+> when two did.
+>
+> Delivered: 1 feature module (6 files), 4 endpoints consumed, 91 new tests, 0 backend changes,
+> 0 migrations, 0 dependencies. Frontend suite 1050 → 1141. Initial bundle unchanged at 306.55 kB
+> — the section rides in the lazily-loaded intelligence chunk.
 
 | | |
 |---|---|
 | **Objective** | Extend the intelligence view with measured forecast performance from 7.3 |
 | **Why it exists** | 7.3 makes the data reachable; this makes it legible |
-| **V1 reused** | the intelligence feature module and its chart components |
-| **New components** | an accuracy panel; a forecast-vs-actual chart |
-| **Database / API / ML / LLM** | none |
-| **Security** | the accuracy panel is hidden from viewers, matching 7.3's role requirement |
-| **Testing** | feature tests including the viewer-cannot-see case |
-| **Docs** | screenshot |
-| **Non-goals** | forecasts and actuals are never blended into one series; no confidence band is drawn that the protocol does not produce |
+| **V1 reused** | `ForecastChart` unchanged (it already draws two never-blended series and omits the band when bounds are null); `PeriodSelector`; `StateMessage`; `describeFailure`; `formatCount`/`formatDate`; the `rangeFor` period helpers; the shared HTTP seam and `ApiError` |
+| **New components** | `features/forecastPerformance/` — `useForecastPerformance.ts`, `pairing.ts`, `AccuracyPanel.tsx`, `DistributionPanel.tsx`, `ForecastPerformanceSection.tsx`, plus `types/mlPerformance.ts` |
+| **Database / ML / LLM** | none |
+| **API** | none added. Four consumed: `analytics/daily`, `ml/demand-predictions`, `ml/prediction-distribution`, `ml/forecast-accuracy`. Surface stays **54 / 86** |
+| **Security** | the accuracy panel renders only when the API returns it; a 403 removes it and is shown as an ordinary status, not an alert. No client-side role check exists, because no role reaches the client |
+| **Testing** | 44 feature tests + 47 source-level architecture tests; 5 existing intelligence tests updated for the new section, none weakened |
+| **Docs** | this entry |
+| **Non-goals** | forecasts and actuals are never blended; no confidence band; no combined segment metric; no threshold, verdict or the word "drift" anywhere on screen |
 | **Depends on** | **7.3** |
-| **Acceptance** | (1) actual and forecast are visually distinct; (2) the settlement lag is stated on screen; (3) the "not established" caveat is visible, not buried in a tooltip |
-| **Done when** | CI green and the claim boundary survives a reading of the rendered screen |
+| **Acceptance** | (1) actual and forecast are distinct by shape and by name, in the chart and in its table; (2) the settlement lag is in the panel body — a test asserts it is not in a `title` attribute; (3) the "not established" caveat is the first thing in the accuracy panel and the server's `statement` is rendered verbatim; (4) no metric is computed in the browser, asserted by a source scan that forbids `Math.`, `reduce`, `+=`, `parseFloat` and `toFixed` across the feature |
+| **Known limitation** | the stored-prediction read is one page of 100. A window holding more discloses "showing N of M" rather than paginating; a longer history needs a shorter period |
 
 ---
 

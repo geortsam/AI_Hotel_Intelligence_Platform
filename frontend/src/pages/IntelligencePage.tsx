@@ -5,6 +5,8 @@ import { PageContainer } from '@/components/ui/PageContainer'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { StateMessage } from '@/features/dashboard/StateMessage'
+import type { PeriodId } from '@/features/dashboard/period'
+import { ForecastPerformanceSection } from '@/features/forecastPerformance/ForecastPerformanceSection'
 import { AnomalyList } from '@/features/intelligence/AnomalyList'
 import { ForecastChart, type ForecastChartPoint } from '@/features/intelligence/ForecastChart'
 import { InsightList } from '@/features/intelligence/InsightList'
@@ -100,6 +102,14 @@ export function IntelligencePage() {
   const [horizonDays, setHorizonDays] = useState<number>(DEFAULT_HORIZON_DAYS)
   const [trainingDays, setTrainingDays] = useState<number>(DEFAULT_TRAINING_DAYS)
   const [tab, setTab] = useState<TabId>('occupancy')
+  /*
+   * The measured-performance window, which is NOT the observation window above.
+   *
+   * `last90` rather than the shared default: a prediction is only scored once its target date
+   * has cleared the 28-day settlement lag, so a seven-day window would measure nothing and the
+   * panel would open on an empty result for every property.
+   */
+  const [performancePeriod, setPerformancePeriod] = useState<PeriodId>('last90')
 
   const observationId = useId()
   const horizonId = useId()
@@ -458,6 +468,34 @@ export function IntelligencePage() {
             )
           }
         </Gate>
+      </section>
+
+      {/*
+        Stage 7.4. The TRAINED demand model's measured performance -- a different subsystem
+        from everything above, and placed last so the page reads statistical-first.
+
+        The separation is deliberate and is the same one the API makes. The four sections above
+        serve V1's seasonal day-of-week medians, computed per request from the analytics
+        series. This one is about an artifact fitted offline, versioned and checksummed, whose
+        production accuracy is NOT established. Sharing a chart or a figure between them would
+        imply a lineage they do not have, so they share neither: this section fetches its own
+        data, names the model version it is about, and states its own claim boundary.
+      */}
+      <section className={styles.block} aria-labelledby="intelligence-model-performance">
+        <h2 className={styles.blockTitle} id="intelligence-model-performance">
+          Trained model &mdash; measured performance
+        </h2>
+        <p className={styles.blockNote}>
+          A separate subsystem from the statistical forecasts above: an offline-fitted model,
+          not a per-request median. These figures measure predictions the property was actually
+          served, under a protocol fixed and checksummed before any number was computed.{' '}
+          <strong>They do not establish that the model is accurate.</strong>
+        </p>
+        <ForecastPerformanceSection
+          hotel={selected}
+          period={performancePeriod}
+          onPeriodChange={setPerformancePeriod}
+        />
       </section>
     </Frame>
   )

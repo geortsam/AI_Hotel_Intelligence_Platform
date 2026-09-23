@@ -220,6 +220,66 @@ function errorBody(code: string, message: string) {
   return { error: { code, message, details: [] } }
 }
 
+/* --- the Stage 7.4 section's four reads ---------------------------------------------------
+ *
+ * Minimal but well-formed: enough for the trained-model section to render without error, so
+ * that this file's assertions are about the statistical forecaster and not about a neighbour
+ * that failed to load. The section's own behaviour is tested in `features/forecastPerformance/`.
+ */
+
+const MODEL_MEASUREMENT = {
+  protocol_version: 'accuracy_v1',
+  protocol_checksum: 'f'.repeat(64),
+  establishes_production_accuracy: false,
+  statement: 'These figures establish no production accuracy.',
+}
+
+function modelPerformanceDaily() {
+  return {
+    hotel_public_id: TEST_HOTEL.public_id,
+    range: { date_from: '2026-06-15', date_to: '2026-09-12', days: 90 },
+    days: [],
+  }
+}
+
+function modelPerformancePredictions() {
+  return { items: [], total: 0, page: 1, page_size: 100, pages: 0 }
+}
+
+function modelPerformanceAccuracy() {
+  return {
+    hotel_public_id: TEST_HOTEL.public_id,
+    as_of_date: '2026-09-12',
+    window_from: '2026-06-15',
+    window_to: '2026-09-12',
+    scored_from: null,
+    scored_to: null,
+    settlement_lag_days: 28,
+    candidates: 0,
+    ineligible_by_settlement: 0,
+    out_of_scope_model_digest: 0,
+    unsettled_allocations: 0,
+    settled: true,
+    by_model_version: [],
+    measurement: MODEL_MEASUREMENT,
+  }
+}
+
+function modelPerformanceDistribution() {
+  return {
+    hotel_public_id: TEST_HOTEL.public_id,
+    observed: {
+      window_from: '2026-06-15',
+      window_to: '2026-09-12',
+      candidates: 0,
+      out_of_scope_model_digest: 0,
+      by_model_version: [],
+    },
+    comparison: null,
+    measurement: { ...MODEL_MEASUREMENT, protocol_version: 'distribution_v1' },
+  }
+}
+
 /* --- harness ---------------------------------------------------------------------------- */
 
 let fetchStub: FetchStub
@@ -245,6 +305,16 @@ beforeEach(() => {
   fetchStub.on('GET', '/demand-trend', { body: demandTrend() })
   fetchStub.on('GET', '/intelligence/anomalies', { body: anomalyReport() })
   fetchStub.on('GET', '/intelligence/insights', { body: insightsReport() })
+  /*
+   * Stage 7.4 added a fifth section to this page, for the TRAINED model rather than the
+   * statistical forecaster these tests are about. Its four reads are stubbed here so that
+   * every test in this file exercises the page as it actually renders; its own behaviour is
+   * covered in `features/forecastPerformance/`, not here.
+   */
+  fetchStub.on('GET', '/analytics/daily', { body: modelPerformanceDaily() })
+  fetchStub.on('GET', '/ml/demand-predictions', { body: modelPerformancePredictions() })
+  fetchStub.on('GET', '/ml/prediction-distribution', { body: modelPerformanceDistribution() })
+  fetchStub.on('GET', '/ml/forecast-accuracy', { body: modelPerformanceAccuracy() })
 })
 
 afterEach(() => {
@@ -385,8 +455,17 @@ describe('the request contract', () => {
     expect(requestsFor('/demand-trend')).toHaveLength(1)
     expect(requestsFor('/intelligence/anomalies')).toHaveLength(1)
     expect(requestsFor('/intelligence/insights')).toHaveLength(1)
-    // auth/me, hotels, and the four reads for the default tab.
-    expect(fetchStub.calls).toHaveLength(6)
+    // auth/me, hotels, the four reads for the default tab, and Stage 7.4's four for the
+    // trained-model section. Ten is a constant: it does not grow with days, points or rows.
+    expect(fetchStub.calls).toHaveLength(10)
+    for (const path of [
+      '/analytics/daily',
+      '/ml/demand-predictions',
+      '/ml/prediction-distribution',
+      '/ml/forecast-accuracy',
+    ]) {
+      expect(requestsFor(path)).toHaveLength(1)
+    }
   })
 })
 
@@ -665,7 +744,10 @@ describe('failures', () => {
     fetchStub.on('GET', '/intelligence/anomalies', { networkError: true })
     renderPage()
 
-    expect(await screen.findByText('Could not reach the server')).toBeInTheDocument()
+    // Scoped to the anomalies section: Stage 7.4's trained-model section renders its own
+    // failures independently, so the page can legitimately show this copy more than once.
+    const anomalies = await screen.findByRole('region', { name: 'Anomalies' })
+    expect(within(anomalies).getByText('Could not reach the server')).toBeInTheDocument()
   })
 
   it('treats a malformed 200 as a failure, not as an empty result', async () => {
@@ -680,7 +762,8 @@ describe('failures', () => {
     fetchStub.on('GET', '/intelligence/anomalies', { networkError: true })
     renderPage()
 
-    expect(await screen.findByText('Could not reach the server')).toBeInTheDocument()
+    const anomalies = await screen.findByRole('region', { name: 'Anomalies' })
+    expect(within(anomalies).getByText('Could not reach the server')).toBeInTheDocument()
     // The trend and the findings arrived and are still shown.
     expect(screen.getByText('Increasing')).toBeInTheDocument()
     expect(screen.getByText('Booking demand is increasing')).toBeInTheDocument()
@@ -804,11 +887,19 @@ describe('accessibility', () => {
     for (const label of ['Observation window', 'Forecast horizon', 'Training history']) {
       expect(screen.getByLabelText(label)).toBeInTheDocument()
     }
-    expect(
-      document.querySelectorAll(
-        'select:not([id]), input:not([id]):not([type=hidden]), textarea:not([id])',
-      ),
-    ).toHaveLength(0)
+    /*
+     * Every control is labelled, by an `id`/`for` pair OR by being wrapped in its own
+     * `<label>`. The second form was added with Stage 7.4's period selector, which is the
+     * shared `PeriodSelector` this application already uses on the analytics screen: it wraps
+     * each radio in its label, which is equally associative and needs no id. Requiring an id
+     * would have failed valid markup rather than catching an unlabelled control.
+     */
+    const controls = document.querySelectorAll(
+      'select:not([id]), input:not([id]):not([type=hidden]), textarea:not([id])',
+    )
+    for (const control of controls) {
+      expect(control.closest('label')).not.toBeNull()
+    }
   })
 
   it('exposes the forecast metric selector as a real tab list', async () => {
@@ -832,7 +923,15 @@ describe('accessibility', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Intelligence' })).toBeInTheDocument()
     expect(
       screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent),
-    ).toEqual(['Forecast', 'Booking demand', 'Anomalies', 'Findings'])
+    ).toEqual([
+      'Forecast',
+      'Booking demand',
+      'Anomalies',
+      'Findings',
+      // Stage 7.4. Last, and at the same level as its siblings: it is a peer section of this
+      // page rather than a sub-part of the findings above it.
+      'Trained model — measured performance',
+    ])
   })
 
   it('uses no positive tabindex', async () => {

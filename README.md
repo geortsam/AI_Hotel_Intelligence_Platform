@@ -16,7 +16,7 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-5152%20backend%20%C2%B7%201050%20frontend-success)
+![Tests](https://img.shields.io/badge/tests-5152%20backend%20%C2%B7%201141%20frontend-success)
 ![API](https://img.shields.io/badge/API-54%20paths%20%C2%B7%2086%20operations-informational)
 
 </div>
@@ -40,7 +40,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **5152 backend tests and 1050 frontend tests pass in CI.** Schema head is
+> **5152 backend tests and 1141 frontend tests pass in CI.** Schema head is
 > `0011_demand_prediction_public_id` across 11 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
@@ -48,7 +48,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > detection, and split-window trend detection, implemented in the Python standard library.
 > Stages 6.1–6.11 added a second one: a scikit-learn demand model fitted offline, packaged into
 > the API image, and **served** behind one authenticated hotel-scoped endpoint, with every served
-> prediction persisted and three readers over those rows — two programmatic, one an HTTP endpoint.
+> prediction persisted and three readers over those rows, all three now reachable over HTTP.
 >
 > **Implemented is not the same as scientifically validated, and this repository never conflates
 > the two.** The served model is implemented and exercised by tests. Its production accuracy is
@@ -389,6 +389,7 @@ one began.
 | 5.26–5.38 | Production serving, Docker runtime, bootstrap, backup/restore, TLS, deployment robustness, image reproducibility | **done** |
 | 6.1–6.11 | Demand model lifecycle: leakage-safe dataset, versioned training data, offline backtest, metric-blind acceptance, artifact, serving, packaging, prediction persistence, accuracy measurement, distribution observation, stored-prediction read API | **done** |
 | 7.1–7.2 | V2 definition and the analytics reporting view: period KPIs, category breakdowns, activity charts, and the first interface to the served demand model | **done** |
+| 7.3–7.4 | The frozen accuracy and distribution protocols exposed over HTTP, and made legible: forecast against actual, measured error per calibration segment, and the claim boundary on screen | **done** |
 
 What is **not** implemented, and not claimed anywhere in this repository: review sentiment,
 room-image classification, recommendations, any LLM/RAG/agent capability, drift detection,
@@ -657,6 +658,7 @@ draws its own boundary:
 | 6.10 | A frozen protocol summarising a hotel's stored model inputs and outputs over one window and comparing them against a baseline window. Summaries and differences only |
 | 6.11 | One paginated, tenant-scoped `GET` letting a hotel's own members read that hotel's stored predictions, addressed by a public UUID and exposing no internal identifier |
 | 7.3 | Two tenant-scoped `GET`s exposing the 6.9 and 6.10 protocols over HTTP, unchanged. Manager role for accuracy, membership for distribution; both drop the model digest and the per-prediction digests, and both carry the "no production accuracy established" statement in the payload |
+| 7.4 | The first screen for any of it: actual occupancy beside the stored predictions as two never-blended series, measured error per calibration segment with no combined figure, the settlement lag and the "not established" caveat in the panel body. Nothing on it is computed in the browser |
 
 **What none of that establishes.** Not production accuracy, not reliability, not generalisation
 beyond the two hotels the numbers came from, not superiority over the statistical baseline, and not
@@ -696,7 +698,6 @@ record in `ml/models/<model_version>/` — which is where Stage 6.3 wrote the fi
 | **Review sentiment** | Review text | Polarity plus an aspect breakdown (cleanliness, staff, location, value) and token-level explanations |
 | **Room-image classification** | Room photographs | Room type and feature tags for automatic media organisation |
 | **Recommendations** | User and hotel history | Ranked hotel suggestions, evaluated against a popularity baseline |
-| **A view of measured forecast performance** | The Stage 7.3 routes | Forecast-vs-actual on screen. No React view reads either measurement route; Stage 7.2 gave `/ml/demand-forecast` the only ML view that exists, and it shows one forecast rather than its accuracy |
 | **LLM / RAG / agent capability** | — | Nothing of the kind exists today; it is direction, not capability |
 
 Rules these must follow, fixed now so they are not negotiated later:
