@@ -3,9 +3,15 @@
 > The ordered plan produced by Stage 7.1. Each stage is specified well enough to be implemented
 > on its own, in order, without re-deciding anything.
 >
-> **Implemented so far: Stage 7.2.** Every other stage below is a specification and nothing more —
-> none of its code exists. A stage carries `· *done*` in its heading once it ships, with a note
-> recording what was actually built and where that differed from the plan.
+> **Implemented so far: Stages 7.2, 7.3, 7.4 and 7.5** — all of Track A, and the first stage of
+> Track B. Every other stage below is a specification and nothing more; none of its code exists.
+> A stage carries `· *done*` in its heading once it ships, with a note recording what was actually
+> built and where that differed from the plan.
+>
+> **One open specification gap blocks nothing yet but must be settled before 7.6:** the
+> circuit breaker that architecture §2 requires "inside the process (§5.7)" is not specified by
+> §5.7 — no threshold, no window, no open duration, no reset rule, no error code. Stage 7.5
+> deliberately did not invent one. See that stage's note.
 >
 > Read [v2-architecture.md](v2-architecture.md) first: it holds the decisions these stages
 > implement — the single-deployable topology, the LLM abstraction, the RAG design, the tool
@@ -171,24 +177,55 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 
 ## Track B — the generative platform
 
-### Stage 7.5 — LLM provider abstraction
+### Stage 7.5 — LLM provider abstraction · *done*
+
+> The seam exists and nothing sits on it: no endpoint, no tool, no retrieval, no copilot, and no
+> service or router imports `app.llm` at all — asserted, so that 7.6 cannot arrive early by
+> accident. The application is unchanged from outside: the OpenAPI document is byte-identical
+> with `llm_enabled` true and false, and the surface stays 54 / 86.
+>
+> **One piece of the specified architecture was deliberately not built.** §2 calls for "a
+> timeout, a budget and a circuit-breaker **inside** the process (§5.7)". §5.7 specifies the
+> first two and says nothing about the third — it is not in the failure table, and there is no
+> threshold, window, open duration, half-open probe, reset rule or error code for a call refused
+> while open. There was no contract to implement, so none was invented: a guessed threshold in
+> the runtime path would be inherited by every later stage as though it had been decided. **This
+> is the open specification gap of Track B and needs a decision before 7.6.**
+>
+> **Two smaller divergences from the documents, both recorded rather than resolved silently.**
+> §5.6 names three doubles — `ScriptedModel`, `RecordedModel`, `FailingModel` — and the stage
+> brief asked for "deterministic, failing, slow". Those overlap in two of three. All four were
+> built, because they test different things: `FailingModel(LlmUnavailableError)` proves the error
+> propagates, while only a call that genuinely hangs proves the **deadline is enforced**, which
+> is what §5.7's timeout rule actually claims. Separately, §5.1 lists a tool catalogue on
+> `ChatRequest`; tools are 7.6's, so the field is not there yet and the request has five fields,
+> pinned by a test.
+>
+> **Failure mode 4 is declared but not exercised.** §5.7 row 4 is "tool raises", whose behaviour
+> is a loop rule rather than a status, and this stage introduces no tools for anything to raise
+> inside. `LlmToolFailedError` exists so the taxonomy is whole; a test asserts it is declared and
+> states that its status is a placeholder for the stage that adds tools.
+>
+> Delivered: 10 new modules, 1 optional dependency pinned in its own file, 1 prompt, 6 failure
+> types, 4 doubles, 132 tests. Backend 5152 → 5284. Frontend untouched at 1141.
 
 | | |
 |---|---|
-| **Objective** | The `ChatModel` protocol, one provider adapter, settings, prompt records, and the three test doubles — with no product feature on top |
+| **Objective** | The `ChatModel` protocol, one provider adapter, settings, prompt records, and the test doubles — with no product feature on top |
 | **Why it exists** | Every later stage depends on it. Building it alone means the abstraction is designed against its contract, not bent around the first feature |
-| **V1 reused** | `Settings`; `FixedWindowRateLimiter`; the error contract; request-id correlation |
-| **New components** | `app/llm/` — `base.py`, `providers/`, `prompts/`, `testing.py` |
-| **Database** | none |
-| **API** | none |
-| **LLM** | the abstraction itself; timeouts, retries, budgets and the six failure modes of architecture §5.7 |
-| **Security** | the API key is read from the environment and never logged, never in an error, never in a response |
-| **Testing** | the full failure matrix against `FailingModel`; a provider contract suite; **a test asserting no test makes a network call**; a test that no `app/services/` module imports a provider SDK |
-| **Docs** | an LLM design document: provider abstraction, prompt versioning, budgets, failure behaviour |
-| **Non-goals** | no endpoint, no tool, no copilot, no user-visible change |
+| **V1 reused** | `Settings`; the `AppError` contract and its one `ErrorResponse` envelope; the `accuracy_v1` checksum mechanism, applied to prompts; `RequestIdFilter` correlation |
+| **New components** | `app/llm/` — `base.py`, `errors.py`, `boundary.py`, `factory.py`, `testing.py`, `prompts/registry.py`, `providers/anthropic_provider.py`; `backend/requirements-llm.txt` |
+| **Database** | none — no migration, no table, and the package imports no session, no repository and no SQLAlchemy |
+| **API** | none. The seam is exercised from tests only |
+| **LLM** | the abstraction; enforced timeout, one retry with jitter, per-request budget, structured-output validation, and five of the six failure modes of §5.7 |
+| **Security** | the key is read from `Settings`, handed to the client and never logged, never in an error, never in a response — asserted. No session, SQL, row, credential or tenant identifier can cross the seam: there is no field on `ChatRequest` for one, and a test pins the field set |
+| **Testing** | the failure matrix; adapter translation against a stand-in with the SDK's shape; a socket-disabling test proving no network call; a repo-wide AST scan proving the SDK is imported in **exactly one** module; tests that no service and no router reaches `app.llm` |
+| **Docs** | this entry. The design is in the module docstrings, which carry the reasoning at the code they govern |
+| **Non-goals** | no endpoint, no tool, no copilot, no RAG, no embeddings, no agent, no user-visible change — each asserted by a source scan over the package |
 | **Depends on** | nothing |
-| **Acceptance** | (1) `llm_enabled=false` leaves the app fully functional; (2) every failure in §5.7 produces its documented code; (3) prompts are versioned and checksummed; (4) CI makes no network call; (5) one dependency added, pinned |
-| **Done when** | CI green with the provider unreachable |
+| **Acceptance** | (1) `llm_enabled=false` leaves the app fully functional — the OpenAPI document is byte-identical either way; (2) each of the five failures §5.7 gives a status to produces its documented code, and the sixth is declared; (3) prompts carry id, version and a SHA-256 checksum reproducible by hand; (4) no test opens a socket, asserted by disabling them; (5) one dependency added, pinned, and installed by neither CI nor the image |
+| **Known limitations** | **no circuit breaker** (§2 requires one, §5.7 does not specify it — see above); failure mode 4 declared but not exercised, since no tool exists to raise; the enforced deadline abandons a hung call rather than killing it, because a Python thread cannot be killed — that bounds the caller's latency and leaks a thread for the duration; the live provider is not exercised by any test, so nothing here establishes that the vendor behaves as documented |
+| **Done when** | CI green with the provider SDK absent and no credential set |
 
 ### Stage 7.6 — Tool boundary
 

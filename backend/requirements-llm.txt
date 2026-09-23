@@ -1,0 +1,30 @@
+# Stage 7.5: the optional language-model provider.
+#
+# THIS FILE IS NOT INSTALLED BY THE IMAGE. `backend/Dockerfile` copies and installs
+# `backend/requirements.txt` and nothing else, so the deployed container carries no vendor SDK
+# and needs no provider credential to build, start or serve. That is deliberate and is asserted
+# by a test: the base application must remain installable and runnable without this file.
+#
+#   pip install -r backend/requirements-llm.txt
+#
+# Install it where a live provider is actually wanted -- a developer machine, or a deployment
+# that has set `LLM_ENABLED=true` and mounted a key. Everywhere else the application runs with
+# `llm_enabled=false`, every V1 endpoint serves, and the language-model paths answer a declared
+# 503 with `LLM_DISABLED` (v2-architecture.md §5.2).
+#
+# Why a separate file rather than an extra in pyproject.toml: this repository has never declared
+# runtime dependencies in `pyproject.toml` -- `backend/requirements.txt`,
+# `backend/requirements-dev.txt` and `ml/requirements-ml.txt` are the three declarations, each
+# installed by a different consumer. A fourth file is the shape this repository already uses; a
+# `[project.optional-dependencies]` table would be a second mechanism for the same job.
+#
+# The SDK is imported in exactly one module, `app/llm/providers/anthropic_provider.py`, and the
+# import is deferred to first use so that module is importable without this file present. A test
+# asserts both: that the import is absent from every other module, and that the adapter imports
+# cleanly with the SDK uninstalled.
+#
+# No test in CI installs this file and no test makes a network call. The adapter's translation
+# is tested against a stand-in with the SDK's shape; whether the live endpoint behaves as
+# documented is not something this repository's tests can establish.
+
+anthropic==0.42.0

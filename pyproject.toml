@@ -65,3 +65,20 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 module = ["sklearn.*", "scipy.*"]
 ignore_missing_imports = true
+
+# Stage 7.5: the language-model provider SDK is an OPTIONAL dependency, declared in
+# backend/requirements-llm.txt and installed by neither CI nor the image. So it is genuinely
+# absent when mypy runs, and `app/llm/providers/anthropic_provider.py` -- the one module allowed
+# to name it, behind a deferred import -- would be an `import-not-found` error on every run.
+#
+# This is a different reason from the sklearn entry above, which is about missing type stubs for
+# an installed package. Here the package is not installed at all, and that is the design: the
+# base application must remain installable and runnable without a vendor SDK. Pinning the
+# dependency just to satisfy the type checker would undo the isolation the stage exists to
+# establish.
+#
+# Scoped to the one package, like the entry above. The adapter itself is fully typed; only the
+# vendor's own module is exempt.
+[[tool.mypy.overrides]]
+module = ["anthropic.*"]
+ignore_missing_imports = true

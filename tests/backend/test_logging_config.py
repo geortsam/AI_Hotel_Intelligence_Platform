@@ -48,6 +48,10 @@ ENV_PY = REPO_ROOT / "database" / "migrations" / "env.py"
 #: the list stayed disabled for the rest of the session once the test below ran.
 APP_LOGGERS = [
     "app.core.errors",
+    # Stage 7.5. The language-model boundary logs one event per call: an outcome, a prompt
+    # identity and two counts. No prompt text, no answer, no provider name and no key -- the
+    # same discipline the ML service loggers below apply to a hotel's data.
+    "app.llm.boundary",
     "app.ml.artifact_store",
     "app.services.amenity",
     "app.services.auth",

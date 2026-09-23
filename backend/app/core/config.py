@@ -157,6 +157,30 @@ class Settings(BaseSettings):
     #: months to reach users -- so it is a decision a deployment makes on purpose.
     hsts_preload: bool = False
 
+    # --- Language model (Stage 7.5) ----------------------------------------
+    #
+    # The master switch, and it is **off by default**. A deployment that sets nothing gets the
+    # documented posture of v2-architecture.md §5.2: the application starts, every V1 endpoint
+    # serves, and the language-model paths answer a clean 503 with `LLM_DISABLED`. That is the
+    # same stance `ml/demand-forecast` takes when its artifact is unavailable, and it is why
+    # this is a flag rather than "an API key happens to be set" -- a deployment must say yes on
+    # purpose, and an accidentally-present key must not be enough to start spending money.
+    llm_enabled: bool = False
+    #: Which adapter the factory builds. Never read by a service: §5.1 requires that no caller
+    #: names a vendor, so the name is resolved here and nowhere above `app.llm`.
+    llm_provider: Literal["anthropic"] = "anthropic"
+    llm_model: str = "claude-sonnet-5"
+    #: Optional override for a gateway or a regional endpoint. None means the SDK's default.
+    llm_base_url: str | None = None
+    #: Read from the environment and never logged, never placed in an error and never returned
+    #: in a response. Tests assert all three.
+    llm_api_key: str | None = None
+    #: The per-attempt deadline the boundary enforces, and the per-request token ceiling of
+    #: §4.5. Both are bounded above so a misconfiguration cannot express "no limit" -- an
+    #: unbounded spend is the availability risk that section names.
+    llm_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    llm_max_output_tokens: int = Field(default=1024, ge=1, le=32_000)
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:

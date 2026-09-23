@@ -314,12 +314,26 @@ FORBIDDEN_EVERYWHERE = (
     "statsmodels",
     "langchain",
     "openai",
-    "anthropic",
     "transformers",
     "sentence_transformers",
     "chromadb",
     "faiss",
 )
+
+#: Libraries permitted in exactly one module, and banned in every other.
+#:
+#: `anthropic` was in the list above until Stage 7.5, which introduced the language-model
+#: boundary that `docs/v2-architecture.md` §5 specifies. It is no longer forbidden everywhere --
+#: but "not forbidden" is not "unrestricted", and dropping it from the tuple without putting it
+#: anywhere would have turned a real guard into no guard at all.
+#:
+#: So it moves here, where the assertion is stronger than the one it replaced: not merely that
+#: the SDK is absent from most files, but that it appears in exactly ONE, named below. A second
+#: module importing it is the failure this now catches, and that is the architectural rule --
+#: "the provider adapter is the only place where the real provider SDK may be imported".
+PERMITTED_IN_ONE_MODULE = {
+    "anthropic": "backend/app/llm/providers/anthropic_provider.py",
+}
 
 
 def _python_sources(root: Path) -> list[Path]:
@@ -341,6 +355,26 @@ def test_no_forbidden_library_appears_anywhere_in_the_repository(library: str) -
     for root in ("backend/app", "ml"):
         for source in _python_sources(REPOSITORY_ROOT / root):
             assert not pattern.search(source.read_text(encoding="utf-8")), f"{source}: {library}"
+
+
+@pytest.mark.parametrize(("library", "permitted"), sorted(PERMITTED_IN_ONE_MODULE.items()))
+def test_a_permitted_library_appears_in_exactly_one_module(library: str, permitted: str) -> None:
+    """Stage 7.5's boundary, enforced mechanically rather than by convention.
+
+    Both halves matter. The first — that no other module imports it — is the architectural rule.
+    The second — that the permitted module really does — is what stops this test passing
+    vacuously if the adapter were deleted or renamed and the exemption left behind.
+    """
+    pattern = re.compile(rf"^\s*(import|from)\s+{re.escape(library)}\b", re.MULTILINE)
+
+    importers = [
+        source.relative_to(REPOSITORY_ROOT).as_posix()
+        for root in ("backend/app", "ml")
+        for source in _python_sources(REPOSITORY_ROOT / root)
+        if pattern.search(source.read_text(encoding="utf-8"))
+    ]
+
+    assert importers == [permitted]
 
 
 def test_the_backend_requirements_declare_exactly_one_ml_library() -> None:

@@ -222,9 +222,15 @@ behind one header, so a caller can see which points fell back to the window medi
 trend response returns both window medians *and* the threshold, so its classification can be
 recomputed by hand.
 
-**There is no LLM, no embedding, no vector database, no retrieval-augmented generation, no
-agent framework and no external AI service anywhere in this repository.** There *is* one trained
-model, fitted offline and served: §5.1c. See also §5.3.
+**No language model is ever called, and there is no embedding, no vector database, no
+retrieval-augmented generation and no agent framework anywhere in this repository.** There *is*
+one trained model, fitted offline and served: §5.1c. See also §5.3.
+
+*(Stage 7.5 added `app/llm/` — the boundary a future language-model call would pass through,
+and nothing that uses it. No endpoint, no tool, no service and no router reaches it; the
+provider SDK is an optional dependency neither CI nor the image installs; and the feature is
+off by default. So no external AI service is contacted, which is what the sentence above is
+about. See `docs/v2-roadmap.md` Stage 7.5.)*
 
 ### 5.1 The V2 demand dataset (Stage 6.1) — a dataset, not a model
 

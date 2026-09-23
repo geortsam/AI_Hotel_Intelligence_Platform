@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -493,6 +494,11 @@ def code_only(source: str) -> str:
     return ast.unparse(tree)
 
 
+#: How psycopg's diagnostics object is reached: as a quoted attribute name handed to `getattr`,
+#: or as a real attribute access. Either quoting, because `ast.unparse` rewrites them.
+_DIAGNOSTICS_ACCESS = re.compile(r"""['"]diag['"]|\.diag\b""")
+
+
 def sources() -> dict[str, str]:
     return {
         path.relative_to(APP).as_posix(): code_only(path.read_text(encoding="utf-8"))
@@ -545,14 +551,41 @@ def test_no_service_reads_the_driver_diagnostics_directly() -> None:
     A service reaching into the diagnostics itself would be one edit away from reading the
     driver MESSAGE, which renders the offending row -- a guest's details, an amount, an email
     address -- and is the thing eleven stages of error hygiene exist to keep out of responses.
+
+    Two corrections to how this is matched, both made when Stage 7.5 tripped it.
+
+    **``.diag`` is matched as a whole attribute, not as a substring.** The bare substring also
+    fires on any longer name starting with those four letters -- ``.diagnostics`` on Stage 7.5's
+    ``ChatResponse`` is one, ``.diagnose`` and ``.diagram`` would be others -- none of which is
+    psycopg's diagnostics object.
+
+    **The quoted form is matched in the quoting ``ast.unparse`` actually produces.** ``sources()``
+    runs every file through :func:`code_only`, which re-emits the tree, and ``ast.unparse``
+    normalises every string literal to single quotes. The original ``'"diag"'`` clause therefore
+    could never match anything, in any file: the real accessor here is
+    ``getattr(..., 'diag', None)``. The clause below matches either quoting, so it now does the
+    work it was written to do. The positive control that follows is what would have caught this.
     """
     offenders = [
         name
         for name, source in sources().items()
-        if name != "core/errors.py" and ('"diag"' in source or ".diag" in source)
+        if name != "core/errors.py" and _DIAGNOSTICS_ACCESS.search(source)
     ]
 
     assert offenders == [], offenders
+
+
+def test_the_diagnostics_guard_would_catch_a_real_offender() -> None:
+    """Guards the test above: a pattern that matched nothing would pass over every file.
+
+    ``core/errors.py`` is the one module allowed to read the diagnostics, so it is the natural
+    positive control -- if the pattern cannot find the access there, it cannot find it anywhere,
+    and the exclusion above is guarding nothing.
+    """
+    assert _DIAGNOSTICS_ACCESS.search(sources()["core/errors.py"])
+    assert _DIAGNOSTICS_ACCESS.search("exc.orig.diag.constraint_name")
+    assert _DIAGNOSTICS_ACCESS.search("getattr(orig, 'diag', None)")
+    assert not _DIAGNOSTICS_ACCESS.search("response.diagnostics")
 
 
 def test_the_extraction_returns_none_for_a_non_driver_error() -> None:

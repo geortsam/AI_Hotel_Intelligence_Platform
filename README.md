@@ -16,7 +16,7 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-5152%20backend%20%C2%B7%201141%20frontend-success)
+![Tests](https://img.shields.io/badge/tests-5284%20backend%20%C2%B7%201141%20frontend-success)
 ![API](https://img.shields.io/badge/API-54%20paths%20%C2%B7%2086%20operations-informational)
 
 </div>
@@ -40,7 +40,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **5152 backend tests and 1141 frontend tests pass in CI.** Schema head is
+> **5284 backend tests and 1141 frontend tests pass in CI.** Schema head is
 > `0011_demand_prediction_public_id` across 11 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
@@ -58,8 +58,13 @@ more than one currency and the platform never converts between them.</sub></div>
 > passing test proves software behaviour under a declared protocol, not predictive validity —
 > [docs/ml-model-card.md](docs/ml-model-card.md) §15 carries those answers as data.
 >
-> **There is no LLM, no embeddings, no vector database, no RAG and no agent framework in this
-> repository.** Nothing here is a placeholder pretending to be a feature —
+> **No language model is ever called, and there are no embeddings, no vector database, no RAG
+> and no agent framework in this repository.** Stage 7.5 added the *boundary* one would pass
+> through — a `ChatModel` protocol, one provider adapter, versioned prompts and a failure
+> taxonomy — and nothing on top of it: no endpoint, no tool, no copilot. The provider SDK is an
+> optional dependency that neither CI nor the image installs, the feature is off by default,
+> and no service or router imports the package at all. Nothing here is a placeholder pretending
+> to be a feature —
 > [docs/development-roadmap.md](docs/development-roadmap.md) separates what exists from what is
 > left for V2, and [Known limitations](#known-limitations) is the honest list.
 
@@ -682,8 +687,13 @@ See [docs/ml-training-data.md](docs/ml-training-data.md),
 [docs/ml-prediction-read-api.md](docs/ml-prediction-read-api.md) and
 [docs/ml-forecast-performance-api.md](docs/ml-forecast-performance-api.md).
 
-**There is no LLM, no embeddings, no vector database, no RAG and no agent framework in this
-repository.**
+**No language model is ever called.** Stage 7.5 added the seam one would pass through and
+nothing that uses it: `app/llm/` holds a `ChatModel` protocol, one provider adapter, versioned
+checksummed prompts, the six declared failure modes and four test doubles. There is no
+endpoint, no tool, no copilot, no RAG, no embeddings, no vector database and no agent
+framework. The provider SDK lives in `backend/requirements-llm.txt`, which neither CI nor the
+Docker image installs; `llm_enabled` is false by default; and a repository-wide test asserts
+the SDK is imported in exactly one module and that no service or router reaches the package.
 
 ### V2 — NOT IMPLEMENTED
 

@@ -16,6 +16,14 @@
 #
 # scikit-learn is here for exactly one estimator, HistGradientBoostingRegressor: the smallest
 # conventional learned regressor for a small tabular panel. No gradient-boosting library, no
-# deep-learning framework and no LLM client is declared, and a test asserts none is imported.
+# deep-learning framework and no LLM client is declared here, and a test asserts none is
+# imported anywhere under `ml/`.
+#
+# Stage 7.5 note: a language-model SDK now exists in this repository, in
+# `backend/requirements-llm.txt` -- optional, installed by neither CI nor the image, and
+# imported by exactly one module under `backend/app/llm/providers/`. It is declared nowhere
+# near the offline pipelines and nothing under `ml/` imports it; the test that used to ban it
+# everywhere now pins it to that one module, which is a stronger assertion than the ban it
+# replaced.
 
 scikit-learn==1.9.1
