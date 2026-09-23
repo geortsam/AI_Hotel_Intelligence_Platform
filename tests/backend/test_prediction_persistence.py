@@ -567,12 +567,17 @@ def test_the_serving_path_logs_no_secret_or_sql(
 # --- the contract is unchanged ------------------------------------------------------
 
 
-def test_the_api_surface_did_not_move() -> None:
+def test_the_api_surface_is_the_one_stage_73_published() -> None:
+    """Stage 6.8 added no route; later stages added three, taking 51 / 83 to 54 / 86.
+
+    Persistence itself is still invisible from outside -- the test below pins the serving
+    response's exact field set, which is what this stage was actually required not to move.
+    """
     schema = create_app(Settings(environment="test", debug=True)).openapi()
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
 
-    assert len(schema["paths"]) == 52
-    assert sum(len([m for m in spec if m in methods]) for spec in schema["paths"].values()) == 84
+    assert len(schema["paths"]) == 54
+    assert sum(len([m for m in spec if m in methods]) for spec in schema["paths"].values()) == 86
 
 
 def test_the_response_schema_gained_nothing() -> None:

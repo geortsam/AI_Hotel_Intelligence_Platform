@@ -23,6 +23,7 @@ from app.api.v1.endpoints import (
     intelligence,
     members,
     meta,
+    ml_performance,
     ml_predictions,
     payments,
     platform_audit,
@@ -83,6 +84,13 @@ api_router.include_router(intelligence.router)
 # different version vocabulary -- one prefix for both would imply a lineage they do not share.
 # Read-only and hotel-scoped like everything around it.
 api_router.include_router(ml_predictions.router)
+# Stage 7.3. What the served model has already produced, measured. A THIRD router sharing the
+# /ml prefix, registered after the serving one because it reads what that one writes: accuracy
+# against recorded occupancy, and the distribution of the stored predictions and their inputs.
+# Both frozen protocols behind it were written in Stages 6.9 and 6.10 and are untouched here --
+# this stage is routing, not modelling. Read-only and hotel-scoped like everything around it;
+# accuracy additionally requires the manager role, declared on the route itself.
+api_router.include_router(ml_performance.router)
 # The audit trail. Hotel-scoped like everything else that is a property's own data, and
 # read-only: there is no route that writes, edits or deletes an event, because a history a
 # client can append to is not evidence. Registered last because it observes every domain

@@ -1,10 +1,17 @@
 """What a distribution observation returns. Not an HTTP contract, and deliberately not one.
 
-Stage 6.10 adds **no endpoint**. These are frozen dataclasses rather than Pydantic models, for
-the reason Stage 6.9's result types are: every other module in this package defines a body that
-FastAPI registers, and a Pydantic model here would suggest this one does too. Nothing in this
-file is registered on a route, appears in the OpenAPI document or crosses the network. The API
-stays at 51 paths / 83 operations.
+These are frozen dataclasses rather than Pydantic models, for the reason Stage 6.9's result
+types are: every other module in this package defines a body that FastAPI registers, and a
+Pydantic model here would suggest this one does too. Nothing in this file is registered on a
+route, appears in the OpenAPI document or crosses the network.
+
+*(Stage 6.10 added no endpoint and the API stayed at 51 paths / 83 operations. Stage 7.3 later
+published this observation over HTTP, taking the surface to 54 / 86 -- but through a SEPARATE
+set of Pydantic models in ``app.schemas.ml_performance``, projected onto from the dataclasses
+below. The paragraph above is therefore still exactly true of this file, which is the point of
+the arrangement: a field added here is not thereby published, and the two that must not travel
+-- ``feature_digests`` and ``canonical_model_digest`` -- are dropped in that projection. A test
+asserts that no schema in the document carries either.)*
 
 ## No field here reaches a conclusion
 

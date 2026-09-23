@@ -97,6 +97,19 @@ SERVING_ENDPOINT = "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast"
 #: stored rows, loads no artifact, and declares no 503.
 STORED_PREDICTIONS_ENDPOINT = "/api/v1/hotels/{hotel_public_id}/ml/demand-predictions"
 
+#: The two Stage 7.3 added, for the same reason and with the same property: they measure rows the
+#: serving route already wrote, load no artifact, and declare no 503.
+ACCURACY_ENDPOINT = "/api/v1/hotels/{hotel_public_id}/ml/forecast-accuracy"
+DISTRIBUTION_ENDPOINT = "/api/v1/hotels/{hotel_public_id}/ml/prediction-distribution"
+
+#: Every route under the ML prefix. Exactly one of them reaches the model.
+ML_ENDPOINTS = [
+    SERVING_ENDPOINT,
+    STORED_PREDICTIONS_ENDPOINT,
+    ACCURACY_ENDPOINT,
+    DISTRIBUTION_ENDPOINT,
+]
+
 
 # --- fixtures ------------------------------------------------------------------------------------
 
@@ -557,10 +570,11 @@ def test_exactly_one_route_serves_the_model_and_none_names_an_artifact() -> None
     or an estimator would be a path a client could vary, and the whole point of the loading
     boundary is that no request chooses what is loaded.
 
-    Stage 6.11 put a second route on the ML router, and it is deliberately not a second serving
-    route: it reads rows the serving route already wrote, loads no artifact and declares no 503.
-    What this file is responsible for -- that exactly one route can reach the model, and that no
-    path names an artifact -- is unchanged, and is asserted as that rather than as a route count.
+    Stage 6.11 put a second route on the ML router and Stage 7.3 two more, and none of the three
+    is a second serving route: each reads or measures rows the serving route already wrote, loads
+    no artifact and declares no 503. What this file is responsible for -- that exactly one route
+    can reach the model, and that no path names an artifact -- is unchanged, and is asserted as
+    that rather than as a route count.
     """
     from app.core.config import Settings
     from app.main import create_app
@@ -568,17 +582,20 @@ def test_exactly_one_route_serves_the_model_and_none_names_an_artifact() -> None
     schema = create_app(Settings(environment="test", debug=True)).openapi()
     paths = schema["paths"]
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
-    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 84
+    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 86
 
-    ml_routes = sorted(path for path in paths if "/ml/" in path)
-    assert ml_routes == [SERVING_ENDPOINT, STORED_PREDICTIONS_ENDPOINT]
-    assert set(paths[SERVING_ENDPOINT]) == {"get"}
-    assert set(paths[STORED_PREDICTIONS_ENDPOINT]) == {"get"}
+    assert sorted(path for path in paths if "/ml/" in path) == sorted(ML_ENDPOINTS)
+    for endpoint in ML_ENDPOINTS:
+        assert set(paths[endpoint]) == {"get"}, endpoint
 
     # Only the serving route can fail for want of a model, which is what makes it the only one
-    # that reaches one.
+    # that reaches one. Asserted over every other ML route rather than over a named list, so a
+    # fifth route cannot be added without either declaring no 503 or failing here.
     assert "503" in paths[SERVING_ENDPOINT]["get"]["responses"]
-    assert "503" not in paths[STORED_PREDICTIONS_ENDPOINT]["get"]["responses"]
+    for endpoint in ML_ENDPOINTS:
+        if endpoint == SERVING_ENDPOINT:
+            continue
+        assert "503" not in paths[endpoint]["get"]["responses"], endpoint
     assert not [
         path
         for path in paths

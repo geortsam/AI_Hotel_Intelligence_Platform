@@ -76,24 +76,46 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | **Acceptance** | (1) `/analytics` renders real data for a member; (2) `BUILT_AREAS` in `AppRouter.tsx` contains every nav route and `PlaceholderPage` has no remaining consumer; (3) every figure shown is returned by an endpoint, none computed in the browser; (4) frontend suite green, typecheck clean |
 | **Done when** | CI green, the README no longer describes Analytics as a placeholder, and a screenshot of the real view is committed |
 
-### Stage 7.3 — Forecast performance API
+### Stage 7.3 — Forecast performance API · *done*
+
+> Both frozen services are now reachable over HTTP and the surface is **54 paths / 86
+> operations**, exactly as planned. Two things came out differently from the plan above, both
+> found while reading the code rather than decided in advance.
+>
+> **The `Page` envelope does not apply.** Neither endpoint returns a collection — each returns one
+> measurement over one window — so paginating would have wrapped a single object in a pager that
+> could only ever report one page. What the envelope was there to prevent, an unbounded read, is
+> instead prevented by a **366-day maximum window**, which is the one new policy this stage
+> introduces. It bounds the HTTP surface only: neither protocol gained a field, both checksums are
+> unchanged, and a programmatic caller is as unbounded as before.
+>
+> **Two request rules had to be written, because neither frozen service validates its window** —
+> they were never reachable from a client. A reversed window returned an *empty measurement* from
+> both, which reads as "nothing happened" rather than "you asked wrongly"; it is now a 422, as is
+> half a baseline pair. Both rules live in the new thin service, never in a router.
+>
+> Delivered: 2 routes, 1 service, 16 response models, 1 stage document, 141 tests, 0 migrations,
+> 0 dependencies, 0 changes to either protocol or to the model artifact. The three tests asserting
+> "this stage adds no endpoint" were restated as what they actually protected — that the frozen
+> dataclasses are still not HTTP contracts and that the withheld digests appear in no published
+> schema — which is a stronger claim than the path count it replaced.
 
 | | |
 |---|---|
 | **Objective** | Expose `DemandAccuracyService.evaluate` and `DemandDistributionService.observe` over read-only, tenant-scoped HTTP |
 | **Why it exists** | Both services are complete, frozen, protocol-checksummed and tested, and reachable only from tests. "Forecast vs actual" and "historical forecast performance" are a routing problem, not a modelling one |
-| **V1 reused** | both services unchanged; `HotelScopeResolver`; the `Page` envelope; the error contract |
-| **New components** | two routes on the existing ML router; two response schemas |
-| **Database** | none |
-| **API** | `GET …/ml/forecast-accuracy`, `GET …/ml/prediction-distribution`. Surface moves 52/84 → **54/86**, deliberately |
-| **ML** | none — no retraining, no artifact change, no protocol change |
-| **Security** | manager role for accuracy (it exposes how wrong the model was, an operational judgement); viewer for distribution; identical-404 for unknown and non-member |
-| **Testing** | contract tests; tenant isolation against real PostgreSQL; a test that the frozen protocol checksums are unchanged; leakage tests for digests and feature values |
-| **Docs** | a stage document; the API count updated in the four places that state it |
-| **Non-goals** | no threshold, no verdict, no alert, no drift *detection* — the protocols decide nothing and the endpoints must not imply otherwise |
+| **V1 reused** | both services unchanged; `HotelScopeResolver`; `require_role`; the `ErrorResponse` contract; request-id middleware |
+| **New components** | `api/v1/endpoints/ml_performance.py` (2 routes), `services/ml_performance.py` (validate, delegate, project), `schemas/ml_performance.py` (16 models) |
+| **Database** | none — head still `0011_demand_prediction_public_id` |
+| **API** | `GET …/ml/forecast-accuracy`, `GET …/ml/prediction-distribution`. Surface moved 52/84 → **54/86** |
+| **ML** | none — no retraining, no artifact change, no protocol change, digest untouched |
+| **Security** | manager role for accuracy (it exposes how wrong the model was, an operational judgement); membership alone for distribution, argued from the fact that every field it summarises is calendar arithmetic or a figure the same caller already reads from `/analytics/daily`; identical-404 for unknown and non-member |
+| **Testing** | 98 contract/delegation/layering tests without a database; 43 against real PostgreSQL covering the real authorization chain, tenant isolation, request-id and that measuring writes nothing |
+| **Docs** | [ml-forecast-performance-api.md](ml-forecast-performance-api.md); the API count updated in `architecture.md` and the two places in `README.md` |
+| **Non-goals** | no threshold, no verdict, no alert, no drift *detection* — the protocols decide nothing and the endpoints do not imply otherwise |
 | **Depends on** | nothing |
-| **Acceptance** | (1) both endpoints return the services' own output unchanged; (2) `accuracy_v1` and `distribution_v1` checksums identical to Stage 6.9/6.10; (3) response carries the "no production accuracy established" statement; (4) no internal id, digest or feature value in any response |
-| **Done when** | CI green including the Docker probe, and the surface is documented as 54/86 |
+| **Acceptance** | (1) both endpoints return the services' own output unchanged — asserted by an AST walk proving the projection contains no arithmetic and imports neither pure-calculation module; (2) `accuracy_v1` and `distribution_v1` checksums identical to Stage 6.9/6.10; (3) every response carries the "no production accuracy established" statement in its payload; (4) no internal id and no digest in any response, asserted across every schema in the OpenAPI document |
+| **Caveat** | a distribution window holding a single prediction publishes that prediction's own feature vector, since the summary of one observation is the observation. Stated in §5 of the stage document rather than glossed |
 
 ### Stage 7.4 — Forecast-vs-actual visualisation
 

@@ -1,10 +1,17 @@
 """What an accuracy evaluation returns. Not an HTTP contract, and deliberately not one.
 
-Stage 6.9 adds **no endpoint**. These are frozen dataclasses rather than Pydantic models, which
-is the difference that matters: every other module in this package defines a request or response
-body that FastAPI registers, and a Pydantic model here would suggest this one does too. Nothing
-in this file is registered on a route, appears in the OpenAPI document or crosses the network.
-The API stays at 51 paths / 83 operations.
+These are frozen dataclasses rather than Pydantic models, which is the difference that matters:
+every other module in this package defines a request or response body that FastAPI registers,
+and a Pydantic model here would suggest this one does too. Nothing in this file is registered on
+a route, appears in the OpenAPI document or crosses the network.
+
+*(Stage 6.9 added no endpoint and the API stayed at 51 paths / 83 operations. Stage 7.3 later
+published this evaluation over HTTP, taking the surface to 54 / 86 -- but through a SEPARATE set
+of Pydantic models in ``app.schemas.ml_performance``, projected onto from the dataclasses below.
+The paragraph above is therefore still exactly true of this file, and that is what makes the
+withholding below enforceable: ``canonical_model_digest`` and ``scored_feature_digests`` are
+computed here, used for attribution here, and dropped at that projection. A test asserts that no
+schema in the OpenAPI document carries either.)*
 
 ## What travels, and what does not
 

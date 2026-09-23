@@ -365,8 +365,8 @@ def test_the_openapi_document_is_unchanged() -> None:
     spec = create_app(Settings(environment="test", secret_key=SECRET)).openapi()
     operations = [(path, method) for path, item in spec["paths"].items() for method in item]
 
-    assert len(spec["paths"]) == 52
-    assert len(operations) == 84
+    assert len(spec["paths"]) == 54
+    assert len(operations) == 86
     # Built from the real factory, so the middleware is present -- and contributes nothing.
     assert not any("security" in path.lower() for path in spec["paths"])
 

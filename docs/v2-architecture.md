@@ -22,6 +22,11 @@ roadmap in [v2-roadmap.md](v2-roadmap.md) is shaped by that.
 **52 paths / 84 operations**, of which 79 require authentication. Twelve of them are the
 analytics and intelligence surface V2 builds on:
 
+*(That is the inventory V2 started from, and it is left as the record of that starting point.
+Stage 7.3 has since added two read-only routes of its own, taking the surface to 54 / 86 and the
+authenticated count to 81 — see [ml-forecast-performance-api.md](ml-forecast-performance-api.md).
+The twelve endpoints below are unchanged.)*
+
 | Endpoint | What it already returns |
 |---|---|
 | `GET …/analytics/overview` | occupancy rate, ADR, RevPAR, occupied / sold / complimentary / available room nights, booking status counts, arrivals, departures, cancellations — per currency |

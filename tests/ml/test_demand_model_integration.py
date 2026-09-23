@@ -386,29 +386,33 @@ def test_the_public_api_gained_only_the_serving_endpoint() -> None:
     """Stage 6.3 asserted 82 operations and no ML path at all. Stage 6.6 added one route.
 
     What this still holds is the part Stage 6.3 cared about: no training surface. There is no
-    route that fits a model, launches a run or promotes an artifact, and the one ML route that
-    now exists is a read.
+    route that fits a model, launches a run or promotes an artifact, and every ML route that now
+    exists is a read.
     """
     from app.core.config import Settings
     from app.main import create_app
 
+    serving = "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast"
     schema = create_app(Settings(environment="test", debug=True)).openapi()
     paths = schema["paths"]
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     operations = sum(len([m for m in spec if m in methods]) for spec in paths.values())
-    assert operations == 84
-    # Two routes on the ML prefix since Stage 6.11, and only one of them reaches a model. The
+    assert operations == 86
+    # Four routes on the ML prefix since Stage 7.3, and only one of them reaches a model. The
     # 503 is what says which: an unavailable artifact is a failure only the serving route can
     # have, so declaring it is the structural difference rather than a naming convention.
-    assert sorted(path for path in paths if "/ml" in path) == [
-        "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast",
+    ml_paths = sorted(path for path in paths if "/ml" in path)
+    assert ml_paths == [
+        serving,
         "/api/v1/hotels/{hotel_public_id}/ml/demand-predictions",
+        "/api/v1/hotels/{hotel_public_id}/ml/forecast-accuracy",
+        "/api/v1/hotels/{hotel_public_id}/ml/prediction-distribution",
     ]
-    assert "503" in paths["/api/v1/hotels/{hotel_public_id}/ml/demand-forecast"]["get"]["responses"]
-    assert (
-        "503"
-        not in paths["/api/v1/hotels/{hotel_public_id}/ml/demand-predictions"]["get"]["responses"]
-    )
+    assert "503" in paths[serving]["get"]["responses"]
+    for path in ml_paths:
+        assert set(paths[path]) == {"get"}, path
+        if path != serving:
+            assert "503" not in paths[path]["get"]["responses"], path
     assert not [
         path for path in paths if any(word in path for word in ("train", "fit", "forecast/run"))
     ]

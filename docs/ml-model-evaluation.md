@@ -10,9 +10,11 @@
 > unchanged at 82 operations, and `backend/` gained no ML dependency.
 >
 > *(Both API statements describe Stage 6.3 and remain true of it. Stage 6.6 later added one
-> read-only serving route, taking the surface to 83 operations, and Stage 6.11 a second, taking it
-> to the current **52 paths / 84 operations** — see [ml-serving.md](ml-serving.md) and
-> [ml-prediction-read-api.md](ml-prediction-read-api.md). Nothing else here is affected.)*
+> read-only serving route, taking the surface to 83 operations, Stage 6.11 a second, taking it to
+> 84, and Stage 7.3 two more, taking it to the current **54 paths / 86 operations** — see
+> [ml-serving.md](ml-serving.md), [ml-prediction-read-api.md](ml-prediction-read-api.md) and
+> [ml-forecast-performance-api.md](ml-forecast-performance-api.md). Nothing else here is
+> affected.)*
 >
 > **Stage 6.4 validated this measurement** under a pre-declared acceptance policy and added the
 > robustness, regime and error analysis these pooled numbers cannot give:

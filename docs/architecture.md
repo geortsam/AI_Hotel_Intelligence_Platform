@@ -121,19 +121,27 @@ identifiers at the API boundary are UUIDs; internal `BIGINT` keys are never seri
 `repositories/` 18, `models/` 14, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 2 — and the HTTP
 surface was 82 operations, of which 77 required authentication.
 
-**Current state:** `api/` 29 files, `services/` 28, `schemas/` 24, `repositories/` 20, `models/`
-15, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 9. The HTTP surface is **52 paths / 84 operations**,
-of which **79 require authentication**; the 5 that do not are the version-metadata endpoint,
+**Current state:** `api/` 30 files, `services/` 29, `schemas/` 25, `repositories/` 20, `models/`
+15, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 9. The HTTP surface is **54 paths / 86 operations**,
+of which **81 require authentication**; the 5 that do not are the version-metadata endpoint,
 registration, login and the two health probes — the same five as at V1.
 
 **What moved it, and when.** Stage 6.6 added one read-only, hotel-scoped, authenticated route —
 the demand model's serving boundary — taking the surface to 83 operations. Stage 6.11 added a
-second, `GET .../ml/demand-predictions`, taking it to 84. Those are the only two API changes since
-V1, both on the same router, and only the first of them reaches a model: the serving route declares
-a `503` for an unavailable artifact and the read route declares none, because it loads none. The
-serving route is also the only place the application reaches the offline `ml/` package, through a
-single module behind a lazy import. See [ml-serving.md](ml-serving.md) and
-[ml-prediction-read-api.md](ml-prediction-read-api.md).
+second, `GET .../ml/demand-predictions`, taking it to 84. Stage 7.3 added two more,
+`GET .../ml/forecast-accuracy` and `GET .../ml/prediction-distribution`, taking it to 86. Those
+four are the only API changes since V1, all under the same `/ml` segment, and **only the first of
+them reaches a model**: the serving route declares a `503` for an unavailable artifact and the
+other three declare none, because they load none. The serving route is also the only place the
+application reaches the offline `ml/` package, through a single module behind a lazy import. See
+[ml-serving.md](ml-serving.md), [ml-prediction-read-api.md](ml-prediction-read-api.md) and
+[ml-forecast-performance-api.md](ml-forecast-performance-api.md).
+
+The three reading routes are not symmetric in what they require. `demand-predictions` and
+`prediction-distribution` need membership alone; `forecast-accuracy` additionally declares
+`require_role(MANAGER)`, because how wrong the model has been is an operational judgement rather
+than a figure every member needs. None of the four establishes production accuracy, and each says
+so in its own response body rather than only in this document.
 
 Stage 6.7 made the serving route executable in the deployed image: `backend/Dockerfile` became a
 three-stage build whose middle stage regenerates the approved model from the committed dataset

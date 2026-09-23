@@ -66,6 +66,9 @@ from app.services.health import HealthService
 from app.services.hotel import HotelService
 from app.services.intelligence import IntelligenceService
 from app.services.membership import MembershipService
+from app.services.ml_accuracy import DemandAccuracyService
+from app.services.ml_drift import DemandDistributionService
+from app.services.ml_performance import ForecastPerformanceService
 from app.services.ml_prediction_read import DemandPredictionReadService
 from app.services.ml_serving import DemandPredictionService
 from app.services.payment import PaymentService
@@ -452,6 +455,37 @@ def get_demand_prediction_read_service(
 
 DemandPredictionReadServiceDep = Annotated[
     DemandPredictionReadService, Depends(get_demand_prediction_read_service)
+]
+
+
+def get_forecast_performance_service(
+    db: DbSession, scope: ScopeResolverDep
+) -> ForecastPerformanceService:
+    """Assemble the HTTP boundary over the two frozen measurement services (Stage 7.3).
+
+    The two services beneath are constructed here exactly as Stages 6.9 and 6.10 construct them
+    -- same repositories, same resolver, and the default protocol each declares. Neither is
+    subclassed, wrapped or handed a modified protocol: a route measuring under different rules
+    from a programmatic caller would make the protocol checksum in the response meaningless.
+
+    No session reaches any of the three. Measuring predictions against what actually happened
+    writes nothing, so there is no unit of work to own, and the repositories hold the session for
+    their own SELECTs. The same asymmetry as the analytics, intelligence and stored-prediction
+    services.
+
+    Both services are handed the SAME ``MlPredictionRepository``, and the accuracy service the
+    same ``MlDemandRepository`` the dataset pipeline and serving path use. One module owns what a
+    prediction row is, and one owns what realised demand is.
+    """
+    predictions = MlPredictionRepository(db)
+    return ForecastPerformanceService(
+        DemandAccuracyService(predictions, MlDemandRepository(db), scope),
+        DemandDistributionService(predictions, scope),
+    )
+
+
+ForecastPerformanceServiceDep = Annotated[
+    ForecastPerformanceService, Depends(get_forecast_performance_service)
 ]
 
 

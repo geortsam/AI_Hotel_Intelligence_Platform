@@ -277,14 +277,18 @@ def test_no_internal_identifier_appears_in_a_serialised_response() -> None:
 # ======================================================================================
 
 
-def test_the_api_surface_moved_by_exactly_one_route() -> None:
-    """51/83 -> 52/84, deliberately. The first API change since Stage 6.6."""
+def test_this_route_is_present_and_is_a_read() -> None:
+    """Stage 6.11 moved 51/83 -> 52/84; Stage 7.3 moved it again, to 54/86.
+
+    This stage's own claim is the route below, not the total, so the total is asserted as the
+    current one and the route is pinned by name.
+    """
     schema = openapi()
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     operations = sum(1 for path in schema["paths"].values() for verb in path if verb in methods)
 
-    assert len(schema["paths"]) == 52
-    assert operations == 84
+    assert len(schema["paths"]) == 54
+    assert operations == 86
     assert SCHEMA_PATH in schema["paths"]
     assert set(schema["paths"][SCHEMA_PATH]) == {"get"}
 

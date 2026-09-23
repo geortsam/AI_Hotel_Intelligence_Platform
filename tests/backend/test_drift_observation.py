@@ -1025,15 +1025,68 @@ def test_the_result_carries_the_protocol_that_produced_it() -> None:
     assert result.observed.window_to == WINDOW[1]
 
 
-def test_the_api_surface_did_not_move() -> None:
-    """Stage 6.10 adds no endpoint."""
+def test_the_api_surface_is_the_one_stage_73_published() -> None:
+    """Stage 6.10 added no endpoint; Stage 7.3 published this service over HTTP deliberately.
+
+    The surface moved 52 / 84 -> 54 / 86 with that stage. Asserting the old figures here would
+    assert that a later stage did not happen; what this test was protecting is kept below.
+    """
     schema = create_app(Settings(environment="test", debug=True)).openapi()
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     operations = sum(1 for path in schema["paths"].values() for verb in path if verb in methods)
 
-    assert len(schema["paths"]) == 52
-    assert operations == 84
-    assert not [name for name in schema["components"]["schemas"] if "istribution" in name]
+    assert len(schema["paths"]) == 54
+    assert operations == 86
+
+
+def test_the_frozen_result_type_is_still_not_an_http_contract() -> None:
+    """Stage 7.3 publishes a separate projection, so a field added here is not published."""
+    schema = create_app(Settings(environment="test", debug=True)).openapi()
+    published = set(schema["components"]["schemas"])
+
+    assert "DistributionObservation" not in published
+    assert "DistributionComparison" not in published
+    assert "WindowSummary" not in published
+    assert "SegmentSummary" not in published
+    assert "FieldSummary" not in published
+
+
+def test_no_published_schema_carries_the_per_prediction_digests() -> None:
+    """``feature_digests`` attributes a summary to its rows internally. It does not leave."""
+    schema = create_app(Settings(environment="test", debug=True)).openapi()
+
+    carrying = [
+        name
+        for name, definition in schema["components"]["schemas"].items()
+        if "feature_digests" in definition.get("properties", {})
+    ]
+
+    assert carrying == []
+
+
+def test_nothing_published_from_this_observation_reaches_a_verdict() -> None:
+    """The observation decides nothing, and neither may anything published from it.
+
+    A field named for drift, a threshold or a verdict would be this stage's non-goal arriving
+    through the API instead of through the protocol, which is the same non-goal.
+
+    Scoped to the models Stage 7.3 publishes rather than to the whole document, deliberately:
+    V1's ``AnomalyPoint`` carries a ``threshold`` and is correct to -- statistical anomaly
+    detection over the analytics series is a different feature that genuinely does decide
+    something, and it decides it about a series rather than about the model.
+    """
+    import app.schemas.ml_performance as published_models
+
+    schema = create_app(Settings(environment="test", debug=True)).openapi()
+    ours = set(published_models.__all__) & set(schema["components"]["schemas"])
+    forbidden = {"drift", "drifted", "drift_detected", "threshold", "verdict", "alert", "anomaly"}
+
+    # Guards the loop: an empty intersection would pass this test without checking anything.
+    assert len(ours) >= 10
+
+    for name in ours:
+        offending = forbidden & set(schema["components"]["schemas"][name].get("properties", {}))
+        assert not offending, f"{name} publishes {sorted(offending)}"
 
 
 def test_the_migration_chain_did_not_move() -> None:

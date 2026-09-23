@@ -173,11 +173,17 @@ APPROVED_RESOURCE_SEGMENTS = {
     # computes a seasonal median per request, this one scores an artifact fitted offline. One
     # prefix for both would imply a lineage they do not have.
     "ml",
-    # The two routes under it, both nouns and both reads: nothing here fits, promotes or
+    # The four routes under it, all nouns and all reads: nothing here fits, promotes or
     # schedules. `demand-forecast` scores the artifact; `demand-predictions` (Stage 6.11) reads
     # rows that route already wrote and touches no model at all.
     "demand-forecast",
     "demand-predictions",
+    # Stage 7.3. Both read the stored rows too, and measure them: `forecast-accuracy` against
+    # recorded occupancy, `prediction-distribution` against a second window of the same rows.
+    # Nouns for measurements, not verbs for a judgement -- neither protocol reaches one, so
+    # `drift` and `model-health` would both name something this platform does not compute.
+    "forecast-accuracy",
+    "prediction-distribution",
 }
 
 #: Resources the SCHEMA models as global -- no hotel_id column, and a unique constraint with
@@ -296,6 +302,11 @@ def test_domain_surface_is_exactly_the_approved_hierarchy() -> None:
         "/api/v1/hotels/{hotel_public_id}/intelligence/insights",
         "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast",
         "/api/v1/hotels/{hotel_public_id}/ml/demand-predictions",
+        # Stage 7.3. Under the same /ml segment as the two above, so a caller looking for
+        # anything about the demand model finds it in one namespace. These read what those
+        # produced rather than producing anything themselves.
+        "/api/v1/hotels/{hotel_public_id}/ml/forecast-accuracy",
+        "/api/v1/hotels/{hotel_public_id}/ml/prediction-distribution",
         "/api/v1/hotels/{hotel_public_id}/audit-events",
         "/api/v1/platform/audit-events",
         "/api/v1/auth/register",

@@ -863,15 +863,56 @@ def test_the_service_imports_neither_the_offline_package_nor_a_framework(forbidd
 # ======================================================================================
 
 
-def test_the_api_surface_did_not_move() -> None:
-    """Criterion 32. Stage 6.9 adds no endpoint."""
+def test_the_api_surface_is_the_one_stage_73_published() -> None:
+    """Criterion 32, as Stage 7.3 left it.
+
+    Stage 6.9 added no endpoint and the surface stayed at 52 / 84. Stage 7.3 published this
+    service over HTTP deliberately, taking it to 54 / 86; asserting the old numbers here would
+    now be asserting that a later stage did not happen.
+
+    What the criterion was actually protecting is below and is unchanged: this module's own
+    result type is internal, and no published schema carries a field it withholds.
+    """
     schema = create_app(Settings(environment="test", debug=True)).openapi()
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     operations = sum(1 for path in schema["paths"].values() for verb in path if verb in methods)
 
-    assert len(schema["paths"]) == 52
-    assert operations == 84
-    assert not [name for name in schema["components"]["schemas"] if "ccuracy" in name]
+    assert len(schema["paths"]) == 54
+    assert operations == 86
+
+
+def test_the_frozen_result_type_is_still_not_an_http_contract() -> None:
+    """The point of Criterion 32, kept.
+
+    ``AccuracyEvaluation`` and its members are dataclasses this stage owns. Stage 7.3 publishes
+    a SEPARATE set of Pydantic models and projects onto them, precisely so that adding a field
+    here does not publish it. If one of these names ever appears in the document, the projection
+    has been replaced by the dataclass itself and the withholding below is no longer enforced.
+    """
+    schema = create_app(Settings(environment="test", debug=True)).openapi()
+    published = set(schema["components"]["schemas"])
+
+    assert "AccuracyEvaluation" not in published
+    assert "ModelVersionAccuracy" not in published
+    assert "SegmentAccuracy" not in published
+
+
+@pytest.mark.parametrize("withheld", ["canonical_model_digest", "scored_feature_digests"])
+def test_no_published_schema_carries_a_field_this_stage_withholds(withheld: str) -> None:
+    """Criterion 32's real content: the digests are computed, and they do not leave.
+
+    Checked against every schema in the document rather than the two this stage's endpoint
+    returns, so a later stage cannot publish the same field from somewhere else.
+    """
+    schema = create_app(Settings(environment="test", debug=True)).openapi()
+
+    carrying = [
+        name
+        for name, definition in schema["components"]["schemas"].items()
+        if withheld in definition.get("properties", {})
+    ]
+
+    assert carrying == []
 
 
 def test_the_migration_chain_did_not_move() -> None:

@@ -16,8 +16,8 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-4999%20backend%20%C2%B7%20998%20frontend-success)
-![API](https://img.shields.io/badge/API-52%20paths%20%C2%B7%2084%20operations-informational)
+![Tests](https://img.shields.io/badge/tests-5152%20backend%20%C2%B7%201050%20frontend-success)
+![API](https://img.shields.io/badge/API-54%20paths%20%C2%B7%2086%20operations-informational)
 
 </div>
 
@@ -31,15 +31,16 @@ more than one currency and the platform never converts between them.</sub></div>
 >
 > Eleven domains over a 22-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
 > guests, bookings, payments, reviews, the financial ledger, analytics and intelligence, plus the
-> stored demand predictions the served model writes — reachable as **52 API paths / 84
-> operations**, of which **79 require authentication**. Authentication is Argon2id plus HS256
+> stored demand predictions the served model writes and the measurements taken over them —
+> reachable as **54 API paths / 86 operations**, of which **81 require authentication**.
+> Authentication is Argon2id plus HS256
 > access tokens; authorization is a four-level hotel role hierarchy with a separate
 > platform-administrator capability. There is a complete React front end — all twelve
 > navigation areas, the last of them built in Stage 7.2 — an append-only audit
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **4999 backend tests and 998 frontend tests pass in CI.** Schema head is
+> **5152 backend tests and 1050 frontend tests pass in CI.** Schema head is
 > `0011_demand_prediction_public_id` across 11 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
@@ -429,7 +430,7 @@ Start the API:
 |---|---|
 | http://localhost:8000/health | `{"status":"ok", ...}` |
 | http://localhost:8000/health/db | `{"status":"ok","database":"reachable", ...}`, or 503 when it is not |
-| http://localhost:8000/docs | Swagger UI — 52 paths, 84 operations. Disabled when `ENVIRONMENT=production` |
+| http://localhost:8000/docs | Swagger UI — 54 paths, 86 operations. Disabled when `ENVIRONMENT=production` |
 
 ### Frontend
 
@@ -655,6 +656,7 @@ draws its own boundary:
 | 6.9 | A frozen, content-checksummed protocol measuring stored predictions against realised demand after a 28-day settlement lag. Computed and returned, never persisted |
 | 6.10 | A frozen protocol summarising a hotel's stored model inputs and outputs over one window and comparing them against a baseline window. Summaries and differences only |
 | 6.11 | One paginated, tenant-scoped `GET` letting a hotel's own members read that hotel's stored predictions, addressed by a public UUID and exposing no internal identifier |
+| 7.3 | Two tenant-scoped `GET`s exposing the 6.9 and 6.10 protocols over HTTP, unchanged. Manager role for accuracy, membership for distribution; both drop the model digest and the per-prediction digests, and both carry the "no production accuracy established" statement in the payload |
 
 **What none of that establishes.** Not production accuracy, not reliability, not generalisation
 beyond the two hotels the numbers came from, not superiority over the statistical baseline, and not
@@ -674,8 +676,9 @@ See [docs/ml-training-data.md](docs/ml-training-data.md),
 [docs/ml-production-runtime.md](docs/ml-production-runtime.md),
 [docs/ml-prediction-persistence-design.md](docs/ml-prediction-persistence-design.md),
 [docs/ml-accuracy-measurement.md](docs/ml-accuracy-measurement.md),
-[docs/ml-drift-observation.md](docs/ml-drift-observation.md) and
-[docs/ml-prediction-read-api.md](docs/ml-prediction-read-api.md).
+[docs/ml-drift-observation.md](docs/ml-drift-observation.md),
+[docs/ml-prediction-read-api.md](docs/ml-prediction-read-api.md) and
+[docs/ml-forecast-performance-api.md](docs/ml-forecast-performance-api.md).
 
 **There is no LLM, no embeddings, no vector database, no RAG and no agent framework in this
 repository.**
@@ -693,7 +696,7 @@ record in `ml/models/<model_version>/` — which is where Stage 6.3 wrote the fi
 | **Review sentiment** | Review text | Polarity plus an aspect breakdown (cleanliness, staff, location, value) and token-level explanations |
 | **Room-image classification** | Room photographs | Room type and feature tags for automatic media organisation |
 | **Recommendations** | User and hotel history | Ranked hotel suggestions, evaluated against a popularity baseline |
-| **An ML surface in the front end** | — | No React view reads any `/ml/` route today |
+| **A view of measured forecast performance** | The Stage 7.3 routes | Forecast-vs-actual on screen. No React view reads either measurement route; Stage 7.2 gave `/ml/demand-forecast` the only ML view that exists, and it shows one forecast rather than its accuracy |
 | **LLM / RAG / agent capability** | — | Nothing of the kind exists today; it is direction, not capability |
 
 Rules these must follow, fixed now so they are not negotiated later:

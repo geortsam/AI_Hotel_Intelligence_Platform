@@ -55,6 +55,9 @@ APP = REPOSITORY_ROOT / "backend" / "app"
 SCHEMA_PATH = "/api/v1/hotels/{hotel_public_id}/ml/demand-forecast"
 #: Stage 6.11 added this one. It reads stored rows and scores nothing.
 STORED_PREDICTIONS_PATH = "/api/v1/hotels/{hotel_public_id}/ml/demand-predictions"
+#: Stage 7.3 added these two. Both measure stored rows and score nothing.
+ACCURACY_PATH = "/api/v1/hotels/{hotel_public_id}/ml/forecast-accuracy"
+DISTRIBUTION_PATH = "/api/v1/hotels/{hotel_public_id}/ml/prediction-distribution"
 
 #: A fixed anchor, so every expectation below is arithmetic rather than "whatever today is".
 TARGET = dt.date(2026, 6, 1)
@@ -730,26 +733,30 @@ def openapi() -> dict:
 
 
 def test_exactly_one_serving_route_was_added() -> None:
-    """One route SCORES the model. The ML router gained a second in Stage 6.11 that does not.
+    """One route SCORES the model. The ML namespace holds three others that do not.
 
     The claim this test defends was never "the router has one route" -- it is that scoring the
-    model happens in exactly one place. Stage 6.11 added
-    ``GET .../ml/demand-predictions``, which reads rows the serving route already wrote and
-    never touches an artifact; the test below pins that separation rather than this one
-    quietly widening to accommodate it.
+    model happens in exactly one place. Stage 6.11 added ``GET .../ml/demand-predictions`` and
+    Stage 7.3 added ``forecast-accuracy`` and ``prediction-distribution``; all three read rows
+    the serving route already wrote and none touches an artifact. The test pins that separation
+    rather than quietly widening to accommodate them.
     """
     schema = openapi()
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     operations = sum(len([m for m in spec if m in methods]) for spec in schema["paths"].values())
 
-    assert len(schema["paths"]) == 52
-    assert operations == 84
-    assert sorted(path for path in schema["paths"] if "/ml/" in path) == [
-        SCHEMA_PATH,
-        STORED_PREDICTIONS_PATH,
-    ]
-    assert set(schema["paths"][SCHEMA_PATH]) == {"get"}
-    assert set(schema["paths"][STORED_PREDICTIONS_PATH]) == {"get"}
+    assert len(schema["paths"]) == 54
+    assert operations == 86
+    assert sorted(path for path in schema["paths"] if "/ml/" in path) == sorted(
+        [SCHEMA_PATH, STORED_PREDICTIONS_PATH, ACCURACY_PATH, DISTRIBUTION_PATH]
+    )
+    # Every route in the namespace is a read, and only one of them can reach an artifact --
+    # which is why only one declares the 503 that a missing artifact produces.
+    for path in (SCHEMA_PATH, STORED_PREDICTIONS_PATH, ACCURACY_PATH, DISTRIBUTION_PATH):
+        assert set(schema["paths"][path]) == {"get"}
+    assert "503" in schema["paths"][SCHEMA_PATH]["get"]["responses"]
+    for path in (STORED_PREDICTIONS_PATH, ACCURACY_PATH, DISTRIBUTION_PATH):
+        assert "503" not in schema["paths"][path]["get"]["responses"]
 
 
 def test_the_stored_prediction_route_reaches_no_model() -> None:
