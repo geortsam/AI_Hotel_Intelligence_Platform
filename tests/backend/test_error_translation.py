@@ -66,9 +66,11 @@ AUDIT_REPOSITORY_QUALNAME = "app.repositories.audit.AuditRepository"
 #: A regression sanity check ONLY. Nothing below reads these to decide what to verify -- the
 #: coverage is derived by :func:`audit_writing_classes` -- but a silent change in the shape of
 #: the architecture should still be something somebody has to look at.
-EXPECTED_WRITER_COUNT = 7
+#: Stage 7.6 added the eighth: `ToolInvocationService`, which records `tool.invoked` and
+#: therefore carries the same guard every other writer does.
+EXPECTED_WRITER_COUNT = 8
 EXPECTED_WRITER_MODULES = frozenset(
-    {"auth", "booking", "payment", "membership", "amenity", "finance"}
+    {"auth", "booking", "payment", "membership", "amenity", "finance", "tool_invocation"}
 )
 
 #: Services known NOT to write audit events. Asserted to stay undiscovered, so the rule cannot
@@ -2223,7 +2225,7 @@ def test_no_service_imports_from_a_project_file_outside_the_import_roots() -> No
 def test_the_wider_universe_discovers_exactly_the_same_writers() -> None:
     """Both directions of the claim.
 
-    The seven are still found; and they were already found under the narrow universe, so no
+    The eight are still found; and they were already found under the narrow universe, so no
     real writer depends on the machinery this stage added. Re-export support remains
     precautionary -- the same standing the relative-import branch has had since Stage 4.5.19.
     """

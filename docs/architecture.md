@@ -150,10 +150,12 @@ dependency (`scikit-learn`), thirteen `ml/` modules and the artifact — and no 
 notebook and no training entry point. The HTTP surface did not change.
 See [ml-production-runtime.md](ml-production-runtime.md).
 
-Stages 6.8 and 6.11 added the only two migrations since V1 — `0010_demand_predictions` and
-`0011_demand_prediction_public_id` — taking the head to `0011` across 11 linear revisions and the
-schema to 22 application tables. Stages 6.9 and 6.10 added services and protocols only: no table,
-no migration, no route.
+Stages 6.8 and 6.11 added two migrations after V1 — `0010_demand_predictions` and
+`0011_demand_prediction_public_id` — taking the schema to 22 application tables. Stages 6.9 and
+6.10 added services and protocols only: no table, no migration, no route. Stage 7.6 added the
+third, `0012_audit_tool_invoked`, which creates nothing: it widens the two closed audit
+vocabulary CHECKs by one value each (`tool.invoked`, `tool`) so copilot tool calls are recorded
+on the existing append-only trail. Head `0012` across 12 linear revisions, still 22 tables.
 
 ---
 

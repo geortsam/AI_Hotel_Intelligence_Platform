@@ -51,7 +51,12 @@ APP_LOGGERS = [
     # Stage 7.5. The language-model boundary logs one event per call: an outcome, a prompt
     # identity and two counts. No prompt text, no answer, no provider name and no key -- the
     # same discipline the ML service loggers below apply to a hotel's data.
+    "app.copilot.loop",
     "app.llm.boundary",
+    # Stage 7.6. The circuit breaker logs a state transition and nothing else; the tool loop
+    # logs a stop reason and counts; the invocation service logs an unexpected tool error by
+    # exception TYPE only -- never a traceback, never an argument.
+    "app.llm.circuit",
     "app.ml.artifact_store",
     "app.services.amenity",
     "app.services.auth",
@@ -70,6 +75,7 @@ APP_LOGGERS = [
     "app.services.review",
     "app.services.room",
     "app.services.room_type",
+    "app.services.tool_invocation",
 ]
 
 

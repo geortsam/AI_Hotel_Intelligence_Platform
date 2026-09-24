@@ -84,6 +84,21 @@ class LlmUnavailableError(LlmError):
     message = GENERIC_LLM_MESSAGE
 
 
+class LlmCircuitOpenError(LlmUnavailableError):
+    """The circuit breaker refused the call without reaching the provider. Stage 7.6, §5.8.
+
+    **Not a seventh declared failure.** It inherits `LlmUnavailableError`'s code, status and
+    message, so a client sees exactly `503 LLM_UNAVAILABLE` — the same answer a timeout gives,
+    and the true one: the provider is unavailable, and this process has already learned so. A
+    distinct public code would tell a client something about this server's internal
+    protection it has no use for and no way to act on differently.
+
+    A separate class so that code inside the process *can* tell them apart: the boundary must
+    never count its own refusal as another provider failure, and a test must be able to assert
+    that the provider was not reached.
+    """
+
+
 class LlmRateLimitedError(LlmError):
     """The provider refused for rate. §5.7 row 2: **no retry**; 429 ``LLM_RATE_LIMITED``.
 
@@ -118,18 +133,20 @@ class LlmInvalidResponseError(LlmError):
 
 
 class LlmToolFailedError(LlmError):
-    """A tool raised while the model was calling it. §5.7 row 4.
+    """A tool failed while the model was using it. §5.7 row 4.
 
-    **Declared, not implemented, and that is deliberate.** Stage 7.5 introduces no tools — there
-    is no registry, no contract surface and no orchestration loop for a tool to fail inside — so
-    there is nothing here that could raise this. It is declared now because the taxonomy is
-    specified as a whole and a later stage inheriting five of six types would be inheriting a
-    gap it had to name itself.
+    **Declared, and deliberately not raised by the tool loop.** §5.7 gives this row a *loop*
+    behaviour rather than a status: "the tool's error is returned to the model once; a second
+    failure ends the loop". Stage 7.6 implements exactly that in `app.copilot.loop`: the first
+    failure goes back to the model as a flagged tool result, and the second ends the loop with a
+    result labelled incomplete (`stop_reason="tool_failed"`), which carries the failures rather
+    than hiding them.
 
-    §5.7 gives this row a *loop* behaviour rather than a status: "the tool's error is returned to
-    the model once; a second failure ends the loop". That belongs to the orchestration loop of
-    Stage 7.6, not to this boundary, and the status below is a placeholder that the stage adding
-    tools should revisit against the response it actually wants to send.
+    That is a *partial result*, not an exception, because §5.4 asks for "a hard stop that returns
+    a partial, labelled answer rather than looping" and an exception would discard the part that
+    succeeded. So nothing raises this class yet. It stays declared because the taxonomy is
+    specified as a whole, and the stage that adds an endpoint decides whether a labelled partial
+    becomes a 200 with the label or this 502. The status below remains a placeholder until then.
     """
 
     status_code = status.HTTP_502_BAD_GATEWAY
@@ -171,6 +188,7 @@ __all__ = [
     "DECLARED_FAILURES",
     "GENERIC_LLM_MESSAGE",
     "LlmBudgetExhaustedError",
+    "LlmCircuitOpenError",
     "LlmDisabledError",
     "LlmError",
     "LlmInvalidResponseError",

@@ -9,6 +9,15 @@
 > perform — is replacing the pinned PostgreSQL image, and §6.4 argues that decision should be
 > deferred until measurement forces it.
 
+> **Amendments.** The text above describes the document as written at Stage 7.1. Later stages
+> amend it only through numbered, dated amendments, each marked in place where it applies and
+> listed here, so the original specification stays readable and every change to it can be
+> attributed to the stage that made it.
+>
+> | Amendment | Stage | Date | Sections |
+> |---|---|---|---|
+> | A1 | 7.6 — Tool boundary | 2026-09-24 | §4.3, §4.4, §5.4, §5.7, **§5.8 (new)**, §7.2, §7.3 |
+
 ---
 
 ## 1. What V1 already provides
@@ -224,6 +233,14 @@ structural defence — *the model cannot name a hotel* — is not.
 - Return a figure that no tool produced.
 - Be the only record of what happened: every tool invocation is audited.
 
+> **Amendment A1 (Stage 7.6).** "Every V2 tool … is read-only" has one declared exception.
+> `get_demand_forecast` delegates to `DemandPredictionService.forecast_demand`, which records
+> every prediction it serves (Stage 6.8) so the accuracy protocol can later score it. The tool
+> keeps that behaviour rather than bypassing the service, and declares it
+> (`side_effect = "records_served_prediction"`). The write is the service's own, idempotent under
+> `uq_demand_predictions_identity`, and changes no booking, payment, membership or catalogue
+> row. Every other tool declares `side_effect = "none"`, and a test asserts it.
+
 ### 4.4 Auditability
 
 Tool invocations are recorded with: the resolved hotel, the actor, the tool name, a hash of the
@@ -231,6 +248,17 @@ arguments, the outcome, the duration, and the request id that already correlates
 **question text and the answer text are not written to the audit trail** — the trail is an
 operational record, and free text there is a data-retention liability. Conversation content, when
 it is persisted at all (§7), lives in its own tenant-scoped table with its own retention rule.
+
+> **Amendment A1 (Stage 7.6).** Tool invocations are recorded in the **existing** append-only
+> `audit_events` trail, not in a table of their own: action `tool.invoked`, resource type `tool`,
+> reference = the *registered* tool name (or the literal `unknown`), `hotel_id` = the resolved
+> hotel, `actor_user_id` = the authenticated caller, `request_id` from the existing correlation
+> id, and `details` = `{outcome, error_code, duration_ms, arguments_sha256}`. The arguments
+> themselves, the name a model supplied for an unknown tool, the question, the answer, the prompt
+> and all tool output are **not** recorded. Both vocabulary CHECK constraints are closed lists,
+> so migration `0012_audit_tool_invoked` widens each by exactly one value; the append-only
+> trigger is untouched. One event is written per call that reached a resolved hotel, whatever its
+> outcome; a call for a hotel the caller cannot see is a 404 before anything is attributed.
 
 ### 4.5 Cost as a security property
 
@@ -287,6 +315,17 @@ is. The orchestration loop is **bounded and explicit**: a maximum number of tool
 request (proposed: 3), a maximum number of tool calls per round, and a hard stop that returns a
 partial, labelled answer rather than looping.
 
+> **Amendment A1 (Stage 7.6).** The bounds are fixed as: **3** tool rounds (as proposed), **4**
+> tool calls per round, and **2** tool failures per request (§5.7 row 4). The loop
+> (`app.copilot.loop.ToolLoop`) is a `for` over `range(rounds + 1)` — at most 4 model calls and
+> 12 tool calls per request — with no `while` and no recursion. It ends with a `LoopResult` whose
+> `stop_reason` is one of `completed`, `tool_failed`, `max_rounds`, `tool_call_cap` or
+> `model_failed`; only `completed` is complete, and every other value is a labelled partial result
+> carrying every invocation outcome. A round that asks for more calls than the cap runs none of
+> them. A declared LLM failure from the model call is not retried by the loop (the boundary
+> already applied §5.7) and is not swallowed: it ends the loop as `model_failed` with the error
+> attached, so the endpoint stage can raise it for §5.7's status or return the partial work.
+
 ### 5.5 Structured outputs
 
 Where the answer feeds the UI rather than a human paragraph — recommendations, extracted filters —
@@ -320,6 +359,43 @@ Specified once, here, so no stage improvises it:
 
 In every case the response uses the existing `ErrorResponse` envelope and leaks no provider
 detail, no prompt and no stack.
+
+> **Amendment A1 (Stage 7.6) — row 4, "Tool raises".** A tool failure is every invocation outcome
+> other than success: an unknown or un-offered tool name, a refused role, arguments that fail the
+> tool's schema, a typed service `AppError`, or an unexpected exception (reported as
+> `INTERNAL_ERROR` with the generic message — never the exception). The **first** failure in a
+> request is returned to the model once, as a `tool` message flagged `is_error` whose content is
+> `{"error": {"code", "message"}}`. The **second** failure ends the loop immediately — later
+> calls in the same round are not run and the model is not asked again — with
+> `stop_reason = "tool_failed"`. Failures are counted per request, not per tool or per round.
+> Row 4 produces a labelled partial result, not an exception: `LLM_TOOL_FAILED` stays declared,
+> and its `502` remains a placeholder until the endpoint stage decides how a partial result is
+> presented.
+
+### 5.8 Circuit breaker — Amendment A1 (Stage 7.6)
+
+§2 calls for "a timeout, a budget and a circuit-breaker inside the process"; §5.7 specified the
+first two only. Stage 7.6 was asked to decide the third, conservatively and deterministically.
+Implemented in `app.llm.circuit`, owned by `GuardedChatModel`.
+
+| Question | Decision |
+|---|---|
+| Threshold | **5 availability failures** within the window open the breaker |
+| Window | a rolling **60 seconds** on a monotonic clock |
+| OPEN duration | **30 seconds**, then HALF_OPEN |
+| HALF_OPEN | exactly one probe call is admitted; every other call is refused while it runs. Probe succeeds → CLOSED. Probe fails for availability → OPEN for another 30 seconds. Probe ends any other way → the slot is released and the breaker stays HALF_OPEN |
+| What is a failure | a call that ends in `LlmUnavailableError` (timeout after the boundary's retry, unreachable provider, missing SDK). One call is one failure, whatever its attempts |
+| What is not | rate limit, budget, disabled, invalid response: each means the provider answered, or was never asked |
+| What is a success | a call that returned an answer. It closes the breaker only when it was the HALF_OPEN probe; in CLOSED it does not erase earlier failures |
+| Owner | `GuardedChatModel`, consulted after the `llm_enabled` flag and the per-request budget and before a worker thread is spent |
+| Scope | one breaker per process per provider and model, created by the factory and shared by every guarded model for that upstream. It holds counts and timestamps only — no request, prompt, caller or hotel — so it cannot carry anything between tenants; its only effect is to refuse sooner |
+| While OPEN | the call is refused immediately; the provider is never reached |
+| Error code | `LlmCircuitOpenError`, a subclass of `LlmUnavailableError`: **`503` with `LLM_UNAVAILABLE`** in the existing envelope. Not a seventh declared failure; the taxonomy stays six |
+| Test control | the monotonic clock is injected; every transition is a pure function of recorded outcomes and that clock, so no test sleeps |
+
+In-process and per worker: each process learns independently that the provider is down, at a
+cost of at most five failed calls per process. No Redis, no second service, no shared store and
+no new dependency — the posture §2 chose.
 
 ---
 
@@ -427,6 +503,21 @@ break down by room type — it would need a new repository method and belongs in
 not a tool stage) and anything touching guests, payments or audit (higher-sensitivity data whose
 exposure through a generative surface needs its own argument).
 
+> **Amendment A1 (Stage 7.6) — corrections verified against the code.** Stage 7.6 implements
+> **five** of the six tools. The table above is corrected as follows:
+>
+> | Tool | Correction |
+> |---|---|
+> | `get_revenue_breakdown` | delegates to `AnalyticsService.revenue_breakdown`. No service method `revenue_by_category` exists: that is the route path (`/analytics/revenue-by-category`) and the repository method |
+> | `get_demand_forecast` | delegates to `DemandPredictionService.forecast_demand` with the served horizon fixed (not a model argument), and **declares the side effect** `records_served_prediction` — see §4.3's amendment |
+> | `get_forecast_accuracy` | delegates to the Stage 7.3 `ForecastPerformanceService.forecast_accuracy`, not to `DemandAccuracyService.evaluate` directly: the raw evaluation carries the model and protocol digests §7.4 forbids a tool to return and applies no window bound; the Stage 7.3 projection is what makes it publishable, and it is what the manager-only route serves |
+> | `search_hotel_knowledge` | **deferred** until after Stage 7.9. It delegates to a `KnowledgeService` that does not exist until the RAG stages build it; a tool over a missing service would have to invent business logic |
+>
+> Every tool's output is its service response minus `hotel_public_id`, validated against an
+> `extra="forbid"` output model. Every input model forbids unknown keys, and the registry refuses
+> at import any tool whose input schema names a hotel, tenant, property, organisation, user,
+> account, member or UUID, or any `id`/`*_id` field, at any depth.
+
 ### 7.3 Per-tool definition template
 
 Each tool is specified in its implementing stage with exactly these fields, and a test per field:
@@ -443,6 +534,13 @@ data restrictions    fields explicitly withheld, with the reason
 error behaviour      typed errors returned to the model; never a raw exception
 audit                action name, what is recorded, what is not
 ```
+
+> **Amendment A1 (Stage 7.6).** Each field is a typed attribute of
+> `app.copilot.contracts.ToolContract` (name, description, min_role, input_model, output_model,
+> delegates_to, side_effect, withheld) or of the invocation path (tenant scope is
+> `ToolContext.hotel_public_id`, set from the authorized request; error behaviour is
+> `ToolOutcome`; audit is `tool.invoked`). "side effects: none (read-only)" is a declared field,
+> not an assumption, and one tool declares `records_served_prediction`.
 
 ### 7.4 What tool results may contain
 

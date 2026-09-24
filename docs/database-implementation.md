@@ -3,7 +3,8 @@
 > **Stage snapshot, not a current-state document.** This records how the Stage 2A schema was
 > built, and is not maintained since. Six migrations have been added after it — users,
 > memberships, platform admins, audit events, the audit archive and served demand predictions —
-> taking the head to `0011_demand_prediction_public_id`. In particular, §9's environment notes describe the machine as it
+> taking the head to `0011_demand_prediction_public_id` — and Stage 7.6 added a seventh,
+`0012_audit_tool_invoked`, which widens two audit CHECKs and creates nothing. In particular, §9's environment notes describe the machine as it
 > was at Stage 2B, not as it is. See [architecture.md](architecture.md) and
 > [../database/README.md](../database/README.md).
 

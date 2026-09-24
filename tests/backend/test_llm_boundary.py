@@ -147,6 +147,8 @@ def test_the_request_carries_exactly_these_fields() -> None:
         "messages",
         "budget",
         "response_schema",
+        # Stage 7.6: section 5.1's tool catalogue, a tuple of name/description/schema specs.
+        "tools",
     }
 
 
@@ -164,6 +166,8 @@ def test_the_response_carries_exactly_these_fields() -> None:
         "attempts",
         "completed_at",
         "diagnostics",
+        # Stage 7.6: the tool calls the model asked for. Untrusted model output.
+        "tool_calls",
     }
 
 

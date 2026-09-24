@@ -3,15 +3,15 @@
 > The ordered plan produced by Stage 7.1. Each stage is specified well enough to be implemented
 > on its own, in order, without re-deciding anything.
 >
-> **Implemented so far: Stages 7.2, 7.3, 7.4 and 7.5** — all of Track A, and the first stage of
-> Track B. Every other stage below is a specification and nothing more; none of its code exists.
+> **Implemented so far: Stages 7.2, 7.3, 7.4, 7.5 and 7.6** — all of Track A, and the first two
+> stages of Track B. Every other stage below is a specification and nothing more; none of its code
+> exists.
 > A stage carries `· *done*` in its heading once it ships, with a note recording what was actually
 > built and where that differed from the plan.
 >
-> **One open specification gap blocks nothing yet but must be settled before 7.6:** the
-> circuit breaker that architecture §2 requires "inside the process (§5.7)" is not specified by
-> §5.7 — no threshold, no window, no open duration, no reset rule, no error code. Stage 7.5
-> deliberately did not invent one. See that stage's note.
+> **The circuit-breaker gap Stage 7.5 left open is settled.** Stage 7.6 specified it —
+> threshold, window, open duration, half-open probe, failure definition, owner and error code —
+> as architecture **Amendment A1, §5.8**, and implemented it in `app.llm.circuit`. See Stage 7.6.
 >
 > Read [v2-architecture.md](v2-architecture.md) first: it holds the decisions these stages
 > implement — the single-deployable topology, the LLM abstraction, the RAG design, the tool
@@ -227,22 +227,59 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | **Known limitations** | **no circuit breaker** (§2 requires one, §5.7 does not specify it — see above); failure mode 4 declared but not exercised, since no tool exists to raise; the enforced deadline abandons a hung call rather than killing it, because a Python thread cannot be killed — that bounds the caller's latency and leaks a thread for the duration; the live provider is not exercised by any test, so nothing here establishes that the vendor behaves as documented |
 | **Done when** | CI green with the provider SDK absent and no credential set |
 
-### Stage 7.6 — Tool boundary
+### Stage 7.6 — Tool boundary · *done*
+
+> Built as specified by the Stage 7.6 brief, which widened the plan below in three ways the
+> original entry did not anticipate, and narrowed it in one. Every divergence from the documents
+> is recorded in architecture **Amendment A1** rather than resolved silently.
+>
+> **Widened by the brief.** (1) The circuit breaker 7.5 could not build is decided and built
+> (§5.8): 5 availability failures in a rolling 60 s open it for 30 s, then one probe; while open
+> the provider is never reached and the caller gets `503 LLM_UNAVAILABLE`. (2) The **bounded tool
+> loop and failure mode 4** — planned here as "no LLM involvement" and implicitly 7.7's — are
+> built in 7.6: 3 rounds, 4 calls per round, the first tool failure returned to the model flagged
+> as an error, the second ending the loop with a labelled partial result. (3) `ChatRequest` now
+> carries the deterministic tool catalogue §5.1 lists, and the adapter translates tool use.
+>
+> **Narrowed: five tools, not six.** `search_hotel_knowledge` delegates to a `KnowledgeService`
+> that only Stage 7.9 builds; a tool over a missing service would have had to invent business
+> logic. It is deferred to after 7.9 — a decision taken with the user, not by default.
+>
+> **Found in the code, not in the plan.** §7.2 named `AnalyticsService.revenue_by_category`,
+> which does not exist (the service method is `revenue_breakdown`). `get_forecast_accuracy`
+> delegates to the Stage 7.3 `ForecastPerformanceService`, not to `DemandAccuracyService.evaluate`,
+> because the raw evaluation carries the digests §7.4 forbids a tool to return. And
+> `get_demand_forecast` is **not strictly read-only**: its service records every prediction it
+> serves (Stage 6.8). With the user's agreement it keeps that behaviour as a **declared side
+> effect** — idempotent, no business record touched — and every other tool is asserted to write
+> nothing.
+>
+> **The planned `copilot_tool_invocations` table was not built.** The brief required the
+> existing append-only trail and forbade a second audit system, so invocations are
+> `tool.invoked` events on `audit_events`. That needed the smallest schema change possible:
+> migration **0012** widens the two closed vocabulary CHECKs by one value each, and touches
+> nothing else. Head `0011` → **`0012_audit_tool_invoked`**.
+>
+> Delivered: `app/copilot/` (contracts, registry, catalogue, loop, 5 tool modules),
+> `app/services/tool_invocation.py`, `app/llm/circuit.py`, 1 migration, 0 dependencies,
+> 0 endpoints (surface stays **54 / 86**), 235 new tests. Backend 5284 → 5519.
+> Frontend untouched at 1141.
 
 | | |
 |---|---|
-| **Objective** | The registry, the contracts and the six read-only tools of architecture §7.2, callable programmatically — not yet by a model |
-| **Why it exists** | The tools are the security boundary. They are built and tested before anything non-deterministic can call them |
-| **V1 reused** | `AnalyticsService`, `DemandPredictionService`, `DemandAccuracyService`, `HotelScopeResolver`, the audit trail |
-| **New components** | `app/copilot/registry.py`, `contracts.py`, `tools/` |
-| **Database** | `copilot_tool_invocations` — one migration on `0011` |
-| **API** | none |
-| **Security** | every tool re-asserts authorization; no tool accepts a tenant identifier; every invocation audited |
-| **Testing** | per tool: schema, role, tenant isolation, withheld fields, error behaviour, audit row. A registry test that **every** registered tool declares a role and is read-only |
-| **Docs** | the tool catalogue, one section per tool using the §7.3 template |
-| **Non-goals** | no LLM involvement; no writing tool; no room-type tool (the analytics repository does not support it yet) |
-| **Depends on** | **7.3** (for `get_forecast_accuracy`) |
-| **Acceptance** | (1) six tools, each delegating to an existing service and adding no business logic; (2) no tool signature contains a hotel identifier; (3) a non-member gets the identical 404 through every tool; (4) each call writes exactly one audit row containing no question text |
+| **Objective** | The registry, the contracts and the read-only tools of architecture §7.2, the bounded loop that lets a model call them, and the circuit breaker 7.5 left undecided |
+| **Why it exists** | The tools are the security boundary. They are built and tested before anything non-deterministic can call them in production |
+| **V1 reused** | `AnalyticsService`, `DemandPredictionService`, `ForecastPerformanceService` (7.3), `HotelScopeResolver`, `AuditTrail` and its append-only table, the `AppError` envelope; 7.5's seam, boundary and doubles |
+| **New components** | `app/copilot/contracts.py`, `registry.py`, `catalogue.py`, `loop.py`, `tools/` (5 modules); `app/services/tool_invocation.py`; `app/llm/circuit.py` |
+| **Database** | migration `0012_audit_tool_invoked`: `tool.invoked` and `tool` added to the two closed audit vocabularies. No table, column, index or trigger change |
+| **API** | none. The OpenAPI document gains one enum value (`tool.invoked` in the audit-history `action` filter); paths and operations unchanged at 54 / 86 |
+| **Security** | the hotel is a parameter of the invocation service, never of a tool: every input model forbids unknown keys, and the registry refuses at import any schema naming a hotel, tenant, property, user or `*_id`. Role is checked before arguments are parsed and before any service runs; the model is offered only the tools the caller's role permits, and a name it was not offered is unknown. Every call that reaches a resolved hotel is audited — no question, answer, prompt, argument or output in the event |
+| **Testing** | a unit suite over the breaker (injected clock), the seam and adapter, the registry, the five contracts, the catalogue, every loop termination and the invocation service's ordering; the brief's security tests A–M; and a real-PostgreSQL suite with two hotels and four callers — including model output that names hotel B in an argument, a date, a tool name and the question |
+| **Docs** | architecture Amendment A1 (§4.3, §4.4, §5.4, §5.7, §5.8, §7.2, §7.3); this entry; module docstrings carrying each tool's §7.3 template |
+| **Non-goals** | no endpoint, no `CopilotService`, no prompt for a copilot, no conversation, no retrieval, no embeddings, no recommendation, no agent framework, no demand-model change — each asserted |
+| **Depends on** | **7.3** (for `get_forecast_accuracy`), **7.5** |
+| **Acceptance** | (1) five tools, each delegating to one existing service method and adding no business logic — asserted per tool by source scan; (2) no tool schema contains a tenant identifier, at any depth, input or output; (3) a non-member gets the hotel's 404 through the invocation service, unaudited; (4) each call writes exactly one audit row with no question text — asserted with planted sentinels |
+| **Known limitations** | the breaker is per process, so each worker learns an outage separately (at most 5 failed calls each); `LLM_TOOL_FAILED` stays declared and unraised — FM4 yields a labelled partial result, and how an endpoint presents one is 7.7's decision; the forecast tool's recorded prediction commits before its audit event, so an audit failure after a successful forecast leaves the prediction recorded (and no result reaches the model); `search_hotel_knowledge` deferred |
 | **Done when** | CI green, migration verified on a disposable database first |
 
 ### Stage 7.7 — Copilot, single turn
@@ -251,7 +288,7 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 |---|---|
 | **Objective** | One endpoint: a question in, a grounded answer out, using 7.6's tools and 7.5's abstraction. Stateless, no memory, no retrieval |
 | **Why it exists** | The smallest thing that is actually the product. Retrieval and memory are separable and each carries its own risk |
-| **V1 reused** | scope resolver, error contract, rate limiter, audit |
+| **V1 reused** | scope resolver, error contract, rate limiter, audit; from 7.6 the registry, catalogue, `ToolInvocationService` and the bounded `ToolLoop` — 7.7 wires them, it does not rebuild them |
 | **New components** | `app/services/copilot.py`; one router; request/response schemas; `llm_invocations` table |
 | **Database** | `llm_invocations` — one migration |
 | **API** | `POST …/copilot/ask`. Surface 54/86 → **55/87** |
@@ -393,7 +430,7 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | 7.3 | — | 7.5, 7.9 |
 | 7.4 | 7.3 | Track B |
 | 7.5 | — | 7.2, 7.3, 7.9 |
-| 7.6 | 7.3 | 7.9 |
+| 7.6 | 7.3, 7.5 | 7.9 |
 | 7.7 | 7.5, 7.6 | 7.9 |
 | 7.8 | 7.7 | — |
 | 7.9 | — | 7.2–7.7 |

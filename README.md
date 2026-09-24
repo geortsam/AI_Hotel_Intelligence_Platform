@@ -16,7 +16,7 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-5284%20backend%20%C2%B7%201141%20frontend-success)
+![Tests](https://img.shields.io/badge/tests-5519%20backend%20%C2%B7%201141%20frontend-success)
 ![API](https://img.shields.io/badge/API-54%20paths%20%C2%B7%2086%20operations-informational)
 
 </div>
@@ -40,8 +40,8 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **5284 backend tests and 1141 frontend tests pass in CI.** Schema head is
-> `0011_demand_prediction_public_id` across 11 linear migrations.
+> **5519 backend tests and 1141 frontend tests pass in CI.** Schema head is
+> `0012_audit_tool_invoked` across 12 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
 > baseline — seasonal-naive day-of-week median forecasting, MAD-based intervals and anomaly
@@ -312,7 +312,7 @@ Full detail, including the rules later stages must follow:
 | Validation | Pydantic v2, pydantic-settings | Request/response schemas, environment config |
 | ORM | SQLAlchemy 2.0 | Data mapping across 15 model modules |
 | Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
-| Migrations | Alembic | 11 linear revisions, head `0011_demand_prediction_public_id` |
+| Migrations | Alembic | 12 linear revisions, head `0012_audit_tool_invoked` |
 | Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
 | Frontend | React 18, TypeScript 5.7, Vite 6 | Dashboard SPA, route-level code splitting |
 | Intelligence (V1) | Python standard library | Deterministic statistical baseline — no NumPy or pandas on its path |
@@ -586,7 +586,7 @@ Every push and pull request to `main` runs four jobs in parallel on `ubuntu-late
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
-PostgreSQL reports 18.6, that `migrate` exits 0 and leaves the schema at `0011`, that the API
+PostgreSQL reports 18.6, that `migrate` exits 0 and leaves the schema at `0012`, that the API
 and frontend both become healthy, that nginx serves the SPA at `/`, `/bookings`, `/reviews`
 and `/intelligence`, that `/api/v1/` is proxied through to FastAPI while an unknown `/api/`
 path still returns a real 404 rather than the SPA, that `SECRET_KEY` and `POSTGRES_PASSWORD`

@@ -22,14 +22,37 @@ on a `None` it forgot to check.
 **No dependency injection wiring here.** Stage 7.5 adds no endpoint, so there is nothing to
 inject into: `app/api/deps.py` is untouched. The stage that adds a route adds the `Depends`
 provider there, calling this function.
+
+## One circuit breaker per upstream, for the life of the process (Stage 7.6)
+
+`build_chat_model` may be called once per request, but the breaker must not be: a breaker built
+per call would forget every failure the moment the call ended and could never open. So breakers
+live in a process-wide table keyed by **provider and model** — the identity of the upstream whose
+health they measure — and every guarded model built for that upstream shares one. A disabled
+deployment gets none: it never reaches a provider, so there is nothing to measure.
 """
 
 from __future__ import annotations
 
+import threading
+
 from app.core.config import Settings
 from app.llm.base import ChatModel, ChatRequest, ChatResponse
 from app.llm.boundary import GuardedChatModel
+from app.llm.circuit import CircuitBreaker
 from app.llm.errors import LlmDisabledError
+
+_BREAKERS: dict[tuple[str, str], CircuitBreaker] = {}
+_BREAKERS_LOCK = threading.Lock()
+
+
+def breaker_for(provider: str, model: str) -> CircuitBreaker:
+    """The one breaker for this upstream, created on first use and shared thereafter."""
+    with _BREAKERS_LOCK:
+        key = (provider, model)
+        if key not in _BREAKERS:
+            _BREAKERS[key] = CircuitBreaker()
+        return _BREAKERS[key]
 
 
 class _UnreachableModel:
@@ -75,6 +98,7 @@ def build_chat_model(settings: Settings) -> ChatModel:
         provider,
         enabled=True,
         max_output_tokens=settings.llm_max_output_tokens,
+        breaker=breaker_for(settings.llm_provider, settings.llm_model),
     )
 
 
@@ -100,4 +124,4 @@ def _build_provider(settings: Settings) -> ChatModel:
     raise ValueError(f"No adapter is built for provider {settings.llm_provider!r}.")
 
 
-__all__ = ["build_chat_model"]
+__all__ = ["breaker_for", "build_chat_model"]

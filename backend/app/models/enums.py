@@ -385,6 +385,15 @@ class AuditAction(_Vocabulary):
     EXPENSE_CATEGORY_UPDATED = "expense_category.updated"
     EXPENSE_CATEGORY_DELETED = "expense_category.deleted"
 
+    #: Stage 7.6. A copilot tool was called against one hotel -- successfully or not. The first
+    #: action that records a READ rather than a committed change, and the only one: §4.3 of the
+    #: V2 architecture requires every tool invocation to be audited, and none of the nineteen
+    #: above describes one. Resource type ``tool``, reference the tool's registered name.
+    #:
+    #: Adding it required migration 0012, which widened `ck_audit_events_action_valid` and
+    #: `ck_audit_events_resource_type_valid` by one value each.
+    TOOL_INVOKED = "tool.invoked"
+
 
 class AuditResourceType(_Vocabulary):
     """What kind of thing an audit event is about (Stage 4.5.12).
@@ -402,6 +411,9 @@ class AuditResourceType(_Vocabulary):
     AMENITY = "amenity"
     REVENUE_CATEGORY = "revenue_category"
     EXPENSE_CATEGORY = "expense_category"
+    #: Stage 7.6, with ``tool.invoked``. The reference is the tool's registered name -- a
+    #: literal from the static registry, never the name a model supplied.
+    TOOL = "tool"
 
 
 #: The actions that belong to NO hotel, and therefore store ``hotel_id IS NULL``.
@@ -483,6 +495,17 @@ SAFE_AUDIT_DETAIL_KEYS: frozenset[str] = frozenset(
         "role",
         # Catalogue entries, named by the code that is already their public identifier.
         "code",
+        # Stage 7.6, tool invocations. `outcome` is one of a closed set of literals written by
+        # the invocation service; `error_code` is an AppError's public machine code, the same
+        # string an ErrorResponse already shows a client; `duration_ms` is an integer.
+        "outcome",
+        "error_code",
+        "duration_ms",
+        # SHA-256 of the canonical JSON of the arguments the model supplied: §4.4's "a hash of
+        # the arguments". A fingerprint that lets two identical calls be recognised as such,
+        # NOT the arguments themselves -- model output is never stored verbatim. Unrelated to
+        # the credential digests the note above excludes: it is not derived from any secret.
+        "arguments_sha256",
     }
 )
 

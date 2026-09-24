@@ -2,12 +2,12 @@
 
 Stage 7.5. §2 names the thing this file exists for: the LLM call "is slow, external, paid for,
 and can hang. That is an argument for a timeout, a budget and a circuit-breaker **inside** the
-process". Two of those three are here. The third is not, and §5.7 is why — see "What is not
-here" below.
+process". Stage 7.5 built the first two; Stage 7.6 added the third once its semantics had been
+decided — see "The circuit breaker" below.
 
     caller
        |
-    GuardedChatModel.complete()      <- timeout, retry, budget, schema validation
+    GuardedChatModel.complete()      <- disabled, budget, circuit, timeout, retry, schema
        |
     ChatModel (an adapter, or a double)
 
@@ -42,17 +42,23 @@ mitigation a later stage should add if hung calls are ever observed.
 `time.perf_counter`, which measures duration rather than telling the time. Two runs over the same
 double therefore differ in exactly one field, and a test can pin everything else.
 
-## What is not here: the circuit breaker
+## The circuit breaker (Stage 7.6)
 
-§2 calls for "a timeout, a budget and a circuit-breaker inside the process (§5.7)". §5.7
-specifies the first two and **says nothing about the third**: no failure threshold, no window, no
-open duration, no half-open probe, no error code for a call refused while open, and no reset
-rule. It is not in the failure table, so it has no declared behaviour to implement.
+Stage 7.5 left it out because §5.7 said nothing about its threshold, window, open duration, probe
+or error code, and a guessed number in the runtime path would have been inherited as though it
+had been decided. Stage 7.6 was asked to decide it; the decision is `docs/v2-architecture.md` §5.8
+(Amendment A1) and the implementation is `app.llm.circuit`.
 
-It is therefore deliberately absent rather than guessed at. Inventing a threshold would put a
-number in the runtime path that no document justifies and that every later stage would inherit as
-though it had been decided. The gap is reported in `docs/v2-roadmap.md` under Stage 7.5 and is
-the one piece of this stage's architecture that needs a decision before it can be built.
+Here it is consulted in a fixed place: **after** the disabled flag and the per-request budget —
+a disabled deployment or an over-budget request is refused for its own reason, and neither says
+anything about the provider — and **before** a thread is spent. While it is open the provider is
+never reached and the caller gets `LlmCircuitOpenError`, which is `503 LLM_UNAVAILABLE`.
+
+Only an `LlmUnavailableError` that ends a call counts against it — one per call, after the retry.
+A rate limit, an invalid answer or a budget refusal is a provider that answered.
+
+The breaker is optional so a caller that wants none (most unit tests) is not handed one; the
+factory always supplies one.
 """
 
 from __future__ import annotations
@@ -64,10 +70,12 @@ import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
+from dataclasses import replace
 
 from pydantic import ValidationError as PydanticValidationError
 
 from app.llm.base import ChatModel, ChatRequest, ChatResponse
+from app.llm.circuit import CircuitBreaker
 from app.llm.errors import (
     LlmBudgetExhaustedError,
     LlmDisabledError,
@@ -105,6 +113,7 @@ class GuardedChatModel:
         jitter: Callable[[float, float], float] = random.uniform,
         monotonic: Callable[[], float] = time.perf_counter,
         now: Callable[[], dt.datetime] | None = None,
+        breaker: CircuitBreaker | None = None,
     ) -> None:
         self._inner = inner
         self._enabled = enabled
@@ -114,6 +123,7 @@ class GuardedChatModel:
         self._jitter = jitter
         self._monotonic = monotonic
         self._now = now
+        self._breaker = breaker
 
     def complete(self, request: ChatRequest) -> ChatResponse:
         """Answer, or raise one of the six declared failures. Never anything else."""
@@ -123,6 +133,25 @@ class GuardedChatModel:
 
         self._require_within_budget(request)
 
+        if self._breaker is None:
+            return self._guarded(request)
+
+        # §5.8. Raises LlmCircuitOpenError while open, before the provider is reached.
+        probe = self._breaker.acquire()
+        try:
+            response = self._guarded(request)
+        except LlmUnavailableError:
+            self._breaker.record_failure(probe)
+            raise
+        except BaseException:
+            # Answered, but badly or not at all for a reason that is not availability.
+            self._breaker.release(probe)
+            raise
+        self._breaker.record_success(probe)
+        return response
+
+    def _guarded(self, request: ChatRequest) -> ChatResponse:
+        """§5.7's timeout, retry and validation rules, around the inner model."""
         started = self._monotonic()
         last_timeout: FutureTimeoutError | None = None
 
@@ -173,24 +202,12 @@ class GuardedChatModel:
             # point: shutdown must not block on the call this boundary just gave up on.
             executor.shutdown(wait=False)
 
-        if request.response_schema is not None:
+        if request.response_schema is not None and not response.tool_calls:
             # §5.5: validated, never coerced. A failure here is caught by `complete` above and
-            # becomes row 3 after its one retry.
+            # becomes row 3 after its one retry. An answer that asks for tools is not the final
+            # answer yet, so there is nothing to validate until the model stops asking.
             parsed = request.response_schema.model_validate_json(response.text)
-            return ChatResponse(
-                text=response.text,
-                parsed=parsed,
-                usage=response.usage,
-                latency_ms=response.latency_ms,
-                provider=response.provider,
-                model=response.model,
-                finish_reason=response.finish_reason,
-                prompt_id=response.prompt_id,
-                prompt_version=response.prompt_version,
-                attempts=response.attempts,
-                completed_at=response.completed_at,
-                diagnostics=response.diagnostics,
-            )
+            return replace(response, parsed=parsed)
         return response
 
     # --- budget -------------------------------------------------------------------------------
@@ -218,23 +235,17 @@ class GuardedChatModel:
 
     def _stamp(self, response: ChatResponse, *, started: float, attempts: int) -> ChatResponse:
         """Record what this boundary knows that the adapter could not: elapsed time, attempts."""
-        return ChatResponse(
-            text=response.text,
-            parsed=response.parsed,
-            usage=response.usage,
+        # `replace`, not a field-by-field rebuild: a field added to `ChatResponse` later (as
+        # `tool_calls` was in Stage 7.6) survives the boundary without anyone remembering it.
+        return replace(
+            response,
             latency_ms=(self._monotonic() - started) * 1000,
-            provider=response.provider,
-            model=response.model,
-            finish_reason=response.finish_reason,
-            prompt_id=response.prompt_id,
-            prompt_version=response.prompt_version,
             attempts=attempts,
             completed_at=None if self._now is None else self._now(),
-            diagnostics=response.diagnostics,
         )
 
     def _observe(self, request: ChatRequest, outcome: str, attempts: int) -> None:
-        """One event per call. Five fields, and not one of them is content.
+        """One event per call. Six fields, and not one of them is content.
 
         No prompt text, no rendered message, no answer, no token from either side, no provider
         name, no model name, no key and no tenant identifier. The prompt is named by its
@@ -257,6 +268,7 @@ class GuardedChatModel:
                 "prompt_version": request.prompt_version,
                 "attempts": attempts,
                 "structured": request.response_schema is not None,
+                "tools_offered": len(request.tools),
             },
         )
 

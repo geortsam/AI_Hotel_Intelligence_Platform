@@ -21,15 +21,29 @@ for.
 It also carries **no session, no connection, no SQL, no row and no tenant identifier**. That is
 §4's security boundary and it is structural here rather than advisory: there is no field any of
 them could travel in, so "the LLM cannot reach the database" is a property of the type rather
-than a rule someone remembers. A test asserts the field set exactly, so a seventh field cannot
+than a rule someone remembers. A test asserts the field set exactly, so a new field cannot
 arrive without someone choosing it.
 
-## What is deliberately absent for now
+## The tool catalogue (Stage 7.6)
 
-**No tool catalogue.** §5.1 lists one on `ChatRequest`, and Stage 7.6 is the stage that builds
-the tool boundary. Adding the field now would mean shipping a parameter nothing can populate and
-no adapter can translate, and the first real tool would almost certainly reshape it. The field is
-7.6's to add, against a registry that exists.
+§5.1 lists a tool catalogue on `ChatRequest` and tool calls on `ChatResponse`. Stage 7.5 left
+both out because nothing could populate them; Stage 7.6 adds them against a registry that now
+exists (`app.copilot.registry`):
+
+- `ChatRequest.tools` is a tuple of `ToolSpec` — name, description, JSON input schema. That is
+  the whole of what the model is told about a tool. No callable, no module path, no role and no
+  property: a spec is data a provider can serialise, and nothing in it can select a tenant.
+- `ChatResponse.tool_calls` is a tuple of `ToolCall` — the id the provider assigned, the name the
+  model asked for and the arguments it supplied. **All three are untrusted model output.** This
+  seam carries them; it does not look them up, validate them or run them. The registry does the
+  looking up, and it fails closed on a name it does not hold.
+- `Message` gains the two shapes a tool exchange needs to be replayed to the model: an assistant
+  turn carrying the calls it made, and a `tool` turn carrying one call's result — or its error,
+  flagged as such and never disguised as a success.
+
+Both new fields default to empty, so every Stage 7.5 caller is unchanged.
+
+## What is deliberately absent for now
 
 **No streaming.** Nothing in V2's documented architecture streams, and a protocol with a second
 method that no caller uses is a protocol with a second method to keep working.
@@ -49,27 +63,79 @@ The contract is the shared behavioural suite every adapter and double is run aga
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
-#: Who a message is from. Three, matching what every chat provider models; a fourth would be
-#: this seam inventing a role that has to be mapped to something on the way out.
-Role = Literal["system", "user", "assistant"]
+#: Who a message is from. The three every chat provider models, plus `tool` (Stage 7.6): the
+#: result of one tool call, replayed to the model. Every provider with tool use has that turn,
+#: though each spells it differently — mapping it is the adapter's job.
+Role = Literal["system", "user", "assistant", "tool"]
 
 #: Why a completion stopped. Normalised here so a caller never branches on a vendor's spelling:
 #: an adapter maps whatever it was given onto exactly these, and `unknown` is the honest answer
-#: for a value this seam has not seen rather than a guess at the nearest match.
-FinishReason = Literal["stop", "length", "content_filter", "unknown"]
+#: for a value this seam has not seen rather than a guess at the nearest match. `tool_use`
+#: (Stage 7.6) means the model stopped to ask for one or more tools to be run.
+FinishReason = Literal["stop", "length", "content_filter", "tool_use", "unknown"]
+
+
+@dataclass(frozen=True, slots=True)
+class ToolSpec:
+    """What the model is told about one tool. One entry of §5.1's "tool catalogue".
+
+    Exactly three fields, and a test pins them: a name, a description and the JSON schema of the
+    input. Nothing identifies a caller, a role or a property — the catalogue a request carries
+    has already been filtered to what the caller may use, so the model has no authorization
+    information to reason about and none to be talked out of.
+    """
+
+    name: str
+    description: str
+    input_schema: Mapping[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class ToolCall:
+    """One tool the model asked for. **Untrusted**: every field is model output.
+
+    `id` is the provider's handle for the call, echoed back on the result so the model can pair
+    them. `name` may name a tool that does not exist, and `arguments` may be anything at all;
+    this type records the request and decides nothing about it.
+    """
+
+    id: str
+    name: str
+    arguments: Mapping[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
 class Message:
-    """One turn. Content is text; this seam does not model images or documents."""
+    """One turn. Content is text; this seam does not model images or documents.
+
+    Two turn shapes exist only for tool use (Stage 7.6):
+
+    - an `assistant` turn with `tool_calls`, replaying what the model asked for;
+    - a `tool` turn with `tool_call_id`, carrying one call's result as text. `is_error` marks a
+      failed call, so the model is told the call failed rather than handed an error message
+      dressed as data — §5.7 row 4 returns "the tool's error ... to the model", labelled.
+    """
 
     role: Role
     content: str
+    tool_calls: tuple[ToolCall, ...] = ()
+    tool_call_id: str | None = None
+    is_error: bool = False
+
+    def __post_init__(self) -> None:
+        if self.role == "tool":
+            if not self.tool_call_id:
+                raise ValueError("A tool message must name the call it answers.")
+        elif self.tool_call_id is not None or self.is_error:
+            raise ValueError("Only a tool message may carry a call id or an error flag.")
+        if self.tool_calls and self.role != "assistant":
+            raise ValueError("Only an assistant message may carry tool calls.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,10 +178,16 @@ class ChatRequest:
     #: `None` means a text answer. §5.5: a validation failure is a failure, never a coerced
     #: guess.
     response_schema: type[BaseModel] | None = None
+    #: The tools the model may ask for on this request, in a stable order (Stage 7.6). Empty
+    #: means none, and an adapter then sends no tool definitions at all.
+    tools: tuple[ToolSpec, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.messages:
             raise ValueError("A request must carry at least one message.")
+        names = [spec.name for spec in self.tools]
+        if len(names) != len(set(names)):
+            raise ValueError("A request may not offer the same tool twice.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +226,9 @@ class ChatResponse:
     #: Room for an adapter to record something vendor-shaped for an operator's log. Never read
     #: by application code; a test asserts no service touches it.
     diagnostics: dict[str, Any] = field(default_factory=dict)
+    #: The tools the model asked for, in the order it asked (Stage 7.6). Untrusted model output;
+    #: empty for an answer that requested none.
+    tool_calls: tuple[ToolCall, ...] = ()
 
 
 @runtime_checkable
@@ -179,4 +254,6 @@ __all__ = [
     "Message",
     "Role",
     "TokenUsage",
+    "ToolCall",
+    "ToolSpec",
 ]

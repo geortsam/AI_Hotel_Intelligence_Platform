@@ -12,7 +12,7 @@ database *as a database*, kept separate from the application code that queries i
 
 ## Current state
 
-**Eleven migrations, head `0011_demand_prediction_public_id`,** applied by `alembic upgrade
+**Twelve migrations, head `0012_audit_tool_invoked`,** applied by `alembic upgrade
 head`. They build **22 tables** and the `historical_room_overlaps` view; with Alembic's own
 `alembic_version`, a migrated database reports 24 entries in `information_schema.tables`. Every
 one of the 22 is ORM-mapped -- `tests/backend/test_model_metadata.py` pins the list, so a table
@@ -25,7 +25,7 @@ overlap-detection view.
 The chain is linear: one root (`0001_initial_schema`, `down_revision = None`) and one head. CI
 enforces both and pins the expected head **by name** rather than reading it back, so a chain that
 grew a second head fails the build instead of agreeing with itself. A separate test pins a
-canonical SHA-256 over the nine revision files with line endings normalised to LF, so the history
+canonical SHA-256 over every revision file with line endings normalised to LF, so the history
 cannot be edited unnoticed on any platform:
 
 ```

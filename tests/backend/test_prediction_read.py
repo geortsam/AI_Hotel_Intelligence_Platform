@@ -651,8 +651,8 @@ def test_the_migration_chain_is_eleven_revisions() -> None:
     versions = REPOSITORY_ROOT / "database" / "migrations" / "versions"
     revisions = sorted(path.name for path in versions.glob("*.py"))
 
-    assert len(revisions) == 11
-    assert revisions[-1] == "20260921_0011_demand_prediction_public_id.py"
+    assert len(revisions) == 12
+    assert revisions[-1] == "20260924_0012_audit_tool_invoked.py"
 
 
 # ======================================================================================

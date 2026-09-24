@@ -58,18 +58,22 @@ EXPECTED_FILENAMES = (
     "20260905_0009_audit_booking_deleted.py",
     "20260920_0010_demand_predictions.py",
     "20260921_0011_demand_prediction_public_id.py",
+    "20260924_0012_audit_tool_invoked.py",
 )
 
 #: sha256 of the canonicalised concatenation described in this module's docstring. Derived
-#: from the eleven files above; not a value chosen to make anything pass.
+#: from the twelve files above; not a value chosen to make anything pass.
 #:
-#: Moved twice. `0dc2f8b1...` over nine files was the value before Stage 6.8 added
+#: Moved three times. `0dc2f8b1...` over nine files was the value before Stage 6.8 added
 #: `demand_predictions`; `35162fde...` over ten was the value before Stage 6.11 added
-#: `demand_predictions.public_id`. Both are recorded rather than discarded, because "the digest
-#: changed" should always be answerable with "yes, in that commit, for that migration".
-CANONICAL_SHA256 = "5104c312275dd5975f7097a9d8957588751ec03608b43089a4011adb5a5a1a30"
+#: `demand_predictions.public_id`; `5104c312...` over eleven was the value before Stage 7.6
+#: added 0012 (the `tool.invoked` audit vocabulary) -- and recomputing it over the first eleven
+#: files still reproduces it, which is the check that 0001-0011 were not edited. All three are
+#: recorded rather than discarded, because "the digest changed" should always be answerable with
+#: "yes, in that commit, for that migration".
+CANONICAL_SHA256 = "4706f2d1ea2b6eba9e483426747961ee3df3ff402d615c08d0b8029c687acedf"
 
-EXPECTED_HEAD = "0011_demand_prediction_public_id"
+EXPECTED_HEAD = "0012_audit_tool_invoked"
 EXPECTED_ROOT = "0001_initial_schema"
 
 REVISION = re.compile(r'^revision: str = "([^"]+)"', re.MULTILINE)
@@ -100,6 +104,17 @@ def test_the_chain_is_exactly_these_ten_files_in_this_order() -> None:
 def test_the_canonical_digest_is_unchanged() -> None:
     """The assertion the rest of this module exists to make trustworthy."""
     assert digest_of(path.read_bytes() for path in migration_files()) == CANONICAL_SHA256
+
+
+def test_stage_7_6_left_every_earlier_migration_untouched() -> None:
+    """Adding 0012 moved the digest; this proves it moved ONLY because 0012 was added.
+
+    The eleven files that preceded it still hash to the value pinned before Stage 7.6, so no
+    applied revision was edited to make room for the new one.
+    """
+    earlier = [path.read_bytes() for path in migration_files()[:11]]
+
+    assert digest_of(earlier) == "5104c312275dd5975f7097a9d8957588751ec03608b43089a4011adb5a5a1a30"
 
 
 def test_the_digest_does_not_depend_on_how_git_checked_the_files_out() -> None:

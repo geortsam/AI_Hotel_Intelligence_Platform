@@ -34,8 +34,9 @@ from __future__ import annotations
 import itertools
 import threading
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 
-from app.llm.base import ChatRequest, ChatResponse, FinishReason, TokenUsage
+from app.llm.base import ChatRequest, ChatResponse, FinishReason, TokenUsage, ToolCall
 from app.llm.errors import LlmError
 
 #: What a double reports as the provider and model that answered. Deliberately not a real
@@ -54,6 +55,7 @@ def response_for(
     finish_reason: FinishReason = "stop",
     provider: str = DOUBLE_PROVIDER,
     model: str = DOUBLE_MODEL,
+    tool_calls: tuple[ToolCall, ...] = (),
 ) -> ChatResponse:
     """A well-formed `ChatResponse` for a request, with no clock read.
 
@@ -74,7 +76,22 @@ def response_for(
         finish_reason=finish_reason,
         prompt_id=request.prompt_id,
         prompt_version=request.prompt_version,
+        tool_calls=tool_calls,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ScriptedTurn:
+    """One scripted answer that asks for tools (Stage 7.6).
+
+    A plain string scripts a final text answer; a `ScriptedTurn` scripts a turn in which the model
+    stops to request calls. The calls are whatever the test says — including a name no registry
+    holds or arguments naming another property — because a double for untrusted output has to be
+    able to produce hostile output.
+    """
+
+    tool_calls: tuple[ToolCall, ...]
+    text: str = ""
 
 
 class ScriptedModel:
@@ -82,7 +99,7 @@ class ScriptedModel:
 
     Given one text it answers with that text forever; given several it answers with each in
     turn, which is what a retry test needs — "fail, then succeed" is two scripted answers and
-    not a mock framework.
+    not a mock framework. A `ScriptedTurn` in the sequence answers with tool calls instead.
 
     Every request is recorded, so a test can assert what the seam sent without the double
     having to know why.
@@ -90,12 +107,12 @@ class ScriptedModel:
 
     def __init__(
         self,
-        texts: str | Iterable[str] = "ok",
+        texts: str | Iterable[str | ScriptedTurn] = "ok",
         *,
         output_tokens: int = 5,
         finish_reason: FinishReason = "stop",
     ) -> None:
-        self._texts: Iterator[str] = (
+        self._texts: Iterator[str | ScriptedTurn] = (
             itertools.repeat(texts) if isinstance(texts, str) else iter(list(texts))
         )
         self._output_tokens = output_tokens
@@ -106,15 +123,23 @@ class ScriptedModel:
     def complete(self, request: ChatRequest) -> ChatResponse:
         self.calls.append(request)
         try:
-            text = next(self._texts)
+            scripted = next(self._texts)
         except StopIteration:
             raise AssertionError(
                 "ScriptedModel ran out of scripted answers: the code under test called it more "
                 "times than the test expected, which is itself the finding."
             ) from None
+        if isinstance(scripted, ScriptedTurn):
+            return response_for(
+                request,
+                scripted.text,
+                output_tokens=self._output_tokens,
+                finish_reason="tool_use",
+                tool_calls=scripted.tool_calls,
+            )
         return response_for(
             request,
-            text,
+            scripted,
             output_tokens=self._output_tokens,
             finish_reason=self._finish_reason,
         )
@@ -205,6 +230,7 @@ __all__ = [
     "FailingModel",
     "RecordedModel",
     "ScriptedModel",
+    "ScriptedTurn",
     "SlowModel",
     "response_for",
 ]
