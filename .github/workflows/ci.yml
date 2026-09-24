@@ -546,8 +546,8 @@ jobs:
 
             revisions=$(ls /app/database/migrations/versions/*.py | wc -l)
             echo "  revisions present: $revisions"
-            if [ "$revisions" -ne 11 ]; then
-              echo "::error::expected 11 revisions, found $revisions"
+            if [ "$revisions" -ne 12 ]; then
+              echo "::error::expected 12 revisions, found $revisions"
               exit 1
             fi
 
