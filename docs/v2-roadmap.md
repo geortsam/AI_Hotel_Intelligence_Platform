@@ -3,8 +3,8 @@
 > The ordered plan produced by Stage 7.1. Each stage is specified well enough to be implemented
 > on its own, in order, without re-deciding anything.
 >
-> **Implemented so far: Stages 7.2, 7.3, 7.4, 7.5, 7.6 and 7.7** — all of Track A, and the
-> first three stages of Track B. Every other stage below is a specification and nothing more; none of its code
+> **Implemented so far: Stages 7.2 to 7.8** — all of Track A, and the first four stages of
+> Track B. Every other stage below is a specification and nothing more; none of its code
 > exists.
 > A stage carries `· *done*` in its heading once it ships, with a note recording what was actually
 > built and where that differed from the plan.
@@ -341,7 +341,39 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | **Done when** | CI green with a scripted model; no live provider needed in CI |
 | **Known limitations** | budgets are per worker process; a malformed body from an authorized caller is charged before the 422, because the budget runs as a route dependency; the figure check proves existence, not correct labelling; token counts cover only model calls that returned; no retention rule for `llm_invocations`; the live provider is exercised by no test |
 
-### Stage 7.8 — Evaluation harness
+### Stage 7.8 — Evaluation harness · *done*
+
+> **The harness exists; no model has been evaluated yet, and the harness says so.** No live
+> provider has ever been called from this repository and CI has neither the SDK nor a key, so
+> every exchange CI can replay was written by hand. The stage was built around that fact rather
+> than despite it, with the user's agreement: CI replays hand-written **reference** exchanges
+> through the production copilot stack and fails the build if the pinned report moves -- a gate
+> on the pipeline and the scorers, labelled "No language model was evaluated" in the report
+> itself. The first real evaluation is an opt-in live capture (`scripts/copilot_live_eval.py`,
+> paid, refuses to start without `--confirm-paid-api-call`) that records in the same format CI
+> replays.
+>
+> **Real stack, fixed data.** Each case runs through `CopilotService`, `ToolLoop` and
+> `ToolInvocationService` -- registry, argument and output validation, the role check, the figure
+> check -- with only the three data services (a fictional 20-room hotel built through the
+> production schemas), the membership lookup, the two write sinks and the model replaced. No
+> database, no network (asserted by disabling sockets).
+>
+> **Two design points worth recording.** The grounding scorer is deliberately independent of the
+> copilot's own figure check -- same rule, different implementation, no shared import -- and the
+> two are compared on every case (`scorer_agreement`). And the report records the catalogue each
+> case was *offered*, because a mutation test showed that without it a change offering viewers the
+> manager-only tool would not move the pinned report. Seven mutations -- three in the scorers,
+> four in production code -- each fail the suite by name.
+>
+> **Not built, by necessity:** citation validity and retrieval quality (nothing to cite until
+> 7.9/7.10); label correctness (not mechanical); latency and cost in replay (meaningless). The
+> prompt gives the model no current date, so every question names its dates.
+>
+> Delivered: `tests/evaluation/` (question set, fixture hotel, replay, scorers, harness, 24
+> reference exchanges, pinned report), the live capture script, [copilot-evaluation.md](copilot-evaluation.md),
+> Amendment A3. 0 migrations, 0 API changes, 0 production code changes, 0 dependencies.
+> 92 new tests; backend 5673 → 5765. Frontend untouched at 1141.
 
 | | |
 |---|---|

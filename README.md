@@ -16,7 +16,7 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-5673%20backend%20%C2%B7%201141%20frontend-success)
+![Tests](https://img.shields.io/badge/tests-5765%20backend%20%C2%B7%201141%20frontend-success)
 ![API](https://img.shields.io/badge/API-54%20paths%20%C2%B7%2086%20operations-informational)
 
 </div>
@@ -40,7 +40,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **5673 backend tests and 1141 frontend tests pass in CI.** Schema head is
+> **5765 backend tests and 1141 frontend tests pass in CI.** Schema head is
 > `0013_llm_invocations` across 13 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical

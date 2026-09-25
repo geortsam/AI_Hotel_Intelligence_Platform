@@ -18,6 +18,7 @@
 > |---|---|---|---|
 > | A1 | 7.6 — Tool boundary | 2026-09-24 | §4.3, §4.4, §5.4, §5.7, **§5.8 (new)**, §7.2, §7.3 |
 > | A2 | 7.7 — Copilot, single turn | 2026-09-25 | §4.1, §4.4, §4.5, §5.1, §5.7, **§7.5 (new)** |
+> | A3 | 7.8 — Evaluation harness | 2026-09-26 | §9.2, §9.3 |
 
 ---
 
@@ -687,6 +688,25 @@ copilot makes a claim to a user, not after.
   published for the copilot.
 - The demand model's `production_accuracy_established: No` is untouched by any of this. LLM
   evaluation says nothing about the forecaster.
+
+> **Amendment A3 (Stage 7.8) — what the harness is, and is not yet.** Specified in full in
+> [copilot-evaluation.md](copilot-evaluation.md). The harness (`tests/evaluation/`) runs a frozen,
+> checksummed question set (`copilot_eval_v1`, 24 cases) through the production copilot stack
+> with only the data services and the model replaced. Four of §9.2's six measures are
+> implemented -- tool selection, grounding, refusal correctness, and latency and cost (live only)
+> -- plus `expected_figures`, `completed`, and `scorer_agreement` between the harness's
+> independent grounding scorer and the copilot's own figure check. **Citation validity and
+> retrieval quality are deferred** to Stages 7.9/7.10: there is nothing to cite or retrieve yet.
+>
+> **Refusal is defined mechanically**: a complete answer that states no figure the caller did not
+> write and calls no untolerated tool. It cannot tell a polite decline from an empty answer, and
+> that limitation is pinned by a test rather than hidden behind a phrase list.
+>
+> **§9.3 in practice.** CI replays hand-written reference exchanges on every push and fails if
+> the pinned report moves -- a software gate, and the report says so: "No language model was
+> evaluated". A real model is evaluated only by an opt-in live capture
+> (`scripts/copilot_live_eval.py`), whose report names the model, the date, the set and the
+> prompt, reports each measure as passed-of-scored, and publishes no aggregate.
 
 ---
 

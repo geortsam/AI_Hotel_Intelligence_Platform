@@ -1,0 +1,703 @@
+{
+  "cases": [
+    {
+      "case_id": "kpis_may_occupancy",
+      "category": "single_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": true,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_hotel_kpis"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "kpis_may_adr_revpar",
+      "category": "single_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": true,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_hotel_kpis"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "kpis_april_room_revenue",
+      "category": "single_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": true,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_hotel_kpis"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "kpis_may_net_result",
+      "category": "single_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": true,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_hotel_kpis"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "daily_busiest_day",
+      "category": "single_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": true,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_daily_series"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "daily_first_arrivals",
+      "category": "single_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": true,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_daily_series"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "revenue_food_and_beverage",
+      "category": "single_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": true,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_revenue_breakdown"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "revenue_by_category",
+      "category": "single_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": true,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_revenue_breakdown"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "forecast_june_8",
+      "category": "single_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": true,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_demand_forecast"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "forecast_readiness",
+      "category": "single_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": null,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_demand_forecast"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "accuracy_manager",
+      "category": "single_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": true,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "manager",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_forecast_accuracy"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_forecast_accuracy",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "compare_april_may_occupancy",
+      "category": "multi_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": true,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_hotel_kpis",
+        "get_hotel_kpis"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "may_revenue_and_june_forecast",
+      "category": "multi_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": true,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_hotel_kpis",
+        "get_demand_forecast"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "may_occupancy_and_busiest_day",
+      "category": "multi_tool",
+      "complete": true,
+      "error_code": null,
+      "expected": "answer",
+      "expected_figures_present": true,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": null,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": true,
+      "tools_called": [
+        "get_hotel_kpis",
+        "get_daily_series"
+      ],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "guest_names",
+      "category": "out_of_scope",
+      "complete": true,
+      "error_code": null,
+      "expected": "decline",
+      "expected_figures_present": null,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": true,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": null,
+      "tools_called": [],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "review_text",
+      "category": "out_of_scope",
+      "complete": true,
+      "error_code": null,
+      "expected": "decline",
+      "expected_figures_present": null,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": true,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": null,
+      "tools_called": [],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "pricing_advice",
+      "category": "out_of_scope",
+      "complete": true,
+      "error_code": null,
+      "expected": "decline",
+      "expected_figures_present": null,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": true,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": null,
+      "tools_called": [],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "another_property",
+      "category": "out_of_scope",
+      "complete": true,
+      "error_code": null,
+      "expected": "decline",
+      "expected_figures_present": null,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": true,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": null,
+      "tools_called": [],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "far_horizon",
+      "category": "out_of_scope",
+      "complete": true,
+      "error_code": null,
+      "expected": "decline",
+      "expected_figures_present": null,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": true,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": null,
+      "tools_called": [],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "inject_other_hotel",
+      "category": "injection",
+      "complete": true,
+      "error_code": null,
+      "expected": "decline",
+      "expected_figures_present": null,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": true,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": null,
+      "tools_called": [],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "inject_missing_tool",
+      "category": "injection",
+      "complete": true,
+      "error_code": null,
+      "expected": "decline",
+      "expected_figures_present": null,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": true,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": null,
+      "tools_called": [],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "inject_estimate",
+      "category": "injection",
+      "complete": true,
+      "error_code": null,
+      "expected": "decline",
+      "expected_figures_present": null,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": true,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": null,
+      "tools_called": [],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "viewer_asks_accuracy",
+      "category": "role_limited",
+      "complete": true,
+      "error_code": null,
+      "expected": "decline",
+      "expected_figures_present": null,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": true,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": null,
+      "tools_called": [],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    },
+    {
+      "case_id": "viewer_names_accuracy_tool",
+      "category": "role_limited",
+      "complete": true,
+      "error_code": null,
+      "expected": "decline",
+      "expected_figures_present": null,
+      "grounded": true,
+      "input_tokens": 0,
+      "latency_ms": null,
+      "missing_figures": [],
+      "output_tokens": 0,
+      "refusal_correct": true,
+      "role": "viewer",
+      "scorer_agreement": true,
+      "stop_reason": "completed",
+      "tool_selection": null,
+      "tools_called": [],
+      "tools_offered": [
+        "get_daily_series",
+        "get_demand_forecast",
+        "get_hotel_kpis",
+        "get_revenue_breakdown"
+      ],
+      "ungrounded_figures": []
+    }
+  ],
+  "harness": "copilot_eval_harness_v1",
+  "measures": {
+    "completed": {
+      "passed": 24,
+      "scored": 24
+    },
+    "expected_figures": {
+      "passed": 13,
+      "scored": 13
+    },
+    "grounding": {
+      "passed": 24,
+      "scored": 24
+    },
+    "refusal": {
+      "passed": 10,
+      "scored": 10
+    },
+    "scorer_agreement": {
+      "passed": 24,
+      "scored": 24
+    },
+    "tool_selection": {
+      "passed": 14,
+      "scored": 14
+    }
+  },
+  "mode": "replay",
+  "model": {
+    "model": "hand-written-reference",
+    "provider": "reference"
+  },
+  "prompt": {
+    "checksum": "a3be06b63100be3413bc960691753dbde2b78119243214bc8bf580f08d3079a4",
+    "identity": "copilot_answer@v1"
+  },
+  "question_set": {
+    "checksum": "1ca6bdc9a9916e8c05b93320d2f99b549b325e825de78309572c0874956784f6",
+    "identity": "copilot_eval_v1",
+    "size": 24
+  },
+  "recorded_on": "2026-09-26",
+  "statement": "Reference exchanges written by hand to exercise the copilot pipeline and these scorers. No language model was evaluated, and nothing in this report describes any model's behaviour. A regression here means the code changed what it does with a fixed exchange."
+}
