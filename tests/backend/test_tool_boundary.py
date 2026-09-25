@@ -1578,10 +1578,15 @@ def test_the_copilot_package_reaches_no_database_and_no_vendor() -> None:
                 assert not imported.startswith(forbidden), f"{path.name} imports {imported}"
 
 
-def test_no_endpoint_and_no_copilot_service_exist_yet() -> None:
-    """Stage 7.6's non-goals: the endpoint, the service and everything after are 7.7+."""
-    assert not (APP / "services" / "copilot.py").exists()
-    for path in (APP / "api").rglob("*.py"):
+def test_no_route_reaches_the_tool_machinery_directly() -> None:
+    """Stage 7.6 had no endpoint; Stage 7.7 added one, and it reaches tools only via services.
+
+    Restated to what it protected: no ROUTER imports the registry, the loop or the invocation
+    service. The composition root (`deps.py`) assembles them; the copilot route sees only
+    `CopilotService`. The RAG and memory non-goals below are unchanged.
+    """
+    assert (APP / "services" / "copilot.py").exists()
+    for path in (APP / "api" / "v1").rglob("*.py"):
         for imported in imports_of(path):
             assert not imported.startswith("app.copilot"), path.name
             assert not imported.startswith("app.services.tool_invocation"), path.name
@@ -1596,7 +1601,8 @@ def test_the_only_service_that_reaches_the_copilot_is_the_invocation_service() -
         for path in (APP / "services").glob("*.py")
         if any(i.startswith("app.copilot") for i in imports_of(path))
     )
-    assert reaching == ["tool_invocation.py"]
+    # Stage 7.7: the copilot service composes the catalogue, the loop and the figure check.
+    assert reaching == ["copilot.py", "tool_invocation.py"]
 
 
 def test_an_outcome_is_json_for_the_model_and_hides_nothing() -> None:

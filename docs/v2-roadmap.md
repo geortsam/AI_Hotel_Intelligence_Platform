@@ -3,8 +3,8 @@
 > The ordered plan produced by Stage 7.1. Each stage is specified well enough to be implemented
 > on its own, in order, without re-deciding anything.
 >
-> **Implemented so far: Stages 7.2, 7.3, 7.4, 7.5 and 7.6** — all of Track A, and the first two
-> stages of Track B. Every other stage below is a specification and nothing more; none of its code
+> **Implemented so far: Stages 7.2, 7.3, 7.4, 7.5, 7.6 and 7.7** — all of Track A, and the
+> first three stages of Track B. Every other stage below is a specification and nothing more; none of its code
 > exists.
 > A stage carries `· *done*` in its heading once it ships, with a note recording what was actually
 > built and where that differed from the plan.
@@ -282,7 +282,47 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | **Known limitations** | the breaker is per process, so each worker learns an outage separately (at most 5 failed calls each); `LLM_TOOL_FAILED` stays declared and unraised — FM4 yields a labelled partial result, and how an endpoint presents one is 7.7's decision; the forecast tool's recorded prediction commits before its audit event, so an audit failure after a successful forecast leaves the prediction recorded (and no result reaches the model); `search_hotel_knowledge` deferred |
 | **Done when** | CI green, migration verified on a disposable database first |
 
-### Stage 7.7 — Copilot, single turn
+### Stage 7.7 — Copilot, single turn · *done*
+
+> Built as planned, with every decision the pre-inspection raised taken by the user before any
+> code was written, and recorded as architecture **Amendment A2**.
+>
+> **One question, one labelled answer.** `POST …/copilot/ask` authorizes the caller (any
+> member), charges the per-actor then per-hotel hourly allowance (20 / 100, one shared window,
+> `429 LLM_BUDGET_EXHAUSTED` with `Retry-After`), and hands the question to `CopilotService`,
+> which composes Stage 7.6 unchanged: permitted tools → deterministic catalogue →
+> `copilot_answer@v1` → the bounded loop, its executor bound to the path hotel. A bounded stop is
+> a **200 with `complete: false`**, a stop reason and a fixed notice; only a model failure before
+> any tool ran is re-raised with §5.7's status. The ordering "authorized before charged" is a
+> property of the dependency graph -- the budget dependency depends on the role dependency --
+> and a mutation test proves both halves of it are pinned.
+>
+> **Acceptance (2) is enforced, not requested.** The prompt asks for figures only from tool
+> results; `app.copilot.grounding` then checks every number in the answer against the numbers the
+> tools returned (rounded to the written precision, or a returned fraction written as a
+> percentage). An answer carrying any other number is **withheld** and labelled
+> `ungrounded_figures` -- including another hotel's figure, which the integration suite plants.
+> What this cannot prove is that a figure is attached to the right label; that is Stage 7.8's.
+> **Acceptance (3)** -- decline rather than guess -- is instructed by the prompt and backstopped by
+> the figure check, but whether a real model declines is a behavioural claim no scripted test can
+> make; it is the first thing the evaluation harness should measure.
+>
+> **One table, content-free.** `llm_invocations` (migration **0013**) records the actor, hotel,
+> prompt identity, the provider and model the request was routed to, the stop reason, counts,
+> tokens, latency and the request id -- never the question, the answer, the prompt text or any
+> tool output. Append-only by trigger; its CHECKs describe the data, not the loop's limits.
+> Retention is deferred. Head `0012` → **`0013_llm_invocations`**; 23 application tables.
+>
+> **Two corrections to earlier stages, made rather than papered over.** Stage 7.5's
+> `ChatResponse` docstring claimed a test stopped services reading `.provider` / `.model`; none
+> existed, and now one does. And six "no endpoint yet" guards from 7.5 and 7.6 were restated to
+> what they protect now (only the copilot service reaches `app.llm`; only `deps.py` among API
+> modules; no router reaches the tool machinery) rather than deleted.
+>
+> Delivered: 1 route, `CopilotService`, `LlmInvocationLog` + repository + model, the figure
+> check, 1 prompt, 1 migration, 3 settings, 0 dependencies. Surface 54 / 86 → **55 / 87**.
+> 154 new tests; backend 5519 → 5673. Frontend untouched at 1141. The design
+> is in the module docstrings and Amendment A2 §7.5 rather than a separate document.
 
 | | |
 |---|---|
@@ -290,15 +330,16 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | **Why it exists** | The smallest thing that is actually the product. Retrieval and memory are separable and each carries its own risk |
 | **V1 reused** | scope resolver, error contract, rate limiter, audit; from 7.6 the registry, catalogue, `ToolInvocationService` and the bounded `ToolLoop` — 7.7 wires them, it does not rebuild them |
 | **New components** | `app/services/copilot.py`; one router; request/response schemas; `llm_invocations` table |
-| **Database** | `llm_invocations` — one migration |
+| **Database** | `llm_invocations` — migration `0013_llm_invocations`, one append-only table, no existing table touched |
 | **API** | `POST …/copilot/ask`. Surface 54/86 → **55/87** |
 | **Security** | the whole of architecture §4: the model never names a hotel; tools re-check; per-actor and per-hotel budgets; refusals are typed |
 | **Testing** | orchestration against `ScriptedModel`; the bounded tool loop; budget exhaustion; every failure mode; **a test that an answer containing a figure absent from tool results fails** |
-| **Docs** | the copilot design document and its claims boundary |
+| **Docs** | architecture Amendment A2 (§4.1, §4.4, §4.5, §5.1, §5.7, new §7.5); module docstrings; this entry |
 | **Non-goals** | no memory, no retrieval, no writing, no streaming |
 | **Depends on** | **7.5, 7.6** |
 | **Acceptance** | (1) the answer cites which tools ran; (2) tool results are the only source of figures; (3) a question outside the tool set is declined, not guessed; (4) `llm_enabled=false` → clean 503; (5) no prompt, provider name or key in any response or log |
 | **Done when** | CI green with a scripted model; no live provider needed in CI |
+| **Known limitations** | budgets are per worker process; a malformed body from an authorized caller is charged before the 422, because the budget runs as a route dependency; the figure check proves existence, not correct labelling; token counts cover only model calls that returned; no retention rule for `llm_invocations`; the live provider is exercised by no test |
 
 ### Stage 7.8 — Evaluation harness
 

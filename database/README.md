@@ -12,10 +12,10 @@ database *as a database*, kept separate from the application code that queries i
 
 ## Current state
 
-**Twelve migrations, head `0012_audit_tool_invoked`,** applied by `alembic upgrade
-head`. They build **22 tables** and the `historical_room_overlaps` view; with Alembic's own
-`alembic_version`, a migrated database reports 24 entries in `information_schema.tables`. Every
-one of the 22 is ORM-mapped -- `tests/backend/test_model_metadata.py` pins the list, so a table
+**Thirteen migrations, head `0013_llm_invocations`,** applied by `alembic upgrade
+head`. They build **23 tables** and the `historical_room_overlaps` view; with Alembic's own
+`alembic_version`, a migrated database reports 25 entries in `information_schema.tables`. Every
+one of the 23 is ORM-mapped -- `tests/backend/test_model_metadata.py` pins the list, so a table
 that exists in one place and not the other fails the suite. The models live in
 `backend/app/models/`; this directory
 holds the migration history and the raw SQL that is not expressible through the ORM -- the

@@ -181,6 +181,21 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     llm_max_output_tokens: int = Field(default=1024, ge=1, le=32_000)
 
+    # --- Copilot budgets (Stage 7.7) -----------------------------------------
+    #
+    # §4.5: "per-actor and per-hotel call limits". Counted by the existing
+    # `FixedWindowRateLimiter`, keyed by the caller's and the hotel's PUBLIC identifiers, and
+    # charged only after the caller's membership has been established -- see
+    # `app.api.deps.copilot_budget`. One window for both, deliberately: the limiter prunes
+    # expired buckets using the window of the call that triggered the prune, and two policies
+    # sharing one window cannot prune each other's live counters.
+    #
+    # A refusal is `429 LLM_BUDGET_EXHAUSTED` with `Retry-After`, not `RATE_LIMITED`: the
+    # caller spent an allowance, it did not flood an endpoint.
+    copilot_actor_rate_limit: int = Field(default=20, ge=1)
+    copilot_hotel_rate_limit: int = Field(default=100, ge=1)
+    copilot_rate_limit_window_seconds: int = Field(default=3600, ge=1)
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:

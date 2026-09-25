@@ -204,7 +204,10 @@ class ChatResponse:
 
     `provider` and `model` name what actually answered. They are metadata for attribution and a
     log line, not a branch: a caller that switched on them would have re-coupled itself to the
-    vendor this seam exists to hide, and an architecture test asserts no service reads them.
+    vendor this seam exists to hide. `test_nothing_outside_the_seam_reads_who_answered`
+    (tests/backend/test_copilot.py, Stage 7.7) asserts that no module consuming this seam reads
+    `.provider`, `.model` or `.diagnostics` -- a claim Stage 7.5 made here before any test did.
+    Attribution is resolved from settings by the composition root instead.
     """
 
     text: str

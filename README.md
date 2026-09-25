@@ -16,7 +16,7 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-5519%20backend%20%C2%B7%201141%20frontend-success)
+![Tests](https://img.shields.io/badge/tests-5673%20backend%20%C2%B7%201141%20frontend-success)
 ![API](https://img.shields.io/badge/API-54%20paths%20%C2%B7%2086%20operations-informational)
 
 </div>
@@ -29,10 +29,10 @@ more than one currency and the platform never converts between them.</sub></div>
 
 > ### Current state: **V1 complete and verified**
 >
-> Eleven domains over a 22-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
+> Eleven domains over a 23-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
 > guests, bookings, payments, reviews, the financial ledger, analytics and intelligence, plus the
 > stored demand predictions the served model writes and the measurements taken over them —
-> reachable as **54 API paths / 86 operations**, of which **81 require authentication**.
+> reachable as **55 API paths / 87 operations**, of which **82 require authentication**.
 > Authentication is Argon2id plus HS256
 > access tokens; authorization is a four-level hotel role hierarchy with a separate
 > platform-administrator capability. There is a complete React front end — all twelve
@@ -40,8 +40,8 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **5519 backend tests and 1141 frontend tests pass in CI.** Schema head is
-> `0012_audit_tool_invoked` across 12 linear migrations.
+> **5673 backend tests and 1141 frontend tests pass in CI.** Schema head is
+> `0013_llm_invocations` across 13 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
 > baseline — seasonal-naive day-of-week median forecasting, MAD-based intervals and anomaly
@@ -218,7 +218,7 @@ flowchart LR
         S["<b>React SPA</b><br/>static bundle<br/>route-level code splitting"]
         A["<b>FastAPI</b><br/>api → services → repositories"]
         M["<b>demand_baseline_v1</b><br/>artifact, verified before load<br/>loaded once per process"]
-        D[("<b>PostgreSQL 18.6</b><br/>22 application tables<br/>constraints carry the rules")]
+        D[("<b>PostgreSQL 18.6</b><br/>23 application tables<br/>constraints carry the rules")]
     end
 
     B -- "HTTPS" --> N
@@ -312,7 +312,7 @@ Full detail, including the rules later stages must follow:
 | Validation | Pydantic v2, pydantic-settings | Request/response schemas, environment config |
 | ORM | SQLAlchemy 2.0 | Data mapping across 15 model modules |
 | Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
-| Migrations | Alembic | 12 linear revisions, head `0012_audit_tool_invoked` |
+| Migrations | Alembic | 13 linear revisions, head `0013_llm_invocations` |
 | Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
 | Frontend | React 18, TypeScript 5.7, Vite 6 | Dashboard SPA, route-level code splitting |
 | Intelligence (V1) | Python standard library | Deterministic statistical baseline — no NumPy or pandas on its path |
@@ -436,7 +436,7 @@ Start the API:
 |---|---|
 | http://localhost:8000/health | `{"status":"ok", ...}` |
 | http://localhost:8000/health/db | `{"status":"ok","database":"reachable", ...}`, or 503 when it is not |
-| http://localhost:8000/docs | Swagger UI — 54 paths, 86 operations. Disabled when `ENVIRONMENT=production` |
+| http://localhost:8000/docs | Swagger UI — 55 paths, 87 operations. Disabled when `ENVIRONMENT=production` |
 
 ### Frontend
 
@@ -586,7 +586,7 @@ Every push and pull request to `main` runs four jobs in parallel on `ubuntu-late
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
-PostgreSQL reports 18.6, that `migrate` exits 0 and leaves the schema at `0012`, that the API
+PostgreSQL reports 18.6, that `migrate` exits 0 and leaves the schema at `0013`, that the API
 and frontend both become healthy, that nginx serves the SPA at `/`, `/bookings`, `/reviews`
 and `/intelligence`, that `/api/v1/` is proxied through to FastAPI while an unknown `/api/`
 path still returns a real 404 rather than the SPA, that `SECRET_KEY` and `POSTGRES_PASSWORD`

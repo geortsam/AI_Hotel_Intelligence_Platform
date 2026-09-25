@@ -827,7 +827,7 @@ def test_the_alembic_head_is_still_the_stage_68_revision(session: Session) -> No
     """Criterion 33. Stage 6.9 adds no migration."""
     revision = session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
 
-    assert revision == "0012_audit_tool_invoked"
+    assert revision == "0013_llm_invocations"
 
 
 def test_no_accuracy_table_was_created(session: Session) -> None:

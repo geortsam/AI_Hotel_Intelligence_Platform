@@ -173,6 +173,11 @@ APPROVED_RESOURCE_SEGMENTS = {
     # computes a seasonal median per request, this one scores an artifact fitted offline. One
     # prefix for both would imply a lineage they do not have.
     "ml",
+    # Stage 7.7. The copilot: hotel-scoped because every tool it uses is. `ask` is an
+    # action segment rather than a collection -- a question creates no addressable
+    # resource, which is also why the route answers 200 and not 201.
+    "copilot",
+    "ask",
     # The four routes under it, all nouns and all reads: nothing here fits, promotes or
     # schedules. `demand-forecast` scores the artifact; `demand-predictions` (Stage 6.11) reads
     # rows that route already wrote and touches no model at all.
@@ -308,6 +313,8 @@ def test_domain_surface_is_exactly_the_approved_hierarchy() -> None:
         "/api/v1/hotels/{hotel_public_id}/ml/forecast-accuracy",
         "/api/v1/hotels/{hotel_public_id}/ml/prediction-distribution",
         "/api/v1/hotels/{hotel_public_id}/audit-events",
+        # Stage 7.7. One question in, one labelled answer out, over the hotel's own data.
+        "/api/v1/hotels/{hotel_public_id}/copilot/ask",
         "/api/v1/platform/audit-events",
         "/api/v1/auth/register",
         "/api/v1/auth/login",

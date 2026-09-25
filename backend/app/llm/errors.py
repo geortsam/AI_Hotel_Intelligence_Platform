@@ -160,16 +160,28 @@ class LlmBudgetExhaustedError(LlmError):
     §4.5 makes the argument: "An unbounded LLM spend is an availability risk", and a ceiling that
     is hit must produce "a refusal with a clear error code, never a silent degradation".
 
-    **What this covers in Stage 7.5 is the per-request ceiling only** — a request whose declared
-    token budget exceeds the configured maximum, or a response whose reported usage exceeded it.
-    The per-actor and per-hotel limits §4.5 also names are not here, and cannot be: they are
-    keyed by who is asking, and no actor or tenant identifier is permitted to cross this
-    boundary. They belong to the stage that owns the endpoint, where the caller is known.
+    **Two kinds of ceiling raise it.** The per-request ceiling, enforced by the boundary: a
+    request whose declared token budget exceeds the configured maximum, or a response whose
+    reported usage exceeded it. And, from Stage 7.7, the per-actor and per-hotel call limits
+    §4.5 also names, enforced where the caller is known -- `app.api.deps.copilot_budget` --
+    because no actor or tenant identifier is permitted to cross this boundary.
+
+    ``retry_after`` is set only by the second kind, which counts in a fixed window and so knows
+    when the allowance returns. The exception handler turns it into a ``Retry-After`` header.
+    The per-request ceiling carries none: retrying the same over-budget request later would be
+    refused again, and a header promising otherwise would be a lie. The code stays
+    ``LLM_BUDGET_EXHAUSTED`` in both cases -- distinct from ``RATE_LIMITED``, which means a
+    client flooded an endpoint, not that an allowance was spent.
     """
 
     status_code = status.HTTP_429_TOO_MANY_REQUESTS
     code = "LLM_BUDGET_EXHAUSTED"
     message = "The assistant has reached its usage limit for this request."
+
+    def __init__(self, message: str | None = None, *, retry_after: int | None = None) -> None:
+        super().__init__(message)
+        #: Whole seconds until the allowance returns, or None when waiting would not help.
+        self.retry_after = retry_after
 
 
 #: Every declared failure, keyed by its documented code. A test walks this against §5.7 so the

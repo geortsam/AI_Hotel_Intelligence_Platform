@@ -1035,8 +1035,9 @@ def test_the_api_surface_is_the_one_stage_73_published() -> None:
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     operations = sum(1 for path in schema["paths"].values() for verb in path if verb in methods)
 
-    assert len(schema["paths"]) == 54
-    assert operations == 86
+    # Stage 7.7 added POST .../copilot/ask: 54 / 86 -> 55 / 87.
+    assert len(schema["paths"]) == 55
+    assert operations == 87
 
 
 def test_the_frozen_result_type_is_still_not_an_http_contract() -> None:
@@ -1094,8 +1095,8 @@ def test_the_migration_chain_did_not_move() -> None:
     versions = REPOSITORY_ROOT / "database" / "migrations" / "versions"
     revisions = sorted(path.name for path in versions.glob("*.py"))
 
-    assert len(revisions) == 12
-    assert revisions[-1].endswith("0012_audit_tool_invoked.py")
+    assert len(revisions) == 13
+    assert revisions[-1].endswith("0013_llm_invocations.py")
 
 
 def test_the_model_identity_is_untouched() -> None:

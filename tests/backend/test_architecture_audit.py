@@ -523,6 +523,9 @@ NON_CREATING_POSTS = {
     # resource: the added nights belong to the booking that was already there, and its
     # URL does not change. 201 would promise a Location that does not exist.
     "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/stay/extension": "200",
+    # Stage 7.7. Asking a question creates no resource: the answer is returned, not kept,
+    # and the accounting row it leaves is not addressable. 201 would promise a Location.
+    "/api/v1/hotels/{hotel_public_id}/copilot/ask": "200",
 }
 
 

@@ -61,6 +61,9 @@ APP_LOGGERS = [
     "app.services.amenity",
     "app.services.auth",
     "app.services.booking",
+    # Stage 7.7. One event per copilot question: stop reason, counts, tokens, latency.
+    # No question, no answer, no tool output, no provider or model name.
+    "app.services.copilot",
     "app.services.finance",
     "app.services.guest",
     "app.services.health",

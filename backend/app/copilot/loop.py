@@ -104,6 +104,11 @@ class LoopResult:
     prompt_version: str
     #: The declared failure that stopped the loop, when `stop_reason == "model_failed"`.
     model_error: LlmError | None = None
+    #: Stage 7.7, additive. Token usage summed over every model call that returned an answer,
+    #: as the provider reported it. A call that raised reported nothing, so it adds nothing:
+    #: these are the tokens this request is known to have spent, not an estimate of the rest.
+    input_tokens: int = 0
+    output_tokens: int = 0
 
     @property
     def complete(self) -> bool:
@@ -147,6 +152,8 @@ class ToolLoop:
         failures = 0
         rounds = 0
         model_calls = 0
+        input_tokens = 0
+        output_tokens = 0
         text = ""
 
         def finish(reason: StopReason, error: LlmError | None = None) -> LoopResult:
@@ -159,6 +166,8 @@ class ToolLoop:
                 prompt_id=prompt_id,
                 prompt_version=prompt_version,
                 model_error=error,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
             )
             self._observe(result)
             return result
@@ -176,6 +185,8 @@ class ToolLoop:
                 response = self._model.complete(request)
             except LlmError as failed:
                 return finish("model_failed", failed)
+            input_tokens += response.usage.input_tokens
+            output_tokens += response.usage.output_tokens
             text = response.text
 
             if not response.tool_calls:

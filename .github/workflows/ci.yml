@@ -170,7 +170,7 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
         run: |
           set -euo pipefail
-          expected='0012_audit_tool_invoked'
+          expected='0013_llm_invocations'
 
           echo "--- declared head ---"
           heads="$(python -m alembic heads 2>&1)"
@@ -546,8 +546,8 @@ jobs:
 
             revisions=$(ls /app/database/migrations/versions/*.py | wc -l)
             echo "  revisions present: $revisions"
-            if [ "$revisions" -ne 12 ]; then
-              echo "::error::expected 12 revisions, found $revisions"
+            if [ "$revisions" -ne 13 ]; then
+              echo "::error::expected 13 revisions, found $revisions"
               exit 1
             fi
 
@@ -908,9 +908,9 @@ jobs:
           echo "--- alembic_version, read from PostgreSQL ---"
           revision="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  $revision"
-          [ "$revision" = "0012_audit_tool_invoked" ] || {
-            echo "::error::expected 0012_audit_tool_invoked, got $revision"; exit 1; }
-          echo "  OK   schema is at 0012_audit_tool_invoked"
+          [ "$revision" = "0013_llm_invocations" ] || {
+            echo "::error::expected 0013_llm_invocations, got $revision"; exit 1; }
+          echo "  OK   schema is at 0013_llm_invocations"
 
           tables="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  public tables created: $tables"
@@ -1396,7 +1396,7 @@ jobs:
 
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  after : $after"
-          [ "$after" = "0012_audit_tool_invoked" ] || {
+          [ "$after" = "0013_llm_invocations" ] || {
             echo "::error::revision moved to $after"; exit 1; }
           [ "$before" = "$after" ] || { echo "::error::revision changed"; exit 1; }
           echo "  OK   upgrade head is idempotent and the schema is unchanged"
@@ -1421,7 +1421,7 @@ jobs:
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  revision after restart: $revision"
           echo "  tables after restart  : $after"
-          [ "$revision" = "0012_audit_tool_invoked" ] || {
+          [ "$revision" = "0013_llm_invocations" ] || {
             echo "::error::schema did not survive the restart"; exit 1; }
           [ "$rows" = "$after" ] || { echo "::error::table count changed across restart"; exit 1; }
           echo "  OK   the named volume preserved the schema across stop/start"
@@ -2101,13 +2101,13 @@ jobs:
           # The diff above is the real proof. These restate the few facts that must hold
           # absolutely, so a failure names what was wrong rather than only that something was.
           revision="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc 'SELECT version_num FROM alembic_version')"
-          [ "$revision" = "0012_audit_tool_invoked" ] || {
+          [ "$revision" = "0013_llm_invocations" ] || {
             echo "::error::restored revision is $revision"; exit 1; }
-          echo "  OK   alembic_version is 0012_audit_tool_invoked -- no upgrade or downgrade happened"
+          echo "  OK   alembic_version is 0013_llm_invocations -- no upgrade or downgrade happened"
 
           tables="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")"
-          [ "$tables" -eq 23 ] || { echo "::error::restored database has $tables base tables, expected 23"; exit 1; }
-          echo "  OK   23 base tables (22 application tables + alembic_version)"
+          [ "$tables" -eq 24 ] || { echo "::error::restored database has $tables base tables, expected 24"; exit 1; }
+          echo "  OK   24 base tables (23 application tables + alembic_version)"
 
           membership="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc \
             "SELECT u.email || '/' || h.slug || '/' || uh.role FROM user_hotels uh

@@ -576,8 +576,9 @@ def test_the_api_surface_is_the_one_stage_73_published() -> None:
     schema = create_app(Settings(environment="test", debug=True)).openapi()
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
 
-    assert len(schema["paths"]) == 54
-    assert sum(len([m for m in spec if m in methods]) for spec in schema["paths"].values()) == 86
+    # Stage 7.7 added POST .../copilot/ask: 54 / 86 -> 55 / 87.
+    assert len(schema["paths"]) == 55
+    assert sum(len([m for m in spec if m in methods]) for spec in schema["paths"].values()) == 87
 
 
 def test_the_response_schema_gained_nothing() -> None:

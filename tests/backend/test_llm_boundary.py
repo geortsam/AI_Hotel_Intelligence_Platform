@@ -569,8 +569,8 @@ def test_an_unknown_prompt_raises_rather_than_returning_nothing() -> None:
 
 
 def test_this_stage_registers_only_what_it_needs() -> None:
-    """Stage 7.5 has no product feature, so it needs no product prompts."""
-    assert set(REGISTRY) == {"boundary_probe@v1"}
+    """Stage 7.5 needed no product prompt; Stage 7.7 added exactly one, the copilot's."""
+    assert set(REGISTRY) == {"boundary_probe@v1", "copilot_answer@v1"}
 
 
 # ======================================================================================
@@ -835,7 +835,9 @@ def test_the_v1_application_is_unaffected_by_the_flag() -> None:
     ).openapi()
 
     assert off == on
-    assert len(off["paths"]) == 54
+    # Stage 7.7 added the copilot route. It exists whether or not the flag is set -- with
+    # the flag off it answers 503 LLM_DISABLED -- which is exactly why the documents match.
+    assert len(off["paths"]) == 55
 
 
 # ======================================================================================
@@ -892,21 +894,36 @@ def test_the_sdk_import_is_deferred_rather_than_at_module_scope() -> None:
     assert "anthropic" not in top_level
 
 
-def test_no_service_reaches_the_llm_package_yet() -> None:
-    """Stage 7.5 wires nothing up. A service importing it now would be 7.6 arriving early."""
+def test_only_the_copilot_service_reaches_the_llm_package() -> None:
+    """Stage 7.5 wired nothing up; Stage 7.7 wired exactly one service, the copilot.
+
+    Restated rather than deleted: the guard still fails for any OTHER service reaching the seam,
+    and it pins what the copilot may reach -- the protocol and the prompt registry, never an
+    adapter, the factory or a double.
+    """
     services = python_files_under(APP / "services")
     assert len(services) > 20
 
     for path in services:
-        for imported in module_imports(path):
-            assert not imported.startswith("app.llm"), f"{path.name} imports {imported}"
+        reached = {i for i in module_imports(path) if i.startswith("app.llm")}
+        if path.name == "copilot.py":
+            assert reached == {"app.llm.base", "app.llm.prompts.registry"}, reached
+        else:
+            assert reached == set(), f"{path.name} imports {sorted(reached)}"
 
 
 def test_no_router_reaches_the_llm_package() -> None:
-    """The stage adds no endpoint, so nothing in the API layer may reach the seam."""
+    """No ROUTER reaches the seam. Stage 7.7's composition root may, and only three modules.
+
+    `app/api/deps.py` builds the guarded model (factory), types it (base) and raises the budget
+    refusal (errors). Every endpoint module -- the copilot's included -- imports none of it.
+    """
     for path in python_files_under(APP / "api"):
-        for imported in module_imports(path):
-            assert not imported.startswith("app.llm"), f"{path.name} imports {imported}"
+        reached = {i for i in module_imports(path) if i.startswith("app.llm")}
+        if path.name == "deps.py":
+            assert reached == {"app.llm.base", "app.llm.errors", "app.llm.factory"}, reached
+        else:
+            assert reached == set(), f"{path.name} imports {sorted(reached)}"
 
 
 @pytest.mark.parametrize(

@@ -280,14 +280,22 @@ def test_the_migration_backfills_rows_that_existed_before_it(engine: Engine) -> 
                     "table_name='demand_predictions' AND column_name='public_id'"
                 )
             ).first(), "public_id must not exist at 0010"
+            tables_at_0010 = connection.execute(
+                sa.text(
+                    "SELECT count(*) FROM information_schema.tables WHERE "
+                    "table_schema='public' AND table_type='BASE TABLE'"
+                )
+            ).scalar_one()
 
-        command.upgrade(config, "head")
+        # Exactly 0011, not head: this test is about what 0011 does, and a later migration that
+        # adds a table (Stage 7.7's 0013 does) must not be able to move its assertions. The
+        # `finally` below still returns the schema to head.
+        command.upgrade(config, "0011_demand_prediction_public_id")
 
         with engine.connect() as connection:
             assert (
                 connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-                # Stage 7.6: head is now 0012, which passes through 0011's backfill on the way.
-                == "0012_audit_tool_invoked"
+                == "0011_demand_prediction_public_id"
             )
             backfilled = list(
                 connection.execute(
@@ -321,7 +329,7 @@ def test_the_migration_backfills_rows_that_existed_before_it(engine: Engine) -> 
                         "table_schema='public' AND table_type='BASE TABLE'"
                     )
                 ).scalar_one()
-                == 23
+                == tables_at_0010
             ), "a column, not a table"
     finally:
         # Leave the schema as this suite found it, whatever happened above.
@@ -713,7 +721,7 @@ def test_the_read_is_two_statements_regardless_of_window_size(
 def test_the_alembic_head_is_the_stage_611_revision(session: Session) -> None:
     revision = session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
 
-    assert revision == "0012_audit_tool_invoked"
+    assert revision == "0013_llm_invocations"
 
 
 # ======================================================================================

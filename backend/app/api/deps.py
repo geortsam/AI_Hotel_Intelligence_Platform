@@ -6,6 +6,7 @@ engine, and the pool built in ``app.db.session`` is the only one in the process.
 
 from __future__ import annotations
 
+import functools
 import uuid
 from collections.abc import Callable, Generator
 from typing import Annotated
@@ -14,6 +15,8 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.copilot.contracts import ToolServices
+from app.copilot.registry import ToolRegistry, build_default_registry
 from app.core.client_address import (
     FORWARDED_FOR_HEADER,
     resolve_client_ip,
@@ -23,6 +26,9 @@ from app.core.config import Settings
 from app.core.errors import InvalidTokenError, RateLimitExceededError
 from app.core.rate_limit import FixedWindowRateLimiter, RateLimit
 from app.db.session import get_session_factory
+from app.llm.base import Budget, ChatModel
+from app.llm.errors import LlmBudgetExhaustedError
+from app.llm.factory import build_chat_model
 from app.models.enums import HotelRole
 from app.models.user import User
 from app.repositories.amenity import AmenityRepository, RoomTypeAmenityRepository
@@ -38,6 +44,7 @@ from app.repositories.finance import (
 from app.repositories.guest import GuestRepository
 from app.repositories.health import HealthRepository
 from app.repositories.hotel import HotelRepository
+from app.repositories.llm_invocation import LlmInvocationRepository
 from app.repositories.membership import MembershipRepository
 from app.repositories.ml_demand import MlDemandRepository
 from app.repositories.ml_prediction import MlPredictionRepository
@@ -55,6 +62,7 @@ from app.services.auth import AuthService
 from app.services.authorization import HotelAccessPolicy, PlatformAccessPolicy
 from app.services.availability import AvailabilitySearchService
 from app.services.booking import BookingService
+from app.services.copilot import CopilotService
 from app.services.finance import (
     ExpenseCategoryService,
     ExpenseService,
@@ -65,6 +73,7 @@ from app.services.guest import GuestService
 from app.services.health import HealthService
 from app.services.hotel import HotelService
 from app.services.intelligence import IntelligenceService
+from app.services.llm_invocation_log import LlmInvocationLog
 from app.services.membership import MembershipService
 from app.services.ml_accuracy import DemandAccuracyService
 from app.services.ml_drift import DemandDistributionService
@@ -78,6 +87,7 @@ from app.services.review import ReviewService
 from app.services.room import RoomService
 from app.services.room_type import RoomTypeService
 from app.services.scope import HotelScopeResolver
+from app.services.tool_invocation import ToolInvocationService
 
 
 def get_app_settings(request: Request) -> Settings:
@@ -669,7 +679,154 @@ RoomTypeAmenityServiceDep = Annotated[
     RoomTypeAmenityService, Depends(get_room_type_amenity_service)
 ]
 
+# --- the copilot (Stage 7.7) -----------------------------------------------------------------
+#
+# The composition root is the one place above `app.llm` that may name the factory and the budget
+# error: routers never import `app.llm`, and services receive a `ChatModel` without knowing which
+# vendor stands behind it. An architecture test pins exactly which `app.llm` modules this file
+# reaches.
+
+#: The minimum role for the copilot: any member. A module-level instance rather than an inline
+#: `require_role(...)` call, so the route and `copilot_budget` depend on the SAME callable -- which
+#: FastAPI resolves once per request, and which makes "authorized before charged" a property of
+#: the dependency graph rather than of the order a decorator lists its dependencies in.
+require_copilot_member = require_role(HotelRole.VIEWER)
+
+#: The one sentence both budget refusals share. It does not say which allowance was spent: the
+#: caller learns to wait, and `Retry-After` says for how long.
+COPILOT_BUDGET_MESSAGE = "The assistant's usage limit has been reached. Please try again later."
+
+
+def copilot_budget(
+    hotel_public_id: uuid.UUID,
+    request: Request,
+    settings: SettingsDep,
+    current_user: CurrentUserDep,
+    _member: Annotated[None, Depends(require_copilot_member)],
+) -> None:
+    """Charge the per-actor, then the per-hotel, copilot allowance. §4.5.
+
+    **Authorization first, structurally.** `_member` is the route's own role dependency, so this
+    function cannot run until the caller has been proved a member of this hotel. A non-member
+    therefore gets the hotel's 404 and never touches the hotel's counter: an outsider cannot spend
+    another property's allowance, and cannot learn from a 429 that the property exists.
+
+    **Keys are public identifiers only** -- the caller's `public_id` and the path's hotel UUID --
+    never an internal BIGINT. The existing `FixedWindowRateLimiter` is used exactly as it is: an
+    opaque key and a policy in, a verdict out. Both policies share one window (settings), so
+    neither can prune the other's live counters.
+
+    **The actor is charged first, and the hotel only if the actor was allowed.** The limiter
+    counts refused requests too; checking the hotel after an actor refusal would let one caller's
+    retries drain the property's allowance for every other member.
+    """
+    limiter: FixedWindowRateLimiter = request.app.state.rate_limiter
+    window = settings.copilot_rate_limit_window_seconds
+
+    actor = limiter.check(
+        f"copilot:actor:{current_user.public_id}",
+        RateLimit(settings.copilot_actor_rate_limit, window),
+    )
+    if not actor.allowed:
+        raise LlmBudgetExhaustedError(COPILOT_BUDGET_MESSAGE, retry_after=actor.retry_after)
+
+    hotel = limiter.check(
+        f"copilot:hotel:{hotel_public_id}",
+        RateLimit(settings.copilot_hotel_rate_limit, window),
+    )
+    if not hotel.allowed:
+        raise LlmBudgetExhaustedError(COPILOT_BUDGET_MESSAGE, retry_after=hotel.retry_after)
+
+
+def get_chat_model(settings: SettingsDep) -> ChatModel:
+    """The guarded `ChatModel` for this deployment. Disabled unless `llm_enabled` is set.
+
+    Built per request; the circuit breaker behind it is process-wide per upstream (see
+    `app.llm.factory.breaker_for`), so building the wrapper per request loses nothing.
+    """
+    return build_chat_model(settings)
+
+
+ChatModelDep = Annotated[ChatModel, Depends(get_chat_model)]
+
+
+@functools.cache
+def default_tool_registry() -> ToolRegistry:
+    """The Stage 7.6 registry, built once per process. It is immutable after construction."""
+    return build_default_registry()
+
+
+def get_tool_invocation_service(
+    db: DbSession,
+    scope: ScopeResolverDep,
+    audit: AuditTrailDep,
+    analytics: AnalyticsServiceDep,
+    demand_prediction: DemandPredictionServiceDep,
+    forecast_performance: ForecastPerformanceServiceDep,
+) -> ToolInvocationService:
+    """The Stage 7.6 invocation boundary, over the three services the tools delegate to.
+
+    Each delegated-to service is assembled by its own existing dependency, exactly as its route
+    assembles it, so a tool and a route reach the same service built the same way.
+    """
+    services = ToolServices(
+        analytics=analytics,
+        demand_prediction=demand_prediction,
+        forecast_performance=forecast_performance,
+    )
+    return ToolInvocationService(db, default_tool_registry(), scope, audit, services)
+
+
+ToolInvocationServiceDep = Annotated[ToolInvocationService, Depends(get_tool_invocation_service)]
+
+
+def get_llm_invocation_log(db: DbSession, current_user: CurrentUserDep) -> LlmInvocationLog:
+    """The invocation recorder, already carrying the authenticated caller.
+
+    Bound here for the same reason `get_audit_trail` binds the audit trail's actor: a service
+    that records without naming an identity cannot name the wrong one.
+    """
+    return LlmInvocationLog(LlmInvocationRepository(db), current_user)
+
+
+LlmInvocationLogDep = Annotated[LlmInvocationLog, Depends(get_llm_invocation_log)]
+
+
+def get_copilot_service(
+    db: DbSession,
+    settings: SettingsDep,
+    scope: ScopeResolverDep,
+    model: ChatModelDep,
+    invocations: ToolInvocationServiceDep,
+    log: LlmInvocationLogDep,
+) -> CopilotService:
+    """Assemble the copilot over the request's session.
+
+    The provider and model names are handed over as opaque strings for the accounting row --
+    the service records them and never branches on them -- and the per-request budget comes from
+    the same settings the boundary enforces.
+    """
+    return CopilotService(
+        db,
+        model,
+        default_tool_registry(),
+        invocations,
+        log,
+        scope,
+        budget=Budget(
+            timeout_seconds=settings.llm_timeout_seconds,
+            max_output_tokens=settings.llm_max_output_tokens,
+        ),
+        provider_name=settings.llm_provider,
+        model_name=settings.llm_model,
+    )
+
+
+CopilotServiceDep = Annotated[CopilotService, Depends(get_copilot_service)]
+
+
 __all__ = [
+    "COPILOT_BUDGET_MESSAGE",
     "AmenityServiceDep",
     "AnalyticsServiceDep",
     "AuditServiceDep",
@@ -677,6 +834,8 @@ __all__ = [
     "AuthServiceDep",
     "AvailabilityServiceDep",
     "BookingServiceDep",
+    "ChatModelDep",
+    "CopilotServiceDep",
     "CurrentUserDep",
     "DbSession",
     "DemandPredictionServiceDep",
@@ -687,6 +846,7 @@ __all__ = [
     "HotelAccessPolicyDep",
     "HotelServiceDep",
     "IntelligenceServiceDep",
+    "LlmInvocationLogDep",
     "MembershipServiceDep",
     "PaymentServiceDep",
     "PlatformAccessPolicyDep",
@@ -700,8 +860,11 @@ __all__ = [
     "RoomTypeServiceDep",
     "ScopeResolverDep",
     "SettingsDep",
+    "ToolInvocationServiceDep",
     "change_password_rate_limit",
     "client_address",
+    "copilot_budget",
+    "default_tool_registry",
     "get_amenity_service",
     "get_analytics_service",
     "get_app_settings",
@@ -710,6 +873,8 @@ __all__ = [
     "get_auth_service",
     "get_availability_service",
     "get_booking_service",
+    "get_chat_model",
+    "get_copilot_service",
     "get_current_user",
     "get_db",
     "get_demand_prediction_service",
@@ -720,6 +885,7 @@ __all__ = [
     "get_hotel_access_policy",
     "get_hotel_service",
     "get_intelligence_service",
+    "get_llm_invocation_log",
     "get_membership_service",
     "get_payment_service",
     "get_platform_access_policy",
@@ -732,9 +898,11 @@ __all__ = [
     "get_room_type_amenity_service",
     "get_room_type_service",
     "get_scope_resolver",
+    "get_tool_invocation_service",
     "get_unbound_audit_trail",
     "login_rate_limit",
     "rate_limited",
+    "require_copilot_member",
     "require_platform_admin",
     "require_role",
 ]

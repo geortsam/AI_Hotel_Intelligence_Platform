@@ -380,8 +380,18 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(AppError)
     async def handle_app_error(_: Request, exc: AppError) -> JSONResponse:
-        """Deliberate, client-facing errors are reported as written."""
-        return error_response(exc.status_code, exc.code, exc.message)
+        """Deliberate, client-facing errors are reported as written.
+
+        Stage 7.7: an error that knows when retrying will help says so. Read as an attribute
+        rather than by type so this module need not import the language-model package that
+        defines the one such error (`LlmBudgetExhaustedError`, when a per-actor or per-hotel
+        allowance is spent). An error without the attribute, or with it unset, is unchanged.
+        """
+        response = error_response(exc.status_code, exc.code, exc.message)
+        retry_after = getattr(exc, "retry_after", None)
+        if isinstance(retry_after, int) and retry_after > 0:
+            response.headers["Retry-After"] = str(retry_after)
+        return response
 
     @app.exception_handler(RateLimitExceededError)
     async def handle_rate_limited(_: Request, exc: RateLimitExceededError) -> JSONResponse:

@@ -287,8 +287,9 @@ def test_this_route_is_present_and_is_a_read() -> None:
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
     operations = sum(1 for path in schema["paths"].values() for verb in path if verb in methods)
 
-    assert len(schema["paths"]) == 54
-    assert operations == 86
+    # Stage 7.7 added POST .../copilot/ask: 54 / 86 -> 55 / 87.
+    assert len(schema["paths"]) == 55
+    assert operations == 87
     assert SCHEMA_PATH in schema["paths"]
     assert set(schema["paths"][SCHEMA_PATH]) == {"get"}
 
@@ -651,8 +652,8 @@ def test_the_migration_chain_is_eleven_revisions() -> None:
     versions = REPOSITORY_ROOT / "database" / "migrations" / "versions"
     revisions = sorted(path.name for path in versions.glob("*.py"))
 
-    assert len(revisions) == 12
-    assert revisions[-1] == "20260924_0012_audit_tool_invoked.py"
+    assert len(revisions) == 13
+    assert revisions[-1] == "20260925_0013_llm_invocations.py"
 
 
 # ======================================================================================

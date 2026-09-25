@@ -781,7 +781,7 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     """
     chain = revisions()
 
-    assert len(chain) == 12
+    assert len(chain) == 13
     roots = [rev for rev, down in chain.items() if down is None]
     heads = [rev for rev in chain if rev not in set(chain.values())]
 
@@ -790,14 +790,16 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     # own positions, which are unchanged; the head moves because the chain grew past them.
     # Stage 7.6 added 0012, the fourth audit revision: it widens the two vocabulary CHECKs
     # exactly as 0009 widened one.
-    assert heads == ["0012_audit_tool_invoked"]
+    # Stage 7.7 added 0013, which creates `llm_invocations` and touches no audit table.
+    assert heads == ["0013_llm_invocations"]
     assert chain["0007_audit_events"] == "0006_users_password_changed_at"
     assert chain["0008_audit_retention_archive"] == "0007_audit_events"
     assert chain["0009_audit_booking_deleted"] == "0008_audit_retention_archive"
     assert chain["0012_audit_tool_invoked"] == "0011_demand_prediction_public_id"
+    assert chain["0013_llm_invocations"] == "0012_audit_tool_invoked"
     # Every other revision is somebody's parent exactly once: no fork.
     parents = [down for down in chain.values() if down is not None]
-    assert len(parents) == len(set(parents)) == 11
+    assert len(parents) == len(set(parents)) == 12
 
 
 def test_the_audit_table_is_created_by_exactly_one_migration() -> None:

@@ -57,6 +57,10 @@ APPROVED_TABLES = {
     # Stage 6.8. One row per served demand prediction: what the model said, about what, and
     # from which inputs. Hotel-scoped, never updated, and reachable through no endpoint.
     "demand_predictions",
+    # Stage 7.7. One row per copilot question: prompt identity, the upstream model, how the
+    # bounded tool loop ended, and its token and latency cost -- never the question or the
+    # answer. Hotel-scoped, append-only by trigger, and reachable through no read endpoint.
+    "llm_invocations",
 }
 
 

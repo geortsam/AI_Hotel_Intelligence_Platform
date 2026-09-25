@@ -17,6 +17,7 @@
 > | Amendment | Stage | Date | Sections |
 > |---|---|---|---|
 > | A1 | 7.6 — Tool boundary | 2026-09-24 | §4.3, §4.4, §5.4, §5.7, **§5.8 (new)**, §7.2, §7.3 |
+> | A2 | 7.7 — Copilot, single turn | 2026-09-25 | §4.1, §4.4, §4.5, §5.1, §5.7, **§7.5 (new)** |
 
 ---
 
@@ -213,6 +214,16 @@ router ──► CopilotService ──► HotelScopeResolver.require_hotel(...) 
 caller is allowed*.** That decision is made before the model is invoked and re-made inside every
 tool.
 
+> **Amendment A2 (Stage 7.7) — what leaves the process.** `POST /hotels/{id}/copilot/ask` sends
+> **the caller's question and the results of every tool the model calls** to the configured
+> external language-model provider, together with the system prompt and the tool catalogue. That
+> is what answering requires, and it is stated in the endpoint's own OpenAPI description rather
+> than left for a reader to infer: tool results are this hotel's own analytics, forecast and
+> measured accuracy, validated against output schemas that carry no identifier (§7.4). Nothing
+> about any other hotel can be in them, because the loop's executor is bound to the path hotel
+> and no tool takes a hotel from the model. Authorization runs as the route's first dependency,
+> and the budget dependency depends on it, so the order is a property of the dependency graph.
+
 ### 4.2 Prompt injection
 
 Two injection surfaces, treated differently:
@@ -260,12 +271,39 @@ it is persisted at all (§7), lives in its own tenant-scoped table with its own 
 > trigger is untouched. One event is written per call that reached a resolved hotel, whatever its
 > outcome; a call for a hotel the caller cannot see is a 404 before anything is attributed.
 
+> **Amendment A2 (Stage 7.7) — the invocation record.** Each copilot question leaves one row in
+> `llm_invocations` (migration `0013_llm_invocations`): the hotel, the authenticated actor (bound
+> by the dependency chain as `AuditTrail` binds it), the prompt identity, the provider and model
+> the request was routed to, the stop reason, whether it was complete, the declared error code
+> when the model failed, round/call/failure counts, input and output tokens as the provider
+> reported them, latency in whole milliseconds, and the request id -- the same id the request's
+> `tool.invoked` events carry. **No question, no answer, no prompt text, no tool output, no
+> argument and no credential** is stored: the table has no column for any of them. The answer is
+> returned to the caller and kept nowhere. The table is append-only by trigger (mirroring
+> `audit_events`), `ON DELETE RESTRICT` on both foreign keys, and its CHECK constraints describe
+> the data -- non-negative counts, failures within calls, `complete` agreeing with
+> `stop_reason` -- never the tool loop's operational limits. **Retention is deferred**: the
+> repository's one retention mechanism archives `audit_events`, and no rule for this table exists
+> yet.
+
 ### 4.5 Cost as a security property
 
 An unbounded LLM spend is an availability risk. The existing `FixedWindowRateLimiter` is reused
 for per-actor and per-hotel call limits, and every stage that adds an LLM path also adds its
 budget ceiling and its behaviour when the ceiling is hit (a refusal with a clear error code, never
 a silent degradation).
+
+> **Amendment A2 (Stage 7.7) — the copilot's budgets.** Two call limits, per hour, charged by
+> `app.api.deps.copilot_budget` through the existing `FixedWindowRateLimiter` without changing
+> it: **20 questions per actor** and **100 per hotel** (`copilot_actor_rate_limit`,
+> `copilot_hotel_rate_limit`), over **one shared 3600-second window**
+> (`copilot_rate_limit_window_seconds`) so neither policy can prune the other's live counters.
+> Keys are the caller's `public_id` and the path's hotel UUID -- never an internal key. The
+> caller's membership is established first, so a non-member gets the hotel's 404 and never
+> touches its counter; the actor is charged before the hotel, and a refused actor does not charge
+> the hotel. A refusal is `429 LLM_BUDGET_EXHAUSTED` with `Retry-After` (the seconds until the
+> window returns), deliberately distinct from `RATE_LIMITED`. Limits are per worker process, as
+> every limit on this limiter is.
 
 ---
 
@@ -291,6 +329,14 @@ for, token counts, latency, the provider and model that actually answered, and a
 **No service imports a provider SDK.** The import closure of `app/services/copilot.py` reaches
 `app/llm/base.py` and nothing vendor-specific — the same discipline `app.ml.artifact_store` uses
 for `ml.artifact`, and testable the same way.
+
+> **Amendment A2 (Stage 7.7) — attribution without coupling.** The closure claim above is now a
+> test: importing `app.services.copilot` loads no adapter, no factory and no vendor SDK. The
+> provider and model recorded for a request are resolved from settings by the composition root
+> (`app/api/deps.py`, the only API module that imports `app.llm`) and handed to the service as
+> opaque strings; no module consuming the seam reads `.provider`, `.model` or `.diagnostics`
+> off a response, which a test now asserts -- the claim `ChatResponse`'s docstring made in
+> Stage 7.5 before any test did. Neither name is ever returned to a client.
 
 ### 5.2 Configuration
 
@@ -359,6 +405,23 @@ Specified once, here, so no stage improvises it:
 
 In every case the response uses the existing `ErrorResponse` envelope and leaks no provider
 detail, no prompt and no stack.
+
+> **Amendment A2 (Stage 7.7) — how the copilot endpoint presents each outcome.**
+>
+> | Loop outcome | HTTP |
+> |---|---|
+> | `completed`, every figure grounded | 200, `complete: true` |
+> | `completed`, a figure no tool returned | 200, `complete: false`, `stop_reason: ungrounded_figures`, answer withheld |
+> | `tool_failed`, `max_rounds`, `tool_call_cap` | 200, `complete: false`, that `stop_reason`, a fixed `notice` |
+> | `model_failed` **after** a tool ran | 200, `complete: false`, `stop_reason: model_failed` |
+> | `model_failed` **before** any tool ran | the declared error re-raised: rows 1, 2, 3, 5, 6 above, unchanged |
+>
+> A bounded or partial result is never converted into a 500 or 502: the bound is this server's
+> policy working as designed, and the tool calls that did succeed were real and audited. Row 4
+> ("tool raises") stays a labelled partial; `LLM_TOOL_FAILED` stays declared and unraised. The
+> invocation is recorded in every case, including the re-raised ones. A per-request budget
+> refusal carries no `Retry-After` (retrying the same request would be refused again); a spent
+> per-actor or per-hotel allowance does.
 
 > **Amendment A1 (Stage 7.6) — row 4, "Tool raises".** A tool failure is every invocation outcome
 > other than success: an unknown or un-offered tool name, a refused role, arguments that fail the
@@ -547,6 +610,24 @@ audit                action name, what is recorded, what is not
 Tool output is validated against its schema before reaching the model. Internal ids, digests,
 feature vectors and other tenants' data cannot pass the schema. This is the same discipline the
 Stage 6.11 read API uses, applied at the tool boundary.
+
+### 7.5 The copilot's answer — Amendment A2 (Stage 7.7)
+
+**Figures are checked, not trusted.** The prompt (`copilot_answer@v1`, checksummed in the
+registry) says every number must come from a tool result in the exchange. The copilot service
+then verifies it: every number written in the answer must equal a number the tools returned in
+this request -- or one the caller wrote in the question -- rounded half-up to the precision it is
+written at, or a fraction the tools returned written as a percentage. Anything else (a guess, a
+recalled figure, a sum or difference the model computed, another property's figure) and the
+answer is **withheld**: the response carries no answer text, `complete: false`, and
+`stop_reason: ungrounded_figures`. The check proves each figure *exists* in the tool results; it
+does not prove the figure is attached to the right label -- that is semantic evaluation, and it
+is the evaluation harness's job (Stage 7.8).
+
+**The response labels itself.** `answer`, `complete`, `stop_reason`, a fixed `notice` when not
+complete, `tools_used` (each registered tool name and its outcome; a name the model invented is
+reported as `null`), the prompt identity and `invocation_public_id`. No provider, model, token
+count, key or tenant identifier appears in it. Stateless: no conversation is kept.
 
 ---
 

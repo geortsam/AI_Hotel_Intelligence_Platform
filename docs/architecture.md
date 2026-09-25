@@ -121,9 +121,10 @@ identifiers at the API boundary are UUIDs; internal `BIGINT` keys are never seri
 `repositories/` 18, `models/` 14, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 2 — and the HTTP
 surface was 82 operations, of which 77 required authentication.
 
-**Current state:** `api/` 30 files, `services/` 29, `schemas/` 25, `repositories/` 20, `models/`
-15, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 9. The HTTP surface is **54 paths / 86 operations**,
-of which **81 require authentication**; the 5 that do not are the version-metadata endpoint,
+**Current state:** `api/` 31 files, `services/` 32, `schemas/` 26, `repositories/` 21, `models/`
+16, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 9, and the V2 packages `llm/` 11 and `copilot/`
+12. The HTTP surface is **55 paths / 87 operations**,
+of which **82 require authentication**; the 5 that do not are the version-metadata endpoint,
 registration, login and the two health probes — the same five as at V1.
 
 **What moved it, and when.** Stage 6.6 added one read-only, hotel-scoped, authenticated route —
@@ -155,7 +156,10 @@ Stages 6.8 and 6.11 added two migrations after V1 — `0010_demand_predictions` 
 6.10 added services and protocols only: no table, no migration, no route. Stage 7.6 added the
 third, `0012_audit_tool_invoked`, which creates nothing: it widens the two closed audit
 vocabulary CHECKs by one value each (`tool.invoked`, `tool`) so copilot tool calls are recorded
-on the existing append-only trail. Head `0012` across 12 linear revisions, still 22 tables.
+on the existing append-only trail. Stage 7.7 added the fourth, `0013_llm_invocations`: one
+append-only table holding a content-free account of each copilot question (prompt version,
+upstream model, stop reason, tokens, latency -- never the question or the answer). Head
+`0013` across 13 linear revisions, 23 application tables.
 
 ---
 

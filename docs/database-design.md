@@ -3,7 +3,7 @@
 > **Stage snapshot, not a current-state document.** This is the Stage 2A design record and is
 > not maintained since. The schema it designs was implemented and has since grown by six
 > migrations (users, memberships, platform admins, audit events, audit archive, served demand
-> predictions); the head is now `0012_audit_tool_invoked` over 22 application tables. The "design only" status line below
+> predictions); the head is now `0013_llm_invocations` over 23 application tables. The "design only" status line below
 > describes this document at the time it was written, not the repository today.
 
 **Status: design only. No ORM models, no migrations, no SQL has been written.**

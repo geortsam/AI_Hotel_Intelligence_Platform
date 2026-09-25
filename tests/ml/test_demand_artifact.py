@@ -582,7 +582,9 @@ def test_exactly_one_route_serves_the_model_and_none_names_an_artifact() -> None
     schema = create_app(Settings(environment="test", debug=True)).openapi()
     paths = schema["paths"]
     methods = {"get", "post", "put", "patch", "delete", "head", "options"}
-    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 86
+    # Stage 7.7's copilot route is outside /ml and reaches the model only through the
+    # serving service, as a tool -- still exactly one route that loads the artifact.
+    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 87
 
     assert sorted(path for path in paths if "/ml/" in path) == sorted(ML_ENDPOINTS)
     for endpoint in ML_ENDPOINTS:
