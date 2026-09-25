@@ -196,13 +196,14 @@ def test_a_member_gets_a_complete_answer_and_one_accounting_row(world: World) ->
     assert body["notice"] is None
     assert body["answer"] == "In May 2026, 3 room nights were occupied."
     assert body["tools_used"] == [{"tool": "get_hotel_kpis", "outcome": "succeeded"}]
-    assert (body["prompt_id"], body["prompt_version"]) == ("copilot_answer", "v1")
+    # Stage 7.10: the copilot renders copilot_answer@v2.
+    assert (body["prompt_id"], body["prompt_version"]) == ("copilot_answer", "v2")
 
     [row] = rows(world.session)
     assert str(row["public_id"]) == body["invocation_public_id"]
     assert row["hotel_id"] == world.a.id
     assert row["actor_user_id"] == world.user_id("viewer")
-    assert (row["prompt_id"], row["prompt_version"]) == ("copilot_answer", "v1")
+    assert (row["prompt_id"], row["prompt_version"]) == ("copilot_answer", "v2")
     assert (row["stop_reason"], row["complete"], row["error_code"]) == ("completed", True, None)
     assert (row["rounds"], row["model_calls"], row["tool_calls"], row["tool_failures"]) == (
         1,

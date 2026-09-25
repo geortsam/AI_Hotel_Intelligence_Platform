@@ -1,4 +1,4 @@
-"""Run `copilot_eval_v1` against the REAL configured language model, and record it (Stage 7.8).
+"""Run an evaluation set against the REAL configured language model, and record it (Stage 7.8).
 
 This is the only way this repository evaluates an actual model, and it is never run by CI. It
 makes paid API calls -- one question at a time, up to four model calls each -- so it refuses to
@@ -6,6 +6,11 @@ start without `--confirm-paid-api-call`.
 
     LLM_ENABLED=true LLM_API_KEY=... \\
         python scripts/copilot_live_eval.py --out eval-output --confirm-paid-api-call
+
+`--set copilot_knowledge_eval_v1` (Stage 7.10) runs the document questions instead of the default
+`copilot_eval_v1`. Either way the recording names the prompt the copilot actually renders --
+`app.services.copilot.PROMPT`, `copilot_answer@v2` since Stage 7.10 -- never a prompt it did not
+use.
 
 Configuration comes from `Settings`, exactly as the application reads it: provider, model, key,
 timeout and token ceiling. The script never prints, logs or writes the key. It requires the
@@ -49,6 +54,13 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         help="Required. Acknowledges that this calls the configured provider and costs money.",
     )
     parser.add_argument(
+        "--set",
+        dest="question_set",
+        choices=["copilot_eval_v1", "copilot_knowledge_eval_v1"],
+        default="copilot_eval_v1",
+        help="Which frozen question set to run. Default: copilot_eval_v1.",
+    )
+    parser.add_argument(
         "--case",
         action="append",
         default=[],
@@ -60,12 +72,16 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     options = parse_arguments(argv)
 
+    from dataclasses import replace
+    from typing import Any
+
     from app.core.config import Settings
     from app.llm.base import Budget, ChatModel
     from app.llm.factory import build_chat_model
-    from app.llm.prompts.registry import COPILOT_ANSWER_V1
-    from tests.evaluation.harness import canonical, run
-    from tests.evaluation.questions import COPILOT_EVAL_V1, EvalCase, QuestionSet
+    from app.services.copilot import PROMPT
+    from tests.evaluation import harness, knowledge_harness
+    from tests.evaluation.knowledge_questions import COPILOT_KNOWLEDGE_EVAL_V1
+    from tests.evaluation.questions import COPILOT_EVAL_V1
     from tests.evaluation.replay import RecordingModel, Replays
 
     settings = Settings()
@@ -73,29 +89,33 @@ def main(argv: list[str] | None = None) -> int:
         print("LLM_ENABLED must be true and LLM_API_KEY set.", file=sys.stderr)
         return 2
 
-    question_set = COPILOT_EVAL_V1
+    full: Any = (
+        COPILOT_KNOWLEDGE_EVAL_V1
+        if options.question_set == "copilot_knowledge_eval_v1"
+        else COPILOT_EVAL_V1
+    )
+    runner: Any = knowledge_harness.run if full is COPILOT_KNOWLEDGE_EVAL_V1 else harness.run
+    question_set = full
     if options.case:
-        unknown = set(options.case) - {case.case_id for case in question_set.cases}
+        unknown = set(options.case) - {case.case_id for case in full.cases}
         if unknown:
             print(f"unknown case ids: {sorted(unknown)}", file=sys.stderr)
             return 2
-        question_set = QuestionSet(
-            question_set.set_id,
-            question_set.version,
-            tuple(case for case in question_set.cases if case.case_id in options.case),
+        question_set = replace(
+            full, cases=tuple(case for case in full.cases if case.case_id in options.case)
         )
 
     model = build_chat_model(settings)
     recorded_on = dt.date.today().isoformat()
     recordings: dict[str, RecordingModel] = {}
 
-    def model_for(case: EvalCase) -> ChatModel:
+    def model_for(case: Any) -> ChatModel:
         recorder = RecordingModel(model)
         recordings[case.case_id] = recorder
         print(f"  {case.case_id} ...", flush=True)
         return recorder
 
-    report = run(
+    report = runner(
         question_set,
         model_for,
         mode="live",
@@ -112,10 +132,10 @@ def main(argv: list[str] | None = None) -> int:
         provider=settings.llm_provider,
         model=settings.llm_model,
         recorded_on=recorded_on,
-        question_set=COPILOT_EVAL_V1.identity,
-        question_set_checksum=COPILOT_EVAL_V1.checksum,
-        prompt=COPILOT_ANSWER_V1.identity,
-        prompt_checksum=COPILOT_ANSWER_V1.checksum,
+        question_set=full.identity,
+        question_set_checksum=full.checksum,
+        prompt=PROMPT.identity,
+        prompt_checksum=PROMPT.checksum,
         cases={case_id: recorder.turns() for case_id, recorder in recordings.items()},
     )
 
@@ -123,7 +143,9 @@ def main(argv: list[str] | None = None) -> int:
     (options.out / f"replays-{recorded_on}.json").write_text(
         json.dumps(replays.as_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    (options.out / f"report-{recorded_on}.json").write_text(canonical(report), encoding="utf-8")
+    (options.out / f"report-{recorded_on}.json").write_text(
+        harness.canonical(report), encoding="utf-8"
+    )
 
     print(report["statement"])
     for measure, counts in report["measures"].items():

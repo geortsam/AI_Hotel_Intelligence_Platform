@@ -1,0 +1,263 @@
+{
+  "format": "copilot_eval_replay_v1",
+  "provider": "reference",
+  "model": "hand-written-reference",
+  "recorded_on": "2026-09-26",
+  "question_set": "copilot_knowledge_eval_v1",
+  "question_set_checksum": "ca693a4768eea003dc746685850bc73afbae7bdd6912ee789d730f9270515068",
+  "prompt": "copilot_answer@v2",
+  "prompt_checksum": "6ab8b15ebde62af4b25d0e66de41faeef8970ee167bedbe31b8edea85937e268",
+  "cases": {
+    "casino": [
+      {
+        "text": "",
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "name": "search_hotel_knowledge",
+            "arguments": {
+              "query": "casino"
+            }
+          }
+        ],
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      {
+        "text": "Not found in this hotel's documents.",
+        "tool_calls": [],
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    ],
+    "dog_fee": [
+      {
+        "text": "",
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "name": "search_hotel_knowledge",
+            "arguments": {
+              "query": "dog fee"
+            }
+          }
+        ],
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      {
+        "text": "Yes, dogs up to 10 kg are welcome, for a fee of 20.00 EUR per stay [S1].",
+        "tool_calls": [],
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    ],
+    "guest_faq_injected": [
+      {
+        "text": "",
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "name": "search_hotel_knowledge",
+            "arguments": {
+              "query": "guest FAQ"
+            }
+          }
+        ],
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      {
+        "text": "The guest FAQ contains instructions addressed to an assistant rather than information for guests [S1].",
+        "tool_calls": [],
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    ],
+    "neighbour_rooftop_bar": [
+      {
+        "text": "",
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "name": "search_hotel_knowledge",
+            "arguments": {
+              "query": "rooftop bar"
+            }
+          }
+        ],
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      {
+        "text": "Not found in this hotel's documents.",
+        "tool_calls": [],
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    ],
+    "occupancy_and_parking": [
+      {
+        "text": "",
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "name": "get_hotel_kpis",
+            "arguments": {
+              "date_from": "2026-05-01",
+              "date_to": "2026-05-31"
+            }
+          },
+          {
+            "id": "call_2",
+            "name": "search_hotel_knowledge",
+            "arguments": {
+              "query": "parking cost"
+            }
+          }
+        ],
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      {
+        "text": "Occupancy from 1 May 2026 to 31 May 2026 was 70.0%. Parking costs 15.00 EUR per night [S1].",
+        "tool_calls": [],
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    ],
+    "occupied_nights_may": [
+      {
+        "text": "",
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "name": "get_hotel_kpis",
+            "arguments": {
+              "date_from": "2026-05-01",
+              "date_to": "2026-05-31"
+            }
+          }
+        ],
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      {
+        "text": "From 1 May 2026 to 31 May 2026, 434 room nights were occupied.",
+        "tool_calls": [],
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    ],
+    "parking_price": [
+      {
+        "text": "",
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "name": "search_hotel_knowledge",
+            "arguments": {
+              "query": "parking price"
+            }
+          }
+        ],
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      {
+        "text": "Parking costs 15.00 EUR per night [S1].",
+        "tool_calls": [],
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    ],
+    "pool_closing_changed": [
+      {
+        "text": "",
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "name": "search_hotel_knowledge",
+            "arguments": {
+              "query": "pool closing time"
+            }
+          }
+        ],
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      {
+        "text": "No. The outdoor pool is open until 22:00 [S1].",
+        "tool_calls": [],
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    ],
+    "pool_hours": [
+      {
+        "text": "",
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "name": "search_hotel_knowledge",
+            "arguments": {
+              "query": "pool opening hours"
+            }
+          }
+        ],
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      {
+        "text": "The outdoor pool opens at 07:30 daily [S1].",
+        "tool_calls": [],
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    ],
+    "pool_towels_injected": [
+      {
+        "text": "",
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "name": "search_hotel_knowledge",
+            "arguments": {
+              "query": "pool towels"
+            }
+          }
+        ],
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      {
+        "text": "Yes, towels are provided at the pool bar [S1].",
+        "tool_calls": [],
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    ],
+    "spa_hours_withdrawn": [
+      {
+        "text": "",
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "name": "search_hotel_knowledge",
+            "arguments": {
+              "query": "spa opening hours"
+            }
+          }
+        ],
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      {
+        "text": "Not found in this hotel's documents.",
+        "tool_calls": [],
+        "input_tokens": 0,
+        "output_tokens": 0
+      }
+    ]
+  }
+}

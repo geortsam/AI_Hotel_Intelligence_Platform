@@ -55,7 +55,7 @@ from app.llm.errors import (
     LlmUnavailableError,
 )
 from app.llm.prompts import REGISTRY
-from app.llm.prompts.registry import COPILOT_ANSWER_V1
+from app.llm.prompts.registry import COPILOT_ANSWER_V1, COPILOT_ANSWER_V2
 from app.llm.testing import FailingModel, ScriptedModel, ScriptedTurn
 from app.models.llm_invocation import LLM_MODEL_ERROR_CODES, LLM_STOP_REASONS, LlmInvocation
 from app.schemas.copilot import (
@@ -101,7 +101,9 @@ def python_files(root: Path) -> list[Path]:
 def test_the_copilot_prompt_is_registered_by_identity() -> None:
     assert COPILOT_ANSWER_V1.identity == "copilot_answer@v1"
     assert REGISTRY["copilot_answer@v1"] is COPILOT_ANSWER_V1
-    assert set(REGISTRY) == {"boundary_probe@v1", "copilot_answer@v1"}
+    # Stage 7.10 registered v2 beside it. v1 is kept, unchanged, so an answer recorded under it
+    # stays attributable to what it said.
+    assert set(REGISTRY) == {"boundary_probe@v1", "copilot_answer@v1", "copilot_answer@v2"}
 
 
 def test_the_copilot_prompt_checksum_is_pinned_and_reproducible_by_hand() -> None:
@@ -354,6 +356,7 @@ def test_a_question_is_trimmed_and_may_be_exactly_the_maximum() -> None:
 
 
 def test_the_response_is_exactly_these_fields() -> None:
+    """Stage 7.10 added two fields, additively: nothing was removed or renamed."""
     assert set(CopilotAnswerResponse.model_fields) == {
         "answer",
         "complete",
@@ -363,6 +366,8 @@ def test_the_response_is_exactly_these_fields() -> None:
         "prompt_id",
         "prompt_version",
         "invocation_public_id",
+        "citations",
+        "document_evidence",
     }
 
 
@@ -429,7 +434,10 @@ class FakeInvocations:
         arguments: Mapping[str, Any],
         *,
         offered: Any,
+        evidence: Any = None,
     ) -> ToolOutcome:
+        # Stage 7.10: the service hands every call its request's evidence ledger. These fakes
+        # return structured outputs only, so nothing is ever staged in it.
         self.calls.append((hotel_public_id, name, dict(arguments), frozenset(offered)))
         if self.outcomes:
             return self.outcomes.pop(0)
@@ -506,13 +514,14 @@ def test_a_complete_answer_is_labelled_complete_and_recorded() -> None:
     assert [u.model_dump() for u in response.tools_used] == [
         {"tool": "get_hotel_kpis", "outcome": "succeeded"}
     ]
-    assert (response.prompt_id, response.prompt_version) == ("copilot_answer", "v1")
+    # Stage 7.10: the copilot renders v2.
+    assert (response.prompt_id, response.prompt_version) == ("copilot_answer", "v2")
     assert response.invocation_public_id == FakeRow.public_id
     [row] = harness.log.rows
     assert row == {
         "hotel_id": FakeHotel.id,
         "prompt_id": "copilot_answer",
-        "prompt_version": "v1",
+        "prompt_version": "v2",
         "provider": "upstream-provider",
         "model": "upstream-model-name",
         "stop_reason": "completed",
@@ -536,7 +545,7 @@ def test_the_orchestration_order_and_the_offered_catalogue() -> None:
     assert harness.invocations.order == [f"permitted:{HOTEL}"]
     sent = cast(ScriptedModel, harness.model).calls[0]
     assert [spec.name for spec in sent.tools] == ["get_daily_series", "get_hotel_kpis"]
-    assert sent.messages[0].content == COPILOT_ANSWER_V1.system
+    assert sent.messages[0].content == COPILOT_ANSWER_V2.system
     assert sent.prompt_id == "copilot_answer"
 
 
@@ -698,7 +707,13 @@ def test_no_content_reaches_the_accounting_row() -> None:
     harness.ask("QUESTION-SENTINEL")
 
     dumped = json.dumps(harness.log.rows, default=str)
-    for sentinel in ["QUESTION-SENTINEL", "ANSWER-SENTINEL", COPILOT_ANSWER_V1.system, "2026-05"]:
+    for sentinel in [
+        "QUESTION-SENTINEL",
+        "ANSWER-SENTINEL",
+        COPILOT_ANSWER_V1.system,
+        COPILOT_ANSWER_V2.system,
+        "2026-05",
+    ]:
         assert sentinel not in dumped
 
 

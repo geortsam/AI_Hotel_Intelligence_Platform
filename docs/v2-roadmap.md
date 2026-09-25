@@ -3,7 +3,7 @@
 > The ordered plan produced by Stage 7.1. Each stage is specified well enough to be implemented
 > on its own, in order, without re-deciding anything.
 >
-> **Implemented so far: Stages 7.2 to 7.9** — all of Track A, and the first five stages of
+> **Implemented so far: Stages 7.2 to 7.10** — all of Track A, and the first six stages of
 > Track B. Every other stage below is a specification and nothing more; none of its code
 > exists.
 > A stage carries `· *done*` in its heading once it ships, with a note recording what was actually
@@ -439,7 +439,35 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | **Acceptance** | (1) retrieval bounded by `hotel_id` in the SQL; (2) a re-uploaded document creates a version and supersedes cleanly; (3) every chunk is citable by `public_id`; (4) no internal id in any response |
 | **Done when** | CI green, migration verified on a disposable database first |
 
-### Stage 7.10 — Grounded retrieval answers
+### Stage 7.10 — Grounded retrieval answers · *done*
+
+> **Built as specified, with three decisions taken with the user** (architecture Amendment A5):
+> the model cites request-scoped source labels (`[S1]`), never identifiers, so the Stage 7.6 rule
+> that a tool returns no row identifier stands; a citation no search in this request returned
+> replaces the whole answer with "Not found in this hotel's documents." rather than being stripped;
+> and that same replacement applies whenever a search succeeded and nothing was cited.
+>
+> **No migration.** `stop_reason` is a closed CHECK, so neither outcome is a new stop reason: the
+> response gains `citations` and `document_evidence` additively, and nothing new is persisted.
+> Surface unchanged at 60/93. `copilot_answer@v2` (`6ab8b15e…e268`) is registered beside v1, which
+> is unchanged.
+>
+> **Grounding tightened, not loosened:** a document's numbers ground only the sentences citing it.
+> Five mutations -- accepting an unresolved citation, dropping the not-found rule, making staged
+> labels citable, letting documents ground every sentence, a tool ignoring the context hotel --
+> each fail the suite.
+>
+> **Evaluation.** `copilot_knowledge_eval_v1` (11 cases, 10 measures, each reported separately)
+> and `knowledge_retrieval_v1` (24 queries over real PostgreSQL). The pgvector threshold was
+> declared first -- recall@5 ≥ 0.90 on real hotel documents -- and the author-written set measured
+> **0.6957**: all shared-word queries found, all seven paraphrases missed (every term is
+> required). A regression figure and a signal, not the criterion's evidence. `copilot_eval_v1` is
+> unchanged; its report now names v2 and the sixth tool offered.
+>
+> Delivered: the tool, the citation ledger, the grounding extension, prompt v2, the response
+> fields, two evaluation sets and their pinned reports, a real-PostgreSQL injection and isolation
+> suite, Amendment A5. 0 migrations, 0 dependencies, 0 frontend changes. 126 new tests; backend 5878 → 6004. Frontend
+> untouched at 1141.
 
 | | |
 |---|---|

@@ -19,6 +19,17 @@ name no tool has is reported as `null`, never as the text the model wrote. No fi
 the response that is not inside `answer`, and no provider name, model name, key, token count or
 tenant identifier appears at all. `invocation_public_id` names the stored `llm_invocations` row,
 so an answer can be quoted in a support request.
+
+## Citations (Stage 7.10, additive)
+
+`citations` lists the document excerpts the served `answer` cites, in order of first citation:
+each with the `[S1]`-style label written in the answer, the chunk's and the document's
+`public_id`, the document title and its version. Every one was returned by a document search in
+THIS request, for THIS hotel, from an active version -- the service resolves each label against
+the request's own ledger and never trusts what the model wrote. `document_evidence` says how the
+answer relates to the hotel's documents; `not_found` and `citation_rejected` both replace the
+answer with the fixed "Not found in this hotel's documents." (or withhold a partial one). No new
+stop reason exists for either -- the persisted vocabulary is unchanged.
 """
 
 from __future__ import annotations
@@ -40,6 +51,16 @@ StopReason = Literal[
     "model_failed",
     "ungrounded_figures",
 ]
+
+#: How an answer relates to the hotel's documents. Closed, and never persisted.
+#:
+#: - `none`: no document search succeeded in this request, and the answer cites nothing.
+#: - `cited`: the answer cites at least one excerpt, and every citation resolves.
+#: - `not_found`: a document search succeeded but the answer cited none of its excerpts; the
+#:   answer is replaced by the fixed not-found sentence (withheld, when partial).
+#: - `citation_rejected`: the answer cited a source no search in this request returned; replaced
+#:   (or withheld) the same way. A fabricated citation is not stripped and served around.
+DocumentEvidence = Literal["none", "cited", "not_found", "citation_rejected"]
 
 ToolOutcomeName = Literal[
     "succeeded",
@@ -77,6 +98,16 @@ class CopilotToolUse(BaseModel):
     outcome: ToolOutcomeName
 
 
+class CopilotCitation(BaseModel):
+    """One excerpt the answer cites, as the answer cites it and as this server stores it."""
+
+    source: str = Field(description="The label written in the answer, e.g. S1.")
+    chunk_public_id: uuid.UUID = Field(description="The cited chunk.")
+    document_public_id: uuid.UUID = Field(description="The document version the chunk belongs to.")
+    title: str = Field(description="That version's title.")
+    version: int = Field(description="That version's number.")
+
+
 class CopilotAnswerResponse(BaseModel):
     """The copilot's answer, labelled complete or partial."""
 
@@ -106,13 +137,29 @@ class CopilotAnswerResponse(BaseModel):
     invocation_public_id: uuid.UUID = Field(
         description="Identifies the stored accounting record of this request."
     )
+    citations: list[CopilotCitation] = Field(
+        description=(
+            "The document excerpts the answer cites, in order. Each was returned by a document "
+            "search in this request, for this hotel, from an active version. Empty when the "
+            "answer cites nothing or was replaced or withheld."
+        )
+    )
+    document_evidence: DocumentEvidence = Field(
+        description=(
+            "How the answer relates to this hotel's documents: `none`, `cited`, `not_found` "
+            "(a search ran but nothing was cited) or `citation_rejected` (the answer cited a "
+            "source no search in this request returned)."
+        )
+    )
 
 
 __all__ = [
     "MAX_QUESTION_LENGTH",
     "CopilotAnswerResponse",
     "CopilotAskCreate",
+    "CopilotCitation",
     "CopilotToolUse",
+    "DocumentEvidence",
     "StopReason",
     "ToolOutcomeName",
 ]

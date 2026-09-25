@@ -13,20 +13,41 @@ could replay the turns, but not the token counts a live recording captured -- he
 
 **A replay is bound to what it was recorded against.** The file names the question set and the
 prompt, each with its checksum; loading refuses a file recorded against different ones, because
-replaying old answers to new questions would score nonsense and report it as a result.
+replaying old answers to new questions would score nonsense and report it as a result. The prompt
+is the one the copilot renders today (`app.services.copilot.PROMPT`): Stage 7.10 moved it to
+`copilot_answer@v2`, and the Stage 7.8 reference exchanges were re-bound to it then -- their turns
+unchanged, because none of them searches or cites a document.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from app.llm.base import ChatModel, ChatRequest, ChatResponse, TokenUsage, ToolCall
-from app.llm.prompts.registry import COPILOT_ANSWER_V1
-from tests.evaluation.questions import QuestionSet
+from app.services.copilot import PROMPT
+
+
+class _Case(Protocol):
+    @property
+    def case_id(self) -> str: ...
+
+
+class ReplayableSet(Protocol):
+    """What a replay file is bound to: `copilot_eval_v1` or `copilot_knowledge_eval_v1`."""
+
+    @property
+    def identity(self) -> str: ...
+
+    @property
+    def checksum(self) -> str: ...
+
+    @property
+    def cases(self) -> Iterable[_Case]: ...
+
 
 REPLAY_FORMAT = "copilot_eval_replay_v1"
 
@@ -102,7 +123,7 @@ class Replays:
         }
 
 
-def load_replays(path: Path, question_set: QuestionSet) -> Replays:
+def load_replays(path: Path, question_set: ReplayableSet) -> Replays:
     """Read a replay file, refusing one recorded against another question set or prompt."""
     raw = json.loads(path.read_text(encoding="utf-8"))
     if raw.get("format") != REPLAY_FORMAT:
@@ -125,10 +146,7 @@ def load_replays(path: Path, question_set: QuestionSet) -> Replays:
         question_set.checksum,
     ):
         raise ValueError(f"{path.name} was recorded against another question set")
-    if (replays.prompt, replays.prompt_checksum) != (
-        COPILOT_ANSWER_V1.identity,
-        COPILOT_ANSWER_V1.checksum,
-    ):
+    if (replays.prompt, replays.prompt_checksum) != (PROMPT.identity, PROMPT.checksum):
         raise ValueError(f"{path.name} was recorded against another prompt")
     missing = {case.case_id for case in question_set.cases} - set(replays.cases)
     if missing:
@@ -204,6 +222,7 @@ __all__ = [
     "RecordingModel",
     "ReplayError",
     "ReplayModel",
+    "ReplayableSet",
     "Replays",
     "Turn",
     "load_replays",

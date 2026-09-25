@@ -12,6 +12,8 @@ Stage 7.6. Every field §7.3 lists for a tool has a home here, and a test per fi
   tool runs.
 - **tenant scope** — `ToolContext.hotel_public_id`: from the authorized request, never from the
   model.
+- **citable evidence** — `ToolContext.evidence` (Stage 7.10): the request's own ledger of the
+  excerpts a search returned, by source label. Only the knowledge tool writes to it.
 - **side effects** — `ToolContract.side_effect`: declared, and tested against what the tool does.
 - **data restrictions** — `ToolContract.withheld`: the response fields dropped, with the reason.
 - **error behaviour** — `ToolOutcome`: a typed outcome with a public code; never a raw exception.
@@ -37,9 +39,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.copilot.citations import EvidenceLedger
 from app.models.enums import HotelRole
 from app.schemas.analytics import MAX_RANGE_DAYS
 from app.services.analytics import AnalyticsService
+from app.services.knowledge import KnowledgeService
 from app.services.ml_performance import ForecastPerformanceService
 from app.services.ml_serving import DemandPredictionService
 
@@ -117,7 +121,7 @@ class DateRangeArguments(ToolArguments):
 
 @dataclass(frozen=True, slots=True)
 class ToolServices:
-    """The existing services a tool may delegate to. Three, and nothing else.
+    """The existing services a tool may delegate to. Four, and nothing else.
 
     No session, no repository and no resolver: a tool reaches data only through a service that
     already applies its own scope check, which is why a tool needs no SQL of its own and could
@@ -127,6 +131,9 @@ class ToolServices:
     analytics: AnalyticsService
     demand_prediction: DemandPredictionService
     forecast_performance: ForecastPerformanceService
+    #: Stage 7.10. `search_hotel_knowledge` reads through `KnowledgeService.search` -- the same
+    #: hotel- and status-filtered query the search route runs, not a second implementation.
+    knowledge: KnowledgeService
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,10 +143,14 @@ class ToolContext:
     `hotel_public_id` is the hotel the authenticated request resolved. It is set by
     `ToolInvocationService` from its own `hotel_public_id` parameter, after the scope resolver
     has accepted it, and there is no code path by which a model's output reaches it.
+
+    `evidence` is the request's ledger of citable excerpts. The copilot hands in one per question;
+    anything else gets a fresh, empty one, so no ledger is ever shared between requests.
     """
 
     hotel_public_id: uuid.UUID
     services: ToolServices
+    evidence: EvidenceLedger = field(default_factory=EvidenceLedger)
 
 
 @dataclass(frozen=True, slots=True)

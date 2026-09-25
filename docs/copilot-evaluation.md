@@ -1,4 +1,4 @@
-# Copilot evaluation — Stage 7.8
+# Copilot evaluation — Stages 7.8 and 7.10
 
 > **What the result in this repository means, in one sentence:** the copilot pipeline handles a
 > fixed set of hand-written reference exchanges exactly as it did when the reference was pinned.
@@ -7,7 +7,8 @@
 > 24 questions — nothing more.
 
 This document is the specification of the harness in `tests/evaluation/`, written to the honesty
-rules of [v2-architecture.md](v2-architecture.md) §9.3.
+rules of [v2-architecture.md](v2-architecture.md) §9.3. §1–§7 describe `copilot_eval_v1` (Stage
+7.8); §8 the document and retrieval measurements Stage 7.10 added.
 
 ---
 
@@ -47,6 +48,11 @@ tool results every time. The database path is covered by the Stage 7.6 and 7.7 i
 24 cases, frozen and checksummed (`1ca6bdc9…84f6`), pinned by a test. Every question names its
 dates, because `copilot_answer@v1` gives the model no current date — "last month" would be a
 guess. That is a limitation of the prompt, recorded here rather than changed by this stage.
+
+*Stage 7.10.* The copilot now renders `copilot_answer@v2` and offers six tools. The set is
+unchanged and its reference exchanges keep their turns -- none searches or cites -- but they are
+bound to v2, and the report (harness `copilot_eval_harness_v2`) names v2 and lists
+`search_hotel_knowledge` among the tools offered. No measure moved.
 
 | Category | Cases | Expected |
 |---|---|---|
@@ -92,10 +98,8 @@ half-up rounding interval rather than a quantize-and-compare — imports nothing
 
 ## 5. What is not measured
 
-- **Citation validity and retrieval quality** (§9.2): there is no retrieval until Stages 7.9
-  and 7.10. *Stage 7.9 has since built document retrieval
-  ([knowledge-documents.md](knowledge-documents.md)), but the copilot cannot reach it and nothing
-  cites it; `copilot_eval_v1` and its report are unchanged. Both measures are Stage 7.10's.*
+- **Citation validity and retrieval quality** (§9.2): not by this set. Stage 7.10 measures
+  both, separately -- §8.
 - **Latency and cost in replay**: recorded tokens are zero and replay takes no time. In live mode
   both are real and are reported per case.
 - **Product usefulness**: not measurable in this repository (§9.1).
@@ -128,4 +132,77 @@ LLM_ENABLED=true LLM_API_KEY=... python scripts/copilot_live_eval.py \
 
 The live script reads configuration only through `Settings`, never prints or writes the key, and
 writes the questions and answers about the fictional hotel to the directory you name. Nothing is
-committed automatically.
+committed automatically. `--set copilot_knowledge_eval_v1` runs §8's document set instead.
+
+---
+
+## 8. Documents, citations and retrieval (Stage 7.10)
+
+Two new measurements, kept apart because they answer different questions.
+
+### 8.1 `copilot_knowledge_eval_v1` — does the copilot use documents correctly?
+
+11 cases, frozen and checksummed, run through the production stack exactly as §2 describes, with
+one more stand-in: `fixture_documents.py`, a fixed word-overlap search over a fictional corpus
+that returns only the evaluated hotel's **active** versions. The corpus also holds a superseded
+pool policy, a withdrawn spa page, an injection document (instructions, a fake `[S9]`, another
+hotel's chunk id) and a neighbour's rooftop bar -- so a citation of any of them would be
+recognisable. The stand-in's matching is deliberately simple; retrieval quality is §8.2's
+question, not this one's.
+
+| Measure | Kind | Passes when |
+|---|---|---|
+| `tool_selection` | model | the expected tools were called, and no other |
+| `citation_validity` | model | every citation the model wrote is well formed and names a label it was shown |
+| `citation_ownership` | served | every served citation is the evaluated hotel's chunk |
+| `citation_status` | served | every served citation is from an active version |
+| `cited_figure_grounding` | model | every figure in a cited sentence traces to that sentence's excerpts, structured outputs or the question |
+| `not_found` | served | a not-found case is served the not-found sentence with no citations |
+| `expected_sources` | served | a cited case cites one of its expected documents |
+| `expected_figures` | served | the served answer states each expected figure |
+| `completed` | served | the response was complete |
+| `scorer_agreement` | both | the scorer's citation verdict matches the copilot's `document_evidence` |
+
+"Model" measures judge what the model wrote; "served" measures judge what the copilot returned.
+`citation_ownership` and `citation_status` are guarantees of the pipeline and must hold whatever
+the model does -- the variant tests make a model fabricate labels, copy one out of a document, and
+write another hotel's chunk id, and assert exactly that. The scorers import nothing from
+`app.copilot.citations` or `app.copilot.grounding`. The reference exchanges pass every measure;
+like §1's, they evaluate the pipeline, not a model.
+
+### 8.2 `knowledge_retrieval_v1` — does full-text search find the right chunk?
+
+**The decision criterion for Stage 7.15, declared before the first measurement:**
+
+> recall@5 — the share of queries with at least one expected chunk among the first 5 results —
+> **below 0.90** on a corpus of real hotel documents, with queries of the kind the copilot sends,
+> is the evidence that justifies pgvector. At or above it, lexical search is judged sufficient.
+
+The set: 10 documents (8 English, 2 Greek), 19 chunks, 24 keyword queries -- 14 sharing words with
+their chunk, 7 paraphrases, 2 Greek, 1 with no answer in the corpus. It runs in
+`tests/integration/test_knowledge_retrieval_eval.py` through the real search route on real
+PostgreSQL, and the result is pinned in `tests/evaluation/retrieval_report.json`.
+
+**Measured: recall@5 = 0.6957 (16 of 23), below the threshold.** All 14 shared-word queries and
+both Greek queries are found; **all 7 paraphrases miss** ("parking price" against "Parking costs",
+"pet policy" against "Pets are…"), because `websearch_to_tsquery` requires every term. The
+no-answer query correctly returns nothing.
+
+**What that result is, and is not.** Every document and query in the set was written by the
+developer; none is a real hotel's, and no model wrote the queries. It is therefore a **regression
+figure and a signal** -- lexical search as configured misses paraphrase entirely -- **not** the
+evidence the criterion names, and on its own it neither starts nor rules out Stage 7.15. What it
+does show is where the measurement on real documents should look first, and that a cheaper
+change (how queries are formed, or matching any term rather than all) is a candidate to measure
+before an image change and an embedding cost.
+
+### 8.3 Not measured
+
+- Whether a cited excerpt actually supports the sentence citing it, beyond its figures.
+- Any real model's citation behaviour: that takes a live capture of §8.1.
+- Retrieval on real documents: none exist in this repository.
+
+```bash
+python -m tests.evaluation.knowledge_harness --write-reference   # after an INTENDED change
+WRITE_RETRIEVAL_REPORT=1 python -m pytest tests/integration/test_knowledge_retrieval_eval.py
+```

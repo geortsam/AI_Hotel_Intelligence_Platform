@@ -14,6 +14,9 @@ this order, and no step can be skipped by anything the model says:
                                   AppError is `failed`, anything else is `error`
     6. validate the output        the tool's output model -- nothing unvalidated reaches a model
     7. audit                      `tool.invoked` on the existing append-only trail, then commit
+    8. admit its evidence         Stage 7.10: source labels the tool staged become citable only
+                                  now, after the output that carries them has been validated and
+                                  accounted for; a call that failed at any step leaves none
 
 ## The hotel is a parameter of this method, and never of the tool call
 
@@ -73,6 +76,7 @@ from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.copilot.citations import EvidenceLedger
 from app.copilot.contracts import (
     INTERNAL_ERROR_CODE,
     INVALID_ARGUMENTS_CODE,
@@ -173,13 +177,18 @@ class ToolInvocationService:
         arguments: Mapping[str, Any],
         *,
         offered: Collection[str],
+        evidence: EvidenceLedger | None = None,
     ) -> ToolOutcome:
         """Run one model-requested call against the caller's hotel. Always audited once resolved.
 
         *name* and *arguments* are untrusted model output. *offered* is the set of names this
         request's catalogue contained; a registered tool that was not offered is treated as
         unknown, so a model cannot reach a tool by guessing a name it was not shown.
+
+        *evidence* is the calling request's ledger of citable excerpts. Without one, the call gets
+        a fresh ledger that nothing else can read -- evidence is never shared between requests.
         """
+        ledger = evidence if evidence is not None else EvidenceLedger()
         started = self._monotonic()
         hotel = self._scope.require_hotel(hotel_public_id)
         hotel_id = hotel.id
@@ -219,11 +228,14 @@ class ToolInvocationService:
                 code=INVALID_ARGUMENTS_CODE,
             )
 
-        context = ToolContext(hotel_public_id=hotel_public_id, services=self._services)
+        context = ToolContext(
+            hotel_public_id=hotel_public_id, services=self._services, evidence=ledger
+        )
         try:
             result = tool.run(context, parsed)
             output = contract.output_model.model_validate(result).model_dump(mode="json")
         except AppError as failed:
+            ledger.discard()
             self._session.rollback()
             return self._finish(
                 hotel_id,
@@ -238,6 +250,7 @@ class ToolInvocationService:
             # Never a raw exception to the model. Logged for an operator by TYPE only: no
             # traceback, because a driver error's traceback can carry the row it failed on --
             # the rule `test_no_service_logs_a_driver_exception` enforces for every service.
+            ledger.discard()
             self._session.rollback()
             logger.error(
                 "tool %s raised %s",
@@ -249,7 +262,15 @@ class ToolInvocationService:
                 hotel_id, contract.name, "error", started, fingerprint, code=INTERNAL_ERROR_CODE
             )
 
-        return self._finish(hotel_id, contract.name, "succeeded", started, fingerprint, output)
+        try:
+            outcome = self._finish(
+                hotel_id, contract.name, "succeeded", started, fingerprint, output
+            )
+        except Exception:
+            ledger.discard()
+            raise
+        ledger.admit()
+        return outcome
 
     # --- internals ----------------------------------------------------------------------------
 

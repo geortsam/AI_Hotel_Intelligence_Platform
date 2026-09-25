@@ -5,8 +5,8 @@
   "recorded_on": "2026-09-26",
   "question_set": "copilot_eval_v1",
   "question_set_checksum": "1ca6bdc9a9916e8c05b93320d2f99b549b325e825de78309572c0874956784f6",
-  "prompt": "copilot_answer@v1",
-  "prompt_checksum": "a3be06b63100be3413bc960691753dbde2b78119243214bc8bf580f08d3079a4",
+  "prompt": "copilot_answer@v2",
+  "prompt_checksum": "6ab8b15ebde62af4b25d0e66de41faeef8970ee167bedbe31b8edea85937e268",
   "cases": {
     "accuracy_manager": [
       {

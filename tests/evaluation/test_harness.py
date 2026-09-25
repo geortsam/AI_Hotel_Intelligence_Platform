@@ -26,7 +26,7 @@ import pytest
 from app.copilot.registry import build_default_registry
 from app.core.errors import ValidationError
 from app.llm.base import Budget, ToolCall
-from app.llm.prompts.registry import COPILOT_ANSWER_V1
+from app.llm.prompts.registry import COPILOT_ANSWER_V2
 from tests.evaluation import harness
 from tests.evaluation.fixture_hotel import (
     EVAL_HOTEL,
@@ -191,14 +191,16 @@ def test_the_report_names_its_set_prompt_model_and_date() -> None:
         "checksum": COPILOT_EVAL_V1.checksum,
         "size": 24,
     }
+    # Stage 7.10: the copilot renders copilot_answer@v2, and the report names the prompt the
+    # exchanges ran under -- not the one they were first written for.
     assert report["prompt"] == {
-        "identity": COPILOT_ANSWER_V1.identity,
-        "checksum": COPILOT_ANSWER_V1.checksum,
+        "identity": COPILOT_ANSWER_V2.identity,
+        "checksum": COPILOT_ANSWER_V2.checksum,
     }
     assert report["model"] == {"provider": "reference", "model": "hand-written-reference"}
     assert report["recorded_on"] == "2026-09-26"
     assert report["mode"] == "replay"
-    assert report["harness"] == "copilot_eval_harness_v1"
+    assert report["harness"] == "copilot_eval_harness_v2"
 
 
 def test_the_report_says_no_model_was_evaluated() -> None:
@@ -240,7 +242,7 @@ def test_a_live_report_statement_bounds_its_claim() -> None:
         "2026-10-01",
         "24 questions",
         "copilot_eval_v1",
-        "copilot_answer@v1",
+        "copilot_answer@v2",
         "no aggregate accuracy is claimed",
         "demand model",
     ]:

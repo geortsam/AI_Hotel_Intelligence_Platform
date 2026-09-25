@@ -24,7 +24,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -52,7 +53,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -80,7 +82,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -108,7 +111,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -136,7 +140,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -164,7 +169,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -192,7 +198,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -220,7 +227,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -248,7 +256,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -276,7 +285,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -305,7 +315,8 @@
         "get_demand_forecast",
         "get_forecast_accuracy",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -334,7 +345,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -363,7 +375,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -392,7 +405,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -418,7 +432,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -444,7 +459,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -470,7 +486,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -496,7 +513,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -522,7 +540,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -548,7 +567,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -574,7 +594,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -600,7 +621,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -626,7 +648,8 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     },
@@ -652,12 +675,13 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
-        "get_revenue_breakdown"
+        "get_revenue_breakdown",
+        "search_hotel_knowledge"
       ],
       "ungrounded_figures": []
     }
   ],
-  "harness": "copilot_eval_harness_v1",
+  "harness": "copilot_eval_harness_v2",
   "measures": {
     "completed": {
       "passed": 24,
@@ -690,8 +714,8 @@
     "provider": "reference"
   },
   "prompt": {
-    "checksum": "a3be06b63100be3413bc960691753dbde2b78119243214bc8bf580f08d3079a4",
-    "identity": "copilot_answer@v1"
+    "checksum": "6ab8b15ebde62af4b25d0e66de41faeef8970ee167bedbe31b8edea85937e268",
+    "identity": "copilot_answer@v2"
   },
   "question_set": {
     "checksum": "1ca6bdc9a9916e8c05b93320d2f99b549b325e825de78309572c0874956784f6",

@@ -9,10 +9,12 @@ exactly this order:
     a.    the hotel is resolved again here, as every service resolves its own scope
     d.    the tools the caller's role permits      ToolInvocationService.permitted_tools
     e.    the deterministic catalogue of those     build_catalogue
-    f.    copilot_answer@v1 rendered               the checksummed prompt registry
-    g.    the bounded tool loop                    ToolLoop, its executor bound to THIS hotel
+    f.    copilot_answer@v2 rendered               the checksummed prompt registry (Stage 7.10)
+    g.    the bounded tool loop                    ToolLoop, its executor bound to THIS hotel and
+                                                   to THIS request's evidence ledger
     h.    usage totals                             LoopResult.input_tokens / output_tokens
     i.    latency                                  an injected monotonic clock
+    -     the citation check                       app.copilot.citations (Stage 7.10)
     -     the figure check                         app.copilot.grounding
     j-l.  one llm_invocations row, committed; an integrity failure is this server's fault
     m.    the result mapped to the response, or a model failure with nothing done re-raised
@@ -47,6 +49,24 @@ response carries no answer text, `complete: false` and, when the loop had otherw
 `stop_reason: ungrounded_figures`. See `app.copilot.grounding` for exactly what is and is not
 proven.
 
+## Citations are checked, not trusted (Stage 7.10)
+
+The document search tool labels each excerpt it returns `S1`, `S2`, ... in a ledger that belongs
+to this one request; the model cites a label as `[S1]`. After the loop, every citation-like token
+in the answer is resolved against that ledger -- which holds only what `KnowledgeService.search`
+returned for this hotel, from active versions -- and then:
+
+    any token that does not resolve        document_evidence = citation_rejected: the answer is
+                                           replaced by NOT_FOUND_ANSWER (withheld, if partial)
+    a search succeeded, nothing cited      document_evidence = not_found: replaced the same way
+    otherwise                              cited / none, and the figure check runs, a document's
+                                           numbers grounding only the sentences that cite it
+
+A fabricated citation replaces the whole answer rather than being stripped out of it: a claim the
+model tied to a source that does not exist is not made trustworthy by deleting the tie. Neither
+outcome is a new stop reason -- the persisted `llm_invocations` vocabulary is unchanged, and a
+replaced complete answer is still `completed` -- it is the additive `document_evidence` field.
+
 ## What is stored, and what is sent away
 
 One `llm_invocations` row per request: prompt identity, the upstream it was routed to, how the
@@ -74,14 +94,22 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.copilot.catalogue import build_catalogue
+from app.copilot.citations import CitationCheck, EvidenceLedger, check_citations
 from app.copilot.contracts import ToolOutcome
 from app.copilot.grounding import ungrounded_figures
 from app.copilot.loop import LoopResult, ToolLoop
 from app.copilot.registry import ToolRegistry
+from app.copilot.tools.knowledge_search import NAME as KNOWLEDGE_TOOL
 from app.core.errors import internal_fault, sqlstate_of
 from app.llm.base import Budget, ChatModel, ToolCall
-from app.llm.prompts.registry import COPILOT_ANSWER_V1
-from app.schemas.copilot import CopilotAnswerResponse, CopilotToolUse, StopReason
+from app.llm.prompts.registry import COPILOT_ANSWER_V2
+from app.schemas.copilot import (
+    CopilotAnswerResponse,
+    CopilotCitation,
+    CopilotToolUse,
+    DocumentEvidence,
+    StopReason,
+)
 from app.services.llm_invocation_log import LlmInvocationLog
 from app.services.scope import HotelScopeResolver
 from app.services.tool_invocation import ToolInvocationService
@@ -114,6 +142,24 @@ NOTICES: dict[str, str] = {
 
 #: Added to a partial answer's notice when its text was also withheld for ungrounded figures.
 WITHHELD_SENTENCE = "Its text was withheld because it contained figures no lookup returned."
+
+#: The prompt the copilot renders. v1 stays registered, unchanged, so answers recorded under it
+#: remain attributable; v2 adds the document rules (Stage 7.10).
+PROMPT = COPILOT_ANSWER_V2
+
+#: Architecture §6.6: "An answer that cites nothing is not returned as an answer -- it is
+#: returned as 'not found in this hotel's documents'." The complete answer, verbatim, whenever a
+#: document search ran and the answer cited none of it, or cited something it did not return.
+NOT_FOUND_ANSWER = "Not found in this hotel's documents."
+
+#: Added to a PARTIAL answer's notice when its text was withheld by the citation check.
+CITATION_WITHHELD_SENTENCES: dict[str, str] = {
+    "citation_rejected": (
+        "Its text was withheld because it cited a source no document search in this request "
+        "returned."
+    ),
+    "not_found": "Its text was withheld because it cited none of the documents it searched.",
+}
 
 
 class CopilotService:
@@ -154,18 +200,22 @@ class CopilotService:
 
         offered = self._invocations.permitted_tools(hotel_public_id)
         catalogue = build_catalogue(self._registry, offered)
-        messages = COPILOT_ANSWER_V1.render(question=question)
+        messages = PROMPT.render(question=question)
+        #: This request's citable excerpts. Created here, filled only by this request's own
+        #: successful searches, and dropped with the request.
+        ledger = EvidenceLedger()
 
         def execute(call: ToolCall) -> ToolOutcome:
-            # Bound to the path hotel and the offered names. The model supplies neither.
+            # Bound to the path hotel, the offered names and this request's ledger. The model
+            # supplies none of them.
             return self._invocations.invoke(
-                hotel_public_id, call.name, call.arguments, offered=offered
+                hotel_public_id, call.name, call.arguments, offered=offered, evidence=ledger
             )
 
         started = self._monotonic()
         result = ToolLoop(self._model).run(
-            prompt_id=COPILOT_ANSWER_V1.prompt_id,
-            prompt_version=COPILOT_ANSWER_V1.version,
+            prompt_id=PROMPT.prompt_id,
+            prompt_version=PROMPT.version,
             messages=messages,
             budget=self._budget,
             tools=catalogue,
@@ -173,11 +223,22 @@ class CopilotService:
         )
         latency_ms = max(0, round((self._monotonic() - started) * 1000))
 
-        offending = ungrounded_figures(
-            result.text,
-            outputs=[o.output for o in result.outcomes if o.succeeded and o.output is not None],
-            question=question,
-        )
+        check = check_citations(result.text, ledger)
+        evidence = self._document_evidence(result, check)
+        replaced = evidence in ("not_found", "citation_rejected")
+
+        offending: tuple[str, ...] = ()
+        if not replaced:
+            offending = ungrounded_figures(
+                result.text,
+                outputs=[
+                    o.output
+                    for o in result.outcomes
+                    if o.succeeded and o.output is not None and o.tool != KNOWLEDGE_TOOL
+                ],
+                question=question,
+                evidence={item.label: item.grounding_text for item in check.valid},
+            )
         stop_reason: StopReason = result.stop_reason
         if offending and result.complete:
             stop_reason = "ungrounded_figures"
@@ -186,27 +247,71 @@ class CopilotService:
         invocation_public_id = self._record(
             hotel_id, result, stop_reason, error.code if error is not None else None, latency_ms
         )
-        self._observe(result, stop_reason, latency_ms, withheld=bool(offending))
+        served = not replaced and not offending
+        self._observe(
+            result,
+            stop_reason,
+            latency_ms,
+            withheld=bool(offending),
+            evidence=evidence,
+            citations=len(check.valid) if served else 0,
+        )
 
         if error is not None and not result.outcomes:
             # Nothing partial exists to return. §5.7's declared status and code, unchanged.
             raise error
 
+        if served:
+            answer = result.text
+        elif replaced and result.complete:
+            answer = NOT_FOUND_ANSWER
+        else:
+            answer = ""
+
         return CopilotAnswerResponse(
-            answer="" if offending else result.text,
+            answer=answer,
             complete=stop_reason == "completed",
             stop_reason=stop_reason,
-            notice=self._notice(stop_reason, withheld=bool(offending)),
+            notice=self._notice(
+                stop_reason,
+                withheld=bool(offending),
+                citation_withheld=evidence if replaced else None,
+            ),
             tools_used=[
                 CopilotToolUse(tool=outcome.tool, outcome=outcome.outcome)
                 for outcome in result.outcomes
             ],
-            prompt_id=COPILOT_ANSWER_V1.prompt_id,
-            prompt_version=COPILOT_ANSWER_V1.version,
+            prompt_id=PROMPT.prompt_id,
+            prompt_version=PROMPT.version,
             invocation_public_id=invocation_public_id,
+            citations=[
+                CopilotCitation(
+                    source=item.label,
+                    chunk_public_id=item.chunk_public_id,
+                    document_public_id=item.document_public_id,
+                    title=item.title,
+                    version=item.version,
+                )
+                for item in check.valid
+            ]
+            if served
+            else [],
+            document_evidence=evidence,
         )
 
     # --- internals ----------------------------------------------------------------------------
+
+    @staticmethod
+    def _document_evidence(result: LoopResult, check: CitationCheck) -> DocumentEvidence:
+        """How the answer relates to the hotel's documents. See the module docstring."""
+        if check.invalid:
+            return "citation_rejected"
+        searched = any(
+            outcome.succeeded and outcome.tool == KNOWLEDGE_TOOL for outcome in result.outcomes
+        )
+        if searched and not check.cited:
+            return "not_found"
+        return "cited" if check.cited else "none"
 
     def _record(
         self,
@@ -256,16 +361,28 @@ class CopilotService:
         return internal_fault(exc)
 
     @staticmethod
-    def _notice(stop_reason: str, *, withheld: bool) -> str | None:
+    def _notice(
+        stop_reason: str, *, withheld: bool, citation_withheld: str | None = None
+    ) -> str | None:
         if stop_reason == "completed":
             return None
         notice = NOTICES[stop_reason]
         if withheld and stop_reason != "ungrounded_figures":
             notice = f"{notice} {WITHHELD_SENTENCE}"
+        if citation_withheld is not None:
+            notice = f"{notice} {CITATION_WITHHELD_SENTENCES[citation_withheld]}"
         return notice
 
     @staticmethod
-    def _observe(result: LoopResult, stop_reason: str, latency_ms: int, *, withheld: bool) -> None:
+    def _observe(
+        result: LoopResult,
+        stop_reason: str,
+        latency_ms: int,
+        *,
+        withheld: bool,
+        evidence: str,
+        citations: int,
+    ) -> None:
         """One event per question: how it ended and what it cost. No text of any kind."""
         logger.info(
             "copilot %s after %s round(s), %s tool call(s), %s ms",
@@ -283,10 +400,19 @@ class CopilotService:
                 "output_tokens": result.output_tokens,
                 "latency_ms": latency_ms,
                 "answer_withheld": withheld,
+                "document_evidence": evidence,
+                "citations": citations,
                 "prompt_id": result.prompt_id,
                 "prompt_version": result.prompt_version,
             },
         )
 
 
-__all__ = ["NOTICES", "WITHHELD_SENTENCE", "CopilotService"]
+__all__ = [
+    "CITATION_WITHHELD_SENTENCES",
+    "NOTICES",
+    "NOT_FOUND_ANSWER",
+    "PROMPT",
+    "WITHHELD_SENTENCE",
+    "CopilotService",
+]

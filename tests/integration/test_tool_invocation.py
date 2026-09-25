@@ -45,6 +45,7 @@ from app.models.user import User
 from app.repositories.analytics import AnalyticsRepository
 from app.repositories.audit import AuditRepository
 from app.repositories.hotel import HotelRepository
+from app.repositories.knowledge import KnowledgeRepository
 from app.repositories.membership import MembershipRepository
 from app.repositories.ml_demand import MlDemandRepository
 from app.repositories.ml_prediction import MlPredictionRepository
@@ -52,6 +53,7 @@ from app.repositories.room_type import RoomTypeRepository
 from app.services.analytics import AnalyticsService
 from app.services.audit import AuditTrail
 from app.services.authorization import HotelAccessPolicy
+from app.services.knowledge import KnowledgeService
 from app.services.ml_accuracy import DemandAccuracyService
 from app.services.ml_drift import DemandDistributionService
 from app.services.ml_performance import ForecastPerformanceService
@@ -80,6 +82,8 @@ ALL_TOOLS = (
     "get_forecast_accuracy",
     "get_hotel_kpis",
     "get_revenue_breakdown",
+    # Stage 7.10: a viewer read, so both roles are offered it.
+    "search_hotel_knowledge",
 )
 
 
@@ -157,6 +161,7 @@ def assemble(session: Session, user: User) -> tuple[ToolInvocationService, ToolS
     policy = HotelAccessPolicy(user, MembershipRepository(session))
     scope = HotelScopeResolver(HotelRepository(session), RoomTypeRepository(session), policy)
     predictions = MlPredictionRepository(session)
+    audit = AuditTrail(AuditRepository(session), user)
     services = ToolServices(
         analytics=AnalyticsService(AnalyticsRepository(session), scope),
         demand_prediction=DemandPredictionService(
@@ -166,8 +171,8 @@ def assemble(session: Session, user: User) -> tuple[ToolInvocationService, ToolS
             DemandAccuracyService(predictions, MlDemandRepository(session), scope),
             DemandDistributionService(predictions, scope),
         ),
+        knowledge=KnowledgeService(session, KnowledgeRepository(session), scope, audit),
     )
-    audit = AuditTrail(AuditRepository(session), user)
     invocation = ToolInvocationService(session, build_default_registry(), scope, audit, services)
     return invocation, services
 
@@ -209,7 +214,7 @@ def test_the_catalogue_follows_the_callers_role(world: World) -> None:
     manager, _ = assemble(world.session, world.manager)
 
     assert "get_forecast_accuracy" not in viewer.permitted_tools(world.a.public_id)
-    assert len(viewer.permitted_tools(world.a.public_id)) == 4
+    assert len(viewer.permitted_tools(world.a.public_id)) == 5
     assert manager.permitted_tools(world.a.public_id) == ALL_TOOLS
 
     specs = build_catalogue(build_default_registry(), viewer.permitted_tools(world.a.public_id))

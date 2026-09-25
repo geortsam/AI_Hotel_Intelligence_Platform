@@ -72,10 +72,10 @@ logger = logging.getLogger(__name__)
 
 #: §5.4: "a maximum number of tool rounds per request (proposed: 3)". Adopted as proposed.
 MAX_TOOL_ROUNDS = 3
-#: §5.4 asks for "a maximum number of tool calls per round" and names no number. Four is the
-#: whole useful catalogue minus one: enough for a model to fetch KPIs, a series, a breakdown and a
-#: forecast together, and small enough that a model emitting a burst of calls is stopped before
-#: any of them runs. Recorded in Amendment A1.
+#: §5.4 asks for "a maximum number of tool calls per round" and names no number. Four is enough
+#: for a model to fetch KPIs, a series, a breakdown and a forecast together, and small enough that
+#: a model emitting a burst of calls is stopped before any of them runs. Recorded in Amendment A1,
+#: when the catalogue had five tools; Stage 7.10's sixth does not move it.
 MAX_CALLS_PER_ROUND = 4
 #: §5.7 row 4: returned to the model once; the second failure ends the loop.
 MAX_TOOL_FAILURES = 2

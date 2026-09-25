@@ -371,8 +371,13 @@ def test_stage_7_9_adds_no_vector_embedding_or_model_machinery() -> None:
                 assert not node.module.startswith(("app.llm", "app.copilot")), path.name
 
 
-def test_the_knowledge_tool_is_still_deferred_to_stage_7_10() -> None:
+def test_the_knowledge_tool_arrived_with_stage_7_10_over_this_service() -> None:
+    """Stage 7.9 built the service and registered no tool; Stage 7.10 registered the sixth, which
+    delegates to this service's `search` rather than to a second implementation."""
     from app.copilot.registry import build_default_registry
 
-    assert "search_hotel_knowledge" not in build_default_registry()
-    assert len(build_default_registry().names()) == 5
+    registry = build_default_registry()
+    assert "search_hotel_knowledge" in registry
+    assert len(registry.names()) == 6
+    contract = registry.get("search_hotel_knowledge").contract
+    assert contract.delegates_to == "KnowledgeService.search"

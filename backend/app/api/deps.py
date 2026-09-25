@@ -781,8 +781,9 @@ def get_tool_invocation_service(
     analytics: AnalyticsServiceDep,
     demand_prediction: DemandPredictionServiceDep,
     forecast_performance: ForecastPerformanceServiceDep,
+    knowledge: KnowledgeServiceDep,
 ) -> ToolInvocationService:
-    """The Stage 7.6 invocation boundary, over the three services the tools delegate to.
+    """The Stage 7.6 invocation boundary, over the four services the tools delegate to.
 
     Each delegated-to service is assembled by its own existing dependency, exactly as its route
     assembles it, so a tool and a route reach the same service built the same way.
@@ -791,6 +792,7 @@ def get_tool_invocation_service(
         analytics=analytics,
         demand_prediction=demand_prediction,
         forecast_performance=forecast_performance,
+        knowledge=knowledge,
     )
     return ToolInvocationService(db, default_tool_registry(), scope, audit, services)
 

@@ -16,7 +16,7 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-5878%20backend%20%C2%B7%201141%20frontend-success)
+![Tests](https://img.shields.io/badge/tests-6004%20backend%20%C2%B7%201141%20frontend-success)
 ![API](https://img.shields.io/badge/API-60%20paths%20%C2%B7%2093%20operations-informational)
 
 </div>
@@ -40,7 +40,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **5878 backend tests and 1141 frontend tests pass in CI.** Schema head is
+> **6004 backend tests and 1141 frontend tests pass in CI.** Schema head is
 > `0014_hotel_documents` across 14 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
@@ -64,8 +64,10 @@ more than one currency and the platform never converts between them.</sub></div>
 > Stages 7.6–7.7 put a read-only tool boundary and a single-turn copilot endpoint on it, which
 > answers `503 LLM_DISABLED` unless the feature is switched on and the optional provider SDK —
 > which neither CI nor the image installs — is present. Stage 7.8 evaluates it against recorded
-> exchanges. Stage 7.9 added hotel knowledge documents searched with PostgreSQL full-text search;
-> the copilot cannot read them yet. Nothing here is a placeholder pretending to be a feature —
+> exchanges. Stage 7.9 added hotel knowledge documents searched with PostgreSQL full-text search,
+> and Stage 7.10 let the copilot search them and cite what it uses -- every citation checked
+> against what that request actually retrieved. Retrieval quality on real documents is **not**
+> established. Nothing here is a placeholder pretending to be a feature —
 > [docs/development-roadmap.md](docs/development-roadmap.md) separates what exists from what is
 > left for V2, and [Known limitations](#known-limitations) is the honest list.
 
@@ -699,8 +701,17 @@ asserts the SDK is imported in exactly one module.
 
 **Hotel knowledge documents (Stage 7.9)** are uploaded, versioned, withdrawn and searched with
 PostgreSQL full-text search — the tenant filter in the query itself, no embeddings, no vector
-column, no new datastore. No model reads them yet; citations are Stage 7.10. See
-[docs/knowledge-documents.md](docs/knowledge-documents.md).
+column, no new datastore. See [docs/knowledge-documents.md](docs/knowledge-documents.md).
+
+**Grounded document answers (Stage 7.10).** A sixth copilot tool, `search_hotel_knowledge`,
+searches the hotel's own active documents. The model sees excerpts under request-scoped source
+labels (`[S1]`), never identifiers, inside a section marked as untrusted; the answer carries
+`citations` with the real chunk and document ids, and any citation that request did not retrieve
+-- or a search followed by an uncited answer -- is replaced by "Not found in this hotel's
+documents." The copilot renders `copilot_answer@v2`. Measured on an author-written set, full-text
+recall@5 is 0.6957 against a pgvector threshold of 0.90 declared beforehand: a signal that
+paraphrased queries miss, not evidence about real documents. See
+[docs/copilot-evaluation.md](docs/copilot-evaluation.md) §8.
 
 ### V2 — NOT IMPLEMENTED
 
@@ -715,7 +726,7 @@ record in `ml/models/<model_version>/` — which is where Stage 6.3 wrote the fi
 | **Review sentiment** | Review text | Polarity plus an aspect breakdown (cleanliness, staff, location, value) and token-level explanations |
 | **Room-image classification** | Room photographs | Room type and feature tags for automatic media organisation |
 | **Recommendations** | User and hotel history | Ranked hotel suggestions, evaluated against a popularity baseline |
-| **Grounded answers / agents** | Hotel documents and tools | Answers that cite retrieved chunks (Stage 7.10). The copilot and document search exist; nothing joins them yet, and there is no agent |
+| **Agents** | Hotel documents and tools | Multi-step autonomy. The copilot is single-turn and read-only, and cites the documents it searched (Stage 7.10); there is no agent, no conversation memory and no writing tool |
 
 Rules these must follow, fixed now so they are not negotiated later:
 

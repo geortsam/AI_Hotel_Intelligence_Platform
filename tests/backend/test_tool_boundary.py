@@ -66,6 +66,7 @@ from app.copilot.tools import (
     demand_forecast,
     forecast_accuracy,
     hotel_kpis,
+    knowledge_search,
     revenue_breakdown,
 )
 from app.core.config import Settings
@@ -114,6 +115,7 @@ from app.models.enums import (
     HotelRole,
 )
 from app.schemas.analytics import DailySeriesResponse, OverviewResponse, RevenueBreakdownResponse
+from app.schemas.knowledge import KnowledgeSearchResponse
 from app.schemas.ml_performance import ForecastAccuracyResponse
 from app.schemas.ml_serving import DemandPredictionResponse
 from app.services import tool_invocation as invocation_module
@@ -127,14 +129,21 @@ ARCHITECTURE = REPOSITORY_ROOT / "docs" / "v2-architecture.md"
 HOTEL = uuid.UUID("11111111-1111-1111-1111-111111111111")
 OTHER_HOTEL = uuid.UUID("22222222-2222-2222-2222-222222222222")
 
-#: The five, and the order everything is reported in.
+#: The six, and the order everything is reported in. Stage 7.10 added `search_hotel_knowledge`.
 EXPECTED_TOOLS = (
     "get_daily_series",
     "get_demand_forecast",
     "get_forecast_accuracy",
     "get_hotel_kpis",
     "get_revenue_breakdown",
+    "search_hotel_knowledge",
 )
+
+#: The five data tools of Stage 7.6. Two per-tool rules below are about THEIR shape -- output is
+#: the service response minus the hotel, input is exactly the required arguments -- and do not
+#: describe the knowledge tool, whose output replaces identifiers with source labels and whose
+#: `limit` is optional. Its own shape is pinned in `test_grounded_retrieval.py`.
+DATA_TOOLS = EXPECTED_TOOLS[:5]
 
 #: Every spelling of "which hotel" the brief names, and a few it implies.
 TENANT_FIELDS = (
@@ -630,12 +639,13 @@ def test_non_object_arguments_become_empty_rather_than_crashing() -> None:
 # ======================================================================================
 
 
-def test_exactly_the_five_tools_are_registered() -> None:
-    """§7.2's six minus `search_hotel_knowledge`, deferred until its service exists (A1)."""
+def test_exactly_the_six_tools_are_registered() -> None:
+    """§7.2's six. `search_hotel_knowledge` was deferred by A1 until Stage 7.9 built its service,
+    and registered by Stage 7.10 -- the catalogue holds only tools that can run."""
     registry = build_default_registry()
 
     assert registry.names() == EXPECTED_TOOLS
-    assert "search_hotel_knowledge" not in registry
+    assert "search_hotel_knowledge" in registry
 
 
 def test_every_tool_module_is_registered_and_nothing_else_is() -> None:
@@ -645,9 +655,17 @@ def test_every_tool_module_is_registered_and_nothing_else_is() -> None:
         "demand_forecast",
         "forecast_accuracy",
         "hotel_kpis",
+        "knowledge_search",
         "revenue_breakdown",
     ]
-    tools = (daily_series, demand_forecast, forecast_accuracy, hotel_kpis, revenue_breakdown)
+    tools = (
+        daily_series,
+        demand_forecast,
+        forecast_accuracy,
+        hotel_kpis,
+        knowledge_search,
+        revenue_breakdown,
+    )
     declared = sorted(module.CONTRACT.name for module in tools)
     assert tuple(declared) == EXPECTED_TOOLS
 
@@ -797,6 +815,13 @@ TOOL_MODULES: dict[str, tuple[Any, type[BaseModel], HotelRole, str]] = {
         HotelRole.MANAGER,
         "none",
     ),
+    # Stage 7.10. A viewer read, like `GET …/knowledge/search`, with no side effect.
+    "search_hotel_knowledge": (
+        knowledge_search,
+        KnowledgeSearchResponse,
+        HotelRole.VIEWER,
+        "none",
+    ),
 }
 
 REQUIRED_ARGUMENTS = {
@@ -821,7 +846,7 @@ def test_only_the_forecast_tool_declares_a_side_effect() -> None:
     assert declared == {"get_demand_forecast"}
 
 
-@pytest.mark.parametrize("name", EXPECTED_TOOLS)
+@pytest.mark.parametrize("name", DATA_TOOLS)
 def test_each_output_is_the_service_response_minus_the_hotel(name: str) -> None:
     module, response, _, _ = TOOL_MODULES[name]
     assert set(module.CONTRACT.output_model.model_fields) == (
@@ -830,7 +855,7 @@ def test_each_output_is_the_service_response_minus_the_hotel(name: str) -> None:
     assert HOTEL_IDENTIFIER_FIELD in module.CONTRACT.withheld
 
 
-@pytest.mark.parametrize("name", EXPECTED_TOOLS)
+@pytest.mark.parametrize("name", DATA_TOOLS)
 def test_each_input_has_exactly_its_required_arguments(name: str) -> None:
     schema = TOOL_MODULES[name][0].CONTRACT.input_schema()
     assert schema["additionalProperties"] is False
@@ -882,7 +907,7 @@ def test_no_description_speaks_about_authorization(name: str) -> None:
 
 
 class RecordingServices:
-    """Stands in for the three services and records what each tool asked of them."""
+    """Stands in for the four services and records what each tool asked of them."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
@@ -911,6 +936,7 @@ def test_a_tool_passes_the_context_hotel_and_never_an_argument_hotel(name: str) 
             "window_from": "2026-01-01",
             "window_to": "2026-03-31",
         },
+        "search_hotel_knowledge": {"query": "pool"},
     }[name]
     parsed = module.CONTRACT.input_model.model_validate(arguments)
 
@@ -927,6 +953,7 @@ class _Bundle:
         self.analytics = recorder
         self.demand_prediction = recorder
         self.forecast_performance = recorder
+        self.knowledge = recorder
 
 
 # ======================================================================================
@@ -1583,16 +1610,24 @@ def test_no_route_reaches_the_tool_machinery_directly() -> None:
 
     Restated to what it protected: no ROUTER imports the registry, the loop or the invocation
     service. The composition root (`deps.py`) assembles them; the copilot route sees only
-    `CopilotService`. The RAG and memory non-goals below are unchanged.
+    `CopilotService`. The memory, vector and recommendation non-goals below are unchanged.
+
+    Stage 7.10 is the retrieval stage, so "retriev" is now expected -- but only in the two modules
+    that implement it: the knowledge tool and the citation ledger. Everywhere else in the copilot
+    package it is still refused, so retrieval cannot spread by accident.
     """
     assert (APP / "services" / "copilot.py").exists()
     for path in (APP / "api" / "v1").rglob("*.py"):
         for imported in imports_of(path):
             assert not imported.startswith("app.copilot"), path.name
             assert not imported.startswith("app.services.tool_invocation"), path.name
-    for word in ["embedding", "pgvector", "vector", "retriev", "conversation", "recommend"]:
+    for word in ["embedding", "pgvector", "vector", "conversation", "recommend"]:
         for path in COPILOT.rglob("*.py"):
             assert word not in source_of(path).lower(), (word, path.name)
+    retrieval_modules = {"knowledge_search.py", "citations.py"}
+    for path in COPILOT.rglob("*.py"):
+        if path.name not in retrieval_modules:
+            assert "retriev" not in source_of(path).lower(), path.name
 
 
 def test_the_only_service_that_reaches_the_copilot_is_the_invocation_service() -> None:

@@ -14,7 +14,7 @@ Stage 7.6. The model names a tool; this module decides whether that name means a
   formatting into a module path. A name that is not a key reaches nothing, and a test asserts
   the module contains none of those constructs.
 - **The table is built by explicit, static imports** in `build_default_registry`. What can run
-  is exactly what those five lines import, which a reviewer can read and a test can list.
+  is exactly what those six lines import, which a reviewer can read and a test can list.
 - **Registration is checked, and fails loudly.** A duplicate name, a malformed name, an input
   model that tolerates unknown keys, or a schema that names a hotel, tenant or property anywhere
   — in either direction — is refused at registration, which happens at import. A registry that
@@ -156,18 +156,18 @@ class ToolRegistry:
 
 
 def build_default_registry() -> ToolRegistry:
-    """The five Stage 7.6 tools, registered explicitly. Nothing is discovered.
+    """The six tools, registered explicitly. Nothing is discovered.
 
-    `search_hotel_knowledge`, §7.2's sixth tool, is **deferred** to after Stage 7.9: it delegates
-    to a `KnowledgeService` that does not exist until the RAG stages build it, and a tool over a
-    service that does not exist would have to invent the business logic the brief forbids.
-    Recorded in Amendment A1.
+    The five Stage 7.6 tools, and `search_hotel_knowledge` (Stage 7.10), §7.2's sixth: deferred
+    by Amendment A1 until Stage 7.9 built the `KnowledgeService` it delegates to, and registered
+    now that it can run. Every tool here is executable; none is a placeholder.
     """
     from app.copilot.tools import (
         daily_series,
         demand_forecast,
         forecast_accuracy,
         hotel_kpis,
+        knowledge_search,
         revenue_breakdown,
     )
 
@@ -177,6 +177,7 @@ def build_default_registry() -> ToolRegistry:
     registry.register(revenue_breakdown.CONTRACT, revenue_breakdown.run)
     registry.register(demand_forecast.CONTRACT, demand_forecast.run)
     registry.register(forecast_accuracy.CONTRACT, forecast_accuracy.run)
+    registry.register(knowledge_search.CONTRACT, knowledge_search.run)
     return registry
 
 

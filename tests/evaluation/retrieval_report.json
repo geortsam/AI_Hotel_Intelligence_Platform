@@ -1,0 +1,428 @@
+{
+  "below_threshold": true,
+  "cutoff": 5,
+  "no_match_queries": {
+    "correct": 1,
+    "scored": 1
+  },
+  "queries": [
+    {
+      "expected": [
+        [
+          "Pool and spa",
+          0
+        ],
+        [
+          "Κανόνες πισίνας",
+          0
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "pool",
+      "query_id": "r01",
+      "recalled": true,
+      "returned": [
+        [
+          "Pool and spa",
+          0
+        ],
+        [
+          "Pets",
+          0
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "Pool and spa",
+          0
+        ],
+        [
+          "Κανόνες πισίνας",
+          0
+        ]
+      ],
+      "kind": "paraphrase",
+      "query": "pool opening hours",
+      "query_id": "r02",
+      "recalled": false,
+      "returned": []
+    },
+    {
+      "expected": [
+        [
+          "Breakfast and dining",
+          0
+        ],
+        [
+          "Πρωινό",
+          0
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "breakfast",
+      "query_id": "r03",
+      "recalled": true,
+      "returned": [
+        [
+          "Breakfast and dining",
+          0
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "Breakfast and dining",
+          0
+        ],
+        [
+          "Πρωινό",
+          0
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "breakfast included",
+      "query_id": "r04",
+      "recalled": true,
+      "returned": [
+        [
+          "Breakfast and dining",
+          0
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "Breakfast and dining",
+          1
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "dinner restaurant",
+      "query_id": "r05",
+      "recalled": true,
+      "returned": [
+        [
+          "Breakfast and dining",
+          1
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "Breakfast and dining",
+          2
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "room service",
+      "query_id": "r06",
+      "recalled": true,
+      "returned": [
+        [
+          "Breakfast and dining",
+          2
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "Check-in and check-out",
+          0
+        ]
+      ],
+      "kind": "paraphrase",
+      "query": "check-in time",
+      "query_id": "r07",
+      "recalled": false,
+      "returned": []
+    },
+    {
+      "expected": [
+        [
+          "Check-in and check-out",
+          1
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "late check-out",
+      "query_id": "r08",
+      "recalled": true,
+      "returned": [
+        [
+          "Check-in and check-out",
+          1
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "Check-in and check-out",
+          1
+        ]
+      ],
+      "kind": "paraphrase",
+      "query": "luggage storage",
+      "query_id": "r09",
+      "recalled": false,
+      "returned": []
+    },
+    {
+      "expected": [
+        [
+          "Parking and transport",
+          0
+        ]
+      ],
+      "kind": "paraphrase",
+      "query": "parking price",
+      "query_id": "r10",
+      "recalled": false,
+      "returned": []
+    },
+    {
+      "expected": [
+        [
+          "Parking and transport",
+          1
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "airport shuttle",
+      "query_id": "r11",
+      "recalled": true,
+      "returned": [
+        [
+          "Parking and transport",
+          1
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "Parking and transport",
+          0
+        ]
+      ],
+      "kind": "paraphrase",
+      "query": "electric car charging",
+      "query_id": "r12",
+      "recalled": false,
+      "returned": []
+    },
+    {
+      "expected": [
+        [
+          "Pets",
+          0
+        ]
+      ],
+      "kind": "paraphrase",
+      "query": "pet policy",
+      "query_id": "r13",
+      "recalled": false,
+      "returned": []
+    },
+    {
+      "expected": [
+        [
+          "Pets",
+          0
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "dogs allowed",
+      "query_id": "r14",
+      "recalled": true,
+      "returned": [
+        [
+          "Pets",
+          0
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "Wi-Fi and business services",
+          0
+        ]
+      ],
+      "kind": "paraphrase",
+      "query": "wifi password",
+      "query_id": "r15",
+      "recalled": false,
+      "returned": []
+    },
+    {
+      "expected": [
+        [
+          "Wi-Fi and business services",
+          1
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "meeting room",
+      "query_id": "r16",
+      "recalled": true,
+      "returned": [
+        [
+          "Wi-Fi and business services",
+          1
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "Cancellation policy",
+          0
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "free cancellation",
+      "query_id": "r17",
+      "recalled": true,
+      "returned": [
+        [
+          "Cancellation policy",
+          0
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "Cancellation policy",
+          1
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "non-refundable",
+      "query_id": "r18",
+      "recalled": true,
+      "returned": [
+        [
+          "Cancellation policy",
+          1
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "House rules",
+          0
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "smoking",
+      "query_id": "r19",
+      "recalled": true,
+      "returned": [
+        [
+          "House rules",
+          0
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "House rules",
+          1
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "quiet hours",
+      "query_id": "r20",
+      "recalled": true,
+      "returned": [
+        [
+          "House rules",
+          1
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "Pool and spa",
+          1
+        ]
+      ],
+      "kind": "shared_words",
+      "query": "spa massage",
+      "query_id": "r21",
+      "recalled": true,
+      "returned": [
+        [
+          "Pool and spa",
+          1
+        ]
+      ]
+    },
+    {
+      "expected": [],
+      "kind": "paraphrase",
+      "query": "gym opening times",
+      "query_id": "r22",
+      "recalled": true,
+      "returned": []
+    },
+    {
+      "expected": [
+        [
+          "Κανόνες πισίνας",
+          0
+        ]
+      ],
+      "kind": "greek",
+      "query": "πισίνα",
+      "query_id": "r23",
+      "recalled": true,
+      "returned": [
+        [
+          "Κανόνες πισίνας",
+          0
+        ]
+      ]
+    },
+    {
+      "expected": [
+        [
+          "Πρωινό",
+          0
+        ]
+      ],
+      "kind": "greek",
+      "query": "πρωινό",
+      "query_id": "r24",
+      "recalled": true,
+      "returned": [
+        [
+          "Πρωινό",
+          0
+        ]
+      ]
+    }
+  ],
+  "recall": {
+    "recalled": 16,
+    "scored": 23,
+    "value": 0.6957
+  },
+  "set": {
+    "checksum": "d2523716e4b0b631ec7a28287efab2dd6c41f1579083c30d491c5dd5972c713a",
+    "identity": "knowledge_retrieval_v1"
+  },
+  "statement": "Measured through PostgreSQL full-text search on a corpus and queries written by the developer for this purpose. A regression figure for the retrieval path, reported beside the pgvector threshold declared in advance; not evidence about real hotel documents, and not on its own grounds to start or rule out Stage 7.15.",
+  "threshold": 0.9
+}

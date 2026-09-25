@@ -8,9 +8,15 @@
                          or the live provider          FixtureAccuracy -- the ONLY stand-ins
                          (opt-in, never CI)
 
-What is replaced, and only this: the three data services (fixed data, `fixture_hotel.py`), the
-membership lookup (a role per case), and the two write sinks (the audit trail and the invocation
-log, which record into memory). Nothing touches a database or a network in replay mode.
+What is replaced, and only this: the data services (fixed data, `fixture_hotel.py`, and since
+Stage 7.10 `fixture_documents.py`), the membership lookup (a role per case), and the two write
+sinks (the audit trail and the invocation log, which record into memory). Nothing touches a
+database or a network in replay mode.
+
+Stage 7.10 moved the copilot to `copilot_answer@v2` and a six-tool catalogue. This set's questions
+and what passing it means are unchanged; its report now names v2 and lists the sixth tool among
+those offered, which is exactly the change it should show. Document questions have their own set,
+`copilot_knowledge_eval_v1` (`knowledge_harness.py`).
 
 ## The report, and what it may say (architecture §9.3)
 
@@ -40,11 +46,11 @@ from app.copilot.registry import ToolRegistry, build_default_registry
 from app.core.errors import ForbiddenError, NotFoundError
 from app.llm.base import Budget, ChatModel, ChatRequest, ToolCall
 from app.llm.errors import LlmError
-from app.llm.prompts.registry import COPILOT_ANSWER_V1
 from app.models.enums import SAFE_AUDIT_DETAIL_KEYS, HotelRole
-from app.services.copilot import CopilotService
+from app.services.copilot import PROMPT, CopilotService
 from app.services.tool_invocation import ToolInvocationService
 from tests.evaluation import scorers
+from tests.evaluation.fixture_documents import FixtureKnowledge
 from tests.evaluation.fixture_hotel import (
     EVAL_HOTEL,
     FixtureAccuracy,
@@ -60,7 +66,9 @@ from tests.evaluation.replay import (
     load_replays,
 )
 
-HARNESS_VERSION = "copilot_eval_harness_v1"
+#: v2 since Stage 7.10: the copilot under evaluation renders `copilot_answer@v2` and offers six
+#: tools, so a v1 report and a v2 report are not the same measurement of the same thing.
+HARNESS_VERSION = "copilot_eval_harness_v2"
 HERE = Path(__file__).resolve().parent
 REFERENCE_REPLAYS = HERE / "fixtures" / "reference_replays.json"
 REFERENCE_REPORT = HERE / "reference_report.json"
@@ -87,7 +95,7 @@ REFERENCE_STATEMENT = (
 def live_statement(provider: str, model: str, recorded_on: str, size: int) -> str:
     return (
         f"One run of {provider}/{model}, recorded on {recorded_on}, against {size} questions of "
-        f"{COPILOT_EVAL_V1.identity} under {COPILOT_ANSWER_V1.identity}, with fixed tool data. "
+        f"{COPILOT_EVAL_V1.identity} under {PROMPT.identity}, with fixed tool data. "
         "It describes this question set, this prompt and this model on that date, and nothing "
         "more: no aggregate accuracy is claimed, the set is too small for a rate to generalise, "
         "and it says nothing about the demand model's accuracy or about product usefulness."
@@ -209,6 +217,7 @@ def run_case(
         analytics=cast(Any, FixtureAnalytics()),
         demand_prediction=cast(Any, FixtureForecasts()),
         forecast_performance=cast(Any, FixtureAccuracy()),
+        knowledge=cast(Any, FixtureKnowledge()),
     )
     invocations = ToolInvocationService(
         cast(Any, session), registry, cast(Any, scope), cast(Any, EvalAudit()), services
@@ -362,7 +371,7 @@ def run(
             "checksum": question_set.checksum,
             "size": len(question_set.cases),
         },
-        "prompt": {"identity": COPILOT_ANSWER_V1.identity, "checksum": COPILOT_ANSWER_V1.checksum},
+        "prompt": {"identity": PROMPT.identity, "checksum": PROMPT.checksum},
         "model": {"provider": provider, "model": model},
         "recorded_on": recorded_on,
         "statement": statement,
