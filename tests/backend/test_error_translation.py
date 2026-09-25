@@ -68,9 +68,19 @@ AUDIT_REPOSITORY_QUALNAME = "app.repositories.audit.AuditRepository"
 #: the architecture should still be something somebody has to look at.
 #: Stage 7.6 added the eighth: `ToolInvocationService`, which records `tool.invoked` and
 #: therefore carries the same guard every other writer does.
-EXPECTED_WRITER_COUNT = 8
+#: Stage 7.9 added the ninth: `KnowledgeService`, which records the three `document.*` actions.
+EXPECTED_WRITER_COUNT = 9
 EXPECTED_WRITER_MODULES = frozenset(
-    {"auth", "booking", "payment", "membership", "amenity", "finance", "tool_invocation"}
+    {
+        "auth",
+        "booking",
+        "payment",
+        "membership",
+        "amenity",
+        "finance",
+        "tool_invocation",
+        "knowledge",
+    }
 )
 
 #: Services known NOT to write audit events. Asserted to stay undiscovered, so the rule cannot

@@ -619,4 +619,4 @@ def test_a_manager_reads_tool_events_through_the_existing_audit_api(
 
 def test_the_schema_is_at_the_new_head(session: Session) -> None:
     revision = session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-    assert revision == "0013_llm_invocations"
+    assert revision == "0014_hotel_documents"

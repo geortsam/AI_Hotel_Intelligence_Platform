@@ -746,8 +746,9 @@ def test_exactly_one_serving_route_was_added() -> None:
     operations = sum(len([m for m in spec if m in methods]) for spec in schema["paths"].values())
 
     # Stage 7.7 added POST .../copilot/ask: 54 / 86 -> 55 / 87.
-    assert len(schema["paths"]) == 55
-    assert operations == 87
+    # Stage 7.9 added the knowledge documents and their search: 55 / 87 -> 60 / 93.
+    assert len(schema["paths"]) == 60
+    assert operations == 93
     assert sorted(path for path in schema["paths"] if "/ml/" in path) == sorted(
         [SCHEMA_PATH, STORED_PREDICTIONS_PATH, ACCURACY_PATH, DISTRIBUTION_PATH]
     )

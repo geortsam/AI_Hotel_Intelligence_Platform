@@ -721,7 +721,7 @@ def test_the_read_is_two_statements_regardless_of_window_size(
 def test_the_alembic_head_is_the_stage_611_revision(session: Session) -> None:
     revision = session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
 
-    assert revision == "0013_llm_invocations"
+    assert revision == "0014_hotel_documents"
 
 
 # ======================================================================================

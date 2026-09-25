@@ -63,6 +63,8 @@ RECORDING_SERVICES = [
     "finance",
     # Stage 7.6: every copilot tool call, recorded on the same trail under `tool.invoked`.
     "tool_invocation",
+    # Stage 7.9: a document upload, a new version, a withdrawal.
+    "knowledge",
 ]
 
 AUDIT_PATH = "/api/v1/hotels/{hotel_public_id}/audit-events"
@@ -134,6 +136,11 @@ def test_the_action_vocabulary_is_exactly_the_authorised_set() -> None:
         # Stage 7.6. A copilot tool call, recorded whatever its outcome. The first action that
         # records a read rather than a committed change; migration 0012 widened the CHECK.
         "tool.invoked",
+        # Stage 7.9. The three changes a hotel's knowledge documents can undergo; migration 0014
+        # widened the CHECK. Reads and searches are not audited, as no read in V1 is.
+        "document.created",
+        "document.version_created",
+        "document.withdrawn",
     }
 
 
@@ -148,6 +155,8 @@ def test_the_resource_vocabulary_is_exactly_the_authorised_set() -> None:
         "expense_category",
         # Stage 7.6, with `tool.invoked`. Migration 0012 widened its CHECK too.
         "tool",
+        # Stage 7.9, with the three document actions. Migration 0014 widened its CHECK.
+        "document",
     }
 
 
@@ -162,8 +171,11 @@ def test_the_two_action_groups_partition_the_vocabulary() -> None:
     assert not HOTEL_AUDIT_ACTIONS & PLATFORM_AUDIT_ACTIONS
 
 
-def test_the_hotel_scoped_actions_are_the_ten_a_property_owns() -> None:
-    """Stage 7.6 added the tenth: a tool call is always made against one resolved hotel."""
+def test_the_hotel_scoped_actions_are_the_thirteen_a_property_owns() -> None:
+    """Stage 7.6 added the tenth: a tool call is always made against one resolved hotel.
+
+    Stage 7.9 added three more: a document belongs to exactly one hotel.
+    """
     assert set(HOTEL_AUDIT_ACTIONS) == {
         "booking.created",
         "booking.status_changed",
@@ -175,6 +187,9 @@ def test_the_hotel_scoped_actions_are_the_ten_a_property_owns() -> None:
         "membership.role_changed",
         "membership.removed",
         "tool.invoked",
+        "document.created",
+        "document.version_created",
+        "document.withdrawn",
     }
 
 
@@ -210,13 +225,21 @@ def test_the_migration_permits_exactly_the_enum(action: str) -> None:
     widened = (MIGRATIONS / "20260905_0009_audit_booking_deleted.py").read_text(encoding="utf-8")
     # Stage 7.6 widened it again, in 0012, by `tool.invoked`.
     tool = (MIGRATIONS / "20260924_0012_audit_tool_invoked.py").read_text(encoding="utf-8")
+    # Stage 7.9 widened it again, in 0014, by the three document actions.
+    document = (MIGRATIONS / "20260926_0014_hotel_documents.py").read_text(encoding="utf-8")
 
-    assert f"'{action}'" in clause or f'"{action}"' in widened or f'"{action}"' in tool, action
+    assert (
+        f"'{action}'" in clause
+        or f'"{action}"' in widened
+        or f'"{action}"' in tool
+        or f'"{action}"' in document
+    ), action
 
 
 @pytest.mark.parametrize("resource_type", sorted(AuditResourceType.values()))
 def test_the_migrations_permit_exactly_the_resource_enum(resource_type: str) -> None:
-    """The resource-type twin of the test above. 0007 declared seven; 0012 added `tool`."""
+    """The resource-type twin of the test above. 0007 declared seven; 0012 added `tool`;
+    0014 added `document`."""
     original = (MIGRATIONS / "20260904_0007_audit_events.py").read_text(encoding="utf-8")
     clause = original[
         original.index("ck_audit_events_resource_type_valid") : original.index(
@@ -224,8 +247,13 @@ def test_the_migrations_permit_exactly_the_resource_enum(resource_type: str) -> 
         )
     ]
     tool = (MIGRATIONS / "20260924_0012_audit_tool_invoked.py").read_text(encoding="utf-8")
+    document = (MIGRATIONS / "20260926_0014_hotel_documents.py").read_text(encoding="utf-8")
 
-    assert f"'{resource_type}'" in clause or f'"{resource_type}"' in tool, resource_type
+    assert (
+        f"'{resource_type}'" in clause
+        or f'"{resource_type}"' in tool
+        or f'"{resource_type}"' in document
+    ), resource_type
 
 
 def test_no_service_spells_an_action_as_a_string_literal() -> None:
@@ -389,6 +417,9 @@ def test_the_safe_detail_keys_are_the_authorised_set() -> None:
         "error_code",
         "duration_ms",
         "arguments_sha256",
+        # Stage 7.9, document events: the version number, a positive integer. Never the
+        # title, the source or any of the text.
+        "version",
     }
 
 
@@ -781,7 +812,7 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     """
     chain = revisions()
 
-    assert len(chain) == 13
+    assert len(chain) == 14
     roots = [rev for rev, down in chain.items() if down is None]
     heads = [rev for rev in chain if rev not in set(chain.values())]
 
@@ -791,15 +822,18 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     # Stage 7.6 added 0012, the fourth audit revision: it widens the two vocabulary CHECKs
     # exactly as 0009 widened one.
     # Stage 7.7 added 0013, which creates `llm_invocations` and touches no audit table.
-    assert heads == ["0013_llm_invocations"]
+    # Stage 7.9 added 0014, the fifth audit revision: it creates the two document tables and
+    # widens the two vocabulary CHECKs exactly as 0012 did.
+    assert heads == ["0014_hotel_documents"]
     assert chain["0007_audit_events"] == "0006_users_password_changed_at"
     assert chain["0008_audit_retention_archive"] == "0007_audit_events"
     assert chain["0009_audit_booking_deleted"] == "0008_audit_retention_archive"
     assert chain["0012_audit_tool_invoked"] == "0011_demand_prediction_public_id"
     assert chain["0013_llm_invocations"] == "0012_audit_tool_invoked"
+    assert chain["0014_hotel_documents"] == "0013_llm_invocations"
     # Every other revision is somebody's parent exactly once: no fork.
     parents = [down for down in chain.values() if down is not None]
-    assert len(parents) == len(set(parents)) == 12
+    assert len(parents) == len(set(parents)) == 13
 
 
 def test_the_audit_table_is_created_by_exactly_one_migration() -> None:
@@ -852,6 +886,9 @@ AUDIT_TABLE_ALTERATIONS = {
     "20260905_0009_audit_booking_deleted.py",
     # Stage 7.6: widens the action CHECK by `tool.invoked` and the resource CHECK by `tool`.
     "20260924_0012_audit_tool_invoked.py",
+    # Stage 7.9: widens the action CHECK by the three `document.*` actions and the resource
+    # CHECK by `document`, beside creating the two document tables.
+    "20260926_0014_hotel_documents.py",
 }
 
 

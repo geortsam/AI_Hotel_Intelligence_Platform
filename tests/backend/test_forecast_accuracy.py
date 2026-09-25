@@ -878,8 +878,9 @@ def test_the_api_surface_is_the_one_stage_73_published() -> None:
     operations = sum(1 for path in schema["paths"].values() for verb in path if verb in methods)
 
     # Stage 7.7 added POST .../copilot/ask: 54 / 86 -> 55 / 87.
-    assert len(schema["paths"]) == 55
-    assert operations == 87
+    # Stage 7.9 added the knowledge documents and their search: 55 / 87 -> 60 / 93.
+    assert len(schema["paths"]) == 60
+    assert operations == 93
 
 
 def test_the_frozen_result_type_is_still_not_an_http_contract() -> None:
@@ -921,8 +922,9 @@ def test_the_migration_chain_did_not_move() -> None:
     versions = REPOSITORY_ROOT / "database" / "migrations" / "versions"
     revisions = sorted(path.name for path in versions.glob("*.py"))
 
-    assert len(revisions) == 13
-    assert revisions[-1].endswith("0013_llm_invocations.py")
+    # Stage 7.9 added 0014 (`hotel_documents`, `hotel_document_chunks`).
+    assert len(revisions) == 14
+    assert revisions[-1].endswith("0014_hotel_documents.py")
 
 
 def test_the_model_identity_is_untouched() -> None:

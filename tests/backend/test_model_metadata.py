@@ -61,6 +61,10 @@ APPROVED_TABLES = {
     # bounded tool loop ended, and its token and latency cost -- never the question or the
     # answer. Hotel-scoped, append-only by trigger, and reachable through no read endpoint.
     "llm_invocations",
+    # Stage 7.9. A hotel's operational documents, one row per immutable version, and the
+    # citable chunks each version is split into. Hotel-scoped; neither is ever deleted.
+    "hotel_documents",
+    "hotel_document_chunks",
 }
 
 

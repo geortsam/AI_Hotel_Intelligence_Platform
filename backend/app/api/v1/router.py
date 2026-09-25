@@ -22,6 +22,7 @@ from app.api.v1.endpoints import (
     guests,
     hotels,
     intelligence,
+    knowledge,
     members,
     meta,
     ml_performance,
@@ -95,6 +96,8 @@ api_router.include_router(ml_performance.router)
 # Stage 7.7. The copilot: one question in, one labelled answer out, over the Stage 7.6 tools.
 # Registered after the analytics and ML routers whose services its tools delegate to.
 api_router.include_router(copilot.router)
+# Stage 7.9. Hotel knowledge documents and full-text search. No language model involved.
+api_router.include_router(knowledge.router)
 # The audit trail. Hotel-scoped like everything else that is a property's own data, and
 # read-only: there is no route that writes, edits or deletes an event, because a history a
 # client can append to is not evidence. Registered last because it observes every domain

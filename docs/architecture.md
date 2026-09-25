@@ -123,7 +123,7 @@ surface was 82 operations, of which 77 required authentication.
 
 **Current state:** `api/` 31 files, `services/` 32, `schemas/` 26, `repositories/` 21, `models/`
 16, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 9, and the V2 packages `llm/` 11 and `copilot/`
-12. The HTTP surface is **55 paths / 87 operations**,
+12. The HTTP surface is **60 paths / 93 operations**,
 of which **82 require authentication**; the 5 that do not are the version-metadata endpoint,
 registration, login and the two health probes — the same five as at V1.
 
@@ -158,8 +158,11 @@ third, `0012_audit_tool_invoked`, which creates nothing: it widens the two close
 vocabulary CHECKs by one value each (`tool.invoked`, `tool`) so copilot tool calls are recorded
 on the existing append-only trail. Stage 7.7 added the fourth, `0013_llm_invocations`: one
 append-only table holding a content-free account of each copilot question (prompt version,
-upstream model, stop reason, tokens, latency -- never the question or the answer). Head
-`0013` across 13 linear revisions, 23 application tables.
+upstream model, stop reason, tokens, latency -- never the question or the answer). Stage 7.9
+added the fifth, `0014_hotel_documents`: `hotel_documents` (one immutable row per version) and
+`hotel_document_chunks` (append-only, GIN-indexed for full-text search), plus the three
+`document.*` audit actions. Head `0014` across 14 linear revisions, 25 application tables. See
+[knowledge-documents.md](knowledge-documents.md).
 
 ---
 

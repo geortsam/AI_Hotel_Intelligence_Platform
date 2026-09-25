@@ -394,6 +394,14 @@ class AuditAction(_Vocabulary):
     #: `ck_audit_events_resource_type_valid` by one value each.
     TOOL_INVOKED = "tool.invoked"
 
+    #: Stage 7.9. The knowledge base's three writes: a first version uploaded, a new version
+    #: superseding the current one, and the current version withdrawn from retrieval. Resource
+    #: type ``document``, reference the affected version's public UUID. Migration 0014 widened
+    #: both vocabulary CHECKs, exactly as 0009 and 0012 did.
+    DOCUMENT_CREATED = "document.created"
+    DOCUMENT_VERSION_CREATED = "document.version_created"
+    DOCUMENT_WITHDRAWN = "document.withdrawn"
+
 
 class AuditResourceType(_Vocabulary):
     """What kind of thing an audit event is about (Stage 4.5.12).
@@ -414,6 +422,39 @@ class AuditResourceType(_Vocabulary):
     #: Stage 7.6, with ``tool.invoked``. The reference is the tool's registered name -- a
     #: literal from the static registry, never the name a model supplied.
     TOOL = "tool"
+    #: Stage 7.9, with the three ``document.*`` actions. One version of a hotel document.
+    DOCUMENT = "document"
+
+
+class DocumentStatus(_Vocabulary):
+    """Where one document VERSION stands (Stage 7.9). Only ``active`` is retrievable.
+
+    ``active -> superseded`` when a new version is uploaded; ``active -> withdrawn`` when the
+    current version is withdrawn. Nothing else, enforced by a trigger as well as the service:
+    a version is never edited back to life, and its chunks stay addressable for citations.
+    """
+
+    ACTIVE = "active"
+    SUPERSEDED = "superseded"
+    WITHDRAWN = "withdrawn"
+
+
+class DocumentLanguage(_Vocabulary):
+    """The PostgreSQL text-search configuration a document is indexed and searched under.
+
+    Chosen per document at upload (Stage 7.9 decision): ``english`` and ``greek`` stem, so
+    "room" finds "rooms"; ``simple`` does not stem and treats every language alike. Closed,
+    because each value is cast to ``regconfig`` inside SQL -- an open set would let a request
+    name any configuration the server happens to have. All seven ship with PostgreSQL 18.
+    """
+
+    SIMPLE = "simple"
+    ENGLISH = "english"
+    GREEK = "greek"
+    FRENCH = "french"
+    GERMAN = "german"
+    ITALIAN = "italian"
+    SPANISH = "spanish"
 
 
 #: The actions that belong to NO hotel, and therefore store ``hotel_id IS NULL``.
@@ -506,6 +547,9 @@ SAFE_AUDIT_DETAIL_KEYS: frozenset[str] = frozenset(
         # NOT the arguments themselves -- model output is never stored verbatim. Unrelated to
         # the credential digests the note above excludes: it is not derived from any secret.
         "arguments_sha256",
+        # Stage 7.9, document events: the version number the event concerns. An integer the
+        # service writes; the document's title and content are never recorded.
+        "version",
     }
 )
 

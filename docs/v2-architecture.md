@@ -494,6 +494,35 @@ influence — not as a post-filter on a global search, and not as a namespace co
 is built in a repository, the hotel comes from `require_hotel`, and a test asserts that two hotels
 with identical documents never see each other's chunks.
 
+> **Amendment A4 (Stage 7.9) — what was built, and four decisions taken with the user.** Specified
+> in full in [knowledge-documents.md](knowledge-documents.md). Migration `0014_hotel_documents`
+> creates the two tables of §6.2 with a GIN index on `hotel_document_chunks.search_vector`, and
+> the retrieval of §6.3 is `GET /hotels/{h}/knowledge/search` over PostgreSQL full-text search.
+> No model reads a document yet: the `search_hotel_knowledge` tool and §6.6's citations are
+> Stage 7.10.
+>
+> 1. **Withdrawal keeps the rows.** §6.2's "a status change plus chunk removal" is read as removal
+>    *from retrieval*: the search admits only `active` versions, in its WHERE clause, while a
+>    superseded or withdrawn version's chunks keep their text and `public_id`, so a past citation
+>    stays explainable. Hard deletion is not built. A trigger makes every version immutable
+>    except for `status`, which may move only `active → superseded` or `active → withdrawn`;
+>    chunks are append-only.
+> 2. **The audit vocabulary widened in 0014**, exactly as 0012 did: `document.created`,
+>    `document.version_created`, `document.withdrawn` and the resource type `document`, carrying
+>    the version's public id and its `version` number — never its title or text. Reads and
+>    searches are not audited, as no read in V1 is.
+> 3. **No guest personal data: an attestation plus a stated policy.** Every upload must carry
+>    `contains_no_guest_personal_data: true`. It is a declaration, not detection — a pattern
+>    scanner would refuse the hotel's own contact details and still miss a guest's name.
+> 4. **Per-document language.** §6.2's columns gain `language`, one of seven PostgreSQL
+>    text-search configurations, and each chunk is matched under its own document's. `token_count`
+>    is a word count: no tokenizer is a dependency.
+>
+> **The relevance score is not published.** Results are ordered by `ts_rank_cd`, then document,
+> then chunk ordinal — a total order — but the score is comparable only within one search, so it
+> is used in `ORDER BY` and never selected. §9.2's retrieval measurement, and the threshold that
+> would justify §6.4's pgvector, remain Stage 7.10's to define in advance.
+
 ### 6.4 The vector store decision
 
 **Recommendation: start with PostgreSQL's native full-text search. Defer pgvector until a measured
@@ -697,6 +726,8 @@ copilot makes a claim to a user, not after.
 > -- plus `expected_figures`, `completed`, and `scorer_agreement` between the harness's
 > independent grounding scorer and the copilot's own figure check. **Citation validity and
 > retrieval quality are deferred** to Stages 7.9/7.10: there is nothing to cite or retrieve yet.
+> *(Stage 7.9 has since built retrieval — Amendment A4 — but nothing yet cites it, and its
+> quality is measured in 7.10, not here.)*
 >
 > **Refusal is defined mechanically**: a complete answer that states no figure the caller did not
 > write and calls no untolerated tool. It cannot tell a polite decline from an empty answer, and

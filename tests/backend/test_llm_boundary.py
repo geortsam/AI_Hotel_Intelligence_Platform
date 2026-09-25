@@ -837,7 +837,8 @@ def test_the_v1_application_is_unaffected_by_the_flag() -> None:
     assert off == on
     # Stage 7.7 added the copilot route. It exists whether or not the flag is set -- with
     # the flag off it answers 503 LLM_DISABLED -- which is exactly why the documents match.
-    assert len(off["paths"]) == 55
+    # Stage 7.9 added five knowledge paths, none of which depends on the flag either.
+    assert len(off["paths"]) == 60
 
 
 # ======================================================================================

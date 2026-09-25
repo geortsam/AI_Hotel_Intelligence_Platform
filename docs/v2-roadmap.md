@@ -3,7 +3,7 @@
 > The ordered plan produced by Stage 7.1. Each stage is specified well enough to be implemented
 > on its own, in order, without re-deciding anything.
 >
-> **Implemented so far: Stages 7.2 to 7.8** — all of Track A, and the first four stages of
+> **Implemented so far: Stages 7.2 to 7.9** — all of Track A, and the first five stages of
 > Track B. Every other stage below is a specification and nothing more; none of its code
 > exists.
 > A stage carries `· *done*` in its heading once it ships, with a note recording what was actually
@@ -390,7 +390,38 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | **Acceptance** | (1) grounding is scored mechanically, not by judgement; (2) the result names its question set, prompt version and date; (3) a hallucinated figure is detected by the harness in a deliberate negative test |
 | **Done when** | CI runs it on every push and a regression fails the build |
 
-### Stage 7.9 — Hotel knowledge documents
+### Stage 7.9 — Hotel knowledge documents · *done*
+
+> **Built as specified, with four decisions taken with the user** (architecture Amendment A4,
+> [knowledge-documents.md](knowledge-documents.md)): withdrawal keeps the rows and leaves
+> retrieval through the search's WHERE clause; the audit vocabulary widened in 0014 by three
+> `document.*` actions and the `document` resource; no guest personal data is an attestation
+> (`contains_no_guest_personal_data: true`) plus a stated policy; and each document carries its own
+> text-search language, one of seven.
+>
+> **Migration `0014_hotel_documents`**: `hotel_documents` (one row per immutable version; a
+> composite `(supersedes_id, hotel_id)` foreign key so a version can supersede only its own
+> hotel's; a unique `supersedes_id` so two concurrent re-uploads cannot both win) and
+> `hotel_document_chunks` (append-only; GIN index on `search_vector`). Head `0013` →
+> **`0014_hotel_documents`**; 25 application tables.
+>
+> **Six operations**, surface **55/87 → 60/93**: upload, list, read one version with its chunks,
+> new version, withdrawal (manager for the three writes), and `GET …/knowledge/search` (any
+> member; `q` ≤ 200 characters, `limit` 1–20, default 5). The planned "~60/92" became 93 because
+> reading one version is its own operation — it is how a withdrawn version's citation is
+> explained.
+>
+> **Retrieval**: `hotel_id` and `status = 'active'` in the same WHERE clause as the
+> `websearch_to_tsquery` match; ordered by `ts_rank_cd`, then document, then ordinal. The score
+> itself is not returned — comparable only within one search, and the project keeps floats out of
+> repositories. Chunking lives in a pure module, `app/knowledge/chunking.py`.
+>
+> **Not built**: the `search_hotel_knowledge` tool, citations, retrieval-quality measurement
+> (all 7.10); hard deletion; retention of documents.
+>
+> Delivered: models, repository, service, schemas, routes, migration, the design document,
+> Amendment A4. 0 dependencies, 0 frontend changes. 113 new tests; backend 5765 → 5878. Frontend untouched at
+> 1141.
 
 | | |
 |---|---|

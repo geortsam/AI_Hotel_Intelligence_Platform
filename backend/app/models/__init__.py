@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models -- the approved 23-table schema (Stage 7.7 added `llm_invocations`).
+"""SQLAlchemy ORM models -- the approved 25-table schema (7.7: `llm_invocations`; 7.9: documents).
 
 Importing this package registers every model on ``Base.metadata``, which is what Alembic's
 autogenerate and the test fixtures rely on. Import order matters only in that all models must
@@ -13,6 +13,7 @@ from app.models.booking import Booking, BookingRoom, BookingRoomNight
 from app.models.finance import Expense, ExpenseCategory, Revenue, RevenueCategory
 from app.models.guest import Guest
 from app.models.hotel import Hotel
+from app.models.knowledge import HotelDocument, HotelDocumentChunk
 from app.models.llm_invocation import LlmInvocation
 from app.models.membership import UserHotel
 from app.models.metrics import DailyHotelMetric
@@ -37,6 +38,8 @@ __all__ = [
     "ExpenseCategory",
     "Guest",
     "Hotel",
+    "HotelDocument",
+    "HotelDocumentChunk",
     "LlmInvocation",
     "Payment",
     "PlatformAdmin",

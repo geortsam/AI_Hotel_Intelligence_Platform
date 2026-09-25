@@ -148,7 +148,10 @@ def session(engine: Engine) -> Iterator[Session]:
                 # below, so the teardown says what it clears rather than implying it.
                 # Stage 7.7. llm_invocations is append-only by trigger, and like audit_events
                 # the trigger is row-level, so TRUNCATE clears it. Named for the same reason.
-                "TRUNCATE llm_invocations, demand_predictions, "
+                # Stage 7.9. The knowledge tables carry row-level guard triggers too, which
+                # TRUNCATE does not fire. Chunks first only for readability.
+                "TRUNCATE hotel_document_chunks, hotel_documents, "
+                "llm_invocations, demand_predictions, "
                 "booking_room_nights, booking_rooms, payments, reviews, revenue, "
                 "expenses, daily_hotel_metrics, bookings, guests, rooms, room_types, "
                 "room_type_amenities, amenities, revenue_categories, expense_categories, "

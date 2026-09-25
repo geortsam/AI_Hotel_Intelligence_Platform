@@ -189,6 +189,15 @@ APPROVED_RESOURCE_SEGMENTS = {
     # `drift` and `model-health` would both name something this platform does not compute.
     "forecast-accuracy",
     "prediction-distribution",
+    # Stage 7.9. A hotel's knowledge documents. `documents` is the collection of versions;
+    # `versions` creates the next one and `withdrawal` is the one state change a version can
+    # undergo besides being superseded -- a noun, like `extension`, because it names the
+    # change rather than commanding it. `knowledge/search` reads across every active version.
+    "documents",
+    "versions",
+    "withdrawal",
+    "knowledge",
+    "search",
 }
 
 #: Resources the SCHEMA models as global -- no hotel_id column, and a unique constraint with
@@ -315,6 +324,12 @@ def test_domain_surface_is_exactly_the_approved_hierarchy() -> None:
         "/api/v1/hotels/{hotel_public_id}/audit-events",
         # Stage 7.7. One question in, one labelled answer out, over the hotel's own data.
         "/api/v1/hotels/{hotel_public_id}/copilot/ask",
+        # Stage 7.9. Upload and list, one version, its successor, its withdrawal, and search.
+        "/api/v1/hotels/{hotel_public_id}/documents",
+        "/api/v1/hotels/{hotel_public_id}/documents/{document_public_id}",
+        "/api/v1/hotels/{hotel_public_id}/documents/{document_public_id}/versions",
+        "/api/v1/hotels/{hotel_public_id}/documents/{document_public_id}/withdrawal",
+        "/api/v1/hotels/{hotel_public_id}/knowledge/search",
         "/api/v1/platform/audit-events",
         "/api/v1/auth/register",
         "/api/v1/auth/login",

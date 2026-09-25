@@ -68,6 +68,8 @@ APP_LOGGERS = [
     "app.services.guest",
     "app.services.health",
     "app.services.hotel",
+    # Stage 7.9. Document uploads, versions and withdrawals: public ids and counts only.
+    "app.services.knowledge",
     "app.services.membership",
     "app.services.ml_accuracy",
     "app.services.ml_drift",

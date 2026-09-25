@@ -93,7 +93,9 @@ half-up rounding interval rather than a quantize-and-compare — imports nothing
 ## 5. What is not measured
 
 - **Citation validity and retrieval quality** (§9.2): there is no retrieval until Stages 7.9
-  and 7.10.
+  and 7.10. *Stage 7.9 has since built document retrieval
+  ([knowledge-documents.md](knowledge-documents.md)), but the copilot cannot reach it and nothing
+  cites it; `copilot_eval_v1` and its report are unchanged. Both measures are Stage 7.10's.*
 - **Latency and cost in replay**: recorded tokens are zero and replay takes no time. In live mode
   both are real and are reported per case.
 - **Product usefulness**: not measurable in this repository (§9.1).

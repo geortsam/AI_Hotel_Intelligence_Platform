@@ -16,8 +16,8 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-5765%20backend%20%C2%B7%201141%20frontend-success)
-![API](https://img.shields.io/badge/API-54%20paths%20%C2%B7%2086%20operations-informational)
+![Tests](https://img.shields.io/badge/tests-5878%20backend%20%C2%B7%201141%20frontend-success)
+![API](https://img.shields.io/badge/API-60%20paths%20%C2%B7%2093%20operations-informational)
 
 </div>
 
@@ -29,10 +29,10 @@ more than one currency and the platform never converts between them.</sub></div>
 
 > ### Current state: **V1 complete and verified**
 >
-> Eleven domains over a 23-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
+> Eleven domains over a 25-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
 > guests, bookings, payments, reviews, the financial ledger, analytics and intelligence, plus the
 > stored demand predictions the served model writes and the measurements taken over them —
-> reachable as **55 API paths / 87 operations**, of which **82 require authentication**.
+> reachable as **60 API paths / 93 operations**, of which **88 require authentication**.
 > Authentication is Argon2id plus HS256
 > access tokens; authorization is a four-level hotel role hierarchy with a separate
 > platform-administrator capability. There is a complete React front end — all twelve
@@ -40,8 +40,8 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **5765 backend tests and 1141 frontend tests pass in CI.** Schema head is
-> `0013_llm_invocations` across 13 linear migrations.
+> **5878 backend tests and 1141 frontend tests pass in CI.** Schema head is
+> `0014_hotel_documents` across 14 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
 > baseline — seasonal-naive day-of-week median forecasting, MAD-based intervals and anomaly
@@ -58,13 +58,14 @@ more than one currency and the platform never converts between them.</sub></div>
 > passing test proves software behaviour under a declared protocol, not predictive validity —
 > [docs/ml-model-card.md](docs/ml-model-card.md) §15 carries those answers as data.
 >
-> **No language model is ever called, and there are no embeddings, no vector database, no RAG
-> and no agent framework in this repository.** Stage 7.5 added the *boundary* one would pass
-> through — a `ChatModel` protocol, one provider adapter, versioned prompts and a failure
-> taxonomy — and nothing on top of it: no endpoint, no tool, no copilot. The provider SDK is an
-> optional dependency that neither CI nor the image installs, the feature is off by default,
-> and no service or router imports the package at all. Nothing here is a placeholder pretending
-> to be a feature —
+> **No language model is called by CI or by the shipped image, and there are no embeddings, no
+> vector database and no agent framework in this repository.** Stage 7.5 added the *boundary* —
+> a `ChatModel` protocol, one provider adapter, versioned prompts and a failure taxonomy;
+> Stages 7.6–7.7 put a read-only tool boundary and a single-turn copilot endpoint on it, which
+> answers `503 LLM_DISABLED` unless the feature is switched on and the optional provider SDK —
+> which neither CI nor the image installs — is present. Stage 7.8 evaluates it against recorded
+> exchanges. Stage 7.9 added hotel knowledge documents searched with PostgreSQL full-text search;
+> the copilot cannot read them yet. Nothing here is a placeholder pretending to be a feature —
 > [docs/development-roadmap.md](docs/development-roadmap.md) separates what exists from what is
 > left for V2, and [Known limitations](#known-limitations) is the honest list.
 
@@ -218,7 +219,7 @@ flowchart LR
         S["<b>React SPA</b><br/>static bundle<br/>route-level code splitting"]
         A["<b>FastAPI</b><br/>api → services → repositories"]
         M["<b>demand_baseline_v1</b><br/>artifact, verified before load<br/>loaded once per process"]
-        D[("<b>PostgreSQL 18.6</b><br/>23 application tables<br/>constraints carry the rules")]
+        D[("<b>PostgreSQL 18.6</b><br/>25 application tables<br/>constraints carry the rules")]
     end
 
     B -- "HTTPS" --> N
@@ -312,7 +313,7 @@ Full detail, including the rules later stages must follow:
 | Validation | Pydantic v2, pydantic-settings | Request/response schemas, environment config |
 | ORM | SQLAlchemy 2.0 | Data mapping across 15 model modules |
 | Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
-| Migrations | Alembic | 13 linear revisions, head `0013_llm_invocations` |
+| Migrations | Alembic | 14 linear revisions, head `0014_hotel_documents` |
 | Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
 | Frontend | React 18, TypeScript 5.7, Vite 6 | Dashboard SPA, route-level code splitting |
 | Intelligence (V1) | Python standard library | Deterministic statistical baseline — no NumPy or pandas on its path |
@@ -436,7 +437,7 @@ Start the API:
 |---|---|
 | http://localhost:8000/health | `{"status":"ok", ...}` |
 | http://localhost:8000/health/db | `{"status":"ok","database":"reachable", ...}`, or 503 when it is not |
-| http://localhost:8000/docs | Swagger UI — 55 paths, 87 operations. Disabled when `ENVIRONMENT=production` |
+| http://localhost:8000/docs | Swagger UI — 60 paths, 93 operations. Disabled when `ENVIRONMENT=production` |
 
 ### Frontend
 
@@ -586,7 +587,7 @@ Every push and pull request to `main` runs four jobs in parallel on `ubuntu-late
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
-PostgreSQL reports 18.6, that `migrate` exits 0 and leaves the schema at `0013`, that the API
+PostgreSQL reports 18.6, that `migrate` exits 0 and leaves the schema at `0014`, that the API
 and frontend both become healthy, that nginx serves the SPA at `/`, `/bookings`, `/reviews`
 and `/intelligence`, that `/api/v1/` is proxied through to FastAPI while an unknown `/api/`
 path still returns a real 404 rather than the SPA, that `SECRET_KEY` and `POSTGRES_PASSWORD`
@@ -687,13 +688,19 @@ See [docs/ml-training-data.md](docs/ml-training-data.md),
 [docs/ml-prediction-read-api.md](docs/ml-prediction-read-api.md) and
 [docs/ml-forecast-performance-api.md](docs/ml-forecast-performance-api.md).
 
-**No language model is ever called.** Stage 7.5 added the seam one would pass through and
-nothing that uses it: `app/llm/` holds a `ChatModel` protocol, one provider adapter, versioned
-checksummed prompts, the six declared failure modes and four test doubles. There is no
-endpoint, no tool, no copilot, no RAG, no embeddings, no vector database and no agent
-framework. The provider SDK lives in `backend/requirements-llm.txt`, which neither CI nor the
-Docker image installs; `llm_enabled` is false by default; and a repository-wide test asserts
-the SDK is imported in exactly one module and that no service or router reaches the package.
+**No language model is called by CI or by the shipped image.** Stage 7.5 added the seam:
+`app/llm/` holds a `ChatModel` protocol, one provider adapter, versioned checksummed prompts,
+the six declared failure modes and four test doubles. Stage 7.6 added five read-only copilot
+tools over existing services, Stage 7.7 the single-turn `POST …/copilot/ask`, and Stage 7.8 an
+evaluation harness that replays recorded exchanges. The provider SDK lives in
+`backend/requirements-llm.txt`, which neither CI nor the Docker image installs; `llm_enabled` is
+false by default, and the endpoint then answers `503 LLM_DISABLED`; a repository-wide test
+asserts the SDK is imported in exactly one module.
+
+**Hotel knowledge documents (Stage 7.9)** are uploaded, versioned, withdrawn and searched with
+PostgreSQL full-text search — the tenant filter in the query itself, no embeddings, no vector
+column, no new datastore. No model reads them yet; citations are Stage 7.10. See
+[docs/knowledge-documents.md](docs/knowledge-documents.md).
 
 ### V2 — NOT IMPLEMENTED
 
@@ -708,7 +715,7 @@ record in `ml/models/<model_version>/` — which is where Stage 6.3 wrote the fi
 | **Review sentiment** | Review text | Polarity plus an aspect breakdown (cleanliness, staff, location, value) and token-level explanations |
 | **Room-image classification** | Room photographs | Room type and feature tags for automatic media organisation |
 | **Recommendations** | User and hotel history | Ranked hotel suggestions, evaluated against a popularity baseline |
-| **LLM / RAG / agent capability** | — | Nothing of the kind exists today; it is direction, not capability |
+| **Grounded answers / agents** | Hotel documents and tools | Answers that cite retrieved chunks (Stage 7.10). The copilot and document search exist; nothing joins them yet, and there is no agent |
 
 Rules these must follow, fixed now so they are not negotiated later:
 

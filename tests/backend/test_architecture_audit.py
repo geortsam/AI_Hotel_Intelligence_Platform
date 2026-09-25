@@ -526,6 +526,9 @@ NON_CREATING_POSTS = {
     # Stage 7.7. Asking a question creates no resource: the answer is returned, not kept,
     # and the accounting row it leaves is not addressable. 201 would promise a Location.
     "/api/v1/hotels/{hotel_public_id}/copilot/ask": "200",
+    # Stage 7.9. A withdrawal creates nothing: it changes the status of a version that already
+    # has a URL, and the response is that version. `versions` DOES create one, and answers 201.
+    "/api/v1/hotels/{hotel_public_id}/documents/{document_public_id}/withdrawal": "200",
 }
 
 

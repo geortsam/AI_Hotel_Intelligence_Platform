@@ -44,6 +44,7 @@ from app.repositories.finance import (
 from app.repositories.guest import GuestRepository
 from app.repositories.health import HealthRepository
 from app.repositories.hotel import HotelRepository
+from app.repositories.knowledge import KnowledgeRepository
 from app.repositories.llm_invocation import LlmInvocationRepository
 from app.repositories.membership import MembershipRepository
 from app.repositories.ml_demand import MlDemandRepository
@@ -73,6 +74,7 @@ from app.services.guest import GuestService
 from app.services.health import HealthService
 from app.services.hotel import HotelService
 from app.services.intelligence import IntelligenceService
+from app.services.knowledge import KnowledgeService
 from app.services.llm_invocation_log import LlmInvocationLog
 from app.services.membership import MembershipService
 from app.services.ml_accuracy import DemandAccuracyService
@@ -679,6 +681,22 @@ RoomTypeAmenityServiceDep = Annotated[
     RoomTypeAmenityService, Depends(get_room_type_amenity_service)
 ]
 
+
+def get_knowledge_service(
+    db: DbSession, scope: ScopeResolverDep, audit: AuditTrailDep
+) -> KnowledgeService:
+    """Assemble the hotel knowledge service (Stage 7.9).
+
+    It owns a unit of work -- uploads, new versions and withdrawals commit, each with its audit
+    event in the same transaction -- so it is handed the session, like every writing service.
+    Retrieval goes through the same repository, bounded by the hotel the resolver returns.
+    """
+    return KnowledgeService(db, KnowledgeRepository(db), scope, audit)
+
+
+KnowledgeServiceDep = Annotated[KnowledgeService, Depends(get_knowledge_service)]
+
+
 # --- the copilot (Stage 7.7) -----------------------------------------------------------------
 #
 # The composition root is the one place above `app.llm` that may name the factory and the budget
@@ -846,6 +864,7 @@ __all__ = [
     "HotelAccessPolicyDep",
     "HotelServiceDep",
     "IntelligenceServiceDep",
+    "KnowledgeServiceDep",
     "LlmInvocationLogDep",
     "MembershipServiceDep",
     "PaymentServiceDep",
@@ -885,6 +904,7 @@ __all__ = [
     "get_hotel_access_policy",
     "get_hotel_service",
     "get_intelligence_service",
+    "get_knowledge_service",
     "get_llm_invocation_log",
     "get_membership_service",
     "get_payment_service",
