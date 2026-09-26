@@ -16,7 +16,7 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-6222%20backend%20%C2%B7%201141%20frontend-success)
+![Tests](https://img.shields.io/badge/tests-6222%20backend%20%C2%B7%201235%20frontend-success)
 ![API](https://img.shields.io/badge/API-64%20paths%20%C2%B7%2099%20operations-informational)
 
 </div>
@@ -35,12 +35,12 @@ more than one currency and the platform never converts between them.</sub></div>
 > reachable as **64 API paths / 99 operations**, of which **94 require authentication**.
 > Authentication is Argon2id plus HS256
 > access tokens; authorization is a four-level hotel role hierarchy with a separate
-> platform-administrator capability. There is a complete React front end — all twelve
-> navigation areas, the last of them built in Stage 7.2 — an append-only audit
+> platform-administrator capability. There is a complete React front end — all thirteen
+> navigation areas, the newest the Stage 7.13 copilot screen — an append-only audit
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **6222 backend tests and 1141 frontend tests pass in CI.** Schema head is
+> **6222 backend tests and 1235 frontend tests pass in CI.** Schema head is
 > `0015_copilot_conversations` across 15 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
@@ -742,7 +742,7 @@ record in `ml/models/<model_version>/` — which is where Stage 6.3 wrote the fi
 | **Review sentiment** | Review text | Polarity plus an aspect breakdown (cleanliness, staff, location, value) and token-level explanations |
 | **Room-image classification** | Room photographs | Room type and feature tags for automatic media organisation |
 | **Guest recommendations** | User and hotel history | Ranked hotel suggestions for guests, evaluated against a popularity baseline. Not Stage 7.12, which built manager-facing findings over one hotel's data; this needs guest accounts and cross-hotel data the platform does not have |
-| **Agents** | Hotel documents and tools | Multi-step autonomy. The copilot is single-turn and read-only, and cites the documents it searched (Stage 7.10); there is no agent, no conversation memory and no writing tool |
+| **Agents** | Hotel documents and tools | Multi-step autonomy. The copilot is read-only and cites the documents it searched (Stage 7.10); its conversations (Stage 7.11) are stored per caller under a retention rule, but there is no agent, no autonomous action and no writing tool |
 
 Rules these must follow, fixed now so they are not negotiated later:
 

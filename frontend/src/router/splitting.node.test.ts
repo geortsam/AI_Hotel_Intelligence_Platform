@@ -26,6 +26,7 @@ const ON_DEMAND = [
   'AvailabilityPage',
   'BookingDetailPage',
   'BookingsPage',
+  'CopilotPage',
   'FinancialsPage',
   'GuestDetailPage',
   'GuestsPage',

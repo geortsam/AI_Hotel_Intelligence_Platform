@@ -60,6 +60,9 @@ const GuestsPage = lazy(() =>
 const AnalyticsPage = lazy(() =>
   import('@/pages/AnalyticsPage').then((module) => ({ default: module.AnalyticsPage })),
 )
+const CopilotPage = lazy(() =>
+  import('@/pages/CopilotPage').then((module) => ({ default: module.CopilotPage })),
+)
 const IntelligencePage = lazy(() =>
   import('@/pages/IntelligencePage').then((module) => ({ default: module.IntelligencePage })),
 )
@@ -154,6 +157,7 @@ const BUILT_AREAS: readonly string[] = [
   ROUTES.administration,
   ROUTES.platform,
   ROUTES.intelligence,
+  ROUTES.copilot,
 ]
 
 const featureRoutes: RouteObject[] = NAV_ITEMS.filter(
@@ -253,6 +257,12 @@ const router = createBrowserRouter([
            */
           { path: ROUTES.analytics, element: onDemand(<AnalyticsPage />) },
           { path: ROUTES.intelligence, element: onDemand(<IntelligencePage />) },
+          /*
+           * Stage 7.13. Questions about the selected hotel, answered by the copilot. A sibling
+           * of Forecasting and Analytics: it reads the same data through the server's tools,
+           * and is not a deeper view of either.
+           */
+          { path: ROUTES.copilot, element: onDemand(<CopilotPage />) },
           ...featureRoutes,
           { path: '*', element: <NotFoundPage /> },
         ],

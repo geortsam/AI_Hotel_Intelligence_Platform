@@ -3,7 +3,7 @@
 > The ordered plan produced by Stage 7.1. Each stage is specified well enough to be implemented
 > on its own, in order, without re-deciding anything.
 >
-> **Implemented so far: Stages 7.2 to 7.12** — all of Track A, and the first eight stages of
+> **Implemented so far: Stages 7.2 to 7.13** — all of Track A, and all nine stages of
 > Track B. Every other stage below is a specification and nothing more; none of its code
 > exists.
 > A stage carries `· *done*` in its heading once it ships, with a note recording what was actually
@@ -559,7 +559,28 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | **Depends on** | **7.7, 7.8** |
 | **Acceptance** | (1) each insight names the measure that produced it; (2) a baseline is defined and measured against; (3) nothing is phrased as advice the platform cannot support |
 
-### Stage 7.13 — Copilot front end
+### Stage 7.13 — Copilot front end · *done*
+
+> **Front end only** ([copilot-frontend.md](copilot-frontend.md), architecture Amendment A8). A new
+> `/copilot` area, lazy-loaded, as the last item of the Intelligence group: a one-off question
+> (`/copilot/ask`, nothing stored, the default) or an explicit conversation over the Stage 7.11
+> endpoints (start, continue, list, reopen, delete). No backend operation, contract, prompt,
+> tool, migration or dependency was added.
+>
+> The four acceptance criteria as built: (1) every answer, in every state, carries a *Generated*
+> label saying what the server checked; (2) a citation opens the document version the server's
+> citation names and shows the cited excerpt verbatim, with its status; (3) every tool call a
+> response reports is listed in order, failures included; (4) a viewer is not offered
+> manager-only tools **because the server never offers them to the model** — the frontend knows
+> no role and decides none, and shows only what a response says was used.
+>
+> Two things differed from the plan, both decided with the user: the answer is awaited, not
+> streamed (the server's checks can withhold it after completion), and a reopened conversation
+> says its lookups were not recorded rather than adding a migration to store them. Out of scope:
+> a screen for the Stage 7.12 attention list, and document upload.
+>
+> 0 migrations, 0 dependencies, 0 backend changes. Frontend 1141 → 1235; backend untouched at
+> 6222. The initial bundle grew by under 1 kB (the navigation entry and its lazy loader).
 
 | | |
 |---|---|

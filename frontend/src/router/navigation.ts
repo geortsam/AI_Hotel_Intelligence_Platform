@@ -1,6 +1,7 @@
 import {
   BarChart3,
   BedDouble,
+  BotMessageSquare,
   CalendarRange,
   CalendarSearch,
   LayoutDashboard,
@@ -137,6 +138,16 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         to: ROUTES.reviews,
         icon: MessageSquareText,
         plannedStage: 'Stage 5.9',
+      },
+      {
+        /*
+         * Last in Intelligence: questions answered from the figures the entries above show.
+         * One item added to the existing group; the shell and the sections are unchanged.
+         */
+        label: 'Copilot',
+        to: ROUTES.copilot,
+        icon: BotMessageSquare,
+        plannedStage: 'Stage 7.13',
       },
     ],
   },

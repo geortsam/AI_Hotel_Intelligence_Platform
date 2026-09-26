@@ -1,0 +1,85 @@
+.exchange {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.question {
+  align-self: flex-end;
+  max-width: min(100%, 70ch);
+  padding: var(--space-3);
+  background: var(--color-primary-soft);
+  border-radius: var(--radius-md);
+}
+
+.questionLabel {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/*
+ * Model output and user input are both plain text. `pre-wrap` keeps the line breaks the text
+ * carries; `anywhere` stops a long unbroken token -- a URL, an identifier -- from forcing the
+ * page wider than a phone.
+ */
+.questionText,
+.answer {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  line-height: var(--leading-relaxed);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.answerCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.generatedNote {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+  max-width: 80ch;
+}
+
+.withheld {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
+.notice {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-warning-soft);
+  border-left: 3px solid var(--color-warning);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  line-height: var(--leading-normal);
+}
+
+.reference {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  overflow-wrap: anywhere;
+}
+
+.reference code {
+  font-family: var(--font-mono);
+}

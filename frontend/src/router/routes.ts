@@ -41,6 +41,12 @@ export const ROUTES = {
    * re-reads this screen exactly as it re-reads every other one.
    */
   intelligence: '/intelligence',
+  /*
+   * Stage 7.13. Flat like the rest: the API paths are `/hotels/{id}/copilot/...`, and the hotel
+   * comes from the shell's picker, so switching property clears this screen as it re-reads
+   * every other one.
+   */
+  copilot: '/copilot',
 
   /* Administration */
   property: '/property',

@@ -19,6 +19,11 @@
 > | A1 | 7.6 — Tool boundary | 2026-09-24 | §4.3, §4.4, §5.4, §5.7, **§5.8 (new)**, §7.2, §7.3 |
 > | A2 | 7.7 — Copilot, single turn | 2026-09-25 | §4.1, §4.4, §4.5, §5.1, §5.7, **§7.5 (new)** |
 > | A3 | 7.8 — Evaluation harness | 2026-09-26 | §9.2, §9.3 |
+> | A4 | 7.9 — Knowledge documents | 2026-09-25 | §6.3, §9.3 |
+> | A5 | 7.10 — Grounded document answers | 2026-09-26 | §6.6, §7.2 |
+> | A6 | 7.11 — Conversations | 2026-09-26 | §4.4, §7.5 |
+> | A7 | 7.12 — Attention list | 2026-09-26 | §5.5, §7.2 |
+> | A8 | 7.13 — Copilot front end | 2026-09-26 | §8 |
 
 ---
 
@@ -780,6 +785,35 @@ state library.
 | **Citations** | A shared component: document title, version, and a link to the chunk. Clicking a citation shows the retrieved text, so a user can check the answer against its source |
 | **States** | Loading, empty, error and *refused* are distinct. `LLM_DISABLED` and `LLM_BUDGET_EXHAUSTED` render as explanations, not as generic failures |
 | **Authorization-aware UI** | The copilot surfaces only the tools the member's role permits; a manager-only answer is not offered to a viewer |
+
+> **Amendment A8 (Stage 7.13) — the copilot screen, as built.** Specified in full in
+> [copilot-frontend.md](copilot-frontend.md). Front end only: no backend operation, contract,
+> prompt, tool, migration or dependency was added.
+>
+> - **Two modes.** A one-off question (`/copilot/ask`, the default, nothing stored) or an explicit
+>   conversation (the five Stage 7.11 operations: start, continue, list, reopen, delete). The
+>   external-provider disclosure — and, for a conversation, what is stored, for how long and that
+>   it can be deleted — is shown above the question box before anything is asked.
+> - **"Authorization-aware UI", corrected.** The frontend is told no role, so it decides none.
+>   The server's role-filtered catalogue is the only authority: a viewer's model is never offered
+>   the manager-only tool, and the screen shows only the `tools_used` a response reports, never a
+>   catalogue. A source test forbids role checks in the feature.
+> - **"Streamed or awaited": awaited.** The figure and citation checks run after the answer is
+>   complete and may withhold or replace it, so nothing is shown before the response.
+> - **Text, not markup.** Answers, questions and cited excerpts are rendered as text with line
+>   breaks kept; no Markdown, HTML or auto-linking. Citations come only from the server's
+>   `citations`; opening one reads the named document version (any status, marked) and shows the
+>   cited chunk verbatim.
+> - **States.** Every answer is labelled *Generated* with what the server checked (figures) and
+>   did not (wording). Partial, withheld, `not_found` and `citation_rejected` answers, and each
+>   refusal code, have fixed copy; the server's message is never shown. After `LLM_DISABLED` no
+>   further input is offered for the visit. A 504 or unreadable response is shown as an answer
+>   that did not arrive and may still have been counted.
+> - **Stored turns.** A reopened transcript says its lookups were not recorded (Stage 7.11 never
+>   stored them) instead of implying none ran.
+> - **Boundaries.** Changing hotel clears every thread, the open conversation and any request in
+>   flight; nothing is written to browser storage; one question is in flight at a time.
+> - **Out of scope:** a screen for the Stage 7.12 attention list, and document upload.
 
 ---
 
