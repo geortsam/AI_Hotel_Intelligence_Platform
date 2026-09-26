@@ -57,6 +57,12 @@ ml/data/external/*
 # CI -- which cannot download 17 MB of raw source and must not be allowed to skip instead. A
 # payload whose checksum is committed beside it is verifiable rather than merely present.
 !ml/data/processed/demand_daily_v1.csv
+# Stage 7.14: the three horizon-matched datasets, for the same reason and on the same terms --
+# one named file each, every one pinned by SHA-256 in its committed manifest and in the frozen
+# multi_horizon_v1 protocol. Named rather than globbed, so a stray build cannot be committed.
+!ml/data/processed/demand_daily_h7_v1.csv
+!ml/data/processed/demand_daily_h14_v1.csv
+!ml/data/processed/demand_daily_h28_v1.csv
 
 # --- Trained model artifacts ----------------------------------------------
 # Weights are large binaries and are never committed. Evaluation records are, so a metric

@@ -383,11 +383,15 @@ def error_analysis(
 # --- leakage, re-checked on this run -----------------------------------------------------------
 
 
-def leakage_report(result: EvaluationResult) -> dict[str, object]:
+def leakage_report(result: EvaluationResult, *, dataset_horizon_days: int = 1) -> dict[str, object]:
     """Re-run the structural leakage checks and record what they found.
 
     Inherited assurance is not assurance. Every claim below is computed from the folds this run
     produced, not copied from the Stage 6.3 record.
+
+    ``dataset_horizon_days`` is the horizon the evaluated dataset was built at (Stage 7.14), and
+    it is what a rolling mean's or a cutoff feature's lead time is measured against. The default
+    is the Stage 6.2 dataset, and with it the admissibility check is exactly Stage 6.4's.
     """
     chronological = all(
         fold.fold.train_end <= fold.fold.origin < fold.fold.evaluation_start
@@ -400,9 +404,12 @@ def leakage_report(result: EvaluationResult) -> dict[str, object]:
     keys = [(p.hotel_key, p.target_date) for p in result.predictions]
     no_repeated_observation = len(keys) == len(set(keys))
     horizon = result.policy.horizon_days
+
+    def lead(name: str) -> int | None:
+        return feature_lead_days(name, dataset_horizon_days=dataset_horizon_days)
+
     admissible = all(
-        (feature_lead_days(name) is None) or (feature_lead_days(name) or 0) >= horizon
-        for name in result.selection.selected
+        (lead(name) is None) or (lead(name) or 0) >= horizon for name in result.selection.selected
     )
     expanding = [fold.fold.train_rows for fold in result.folds] == sorted(
         fold.fold.train_rows for fold in result.folds
@@ -425,8 +432,12 @@ def build_validation_report(
     result: EvaluationResult,
     *,
     error_sample: int = DEFAULT_ERROR_SAMPLE,
+    dataset_horizon_days: int = 1,
 ) -> dict[str, object]:
-    """Everything Stage 6.4 measured, with nothing summarised away."""
+    """Everything Stage 6.4 measured, with nothing summarised away.
+
+    ``dataset_horizon_days`` reaches only the leakage re-check; see :func:`leakage_report`.
+    """
     return {
         "validation_version": VALIDATION_VERSION,
         "purpose": (
@@ -450,7 +461,7 @@ def build_validation_report(
             "hotel": regime_metrics(result.predictions, hotel_key),
         },
         "errors": error_analysis(result, limit=error_sample),
-        "leakage": leakage_report(result),
+        "leakage": leakage_report(result, dataset_horizon_days=dataset_horizon_days),
         "cross_hotel_claim": (
             "NONE. Both hotels appear in the training data at every origin; there is no "
             "held-out hotel and, with two, there could not be a meaningful one. The per-hotel "

@@ -382,12 +382,21 @@ def evaluate(
     policy: RollingOriginPolicy | None = None,
     config: EstimatorConfig | None = None,
     feature_names: Sequence[str] | None = None,
+    dataset_horizon_days: int = 1,
+    baseline_lag_days: int = SEASONAL_NAIVE_LAG_DAYS,
 ) -> EvaluationResult:
-    """Run the whole backtest. Deterministic from the rows and the configuration alone."""
+    """Run the whole backtest. Deterministic from the rows and the configuration alone.
+
+    ``dataset_horizon_days`` (the horizon the rows were built at) and ``baseline_lag_days``
+    exist for Stage 7.14's horizon-matched datasets. Their defaults are the Stage 6.2 dataset and
+    the Stage 6.3 seasonal-naive-7 baseline, so a call that passes neither runs Stage 6.3 exactly.
+    """
     policy = policy or RollingOriginPolicy()
     config = config or EstimatorConfig()
     available = feature_names or _dataset_feature_names(rows)
-    selection = select_model_features(available, horizon_days=policy.horizon_days)
+    selection = select_model_features(
+        available, horizon_days=policy.horizon_days, dataset_horizon_days=dataset_horizon_days
+    )
 
     ordered = sorted(rows, key=lambda row: (row.target_date, row.hotel_key))
     origins = rolling_origins([row.target_date for row in ordered], policy)
@@ -410,7 +419,9 @@ def evaluate(
 
         model = LearnedModel.fit(train, selection.selected, config)
         learned_values = model.predict(evaluation)
-        baseline_values = seasonal_naive_predictions(evaluation, horizon_days=policy.horizon_days)
+        baseline_values = seasonal_naive_predictions(
+            evaluation, lag_days=baseline_lag_days, horizon_days=policy.horizon_days
+        )
 
         fold_predictions = tuple(
             Prediction(

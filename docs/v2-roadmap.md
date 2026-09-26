@@ -3,8 +3,8 @@
 > The ordered plan produced by Stage 7.1. Each stage is specified well enough to be implemented
 > on its own, in order, without re-deciding anything.
 >
-> **Implemented so far: Stages 7.2 to 7.13** — all of Track A, and all nine stages of
-> Track B. Every other stage below is a specification and nothing more; none of its code
+> **Implemented so far: Stages 7.2 to 7.14** — all of Track A, all nine stages of Track B,
+> and the independent ML-track stage. Only the conditional Stage 7.15 remains. Every other stage below is a specification and nothing more; none of its code
 > exists.
 > A stage carries `· *done*` in its heading once it ships, with a note recording what was actually
 > built and where that differed from the plan.
@@ -592,7 +592,33 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | **Depends on** | **7.7**, and **7.10** for citations |
 | **Acceptance** | (1) every answer is labelled generated; (2) citations open their source text; (3) tool calls are visible, not hidden; (4) a viewer is not offered manager-only tools |
 
-### Stage 7.14 — Multi-horizon forecasting *(ML track, independent)*
+### Stage 7.14 — Multi-horizon forecasting *(ML track, independent)* · *done*
+
+> **Offline only** ([ml-multi-horizon.md](ml-multi-horizon.md)). Three fixed-horizon direct models
+> — `demand_h7_v1`, `demand_h14_v1`, `demand_h28_v1` — each on its own horizon-matched dataset
+> (`demand_daily_h{7,14,28}_v1`, rebuilt twice from the pinned source, identified by SHA-256) and
+> each beside its own same-weekday baseline (lags 7, 14, 28). Built at horizon *h*, the dataset
+> reconstructs the rolling means and the on-the-books count at `target − h`, so the 7-day model
+> uses 13 features rather than 9. The estimator is Stage 6.3's, untuned.
+>
+> The protocol `multi_horizon_v1` (`d8408e18…`) was frozen before the first fit;
+> `acceptance_v2` keeps Stage 6.4's criteria and evaluator with fold floors of 40 / 20 / 10.
+> **PASS, 13/13, at every horizon.** Pooled over 744 hotel-days per horizon, MAE: 7 days 5.25 vs
+> `seasonal_naive_7` 18.37; 14 days 7.19 vs 20.56; 28 days 9.86 vs 23.83. Each horizon is
+> reported only beside its own baseline — no winner, no ranking of horizons, no aggregate. The
+> gap comes mostly from on-the-books, an **offline approximation** (day resolution,
+> status-agnostic); forecasts are **uncapped**; production accuracy and business value are **not
+> established**.
+>
+> Differences from the plan: no migration was needed (`demand_predictions.forecast_horizon_days`
+> has existed since Stage 6.8); `acceptance_v1` could not be reused unchanged, because the
+> 14- and 28-day backtests have fewer than its 40 folds, hence `acceptance_v2`; and the approved
+> `dataset_horizon_days` parameter had to reach `select_model_features` and `evaluate` as well as
+> `feature_lead_days` and the leakage check — defaulted everywhere, so V1 is byte-identical and
+> every V1 pin, `APPROVED_MODEL` and digest `436bf6b3…` hold. Nothing is served.
+>
+> 0 migrations, 0 dependencies, 0 API/frontend/copilot changes. Backend tests 6222 → 6388;
+> frontend untouched at 1235.
 
 | | |
 |---|---|

@@ -1,0 +1,157 @@
+{
+  "dataset": {
+    "columns": [
+      "hotel_key",
+      "hotel_public_id",
+      "target_date",
+      "horizon_days",
+      "prediction_cutoff",
+      "partition",
+      "target_room_nights",
+      "day_of_week",
+      "day_of_month",
+      "month",
+      "week_of_year",
+      "day_of_year",
+      "is_weekend",
+      "demand_lag_28",
+      "demand_rolling_mean_7",
+      "demand_rolling_mean_14",
+      "demand_rolling_mean_28",
+      "on_books_room_nights_at_cutoff",
+      "rooms_existing_at_cutoff"
+    ],
+    "dataset_version": "v1",
+    "date_max": "2017-08-31",
+    "date_min": "2015-08-26",
+    "distinct_dates": 737,
+    "feature_version": "v1",
+    "grain": "one hotel group x one calendar date",
+    "horizon_days": 28,
+    "hotels": 2,
+    "lag_days": [
+      28
+    ],
+    "name": "demand_daily_h28_v1",
+    "processed_bytes": 251268,
+    "processed_sha256": "61c51f4fe068bc3d52292cff659a1d32b88ab7794317b010f745364a1a139e11",
+    "rolling_windows": [
+      7,
+      14,
+      28
+    ],
+    "rows": 1462,
+    "target": "daily hotel room-night demand",
+    "target_statistics": {
+      "count": 1462,
+      "max": 226,
+      "mean": 163.305746,
+      "median": 178.0,
+      "min": 21,
+      "zero_demand_days": 0
+    }
+  },
+  "generation": {
+    "generated_at": "2026-09-26T16:55:57.483223+00:00",
+    "model_trained": false,
+    "note": "Wall-clock metadata only. Deliberately excluded from every checksum above: rebuilding the dataset must not change its identity.",
+    "pipeline": "ml/pipelines/build_horizon_datasets.py"
+  },
+  "horizon_matching": {
+    "capacity": "Forecasts are raw, uncapped room nights. The offline source carries no room inventory (rooms_existing_at_cutoff is empty on every row and excluded from every model), so no capacity cap exists to apply. Any future serving of these models must declare its own capacity-capping rule; this protocol decides none.",
+    "dataset_horizon_days": 28,
+    "note": "Every feature is reconstructed at target_date - 28. Rolling means and the on-the-books count therefore describe a different cutoff from the same-named columns of demand_daily_v1, which was built one day ahead.",
+    "on_books": "on_books_room_nights_at_cutoff is an offline approximation: the source records lead time in whole days, so the cutoff has day resolution rather than timestamp resolution, and it has no booking-status history, so the count is status-agnostic -- an upper bound on confirmed demand. Production reconstructs the feature from timestamps; a model fitted on this column is not one that could be served against production data unchanged.",
+    "protocol_version": "multi_horizon_v1",
+    "stage": "7.14"
+  },
+  "partitions": {
+    "policy": "chronological by date; no shuffle, no random seed",
+    "test": {
+      "date_max": "2017-08-31",
+      "date_min": "2017-04-06",
+      "rows": 296,
+      "target": {
+        "count": 296,
+        "max": 225,
+        "mean": 195.037162,
+        "median": 184.5,
+        "min": 133,
+        "zero_demand_days": 0
+      }
+    },
+    "train": {
+      "date_max": "2016-11-09",
+      "date_min": "2015-08-26",
+      "rows": 872,
+      "target": {
+        "count": 872,
+        "max": 226,
+        "mean": 158.783257,
+        "median": 178.0,
+        "min": 21,
+        "zero_demand_days": 0
+      }
+    },
+    "train_end": "2016-11-09",
+    "validation": {
+      "date_max": "2017-04-05",
+      "date_min": "2016-11-10",
+      "rows": 294,
+      "target": {
+        "count": 294,
+        "max": 226,
+        "mean": 144.772109,
+        "median": 148.0,
+        "min": 49,
+        "zero_demand_days": 0
+      }
+    },
+    "validation_end": "2017-04-05"
+  },
+  "quality": {
+    "missing_feature_counts": {
+      "demand_lag_28": 56,
+      "demand_rolling_mean_14": 82,
+      "demand_rolling_mean_28": 110,
+      "demand_rolling_mean_7": 68,
+      "rooms_existing_at_cutoff": 1462
+    },
+    "notes": [
+      "no row has a complete feature vector: the extracted history is shorter than the longest lag or rolling window"
+    ],
+    "rows_with_complete_features": 0
+  },
+  "source": {
+    "bookings_parsed": 118675,
+    "citation": "Antonio, N., de Almeida, A., & Nunes, L. (2019). Hotel booking demand datasets. Data in Brief, 22, 41-49.",
+    "commit": "d75aaa0d31596ad6487ae0db20138067d301e031",
+    "doi": "10.1016/j.dib.2018.11.126",
+    "hotel_coverage": {
+      "city_hotel": {
+        "first_covered": "2015-08-26",
+        "last_covered": "2017-08-31"
+      },
+      "resort_hotel": {
+        "first_covered": "2015-09-07",
+        "last_covered": "2017-08-31"
+      }
+    },
+    "hotel_days_outside_coverage": 143,
+    "hotel_ids": {
+      "city_hotel": "c7fb00b8-6205-5d73-95ad-5f774926f2cc",
+      "resort_hotel": "c31c4e41-2181-5ea7-875e-e62ec156c77b"
+    },
+    "license": "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)",
+    "name": "hotel_booking_demand",
+    "records_rejected": 715,
+    "redistribution": "R4DS Online Learning Community, TidyTuesday 2020-02-11 (repository: CC0 1.0)",
+    "rejection_counts": {
+      "zero-night booking occupies no room night": 715
+    },
+    "rows_read": 119390,
+    "sha256": "7c2ae42a7353905ea136e5c2287f17c92c5435826598bfbb8491c6f0c7b1fc06",
+    "title": "Hotel booking demand datasets",
+    "url": "https://raw.githubusercontent.com/rfordatascience/tidytuesday/d75aaa0d31596ad6487ae0db20138067d301e031/data/2020/2020-02-11/hotels.csv"
+  }
+}

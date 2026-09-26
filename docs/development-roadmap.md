@@ -538,7 +538,7 @@ so the served model can be read against the item it came from.
 | Item | Note |
 |---|---|
 | A **served** trained forecast | *Done in Stages 6.6 and 6.7* — loading path, unavailable-model error, endpoint, schema, and a production image that carries and executes the approved model. Persisted predictions and the observability foundation are **Stage 6.8**, *done*; retrospective accuracy measurement under a declared protocol is **Stage 6.9**, *done*, and establishes no production accuracy; distribution observation is **Stage 6.10**, *done*, and detects nothing; a tenant-scoped read API over the stored rows is **Stage 6.11**, *done*. Drift *detection* — a statistic, a threshold, an alert — retraining, and retention of stored predictions remain backlog |
-| Richer feature pipeline | the 7-day horizon admits 9 of 15 contract columns; a horizon-matched on-the-books and rolling-window feature set does not exist |
+| Richer feature pipeline | *Done offline in Stage 7.14* — horizon-matched datasets at 7, 14 and 28 days admit the rolling means and the on-the-books count (13 / 12 / 11 features), measured under the frozen `multi_horizon_v1` protocol; see [ml-multi-horizon.md](ml-multi-horizon.md). Still backlog: **serving** any of these models (with its own capacity-capping rule), and a production-equivalent on-the-books feature — the offline one is day-resolution and status-agnostic. The served 7-day model still uses 9 of 15 columns |
 | Review sentiment | polarity and aspect breakdown over review text |
 | Room-image classification | class set fixed before training |
 | AI recommendations | evaluated with ranking metrics against a popularity baseline |

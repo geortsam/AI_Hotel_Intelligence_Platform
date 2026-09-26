@@ -449,3 +449,29 @@ A change to the dataset checksum, the feature version, the dataset version, the 
 model version makes the validation **refuse to run** rather than quietly produce a record about
 something else. A change to any acceptance threshold changes `acceptance_v1`'s checksum, which a
 test pins, so the policy cannot move without the change being visible in a diff.
+
+---
+
+## 17. Addendum — Stage 7.14: other horizons are other models
+
+**This card still describes `demand_baseline_v1` only, and nothing in it changed.** Stage 7.14
+measured three *separate* offline candidates — `demand_h7_v1`, `demand_h14_v1`, `demand_h28_v1` —
+on three horizon-matched datasets, under the frozen `multi_horizon_v1` protocol and
+`acceptance_v2`. They are documented in [ml-multi-horizon.md](ml-multi-horizon.md), and each has
+its own four records under `ml/models/`.
+
+What that means for this model:
+
+* **It is still the served model**, with the same artifact, the same canonical digest
+  (`436bf6b3…`), the same nine features and the same 7-day horizon. `APPROVED_MODEL` did not change.
+* **§6's limitation now has a measured counterpart, not a remedy.** The 7-day horizon-matched
+  dataset admits the rolling means and the on-the-books count that §6 lists as excluded, and
+  `demand_h7_v1` uses them. That does not make this model a lesser version of that one: the two
+  were measured on different datasets with different features, and no comparison between them is
+  made. §6's statement — *a production model would therefore not be this model* — remains true of
+  both, and the on-the-books column the new models use is the offline approximation §6 describes.
+* **No claim moved.** §15's four answers are unchanged, and the three new models carry the same
+  answers plus two more: business value and uncertainty are not established either.
+* **The one shared-code change** is a defaulted `dataset_horizon_days` parameter in
+  `ml/models.py`, `ml/evaluation.py` and `ml/validation.py`; with its default the code computes
+  exactly what produced this card's numbers, and every record in §16 still reproduces.

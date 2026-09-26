@@ -85,26 +85,36 @@ class ModelContractError(Exception):
     """A configuration that would let a forecaster see something it cannot have seen."""
 
 
-def feature_lead_days(name: str) -> int | None:
+def feature_lead_days(name: str, *, dataset_horizon_days: int = 1) -> int | None:
     """How many days before its target date a feature's value is knowable.
 
     ``None`` means unbounded -- a calendar feature is derivable from the date itself, so no
     horizon can make it unavailable.
 
+    ``dataset_horizon_days`` is the horizon the DATASET was built at (Stage 7.14). Rolling means
+    and the cutoff features are reconstructed at that dataset's own cutoff, ``target_date -
+    dataset_horizon_days``, so that is how far ahead they are knowable. A lag is relative to the
+    target date and does not depend on it. The default, one, is the Stage 6.2 dataset, and with
+    it this function answers exactly what it always has.
+
     An unrecognised name raises. That is the whole value of this function: a feature added
     later without a lead time recorded here must stop the evaluation rather than be quietly
     admitted at every horizon.
     """
+    if dataset_horizon_days < 1:
+        raise ModelContractError(
+            f"dataset_horizon_days must be at least 1, got {dataset_horizon_days}"
+        )
     if name in CALENDAR_FEATURES:
         return None
     lag = _LAG.match(name)
     if lag:
         return int(lag.group(1))
     if _ROLLING.match(name):
-        # The window ends at cutoff_date, which is the day before the target date.
-        return 1
+        # The window ends at cutoff_date, which is dataset_horizon_days before the target date.
+        return dataset_horizon_days
     if name in _CUTOFF_FEATURES:
-        return 1
+        return dataset_horizon_days
     raise ModelContractError(
         f"no lead time is recorded for feature {name!r}; add one rather than assuming it is "
         "safe at every horizon"
@@ -127,11 +137,14 @@ class FeatureSelection:
         }
 
 
-def select_model_features(available: Sequence[str], *, horizon_days: int) -> FeatureSelection:
+def select_model_features(
+    available: Sequence[str], *, horizon_days: int, dataset_horizon_days: int = 1
+) -> FeatureSelection:
     """The admissible feature subset for a forecast made *horizon_days* ahead.
 
     Order follows the dataset's own column order, which Stage 6.1 fixed, so the design matrix
-    columns mean the same thing on every run.
+    columns mean the same thing on every run. ``dataset_horizon_days`` is passed straight to
+    :func:`feature_lead_days`; its default reproduces Stage 6.3 exactly.
     """
     if horizon_days < 1:
         raise ModelContractError(f"horizon_days must be at least 1, got {horizon_days}")
@@ -143,7 +156,7 @@ def select_model_features(available: Sequence[str], *, horizon_days: int) -> Fea
         if unavailable is not None:
             excluded.append((name, unavailable))
             continue
-        lead = feature_lead_days(name)
+        lead = feature_lead_days(name, dataset_horizon_days=dataset_horizon_days)
         if lead is None or lead >= horizon_days:
             selected.append(name)
         else:

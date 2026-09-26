@@ -1,0 +1,3197 @@
+{
+  "dataset": {
+    "dataset_horizon_days": 7,
+    "dataset_version": "v1",
+    "feature_version": "v1",
+    "hotels": [
+      "city_hotel",
+      "resort_hotel"
+    ],
+    "name": "demand_daily_h7_v1",
+    "path": "demand_daily_h7_v1.csv",
+    "rows": 1462,
+    "sha256": "30d74aea92830fd2afb1e0670fb3d05040934a850d06f90ece73476a09a0d52e"
+  },
+  "features": {
+    "excluded": [
+      {
+        "feature": "rooms_existing_at_cutoff",
+        "reason": "the published source carries no room inventory, so the column is None on every offline row; excluded from the model matrix rather than fabricated or imputed"
+      }
+    ],
+    "horizon_days": 7,
+    "selected": [
+      "day_of_week",
+      "day_of_month",
+      "month",
+      "week_of_year",
+      "day_of_year",
+      "is_weekend",
+      "demand_lag_7",
+      "demand_lag_14",
+      "demand_lag_28",
+      "demand_rolling_mean_7",
+      "demand_rolling_mean_14",
+      "demand_rolling_mean_28",
+      "on_books_room_nights_at_cutoff"
+    ]
+  },
+  "generation": {
+    "content_sha256": "6dab7efacec7881fc032ffbc5eb593a61c4a3bd0a8e2b57437d541e61fd8171b",
+    "environment": {
+      "numpy": "2.5.3",
+      "platform": "Windows",
+      "python": "3.14.6",
+      "scikit_learn": "1.9.1",
+      "scipy": "1.18.1"
+    },
+    "generated_at": "2026-09-26T16:57:33.448903+00:00",
+    "note": "Wall-clock and toolchain metadata only, outside the content checksum: re-running the pipeline must not look like a different result.",
+    "pipeline": "ml/pipelines/evaluate_horizons.py"
+  },
+  "metrics": {
+    "definitions": {
+      "denominator": "the number of observations for which a forecast was produced",
+      "mae": "mean(|actual - forecast|) over evaluated observations; unit: room nights",
+      "rmse": "sqrt(mean((actual - forecast)^2)) over evaluated observations; unit: room nights",
+      "skipped": "observations for which the method could not produce a forecast; excluded from every metric above and reported separately, never counted as zero error",
+      "smape": "100 * mean(2 * |actual - forecast| / (|actual| + |forecast|)); a term whose denominator is zero (actual and forecast both zero, i.e. an exact match) contributes 0.0; range 0..200"
+    },
+    "folds": 54,
+    "per_fold": [
+      {
+        "baseline": {
+          "mae": 3.714286,
+          "observations": 14,
+          "rmse": 6.094494,
+          "skipped": 0,
+          "smape": 1.844568
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 3.714286,
+            "observations": 14,
+            "rmse": 6.094494,
+            "skipped": 0,
+            "smape": 1.844568
+          },
+          "learned": {
+            "mae": 3.031235,
+            "observations": 14,
+            "rmse": 4.071349,
+            "skipped": 0,
+            "smape": 1.544164
+          },
+          "learned_minus_baseline": {
+            "mae": -0.683051,
+            "rmse": -2.023145,
+            "smape": -0.300403
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-08-31",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-08-25",
+        "fold": 0,
+        "learned": {
+          "mae": 3.031235,
+          "observations": 14,
+          "rmse": 4.071349,
+          "skipped": 0,
+          "smape": 1.544164
+        },
+        "origin": "2016-08-24",
+        "train_end": "2016-08-24",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 718,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 6.428571,
+          "observations": 14,
+          "rmse": 8.847921,
+          "skipped": 0,
+          "smape": 3.124963
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 6.428571,
+            "observations": 14,
+            "rmse": 8.847921,
+            "skipped": 0,
+            "smape": 3.124963
+          },
+          "learned": {
+            "mae": 3.161241,
+            "observations": 14,
+            "rmse": 4.240056,
+            "skipped": 0,
+            "smape": 1.54848
+          },
+          "learned_minus_baseline": {
+            "mae": -3.26733,
+            "rmse": -4.607866,
+            "smape": -1.576484
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-09-07",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-09-01",
+        "fold": 1,
+        "learned": {
+          "mae": 3.161241,
+          "observations": 14,
+          "rmse": 4.240056,
+          "skipped": 0,
+          "smape": 1.54848
+        },
+        "origin": "2016-08-31",
+        "train_end": "2016-08-31",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 732,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 2.642857,
+          "observations": 14,
+          "rmse": 4.16619,
+          "skipped": 0,
+          "smape": 1.369186
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 2.642857,
+            "observations": 14,
+            "rmse": 4.16619,
+            "skipped": 0,
+            "smape": 1.369186
+          },
+          "learned": {
+            "mae": 2.461191,
+            "observations": 14,
+            "rmse": 3.336452,
+            "skipped": 0,
+            "smape": 1.191248
+          },
+          "learned_minus_baseline": {
+            "mae": -0.181666,
+            "rmse": -0.829739,
+            "smape": -0.177938
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-09-14",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-09-08",
+        "fold": 2,
+        "learned": {
+          "mae": 2.461191,
+          "observations": 14,
+          "rmse": 3.336452,
+          "skipped": 0,
+          "smape": 1.191248
+        },
+        "origin": "2016-09-07",
+        "train_end": "2016-09-07",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 746,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 5.857143,
+          "observations": 14,
+          "rmse": 7.874008,
+          "skipped": 0,
+          "smape": 2.921131
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 5.857143,
+            "observations": 14,
+            "rmse": 7.874008,
+            "skipped": 0,
+            "smape": 2.921131
+          },
+          "learned": {
+            "mae": 3.830606,
+            "observations": 14,
+            "rmse": 5.267432,
+            "skipped": 0,
+            "smape": 1.9109
+          },
+          "learned_minus_baseline": {
+            "mae": -2.026537,
+            "rmse": -2.606575,
+            "smape": -1.010231
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-09-21",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-09-15",
+        "fold": 3,
+        "learned": {
+          "mae": 3.830606,
+          "observations": 14,
+          "rmse": 5.267432,
+          "skipped": 0,
+          "smape": 1.9109
+        },
+        "origin": "2016-09-14",
+        "train_end": "2016-09-14",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 760,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 6.928571,
+          "observations": 14,
+          "rmse": 10.053429,
+          "skipped": 0,
+          "smape": 3.653292
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 6.928571,
+            "observations": 14,
+            "rmse": 10.053429,
+            "skipped": 0,
+            "smape": 3.653292
+          },
+          "learned": {
+            "mae": 3.275792,
+            "observations": 14,
+            "rmse": 3.723348,
+            "skipped": 0,
+            "smape": 1.703246
+          },
+          "learned_minus_baseline": {
+            "mae": -3.65278,
+            "rmse": -6.330081,
+            "smape": -1.950047
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-09-28",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-09-22",
+        "fold": 4,
+        "learned": {
+          "mae": 3.275792,
+          "observations": 14,
+          "rmse": 3.723348,
+          "skipped": 0,
+          "smape": 1.703246
+        },
+        "origin": "2016-09-21",
+        "train_end": "2016-09-21",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 774,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 10.928571,
+          "observations": 14,
+          "rmse": 13.936079,
+          "skipped": 0,
+          "smape": 5.536172
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 10.928571,
+            "observations": 14,
+            "rmse": 13.936079,
+            "skipped": 0,
+            "smape": 5.536172
+          },
+          "learned": {
+            "mae": 5.483849,
+            "observations": 14,
+            "rmse": 7.317876,
+            "skipped": 0,
+            "smape": 2.797164
+          },
+          "learned_minus_baseline": {
+            "mae": -5.444722,
+            "rmse": -6.618202,
+            "smape": -2.739008
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-10-05",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-09-29",
+        "fold": 5,
+        "learned": {
+          "mae": 5.483849,
+          "observations": 14,
+          "rmse": 7.317876,
+          "skipped": 0,
+          "smape": 2.797164
+        },
+        "origin": "2016-09-28",
+        "train_end": "2016-09-28",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 788,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 10.5,
+          "observations": 14,
+          "rmse": 14.738191,
+          "skipped": 0,
+          "smape": 5.496079
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 10.5,
+            "observations": 14,
+            "rmse": 14.738191,
+            "skipped": 0,
+            "smape": 5.496079
+          },
+          "learned": {
+            "mae": 5.481809,
+            "observations": 14,
+            "rmse": 7.484031,
+            "skipped": 0,
+            "smape": 2.72617
+          },
+          "learned_minus_baseline": {
+            "mae": -5.018191,
+            "rmse": -7.25416,
+            "smape": -2.769909
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-10-12",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-10-06",
+        "fold": 6,
+        "learned": {
+          "mae": 5.481809,
+          "observations": 14,
+          "rmse": 7.484031,
+          "skipped": 0,
+          "smape": 2.72617
+        },
+        "origin": "2016-10-05",
+        "train_end": "2016-10-05",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 802,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 8.857143,
+          "observations": 14,
+          "rmse": 14.623855,
+          "skipped": 0,
+          "smape": 4.67015
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 8.857143,
+            "observations": 14,
+            "rmse": 14.623855,
+            "skipped": 0,
+            "smape": 4.67015
+          },
+          "learned": {
+            "mae": 6.045295,
+            "observations": 14,
+            "rmse": 7.161255,
+            "skipped": 0,
+            "smape": 3.118742
+          },
+          "learned_minus_baseline": {
+            "mae": -2.811848,
+            "rmse": -7.4626,
+            "smape": -1.551408
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-10-19",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-10-13",
+        "fold": 7,
+        "learned": {
+          "mae": 6.045295,
+          "observations": 14,
+          "rmse": 7.161255,
+          "skipped": 0,
+          "smape": 3.118742
+        },
+        "origin": "2016-10-12",
+        "train_end": "2016-10-12",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 816,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 14.285714,
+          "observations": 14,
+          "rmse": 19.53751,
+          "skipped": 0,
+          "smape": 7.231127
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 14.285714,
+            "observations": 14,
+            "rmse": 19.53751,
+            "skipped": 0,
+            "smape": 7.231127
+          },
+          "learned": {
+            "mae": 6.697564,
+            "observations": 14,
+            "rmse": 8.450144,
+            "skipped": 0,
+            "smape": 3.445809
+          },
+          "learned_minus_baseline": {
+            "mae": -7.58815,
+            "rmse": -11.087365,
+            "smape": -3.785318
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-10-26",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-10-20",
+        "fold": 8,
+        "learned": {
+          "mae": 6.697564,
+          "observations": 14,
+          "rmse": 8.450144,
+          "skipped": 0,
+          "smape": 3.445809
+        },
+        "origin": "2016-10-19",
+        "train_end": "2016-10-19",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 830,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 13.5,
+          "observations": 14,
+          "rmse": 15.957533,
+          "skipped": 0,
+          "smape": 7.158084
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 13.5,
+            "observations": 14,
+            "rmse": 15.957533,
+            "skipped": 0,
+            "smape": 7.158084
+          },
+          "learned": {
+            "mae": 4.46783,
+            "observations": 14,
+            "rmse": 6.323452,
+            "skipped": 0,
+            "smape": 2.35587
+          },
+          "learned_minus_baseline": {
+            "mae": -9.03217,
+            "rmse": -9.63408,
+            "smape": -4.802214
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-11-02",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-10-27",
+        "fold": 9,
+        "learned": {
+          "mae": 4.46783,
+          "observations": 14,
+          "rmse": 6.323452,
+          "skipped": 0,
+          "smape": 2.35587
+        },
+        "origin": "2016-10-26",
+        "train_end": "2016-10-26",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 844,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 22.714286,
+          "observations": 14,
+          "rmse": 27.438242,
+          "skipped": 0,
+          "smape": 12.518747
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 22.714286,
+            "observations": 14,
+            "rmse": 27.438242,
+            "skipped": 0,
+            "smape": 12.518747
+          },
+          "learned": {
+            "mae": 5.617201,
+            "observations": 14,
+            "rmse": 6.902985,
+            "skipped": 0,
+            "smape": 3.167511
+          },
+          "learned_minus_baseline": {
+            "mae": -17.097085,
+            "rmse": -20.535258,
+            "smape": -9.351236
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-11-09",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-11-03",
+        "fold": 10,
+        "learned": {
+          "mae": 5.617201,
+          "observations": 14,
+          "rmse": 6.902985,
+          "skipped": 0,
+          "smape": 3.167511
+        },
+        "origin": "2016-11-02",
+        "train_end": "2016-11-02",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 858,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 17.642857,
+          "observations": 14,
+          "rmse": 21.035684,
+          "skipped": 0,
+          "smape": 10.369408
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 17.642857,
+            "observations": 14,
+            "rmse": 21.035684,
+            "skipped": 0,
+            "smape": 10.369408
+          },
+          "learned": {
+            "mae": 6.443749,
+            "observations": 14,
+            "rmse": 6.990566,
+            "skipped": 0,
+            "smape": 3.848225
+          },
+          "learned_minus_baseline": {
+            "mae": -11.199108,
+            "rmse": -14.045118,
+            "smape": -6.521183
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-11-16",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-11-10",
+        "fold": 11,
+        "learned": {
+          "mae": 6.443749,
+          "observations": 14,
+          "rmse": 6.990566,
+          "skipped": 0,
+          "smape": 3.848225
+        },
+        "origin": "2016-11-09",
+        "train_end": "2016-11-09",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 872,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 24.642857,
+          "observations": 14,
+          "rmse": 30.994239,
+          "skipped": 0,
+          "smape": 16.344304
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 24.642857,
+            "observations": 14,
+            "rmse": 30.994239,
+            "skipped": 0,
+            "smape": 16.344304
+          },
+          "learned": {
+            "mae": 6.723356,
+            "observations": 14,
+            "rmse": 7.43615,
+            "skipped": 0,
+            "smape": 4.215341
+          },
+          "learned_minus_baseline": {
+            "mae": -17.919501,
+            "rmse": -23.558089,
+            "smape": -12.128962
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-11-23",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-11-17",
+        "fold": 12,
+        "learned": {
+          "mae": 6.723356,
+          "observations": 14,
+          "rmse": 7.43615,
+          "skipped": 0,
+          "smape": 4.215341
+        },
+        "origin": "2016-11-16",
+        "train_end": "2016-11-16",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 886,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 49.857143,
+          "observations": 14,
+          "rmse": 53.976185,
+          "skipped": 0,
+          "smape": 37.970031
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 49.857143,
+            "observations": 14,
+            "rmse": 53.976185,
+            "skipped": 0,
+            "smape": 37.970031
+          },
+          "learned": {
+            "mae": 8.015658,
+            "observations": 14,
+            "rmse": 11.895629,
+            "skipped": 0,
+            "smape": 7.034239
+          },
+          "learned_minus_baseline": {
+            "mae": -41.841484,
+            "rmse": -42.080556,
+            "smape": -30.935792
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-11-30",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-11-24",
+        "fold": 13,
+        "learned": {
+          "mae": 8.015658,
+          "observations": 14,
+          "rmse": 11.895629,
+          "skipped": 0,
+          "smape": 7.034239
+        },
+        "origin": "2016-11-23",
+        "train_end": "2016-11-23",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 900,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 23.5,
+          "observations": 14,
+          "rmse": 27.070015,
+          "skipped": 0,
+          "smape": 20.814836
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 23.5,
+            "observations": 14,
+            "rmse": 27.070015,
+            "skipped": 0,
+            "smape": 20.814836
+          },
+          "learned": {
+            "mae": 4.83709,
+            "observations": 14,
+            "rmse": 6.454914,
+            "skipped": 0,
+            "smape": 4.122438
+          },
+          "learned_minus_baseline": {
+            "mae": -18.66291,
+            "rmse": -20.615101,
+            "smape": -16.692399
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-12-07",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-12-01",
+        "fold": 14,
+        "learned": {
+          "mae": 4.83709,
+          "observations": 14,
+          "rmse": 6.454914,
+          "skipped": 0,
+          "smape": 4.122438
+        },
+        "origin": "2016-11-30",
+        "train_end": "2016-11-30",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 914,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 41.857143,
+          "observations": 14,
+          "rmse": 48.988337,
+          "skipped": 0,
+          "smape": 39.464665
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 41.857143,
+            "observations": 14,
+            "rmse": 48.988337,
+            "skipped": 0,
+            "smape": 39.464665
+          },
+          "learned": {
+            "mae": 9.243162,
+            "observations": 14,
+            "rmse": 10.928814,
+            "skipped": 0,
+            "smape": 10.435492
+          },
+          "learned_minus_baseline": {
+            "mae": -32.613981,
+            "rmse": -38.059523,
+            "smape": -29.029173
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-12-14",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-12-08",
+        "fold": 15,
+        "learned": {
+          "mae": 9.243162,
+          "observations": 14,
+          "rmse": 10.928814,
+          "skipped": 0,
+          "smape": 10.435492
+        },
+        "origin": "2016-12-07",
+        "train_end": "2016-12-07",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 928,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 37.714286,
+          "observations": 14,
+          "rmse": 51.636089,
+          "skipped": 0,
+          "smape": 36.131619
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 37.714286,
+            "observations": 14,
+            "rmse": 51.636089,
+            "skipped": 0,
+            "smape": 36.131619
+          },
+          "learned": {
+            "mae": 4.461376,
+            "observations": 14,
+            "rmse": 6.052066,
+            "skipped": 0,
+            "smape": 5.593625
+          },
+          "learned_minus_baseline": {
+            "mae": -33.252909,
+            "rmse": -45.584023,
+            "smape": -30.537995
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-12-21",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-12-15",
+        "fold": 16,
+        "learned": {
+          "mae": 4.461376,
+          "observations": 14,
+          "rmse": 6.052066,
+          "skipped": 0,
+          "smape": 5.593625
+        },
+        "origin": "2016-12-14",
+        "train_end": "2016-12-14",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 942,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 63.0,
+          "observations": 14,
+          "rmse": 69.977547,
+          "skipped": 0,
+          "smape": 54.070623
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 63.0,
+            "observations": 14,
+            "rmse": 69.977547,
+            "skipped": 0,
+            "smape": 54.070623
+          },
+          "learned": {
+            "mae": 7.677035,
+            "observations": 14,
+            "rmse": 9.659477,
+            "skipped": 0,
+            "smape": 4.964969
+          },
+          "learned_minus_baseline": {
+            "mae": -55.322965,
+            "rmse": -60.318071,
+            "smape": -49.105654
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2016-12-28",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-12-22",
+        "fold": 17,
+        "learned": {
+          "mae": 7.677035,
+          "observations": 14,
+          "rmse": 9.659477,
+          "skipped": 0,
+          "smape": 4.964969
+        },
+        "origin": "2016-12-21",
+        "train_end": "2016-12-21",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 956,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 59.928571,
+          "observations": 14,
+          "rmse": 66.012445,
+          "skipped": 0,
+          "smape": 39.114338
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 59.928571,
+            "observations": 14,
+            "rmse": 66.012445,
+            "skipped": 0,
+            "smape": 39.114338
+          },
+          "learned": {
+            "mae": 6.953836,
+            "observations": 14,
+            "rmse": 8.866299,
+            "skipped": 0,
+            "smape": 4.683694
+          },
+          "learned_minus_baseline": {
+            "mae": -52.974736,
+            "rmse": -57.146146,
+            "smape": -34.430644
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-01-04",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2016-12-29",
+        "fold": 18,
+        "learned": {
+          "mae": 6.953836,
+          "observations": 14,
+          "rmse": 8.866299,
+          "skipped": 0,
+          "smape": 4.683694
+        },
+        "origin": "2016-12-28",
+        "train_end": "2016-12-28",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 970,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 58.857143,
+          "observations": 14,
+          "rmse": 66.190202,
+          "skipped": 0,
+          "smape": 41.379047
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 58.857143,
+            "observations": 14,
+            "rmse": 66.190202,
+            "skipped": 0,
+            "smape": 41.379047
+          },
+          "learned": {
+            "mae": 9.666151,
+            "observations": 14,
+            "rmse": 12.327176,
+            "skipped": 0,
+            "smape": 10.592272
+          },
+          "learned_minus_baseline": {
+            "mae": -49.190992,
+            "rmse": -53.863026,
+            "smape": -30.786775
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-01-11",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-01-05",
+        "fold": 19,
+        "learned": {
+          "mae": 9.666151,
+          "observations": 14,
+          "rmse": 12.327176,
+          "skipped": 0,
+          "smape": 10.592272
+        },
+        "origin": "2017-01-04",
+        "train_end": "2017-01-04",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 984,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 31.285714,
+          "observations": 14,
+          "rmse": 40.65886,
+          "skipped": 0,
+          "smape": 27.194754
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 31.285714,
+            "observations": 14,
+            "rmse": 40.65886,
+            "skipped": 0,
+            "smape": 27.194754
+          },
+          "learned": {
+            "mae": 7.214349,
+            "observations": 14,
+            "rmse": 9.660279,
+            "skipped": 0,
+            "smape": 6.492624
+          },
+          "learned_minus_baseline": {
+            "mae": -24.071365,
+            "rmse": -30.99858,
+            "smape": -20.702131
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-01-18",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-01-12",
+        "fold": 20,
+        "learned": {
+          "mae": 7.214349,
+          "observations": 14,
+          "rmse": 9.660279,
+          "skipped": 0,
+          "smape": 6.492624
+        },
+        "origin": "2017-01-11",
+        "train_end": "2017-01-11",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 998,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 33.5,
+          "observations": 14,
+          "rmse": 39.510396,
+          "skipped": 0,
+          "smape": 27.422185
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 33.5,
+            "observations": 14,
+            "rmse": 39.510396,
+            "skipped": 0,
+            "smape": 27.422185
+          },
+          "learned": {
+            "mae": 7.655975,
+            "observations": 14,
+            "rmse": 9.165013,
+            "skipped": 0,
+            "smape": 7.611002
+          },
+          "learned_minus_baseline": {
+            "mae": -25.844025,
+            "rmse": -30.345384,
+            "smape": -19.811183
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-01-25",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-01-19",
+        "fold": 21,
+        "learned": {
+          "mae": 7.655975,
+          "observations": 14,
+          "rmse": 9.165013,
+          "skipped": 0,
+          "smape": 7.611002
+        },
+        "origin": "2017-01-18",
+        "train_end": "2017-01-18",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1012,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 33.0,
+          "observations": 14,
+          "rmse": 37.271207,
+          "skipped": 0,
+          "smape": 29.134914
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 33.0,
+            "observations": 14,
+            "rmse": 37.271207,
+            "skipped": 0,
+            "smape": 29.134914
+          },
+          "learned": {
+            "mae": 11.298746,
+            "observations": 14,
+            "rmse": 16.491444,
+            "skipped": 0,
+            "smape": 10.470803
+          },
+          "learned_minus_baseline": {
+            "mae": -21.701254,
+            "rmse": -20.779763,
+            "smape": -18.664111
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-02-01",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-01-26",
+        "fold": 22,
+        "learned": {
+          "mae": 11.298746,
+          "observations": 14,
+          "rmse": 16.491444,
+          "skipped": 0,
+          "smape": 10.470803
+        },
+        "origin": "2017-01-25",
+        "train_end": "2017-01-25",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1026,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 28.214286,
+          "observations": 14,
+          "rmse": 31.540224,
+          "skipped": 0,
+          "smape": 25.616851
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 28.214286,
+            "observations": 14,
+            "rmse": 31.540224,
+            "skipped": 0,
+            "smape": 25.616851
+          },
+          "learned": {
+            "mae": 5.892387,
+            "observations": 14,
+            "rmse": 6.839959,
+            "skipped": 0,
+            "smape": 4.99878
+          },
+          "learned_minus_baseline": {
+            "mae": -22.321899,
+            "rmse": -24.700265,
+            "smape": -20.618071
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-02-08",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-02-02",
+        "fold": 23,
+        "learned": {
+          "mae": 5.892387,
+          "observations": 14,
+          "rmse": 6.839959,
+          "skipped": 0,
+          "smape": 4.99878
+        },
+        "origin": "2017-02-01",
+        "train_end": "2017-02-01",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1040,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 43.357143,
+          "observations": 14,
+          "rmse": 49.869114,
+          "skipped": 0,
+          "smape": 30.394915
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 43.357143,
+            "observations": 14,
+            "rmse": 49.869114,
+            "skipped": 0,
+            "smape": 30.394915
+          },
+          "learned": {
+            "mae": 4.247405,
+            "observations": 14,
+            "rmse": 5.720856,
+            "skipped": 0,
+            "smape": 2.792713
+          },
+          "learned_minus_baseline": {
+            "mae": -39.109738,
+            "rmse": -44.148259,
+            "smape": -27.602201
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-02-15",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-02-09",
+        "fold": 24,
+        "learned": {
+          "mae": 4.247405,
+          "observations": 14,
+          "rmse": 5.720856,
+          "skipped": 0,
+          "smape": 2.792713
+        },
+        "origin": "2017-02-08",
+        "train_end": "2017-02-08",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1054,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 27.214286,
+          "observations": 14,
+          "rmse": 33.106969,
+          "skipped": 0,
+          "smape": 18.019366
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 27.214286,
+            "observations": 14,
+            "rmse": 33.106969,
+            "skipped": 0,
+            "smape": 18.019366
+          },
+          "learned": {
+            "mae": 7.198838,
+            "observations": 14,
+            "rmse": 8.859995,
+            "skipped": 0,
+            "smape": 3.990342
+          },
+          "learned_minus_baseline": {
+            "mae": -20.015448,
+            "rmse": -24.246975,
+            "smape": -14.029025
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-02-22",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-02-16",
+        "fold": 25,
+        "learned": {
+          "mae": 7.198838,
+          "observations": 14,
+          "rmse": 8.859995,
+          "skipped": 0,
+          "smape": 3.990342
+        },
+        "origin": "2017-02-15",
+        "train_end": "2017-02-15",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1068,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 22.357143,
+          "observations": 14,
+          "rmse": 28.386365,
+          "skipped": 0,
+          "smape": 13.509109
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 22.357143,
+            "observations": 14,
+            "rmse": 28.386365,
+            "skipped": 0,
+            "smape": 13.509109
+          },
+          "learned": {
+            "mae": 11.776842,
+            "observations": 14,
+            "rmse": 14.431049,
+            "skipped": 0,
+            "smape": 6.698052
+          },
+          "learned_minus_baseline": {
+            "mae": -10.580301,
+            "rmse": -13.955316,
+            "smape": -6.811057
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-03-01",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-02-23",
+        "fold": 26,
+        "learned": {
+          "mae": 11.776842,
+          "observations": 14,
+          "rmse": 14.431049,
+          "skipped": 0,
+          "smape": 6.698052
+        },
+        "origin": "2017-02-22",
+        "train_end": "2017-02-22",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1082,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 17.928571,
+          "observations": 14,
+          "rmse": 25.234613,
+          "skipped": 0,
+          "smape": 11.11836
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 17.928571,
+            "observations": 14,
+            "rmse": 25.234613,
+            "skipped": 0,
+            "smape": 11.11836
+          },
+          "learned": {
+            "mae": 8.470452,
+            "observations": 14,
+            "rmse": 11.198355,
+            "skipped": 0,
+            "smape": 4.640806
+          },
+          "learned_minus_baseline": {
+            "mae": -9.458119,
+            "rmse": -14.036259,
+            "smape": -6.477554
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-03-08",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-03-02",
+        "fold": 27,
+        "learned": {
+          "mae": 8.470452,
+          "observations": 14,
+          "rmse": 11.198355,
+          "skipped": 0,
+          "smape": 4.640806
+        },
+        "origin": "2017-03-01",
+        "train_end": "2017-03-01",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1096,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 21.642857,
+          "observations": 14,
+          "rmse": 25.960134,
+          "skipped": 0,
+          "smape": 12.328928
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 21.642857,
+            "observations": 14,
+            "rmse": 25.960134,
+            "skipped": 0,
+            "smape": 12.328928
+          },
+          "learned": {
+            "mae": 6.163855,
+            "observations": 14,
+            "rmse": 6.927952,
+            "skipped": 0,
+            "smape": 3.432568
+          },
+          "learned_minus_baseline": {
+            "mae": -15.479002,
+            "rmse": -19.032182,
+            "smape": -8.89636
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-03-15",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-03-09",
+        "fold": 28,
+        "learned": {
+          "mae": 6.163855,
+          "observations": 14,
+          "rmse": 6.927952,
+          "skipped": 0,
+          "smape": 3.432568
+        },
+        "origin": "2017-03-08",
+        "train_end": "2017-03-08",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1110,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 16.428571,
+          "observations": 14,
+          "rmse": 21.8076,
+          "skipped": 0,
+          "smape": 8.630971
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 16.428571,
+            "observations": 14,
+            "rmse": 21.8076,
+            "skipped": 0,
+            "smape": 8.630971
+          },
+          "learned": {
+            "mae": 4.08005,
+            "observations": 14,
+            "rmse": 5.217442,
+            "skipped": 0,
+            "smape": 2.098421
+          },
+          "learned_minus_baseline": {
+            "mae": -12.348521,
+            "rmse": -16.590159,
+            "smape": -6.532551
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-03-22",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-03-16",
+        "fold": 29,
+        "learned": {
+          "mae": 4.08005,
+          "observations": 14,
+          "rmse": 5.217442,
+          "skipped": 0,
+          "smape": 2.098421
+        },
+        "origin": "2017-03-15",
+        "train_end": "2017-03-15",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1124,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 18.428571,
+          "observations": 14,
+          "rmse": 23.458169,
+          "skipped": 0,
+          "smape": 10.542124
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 18.428571,
+            "observations": 14,
+            "rmse": 23.458169,
+            "skipped": 0,
+            "smape": 10.542124
+          },
+          "learned": {
+            "mae": 6.873623,
+            "observations": 14,
+            "rmse": 8.685628,
+            "skipped": 0,
+            "smape": 4.029965
+          },
+          "learned_minus_baseline": {
+            "mae": -11.554949,
+            "rmse": -14.772542,
+            "smape": -6.512159
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-03-29",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-03-23",
+        "fold": 30,
+        "learned": {
+          "mae": 6.873623,
+          "observations": 14,
+          "rmse": 8.685628,
+          "skipped": 0,
+          "smape": 4.029965
+        },
+        "origin": "2017-03-22",
+        "train_end": "2017-03-22",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1138,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 14.0,
+          "observations": 14,
+          "rmse": 15.085471,
+          "skipped": 0,
+          "smape": 7.950267
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 14.0,
+            "observations": 14,
+            "rmse": 15.085471,
+            "skipped": 0,
+            "smape": 7.950267
+          },
+          "learned": {
+            "mae": 8.18355,
+            "observations": 14,
+            "rmse": 10.486374,
+            "skipped": 0,
+            "smape": 4.454914
+          },
+          "learned_minus_baseline": {
+            "mae": -5.81645,
+            "rmse": -4.599097,
+            "smape": -3.495353
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-04-05",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-03-30",
+        "fold": 31,
+        "learned": {
+          "mae": 8.18355,
+          "observations": 14,
+          "rmse": 10.486374,
+          "skipped": 0,
+          "smape": 4.454914
+        },
+        "origin": "2017-03-29",
+        "train_end": "2017-03-29",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1152,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 9.214286,
+          "observations": 14,
+          "rmse": 13.397761,
+          "skipped": 0,
+          "smape": 5.369377
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 9.214286,
+            "observations": 14,
+            "rmse": 13.397761,
+            "skipped": 0,
+            "smape": 5.369377
+          },
+          "learned": {
+            "mae": 3.41364,
+            "observations": 14,
+            "rmse": 4.320635,
+            "skipped": 0,
+            "smape": 1.714379
+          },
+          "learned_minus_baseline": {
+            "mae": -5.800645,
+            "rmse": -9.077126,
+            "smape": -3.654998
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-04-12",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-04-06",
+        "fold": 32,
+        "learned": {
+          "mae": 3.41364,
+          "observations": 14,
+          "rmse": 4.320635,
+          "skipped": 0,
+          "smape": 1.714379
+        },
+        "origin": "2017-04-05",
+        "train_end": "2017-04-05",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1166,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 14.214286,
+          "observations": 14,
+          "rmse": 17.810511,
+          "skipped": 0,
+          "smape": 8.018334
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 14.214286,
+            "observations": 14,
+            "rmse": 17.810511,
+            "skipped": 0,
+            "smape": 8.018334
+          },
+          "learned": {
+            "mae": 3.85083,
+            "observations": 14,
+            "rmse": 4.872758,
+            "skipped": 0,
+            "smape": 2.223849
+          },
+          "learned_minus_baseline": {
+            "mae": -10.363456,
+            "rmse": -12.937753,
+            "smape": -5.794485
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-04-19",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-04-13",
+        "fold": 33,
+        "learned": {
+          "mae": 3.85083,
+          "observations": 14,
+          "rmse": 4.872758,
+          "skipped": 0,
+          "smape": 2.223849
+        },
+        "origin": "2017-04-12",
+        "train_end": "2017-04-12",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1180,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 19.928571,
+          "observations": 14,
+          "rmse": 24.238399,
+          "skipped": 0,
+          "smape": 11.562091
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 19.928571,
+            "observations": 14,
+            "rmse": 24.238399,
+            "skipped": 0,
+            "smape": 11.562091
+          },
+          "learned": {
+            "mae": 2.857971,
+            "observations": 14,
+            "rmse": 3.793138,
+            "skipped": 0,
+            "smape": 1.508771
+          },
+          "learned_minus_baseline": {
+            "mae": -17.070601,
+            "rmse": -20.445261,
+            "smape": -10.05332
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-04-26",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-04-20",
+        "fold": 34,
+        "learned": {
+          "mae": 2.857971,
+          "observations": 14,
+          "rmse": 3.793138,
+          "skipped": 0,
+          "smape": 1.508771
+        },
+        "origin": "2017-04-19",
+        "train_end": "2017-04-19",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1194,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 14.714286,
+          "observations": 14,
+          "rmse": 18.776885,
+          "skipped": 0,
+          "smape": 8.15619
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 14.714286,
+            "observations": 14,
+            "rmse": 18.776885,
+            "skipped": 0,
+            "smape": 8.15619
+          },
+          "learned": {
+            "mae": 5.279512,
+            "observations": 14,
+            "rmse": 6.08556,
+            "skipped": 0,
+            "smape": 2.843884
+          },
+          "learned_minus_baseline": {
+            "mae": -9.434774,
+            "rmse": -12.691325,
+            "smape": -5.312306
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-05-03",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-04-27",
+        "fold": 35,
+        "learned": {
+          "mae": 5.279512,
+          "observations": 14,
+          "rmse": 6.08556,
+          "skipped": 0,
+          "smape": 2.843884
+        },
+        "origin": "2017-04-26",
+        "train_end": "2017-04-26",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1208,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 12.857143,
+          "observations": 14,
+          "rmse": 18.039639,
+          "skipped": 0,
+          "smape": 7.421693
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 12.857143,
+            "observations": 14,
+            "rmse": 18.039639,
+            "skipped": 0,
+            "smape": 7.421693
+          },
+          "learned": {
+            "mae": 4.211442,
+            "observations": 14,
+            "rmse": 6.477195,
+            "skipped": 0,
+            "smape": 2.376594
+          },
+          "learned_minus_baseline": {
+            "mae": -8.645701,
+            "rmse": -11.562444,
+            "smape": -5.045099
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-05-10",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-05-04",
+        "fold": 36,
+        "learned": {
+          "mae": 4.211442,
+          "observations": 14,
+          "rmse": 6.477195,
+          "skipped": 0,
+          "smape": 2.376594
+        },
+        "origin": "2017-05-03",
+        "train_end": "2017-05-03",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1222,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 10.785714,
+          "observations": 14,
+          "rmse": 14.190037,
+          "skipped": 0,
+          "smape": 6.120289
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 10.785714,
+            "observations": 14,
+            "rmse": 14.190037,
+            "skipped": 0,
+            "smape": 6.120289
+          },
+          "learned": {
+            "mae": 5.00463,
+            "observations": 14,
+            "rmse": 6.961604,
+            "skipped": 0,
+            "smape": 2.630832
+          },
+          "learned_minus_baseline": {
+            "mae": -5.781084,
+            "rmse": -7.228433,
+            "smape": -3.489457
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-05-17",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-05-11",
+        "fold": 37,
+        "learned": {
+          "mae": 5.00463,
+          "observations": 14,
+          "rmse": 6.961604,
+          "skipped": 0,
+          "smape": 2.630832
+        },
+        "origin": "2017-05-10",
+        "train_end": "2017-05-10",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1236,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 6.0,
+          "observations": 14,
+          "rmse": 7.671841,
+          "skipped": 0,
+          "smape": 3.016143
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 6.0,
+            "observations": 14,
+            "rmse": 7.671841,
+            "skipped": 0,
+            "smape": 3.016143
+          },
+          "learned": {
+            "mae": 3.907718,
+            "observations": 14,
+            "rmse": 4.503446,
+            "skipped": 0,
+            "smape": 1.990706
+          },
+          "learned_minus_baseline": {
+            "mae": -2.092282,
+            "rmse": -3.168395,
+            "smape": -1.025437
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-05-24",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-05-18",
+        "fold": 38,
+        "learned": {
+          "mae": 3.907718,
+          "observations": 14,
+          "rmse": 4.503446,
+          "skipped": 0,
+          "smape": 1.990706
+        },
+        "origin": "2017-05-17",
+        "train_end": "2017-05-17",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1250,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 10.785714,
+          "observations": 14,
+          "rmse": 18.041619,
+          "skipped": 0,
+          "smape": 5.343503
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 10.785714,
+            "observations": 14,
+            "rmse": 18.041619,
+            "skipped": 0,
+            "smape": 5.343503
+          },
+          "learned": {
+            "mae": 4.904901,
+            "observations": 14,
+            "rmse": 7.342865,
+            "skipped": 0,
+            "smape": 2.546683
+          },
+          "learned_minus_baseline": {
+            "mae": -5.880813,
+            "rmse": -10.698754,
+            "smape": -2.79682
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-05-31",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-05-25",
+        "fold": 39,
+        "learned": {
+          "mae": 4.904901,
+          "observations": 14,
+          "rmse": 7.342865,
+          "skipped": 0,
+          "smape": 2.546683
+        },
+        "origin": "2017-05-24",
+        "train_end": "2017-05-24",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1264,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 13.857143,
+          "observations": 14,
+          "rmse": 18.102881,
+          "skipped": 0,
+          "smape": 7.189714
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 13.857143,
+            "observations": 14,
+            "rmse": 18.102881,
+            "skipped": 0,
+            "smape": 7.189714
+          },
+          "learned": {
+            "mae": 5.929799,
+            "observations": 14,
+            "rmse": 7.152474,
+            "skipped": 0,
+            "smape": 3.282318
+          },
+          "learned_minus_baseline": {
+            "mae": -7.927344,
+            "rmse": -10.950407,
+            "smape": -3.907397
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-06-07",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-06-01",
+        "fold": 40,
+        "learned": {
+          "mae": 5.929799,
+          "observations": 14,
+          "rmse": 7.152474,
+          "skipped": 0,
+          "smape": 3.282318
+        },
+        "origin": "2017-05-31",
+        "train_end": "2017-05-31",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1278,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 7.857143,
+          "observations": 14,
+          "rmse": 9.673233,
+          "skipped": 0,
+          "smape": 4.090444
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 7.857143,
+            "observations": 14,
+            "rmse": 9.673233,
+            "skipped": 0,
+            "smape": 4.090444
+          },
+          "learned": {
+            "mae": 3.664148,
+            "observations": 14,
+            "rmse": 4.619869,
+            "skipped": 0,
+            "smape": 1.947019
+          },
+          "learned_minus_baseline": {
+            "mae": -4.192994,
+            "rmse": -5.053364,
+            "smape": -2.143425
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-06-14",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-06-08",
+        "fold": 41,
+        "learned": {
+          "mae": 3.664148,
+          "observations": 14,
+          "rmse": 4.619869,
+          "skipped": 0,
+          "smape": 1.947019
+        },
+        "origin": "2017-06-07",
+        "train_end": "2017-06-07",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1292,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 6.285714,
+          "observations": 14,
+          "rmse": 8.088793,
+          "skipped": 0,
+          "smape": 3.373188
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 6.285714,
+            "observations": 14,
+            "rmse": 8.088793,
+            "skipped": 0,
+            "smape": 3.373188
+          },
+          "learned": {
+            "mae": 2.447131,
+            "observations": 14,
+            "rmse": 3.031885,
+            "skipped": 0,
+            "smape": 1.246137
+          },
+          "learned_minus_baseline": {
+            "mae": -3.838583,
+            "rmse": -5.056908,
+            "smape": -2.127051
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-06-21",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-06-15",
+        "fold": 42,
+        "learned": {
+          "mae": 2.447131,
+          "observations": 14,
+          "rmse": 3.031885,
+          "skipped": 0,
+          "smape": 1.246137
+        },
+        "origin": "2017-06-14",
+        "train_end": "2017-06-14",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1306,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 7.285714,
+          "observations": 14,
+          "rmse": 9.935506,
+          "skipped": 0,
+          "smape": 3.578629
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 7.285714,
+            "observations": 14,
+            "rmse": 9.935506,
+            "skipped": 0,
+            "smape": 3.578629
+          },
+          "learned": {
+            "mae": 4.109667,
+            "observations": 14,
+            "rmse": 5.242729,
+            "skipped": 0,
+            "smape": 2.041546
+          },
+          "learned_minus_baseline": {
+            "mae": -3.176048,
+            "rmse": -4.692777,
+            "smape": -1.537084
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-06-28",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-06-22",
+        "fold": 43,
+        "learned": {
+          "mae": 4.109667,
+          "observations": 14,
+          "rmse": 5.242729,
+          "skipped": 0,
+          "smape": 2.041546
+        },
+        "origin": "2017-06-21",
+        "train_end": "2017-06-21",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1320,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 7.928571,
+          "observations": 14,
+          "rmse": 9.743129,
+          "skipped": 0,
+          "smape": 3.974907
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 7.928571,
+            "observations": 14,
+            "rmse": 9.743129,
+            "skipped": 0,
+            "smape": 3.974907
+          },
+          "learned": {
+            "mae": 3.971259,
+            "observations": 14,
+            "rmse": 4.702144,
+            "skipped": 0,
+            "smape": 2.020002
+          },
+          "learned_minus_baseline": {
+            "mae": -3.957312,
+            "rmse": -5.040985,
+            "smape": -1.954906
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-07-05",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-06-29",
+        "fold": 44,
+        "learned": {
+          "mae": 3.971259,
+          "observations": 14,
+          "rmse": 4.702144,
+          "skipped": 0,
+          "smape": 2.020002
+        },
+        "origin": "2017-06-28",
+        "train_end": "2017-06-28",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1334,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 6.571429,
+          "observations": 14,
+          "rmse": 8.21149,
+          "skipped": 0,
+          "smape": 3.365477
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 6.571429,
+            "observations": 14,
+            "rmse": 8.21149,
+            "skipped": 0,
+            "smape": 3.365477
+          },
+          "learned": {
+            "mae": 3.214686,
+            "observations": 14,
+            "rmse": 3.650515,
+            "skipped": 0,
+            "smape": 1.631625
+          },
+          "learned_minus_baseline": {
+            "mae": -3.356743,
+            "rmse": -4.560975,
+            "smape": -1.733852
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-07-12",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-07-06",
+        "fold": 45,
+        "learned": {
+          "mae": 3.214686,
+          "observations": 14,
+          "rmse": 3.650515,
+          "skipped": 0,
+          "smape": 1.631625
+        },
+        "origin": "2017-07-05",
+        "train_end": "2017-07-05",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1348,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 4.642857,
+          "observations": 14,
+          "rmse": 5.922114,
+          "skipped": 0,
+          "smape": 2.41216
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 4.642857,
+            "observations": 14,
+            "rmse": 5.922114,
+            "skipped": 0,
+            "smape": 2.41216
+          },
+          "learned": {
+            "mae": 4.128222,
+            "observations": 14,
+            "rmse": 4.490896,
+            "skipped": 0,
+            "smape": 2.105384
+          },
+          "learned_minus_baseline": {
+            "mae": -0.514635,
+            "rmse": -1.431218,
+            "smape": -0.306776
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-07-19",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-07-13",
+        "fold": 46,
+        "learned": {
+          "mae": 4.128222,
+          "observations": 14,
+          "rmse": 4.490896,
+          "skipped": 0,
+          "smape": 2.105384
+        },
+        "origin": "2017-07-12",
+        "train_end": "2017-07-12",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1362,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 4.285714,
+          "observations": 14,
+          "rmse": 5.707138,
+          "skipped": 0,
+          "smape": 2.152107
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 4.285714,
+            "observations": 14,
+            "rmse": 5.707138,
+            "skipped": 0,
+            "smape": 2.152107
+          },
+          "learned": {
+            "mae": 2.875419,
+            "observations": 14,
+            "rmse": 3.341132,
+            "skipped": 0,
+            "smape": 1.464953
+          },
+          "learned_minus_baseline": {
+            "mae": -1.410295,
+            "rmse": -2.366007,
+            "smape": -0.687155
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-07-26",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-07-20",
+        "fold": 47,
+        "learned": {
+          "mae": 2.875419,
+          "observations": 14,
+          "rmse": 3.341132,
+          "skipped": 0,
+          "smape": 1.464953
+        },
+        "origin": "2017-07-19",
+        "train_end": "2017-07-19",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1376,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 7.5,
+          "observations": 14,
+          "rmse": 10.800132,
+          "skipped": 0,
+          "smape": 3.793207
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 7.5,
+            "observations": 14,
+            "rmse": 10.800132,
+            "skipped": 0,
+            "smape": 3.793207
+          },
+          "learned": {
+            "mae": 2.64167,
+            "observations": 14,
+            "rmse": 3.642212,
+            "skipped": 0,
+            "smape": 1.35766
+          },
+          "learned_minus_baseline": {
+            "mae": -4.85833,
+            "rmse": -7.157921,
+            "smape": -2.435547
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-08-02",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-07-27",
+        "fold": 48,
+        "learned": {
+          "mae": 2.64167,
+          "observations": 14,
+          "rmse": 3.642212,
+          "skipped": 0,
+          "smape": 1.35766
+        },
+        "origin": "2017-07-26",
+        "train_end": "2017-07-26",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1390,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 5.857143,
+          "observations": 14,
+          "rmse": 9.554356,
+          "skipped": 0,
+          "smape": 2.94327
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 5.857143,
+            "observations": 14,
+            "rmse": 9.554356,
+            "skipped": 0,
+            "smape": 2.94327
+          },
+          "learned": {
+            "mae": 2.660557,
+            "observations": 14,
+            "rmse": 3.166303,
+            "skipped": 0,
+            "smape": 1.330115
+          },
+          "learned_minus_baseline": {
+            "mae": -3.196586,
+            "rmse": -6.388052,
+            "smape": -1.613154
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-08-09",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-08-03",
+        "fold": 49,
+        "learned": {
+          "mae": 2.660557,
+          "observations": 14,
+          "rmse": 3.166303,
+          "skipped": 0,
+          "smape": 1.330115
+        },
+        "origin": "2017-08-02",
+        "train_end": "2017-08-02",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1404,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 3.0,
+          "observations": 14,
+          "rmse": 4.810702,
+          "skipped": 0,
+          "smape": 1.442599
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 3.0,
+            "observations": 14,
+            "rmse": 4.810702,
+            "skipped": 0,
+            "smape": 1.442599
+          },
+          "learned": {
+            "mae": 1.679436,
+            "observations": 14,
+            "rmse": 2.224072,
+            "skipped": 0,
+            "smape": 0.823342
+          },
+          "learned_minus_baseline": {
+            "mae": -1.320564,
+            "rmse": -2.586631,
+            "smape": -0.619257
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-08-16",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-08-10",
+        "fold": 50,
+        "learned": {
+          "mae": 1.679436,
+          "observations": 14,
+          "rmse": 2.224072,
+          "skipped": 0,
+          "smape": 0.823342
+        },
+        "origin": "2017-08-09",
+        "train_end": "2017-08-09",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1418,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 3.071429,
+          "observations": 14,
+          "rmse": 4.527693,
+          "skipped": 0,
+          "smape": 1.503465
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 3.071429,
+            "observations": 14,
+            "rmse": 4.527693,
+            "skipped": 0,
+            "smape": 1.503465
+          },
+          "learned": {
+            "mae": 1.252082,
+            "observations": 14,
+            "rmse": 1.5411,
+            "skipped": 0,
+            "smape": 0.619767
+          },
+          "learned_minus_baseline": {
+            "mae": -1.819346,
+            "rmse": -2.986593,
+            "smape": -0.883698
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-08-23",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-08-17",
+        "fold": 51,
+        "learned": {
+          "mae": 1.252082,
+          "observations": 14,
+          "rmse": 1.5411,
+          "skipped": 0,
+          "smape": 0.619767
+        },
+        "origin": "2017-08-16",
+        "train_end": "2017-08-16",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1432,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 8.0,
+          "observations": 14,
+          "rmse": 11.058287,
+          "skipped": 0,
+          "smape": 3.998052
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 8.0,
+            "observations": 14,
+            "rmse": 11.058287,
+            "skipped": 0,
+            "smape": 3.998052
+          },
+          "learned": {
+            "mae": 3.688242,
+            "observations": 14,
+            "rmse": 4.69968,
+            "skipped": 0,
+            "smape": 1.923072
+          },
+          "learned_minus_baseline": {
+            "mae": -4.311758,
+            "rmse": -6.358607,
+            "smape": -2.07498
+          },
+          "paired_observations": 14
+        },
+        "complete_window": true,
+        "evaluation_end": "2017-08-30",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 14,
+        "evaluation_start": "2017-08-24",
+        "fold": 52,
+        "learned": {
+          "mae": 3.688242,
+          "observations": 14,
+          "rmse": 4.69968,
+          "skipped": 0,
+          "smape": 1.923072
+        },
+        "origin": "2017-08-23",
+        "train_end": "2017-08-23",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1446,
+        "train_start": "2015-08-26"
+      },
+      {
+        "baseline": {
+          "mae": 6.5,
+          "observations": 2,
+          "rmse": 8.514693,
+          "skipped": 0,
+          "smape": 3.63381
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 6.5,
+            "observations": 2,
+            "rmse": 8.514693,
+            "skipped": 0,
+            "smape": 3.63381
+          },
+          "learned": {
+            "mae": 5.72782,
+            "observations": 2,
+            "rmse": 5.975985,
+            "skipped": 0,
+            "smape": 2.864185
+          },
+          "learned_minus_baseline": {
+            "mae": -0.77218,
+            "rmse": -2.538708,
+            "smape": -0.769625
+          },
+          "paired_observations": 2
+        },
+        "complete_window": false,
+        "evaluation_end": "2017-08-31",
+        "evaluation_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "evaluation_rows": 2,
+        "evaluation_start": "2017-08-31",
+        "fold": 53,
+        "learned": {
+          "mae": 5.72782,
+          "observations": 2,
+          "rmse": 5.975985,
+          "skipped": 0,
+          "smape": 2.864185
+        },
+        "origin": "2017-08-30",
+        "train_end": "2017-08-30",
+        "train_hotels": [
+          "city_hotel",
+          "resort_hotel"
+        ],
+        "train_rows": 1460,
+        "train_start": "2015-08-26"
+      }
+    ],
+    "per_hotel": {
+      "city_hotel": {
+        "baseline": {
+          "mae": 20.502688,
+          "observations": 372,
+          "rmse": 31.345413,
+          "skipped": 0,
+          "smape": 12.669259
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 20.502688,
+            "observations": 372,
+            "rmse": 31.345413,
+            "skipped": 0,
+            "smape": 12.669259
+          },
+          "learned": {
+            "mae": 5.692155,
+            "observations": 372,
+            "rmse": 7.74237,
+            "skipped": 0,
+            "smape": 3.167968
+          },
+          "learned_minus_baseline": {
+            "mae": -14.810533,
+            "rmse": -23.603044,
+            "smape": -9.501292
+          },
+          "paired_observations": 372
+        },
+        "learned": {
+          "mae": 5.692155,
+          "observations": 372,
+          "rmse": 7.74237,
+          "skipped": 0,
+          "smape": 3.167968
+        },
+        "predictions": 372,
+        "sufficient_coverage": true
+      },
+      "resort_hotel": {
+        "baseline": {
+          "mae": 16.239247,
+          "observations": 372,
+          "rmse": 24.5792,
+          "skipped": 0,
+          "smape": 12.635706
+        },
+        "comparison": {
+          "baseline": {
+            "mae": 16.239247,
+            "observations": 372,
+            "rmse": 24.5792,
+            "skipped": 0,
+            "smape": 12.635706
+          },
+          "learned": {
+            "mae": 4.813201,
+            "observations": 372,
+            "rmse": 6.92822,
+            "skipped": 0,
+            "smape": 3.70966
+          },
+          "learned_minus_baseline": {
+            "mae": -11.426047,
+            "rmse": -17.65098,
+            "smape": -8.926046
+          },
+          "paired_observations": 372
+        },
+        "learned": {
+          "mae": 4.813201,
+          "observations": 372,
+          "rmse": 6.92822,
+          "skipped": 0,
+          "smape": 3.70966
+        },
+        "predictions": 372,
+        "sufficient_coverage": true
+      }
+    },
+    "pooled": {
+      "baseline": {
+        "mae": 18.370968,
+        "observations": 744,
+        "rmse": 28.166221,
+        "skipped": 0,
+        "smape": 12.652483
+      },
+      "comparison": {
+        "baseline": {
+          "mae": 18.370968,
+          "observations": 744,
+          "rmse": 28.166221,
+          "skipped": 0,
+          "smape": 12.652483
+        },
+        "learned": {
+          "mae": 5.252678,
+          "observations": 744,
+          "rmse": 7.346582,
+          "skipped": 0,
+          "smape": 3.438814
+        },
+        "learned_minus_baseline": {
+          "mae": -13.11829,
+          "rmse": -20.81964,
+          "smape": -9.213669
+        },
+        "paired_observations": 744
+      },
+      "learned": {
+        "mae": 5.252678,
+        "observations": 744,
+        "rmse": 7.346582,
+        "skipped": 0,
+        "smape": 3.438814
+      }
+    },
+    "predictions": 744,
+    "skipped_folds": []
+  },
+  "model": {
+    "baseline_definition": "seasonal naive at a 7-day period: the forecast for (hotel, date) is the realised room nights for that hotel 7 days earlier, read from the dataset's own demand_lag_7 column -- the same weekday, the fewest whole weeks back the horizon allows. Where that observation does not exist the baseline produces no forecast; the day is counted as skipped and excluded from every metric.",
+    "baseline_lag_days": 7,
+    "deterministic": true,
+    "estimator": {
+      "early_stopping": false,
+      "estimator": "sklearn.ensemble.HistGradientBoostingRegressor",
+      "l2_regularization": 0.0,
+      "learning_rate": 0.05,
+      "loss": "squared_error",
+      "max_bins": 255,
+      "max_iter": 200,
+      "max_leaf_nodes": 31,
+      "min_samples_leaf": 20,
+      "random_state": 0
+    },
+    "forecast_horizon_days": 7,
+    "methods": {
+      "baseline": "seasonal_naive_7",
+      "learned": "hist_gradient_boosting"
+    },
+    "model_artifact_persisted": false,
+    "model_version": "demand_h7_v1",
+    "name": "demand_horizon",
+    "predictions": "raw, uncapped room nights",
+    "random_state": 0
+  },
+  "multi_horizon_protocol": {
+    "protocol_sha256": "d8408e188e74867a99ad5eca24540e22636c3084089a84f5b2bf9a9970a0fdaf",
+    "protocol_version": "multi_horizon_v1"
+  },
+  "protocol": {
+    "horizon_days": 7,
+    "minimum_train_days": 365,
+    "origin_rule": "first origin = the date with minimum_train_days distinct dates at or before it; subsequent origins advance by step_days until the last dataset date; evaluation window = (origin, origin + horizon_days]",
+    "random_cross_validation": false,
+    "scheme": "expanding-window rolling origin",
+    "shuffle": false,
+    "step_days": 7,
+    "windows_tile": true
+  }
+}
