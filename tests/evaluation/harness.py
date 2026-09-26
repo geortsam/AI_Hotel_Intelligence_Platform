@@ -56,6 +56,7 @@ from tests.evaluation.fixture_hotel import (
     FixtureAccuracy,
     FixtureAnalytics,
     FixtureForecasts,
+    FixtureInsight,
 )
 from tests.evaluation.questions import COPILOT_EVAL_V1, EvalCase, QuestionSet
 from tests.evaluation.replay import (
@@ -217,6 +218,7 @@ def run_case(
         analytics=cast(Any, FixtureAnalytics()),
         demand_prediction=cast(Any, FixtureForecasts()),
         forecast_performance=cast(Any, FixtureAccuracy()),
+        insight=cast(Any, FixtureInsight()),
         knowledge=cast(Any, FixtureKnowledge()),
     )
     invocations = ToolInvocationService(

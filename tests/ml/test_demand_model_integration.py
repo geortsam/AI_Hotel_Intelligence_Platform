@@ -434,7 +434,8 @@ def test_the_public_api_gained_only_the_serving_endpoint() -> None:
     # Stage 7.7 added POST .../copilot/ask, outside /ml and not a training surface.
     # Stage 7.9 added six knowledge operations, likewise outside /ml.
     # Stage 7.11 added five conversation operations, likewise outside /ml.
-    assert operations == 98
+    # Stage 7.12 added the attention list, which does not use the demand model.
+    assert operations == 99
     # Four routes on the ML prefix since Stage 7.3, and only one of them reaches a model. The
     # 503 is what says which: an unavailable artifact is a failure only the serving route can
     # have, so declaring it is the structural difference rather than a naming convention.

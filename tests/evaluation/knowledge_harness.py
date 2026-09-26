@@ -40,6 +40,7 @@ from tests.evaluation.fixture_hotel import (
     FixtureAccuracy,
     FixtureAnalytics,
     FixtureForecasts,
+    FixtureInsight,
 )
 from tests.evaluation.harness import EvalAudit, EvalLog, EvalScope, EvalSession
 from tests.evaluation.knowledge_questions import (
@@ -131,6 +132,7 @@ def run_case(
         analytics=cast(Any, FixtureAnalytics()),
         demand_prediction=cast(Any, FixtureForecasts()),
         forecast_performance=cast(Any, FixtureAccuracy()),
+        insight=cast(Any, FixtureInsight()),
         knowledge=cast(Any, FixtureKnowledge()),
     )
     invocations = ToolInvocationService(

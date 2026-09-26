@@ -197,6 +197,7 @@ class Stack:
             demand_prediction=cast(Any, None),
             forecast_performance=cast(Any, None),
             knowledge=cast(Any, self.knowledge),
+            insight=cast(Any, None),
         )
         self.invocations = ToolInvocationService(
             cast(Any, FakeSession()),
@@ -238,7 +239,8 @@ def search(query: str = "pool opening hours", call_id: str = "k1", **extra: Any)
 
 def test_search_hotel_knowledge_is_the_sixth_registered_tool() -> None:
     names = build_default_registry().names()
-    assert len(names) == 6
+    # Stage 7.12 added a seventh, `get_hotel_priorities`.
+    assert len(names) == 7
     assert NAME == "search_hotel_knowledge"
     assert NAME in names
 
@@ -303,7 +305,7 @@ def test_every_catalogued_tool_is_an_executable_registered_module() -> None:
     tools_dir = APP / "copilot" / "tools"
     modules = {path.stem for path in tools_dir.glob("*.py") if path.stem != "__init__"}
     registry = build_default_registry()
-    assert len(modules) == len(registry.names()) == 6
+    assert len(modules) == len(registry.names()) == 7
     for name in registry.names():
         assert callable(registry.get(name).run)
 
@@ -322,6 +324,7 @@ def test_the_output_is_a_labelled_untrusted_section_with_labels_not_identifiers(
             demand_prediction=cast(Any, None),
             forecast_performance=cast(Any, None),
             knowledge=cast(Any, FakeKnowledge([POOL, PARKING])),
+            insight=cast(Any, None),
         ),
         evidence=ledger,
     )

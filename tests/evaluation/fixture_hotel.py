@@ -29,6 +29,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 from decimal import Decimal
+from typing import Any
 
 from app.core.errors import ValidationError
 from app.ml.accuracy_protocol import PROTOCOL
@@ -385,6 +386,16 @@ class FixtureForecasts:
         if horizon_days != SERVED_HORIZON_DAYS or target_date not in FORECASTS:
             raise ValidationError(NO_DATA)
         return FORECASTS[target_date]
+
+
+class FixtureInsight:
+    """Stands where `InsightService` does (Stage 7.12). No evaluation case asks for the attention
+    list, so it holds no data: a request is the same typed refusal a real service gives for a
+    request it cannot answer, and a case that tried would record a tool failure."""
+
+    def priorities(self, hotel_public_id: uuid.UUID, date_from: dt.date, date_to: dt.date) -> Any:
+        _require_hotel(hotel_public_id)
+        raise ValidationError(NO_DATA)
 
 
 class FixtureAccuracy:

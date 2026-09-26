@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from typing import Any, get_args
 
 import pytest
+from fastapi.routing import APIRoute
 
 from app.api import deps
 from app.api.v1.endpoints import intelligence as intelligence_router
@@ -773,15 +774,27 @@ def test_no_flat_or_global_intelligence_route_exists() -> None:
 
 
 def test_the_intelligence_surface_is_exactly_five_reports() -> None:
+    """The five V1 reports, unchanged. Stage 7.12 added a sixth path under the same prefix, the
+    attention list -- served by its own router and service, reading these five's outputs, so the
+    V1 set below is still exactly what this module's router serves."""
     paths = set(create_app(Settings(environment="test")).openapi()["paths"])
-
-    assert {p for p in paths if "intelligence" in p} == {
+    v1_reports = {
         "/api/v1/hotels/{hotel_public_id}/intelligence/forecast/occupancy",
         "/api/v1/hotels/{hotel_public_id}/intelligence/forecast/revenue",
         "/api/v1/hotels/{hotel_public_id}/intelligence/demand-trend",
         "/api/v1/hotels/{hotel_public_id}/intelligence/anomalies",
         "/api/v1/hotels/{hotel_public_id}/intelligence/insights",
     }
+
+    assert {p for p in paths if "intelligence" in p} == v1_reports | {
+        "/api/v1/hotels/{hotel_public_id}/intelligence/priorities"
+    }
+    served_here = {
+        f"/api/v1{route.path}"
+        for route in intelligence_router.router.routes
+        if isinstance(route, APIRoute)
+    }
+    assert served_here == v1_reports
 
 
 def test_daily_hotel_metrics_is_still_untouched() -> None:

@@ -378,6 +378,6 @@ def test_the_knowledge_tool_arrived_with_stage_7_10_over_this_service() -> None:
 
     registry = build_default_registry()
     assert "search_hotel_knowledge" in registry
-    assert len(registry.names()) == 6
+    assert len(registry.names()) == 7  # Stage 7.12 added `get_hotel_priorities`
     contract = registry.get("search_hotel_knowledge").contract
     assert contract.delegates_to == "KnowledgeService.search"

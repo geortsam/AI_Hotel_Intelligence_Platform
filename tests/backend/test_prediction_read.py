@@ -290,8 +290,9 @@ def test_this_route_is_present_and_is_a_read() -> None:
     # Stage 7.7 added POST .../copilot/ask: 54 / 86 -> 55 / 87.
     # Stage 7.9 added the knowledge documents and their search: 55 / 87 -> 60 / 93.
     # Stage 7.11 added the copilot conversations: 60 / 93 -> 63 / 98.
-    assert len(schema["paths"]) == 63
-    assert operations == 98
+    # Stage 7.12 added the attention list: 63 / 98 -> 64 / 99.
+    assert len(schema["paths"]) == 64
+    assert operations == 99
     assert SCHEMA_PATH in schema["paths"]
     assert set(schema["paths"][SCHEMA_PATH]) == {"get"}
 

@@ -30,6 +30,7 @@ from app.api.v1.endpoints import (
     ml_predictions,
     payments,
     platform_audit,
+    priorities,
     revenue,
     revenue_categories,
     reviews,
@@ -101,6 +102,8 @@ api_router.include_router(copilot.router)
 api_router.include_router(knowledge.router)
 # Stage 7.11. Copilot conversations: multi-turn memory, one caller's own, at one hotel.
 api_router.include_router(copilot_conversations.router)
+# Stage 7.12. The attention list: a ranked, deterministic reading of one hotel's own data.
+api_router.include_router(priorities.router)
 # The audit trail. Hotel-scoped like everything else that is a property's own data, and
 # read-only: there is no route that writes, edits or deletes an event, because a history a
 # client can append to is not evidence. Registered last because it observes every domain

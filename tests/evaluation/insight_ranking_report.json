@@ -1,0 +1,1262 @@
+{
+  "dataset": {
+    "id": "demand_daily_v1",
+    "rows": 1462,
+    "sha256": "904b819f84f252350ad3387db60fa8fb18f56771447b2c369f3741f65f57095d"
+  },
+  "horizon_days": 14,
+  "k": 3,
+  "methods": {
+    "baseline": "last-week-same-weekday",
+    "platform": "seasonal-naive-dow-median"
+  },
+  "per_hotel": {
+    "city_hotel": {
+      "ndcg_at_k": {
+        "baseline_mean": 0.856821,
+        "equal": 1,
+        "platform_higher": 30,
+        "platform_lower": 15,
+        "platform_mean": 0.886478
+      },
+      "precision_at_k": {
+        "baseline_mean": 0.23913,
+        "equal": 22,
+        "platform_higher": 11,
+        "platform_lower": 13,
+        "platform_mean": 0.217391
+      },
+      "scored": 46,
+      "skipped": {},
+      "windows": 46
+    },
+    "resort_hotel": {
+      "ndcg_at_k": {
+        "baseline_mean": 0.902728,
+        "equal": 4,
+        "platform_higher": 26,
+        "platform_lower": 15,
+        "platform_mean": 0.920661
+      },
+      "precision_at_k": {
+        "baseline_mean": 0.296296,
+        "equal": 25,
+        "platform_higher": 9,
+        "platform_lower": 11,
+        "platform_mean": 0.266667
+      },
+      "scored": 45,
+      "skipped": {},
+      "windows": 45
+    }
+  },
+  "pooled": {
+    "ndcg_at_k": {
+      "baseline_mean": 0.879523,
+      "equal": 5,
+      "platform_higher": 56,
+      "platform_lower": 30,
+      "platform_mean": 0.903382
+    },
+    "precision_at_k": {
+      "baseline_mean": 0.267399,
+      "equal": 47,
+      "platform_higher": 20,
+      "platform_lower": 24,
+      "platform_mean": 0.241758
+    },
+    "scored": 91,
+    "skipped": {},
+    "windows": 91
+  },
+  "protocol": {
+    "checksum": "37245decde495fbdf94f8652d8027c589b69d45052119d3ef3a7d493c19f7efa",
+    "identity": "insight_ranking_v1"
+  },
+  "statement": "Ranking behaviour of two deterministic methods on the frozen demand_daily_v1 dataset (two hotels' historical daily demand), under insight_ranking_v1. It describes how each method's ranking of upcoming days lined up with the realised busiest days on this data, and nothing more: no winner is declared, no significance is tested, and nothing is claimed about hotel operations, revenue or business value.",
+  "windows": [
+    {
+      "baseline": {
+        "ndcg_at_k": 0.388737,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2015-11-23",
+      "platform": {
+        "ndcg_at_k": 0.46858,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.450854,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2015-12-07",
+      "platform": {
+        "ndcg_at_k": 0.719441,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.487525,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2015-12-21",
+      "platform": {
+        "ndcg_at_k": 0.605728,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.742874,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-01-04",
+      "platform": {
+        "ndcg_at_k": 0.61864,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.651971,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-01-18",
+      "platform": {
+        "ndcg_at_k": 0.651971,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.444797,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-02-01",
+      "platform": {
+        "ndcg_at_k": 0.85579,
+        "precision_at_k": 0.666667
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.827495,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-02-15",
+      "platform": {
+        "ndcg_at_k": 0.824901,
+        "precision_at_k": 0.666667
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.963977,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-02-29",
+      "platform": {
+        "ndcg_at_k": 0.844816,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.879318,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-03-14",
+      "platform": {
+        "ndcg_at_k": 0.859333,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.912066,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-03-28",
+      "platform": {
+        "ndcg_at_k": 0.927876,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.975024,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-04-11",
+      "platform": {
+        "ndcg_at_k": 0.907631,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.949273,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-04-25",
+      "platform": {
+        "ndcg_at_k": 0.96609,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.9515,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-05-09",
+      "platform": {
+        "ndcg_at_k": 0.958858,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.881499,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-05-23",
+      "platform": {
+        "ndcg_at_k": 0.968242,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.800974,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-06-06",
+      "platform": {
+        "ndcg_at_k": 0.9025,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.83115,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-06-20",
+      "platform": {
+        "ndcg_at_k": 0.884702,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.982907,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-07-04",
+      "platform": {
+        "ndcg_at_k": 0.972396,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.95739,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-07-18",
+      "platform": {
+        "ndcg_at_k": 0.981583,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.974479,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-08-01",
+      "platform": {
+        "ndcg_at_k": 0.989544,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.970812,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-08-15",
+      "platform": {
+        "ndcg_at_k": 0.996605,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.955483,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-08-29",
+      "platform": {
+        "ndcg_at_k": 0.97627,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.98201,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-09-12",
+      "platform": {
+        "ndcg_at_k": 0.988568,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.929621,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-09-26",
+      "platform": {
+        "ndcg_at_k": 0.941868,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.89304,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-10-10",
+      "platform": {
+        "ndcg_at_k": 0.931948,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.946055,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-10-24",
+      "platform": {
+        "ndcg_at_k": 0.954179,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.912705,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-11-07",
+      "platform": {
+        "ndcg_at_k": 0.902786,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.784005,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-11-21",
+      "platform": {
+        "ndcg_at_k": 0.819987,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.693133,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-12-05",
+      "platform": {
+        "ndcg_at_k": 0.857077,
+        "precision_at_k": 0.666667
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.673094,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2016-12-19",
+      "platform": {
+        "ndcg_at_k": 0.661492,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.908992,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-01-02",
+      "platform": {
+        "ndcg_at_k": 0.865036,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.695314,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-01-16",
+      "platform": {
+        "ndcg_at_k": 0.83334,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.600028,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-01-30",
+      "platform": {
+        "ndcg_at_k": 0.780964,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.893539,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-02-13",
+      "platform": {
+        "ndcg_at_k": 0.878909,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.867539,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-02-27",
+      "platform": {
+        "ndcg_at_k": 0.878905,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.984357,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-03-13",
+      "platform": {
+        "ndcg_at_k": 0.927276,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.970324,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-03-27",
+      "platform": {
+        "ndcg_at_k": 0.983071,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.98425,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-04-10",
+      "platform": {
+        "ndcg_at_k": 0.965076,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.962111,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-04-24",
+      "platform": {
+        "ndcg_at_k": 0.920149,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.955204,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-05-08",
+      "platform": {
+        "ndcg_at_k": 0.971896,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.939845,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-05-22",
+      "platform": {
+        "ndcg_at_k": 0.981989,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.970678,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-06-05",
+      "platform": {
+        "ndcg_at_k": 0.983562,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.969046,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-06-19",
+      "platform": {
+        "ndcg_at_k": 0.933974,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.979766,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-07-03",
+      "platform": {
+        "ndcg_at_k": 0.986909,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.992069,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-07-17",
+      "platform": {
+        "ndcg_at_k": 0.975858,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.965465,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-07-31",
+      "platform": {
+        "ndcg_at_k": 0.978279,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.981492,
+        "precision_at_k": 0.0
+      },
+      "hotel": "city_hotel",
+      "origin": "2017-08-14",
+      "platform": {
+        "ndcg_at_k": 0.993404,
+        "precision_at_k": 0.666667
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.440444,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2015-12-05",
+      "platform": {
+        "ndcg_at_k": 0.403185,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.765444,
+        "precision_at_k": 0.0
+      },
+      "hotel": "resort_hotel",
+      "origin": "2015-12-19",
+      "platform": {
+        "ndcg_at_k": 0.820622,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.877767,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-01-02",
+      "platform": {
+        "ndcg_at_k": 0.830706,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.874062,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-01-16",
+      "platform": {
+        "ndcg_at_k": 0.926816,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.64499,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-01-30",
+      "platform": {
+        "ndcg_at_k": 0.911748,
+        "precision_at_k": 0.666667
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.788908,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-02-13",
+      "platform": {
+        "ndcg_at_k": 0.793695,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.824451,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-02-27",
+      "platform": {
+        "ndcg_at_k": 0.797365,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.886993,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-03-12",
+      "platform": {
+        "ndcg_at_k": 0.917724,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.963262,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-03-26",
+      "platform": {
+        "ndcg_at_k": 0.987224,
+        "precision_at_k": 0.666667
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.927735,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-04-09",
+      "platform": {
+        "ndcg_at_k": 0.899344,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.863599,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-04-23",
+      "platform": {
+        "ndcg_at_k": 0.927441,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.940796,
+        "precision_at_k": 0.0
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-05-07",
+      "platform": {
+        "ndcg_at_k": 0.982146,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.984125,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-05-21",
+      "platform": {
+        "ndcg_at_k": 0.971517,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.983881,
+        "precision_at_k": 0.0
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-06-04",
+      "platform": {
+        "ndcg_at_k": 0.983881,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.981965,
+        "precision_at_k": 0.0
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-06-18",
+      "platform": {
+        "ndcg_at_k": 0.986826,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.944937,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-07-02",
+      "platform": {
+        "ndcg_at_k": 0.995213,
+        "precision_at_k": 0.666667
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.970785,
+        "precision_at_k": 0.0
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-07-16",
+      "platform": {
+        "ndcg_at_k": 0.979363,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.998382,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-07-30",
+      "platform": {
+        "ndcg_at_k": 0.98846,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.986507,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-08-13",
+      "platform": {
+        "ndcg_at_k": 0.993589,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.998718,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-08-27",
+      "platform": {
+        "ndcg_at_k": 0.987178,
+        "precision_at_k": 0.666667
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.986507,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-09-10",
+      "platform": {
+        "ndcg_at_k": 0.989743,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.974129,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-09-24",
+      "platform": {
+        "ndcg_at_k": 0.980452,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.910999,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-10-08",
+      "platform": {
+        "ndcg_at_k": 0.944001,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.942682,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-10-22",
+      "platform": {
+        "ndcg_at_k": 0.926667,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.870881,
+        "precision_at_k": 0.0
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-11-05",
+      "platform": {
+        "ndcg_at_k": 0.863217,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.869101,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-11-19",
+      "platform": {
+        "ndcg_at_k": 0.869101,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.95246,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-12-03",
+      "platform": {
+        "ndcg_at_k": 0.954602,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.793356,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-12-17",
+      "platform": {
+        "ndcg_at_k": 0.839579,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.785507,
+        "precision_at_k": 0.0
+      },
+      "hotel": "resort_hotel",
+      "origin": "2016-12-31",
+      "platform": {
+        "ndcg_at_k": 0.868744,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.734548,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-01-14",
+      "platform": {
+        "ndcg_at_k": 0.691573,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.945269,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-01-28",
+      "platform": {
+        "ndcg_at_k": 0.945269,
+        "precision_at_k": 0.666667
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.969451,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-02-11",
+      "platform": {
+        "ndcg_at_k": 0.974725,
+        "precision_at_k": 0.666667
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.977001,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-02-25",
+      "platform": {
+        "ndcg_at_k": 0.978291,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.893879,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-03-11",
+      "platform": {
+        "ndcg_at_k": 0.925804,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.843594,
+        "precision_at_k": 0.0
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-03-25",
+      "platform": {
+        "ndcg_at_k": 0.944051,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.948528,
+        "precision_at_k": 0.0
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-04-08",
+      "platform": {
+        "ndcg_at_k": 0.948528,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.944105,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-04-22",
+      "platform": {
+        "ndcg_at_k": 0.936412,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.833867,
+        "precision_at_k": 0.0
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-05-06",
+      "platform": {
+        "ndcg_at_k": 0.961027,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.990922,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-05-20",
+      "platform": {
+        "ndcg_at_k": 0.972984,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.930959,
+        "precision_at_k": 0.0
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-06-03",
+      "platform": {
+        "ndcg_at_k": 0.932315,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.990252,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-06-17",
+      "platform": {
+        "ndcg_at_k": 0.975414,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.963626,
+        "precision_at_k": 0.0
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-07-01",
+      "platform": {
+        "ndcg_at_k": 0.986853,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.979777,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-07-15",
+      "platform": {
+        "ndcg_at_k": 0.963841,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.951665,
+        "precision_at_k": 0.666667
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-07-29",
+      "platform": {
+        "ndcg_at_k": 0.987826,
+        "precision_at_k": 0.333333
+      },
+      "skipped": null
+    },
+    {
+      "baseline": {
+        "ndcg_at_k": 0.991954,
+        "precision_at_k": 0.333333
+      },
+      "hotel": "resort_hotel",
+      "origin": "2017-08-12",
+      "platform": {
+        "ndcg_at_k": 0.984697,
+        "precision_at_k": 0.0
+      },
+      "skipped": null
+    }
+  ]
+}

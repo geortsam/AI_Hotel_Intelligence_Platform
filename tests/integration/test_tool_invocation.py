@@ -53,6 +53,8 @@ from app.repositories.room_type import RoomTypeRepository
 from app.services.analytics import AnalyticsService
 from app.services.audit import AuditTrail
 from app.services.authorization import HotelAccessPolicy
+from app.services.insight import InsightService
+from app.services.intelligence import IntelligenceService
 from app.services.knowledge import KnowledgeService
 from app.services.ml_accuracy import DemandAccuracyService
 from app.services.ml_drift import DemandDistributionService
@@ -81,6 +83,8 @@ ALL_TOOLS = (
     "get_demand_forecast",
     "get_forecast_accuracy",
     "get_hotel_kpis",
+    # Stage 7.12: a viewer read, so both roles are offered it.
+    "get_hotel_priorities",
     "get_revenue_breakdown",
     # Stage 7.10: a viewer read, so both roles are offered it.
     "search_hotel_knowledge",
@@ -172,6 +176,7 @@ def assemble(session: Session, user: User) -> tuple[ToolInvocationService, ToolS
             DemandDistributionService(predictions, scope),
         ),
         knowledge=KnowledgeService(session, KnowledgeRepository(session), scope, audit),
+        insight=InsightService(IntelligenceService(AnalyticsRepository(session), scope), scope),
     )
     invocation = ToolInvocationService(session, build_default_registry(), scope, audit, services)
     return invocation, services
@@ -214,7 +219,7 @@ def test_the_catalogue_follows_the_callers_role(world: World) -> None:
     manager, _ = assemble(world.session, world.manager)
 
     assert "get_forecast_accuracy" not in viewer.permitted_tools(world.a.public_id)
-    assert len(viewer.permitted_tools(world.a.public_id)) == 5
+    assert len(viewer.permitted_tools(world.a.public_id)) == 6
     assert manager.permitted_tools(world.a.public_id) == ALL_TOOLS
 
     specs = build_catalogue(build_default_registry(), viewer.permitted_tools(world.a.public_id))

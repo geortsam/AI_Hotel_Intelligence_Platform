@@ -3,7 +3,7 @@
 > The ordered plan produced by Stage 7.1. Each stage is specified well enough to be implemented
 > on its own, in order, without re-deciding anything.
 >
-> **Implemented so far: Stages 7.2 to 7.11** — all of Track A, and the first seven stages of
+> **Implemented so far: Stages 7.2 to 7.12** — all of Track A, and the first eight stages of
 > Track B. Every other stage below is a specification and nothing more; none of its code
 > exists.
 > A stage carries `· *done*` in its heading once it ships, with a note recording what was actually
@@ -519,7 +519,32 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | **Depends on** | **7.7** |
 | **Acceptance** | (1) turn N sees turns 1…N−1 and nothing else; (2) context truncation is explicit and tested; (3) retention is enforced, not merely documented |
 
-### Stage 7.12 — Recommendations
+### Stage 7.12 — Recommendations · *done*
+
+> **Built with six decisions taken with the user** ([attention-list.md](attention-list.md),
+> architecture Amendment A7). "Recommendations" here are **manager-facing, deterministic findings
+> over one hotel's own data**; the guest-facing hotel recommender this stage's rationale quotes
+> from the V1 backlog stays in the backlog. **No language model** is involved: the structured
+> output is the typed response.
+>
+> `GET …/intelligence/priorities` (+1 path, +1 operation: **63/98 → 64/99**) returns an attention
+> list alongside V1's `/insights`, which is unchanged: the busiest 3 of the next 14 days by the
+> seasonal forecast, the 3 strongest observed anomalies, and a moving demand trend -- each with
+> its measure, figures and their source, a comparison, a limitation and an existing view to look
+> at, in nine closed templates with no imperative. The copilot gains a seventh read-only tool,
+> `get_hotel_priorities`; no prompt changed. The word "recommend" stays banned everywhere.
+>
+> **`insight_ranking_v1`**, declared before measuring: precision@3 and NDCG@3 on the frozen
+> `demand_daily_v1` dataset, the platform's seasonal-naive ranking against a last-week
+> same-weekday baseline, 14-day windows every 14 days. 91 windows: NDCG@3 0.903 vs 0.880
+> (platform higher in 56, lower in 30), precision@3 0.242 vs 0.267 (higher in 20, lower in 24).
+> The metrics disagree; no winner is declared and no business value is claimed.
+>
+> One implementation detail differed from the plan: the evaluation lives in `tests/evaluation/`
+> rather than `ml/`, because the offline package may not import the application and the method
+> measured had to be the application's own forecast function.
+>
+> 0 migrations, 0 dependencies, 0 frontend changes. 78 new tests; backend 6144 → 6222. Frontend untouched at 1141.
 
 | | |
 |---|---|

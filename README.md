@@ -16,8 +16,8 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-6144%20backend%20%C2%B7%201141%20frontend-success)
-![API](https://img.shields.io/badge/API-63%20paths%20%C2%B7%2098%20operations-informational)
+![Tests](https://img.shields.io/badge/tests-6222%20backend%20%C2%B7%201141%20frontend-success)
+![API](https://img.shields.io/badge/API-64%20paths%20%C2%B7%2099%20operations-informational)
 
 </div>
 
@@ -32,7 +32,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > Eleven domains over a 27-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
 > guests, bookings, payments, reviews, the financial ledger, analytics and intelligence, plus the
 > stored demand predictions the served model writes and the measurements taken over them —
-> reachable as **63 API paths / 98 operations**, of which **93 require authentication**.
+> reachable as **64 API paths / 99 operations**, of which **94 require authentication**.
 > Authentication is Argon2id plus HS256
 > access tokens; authorization is a four-level hotel role hierarchy with a separate
 > platform-administrator capability. There is a complete React front end — all twelve
@@ -40,7 +40,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **6144 backend tests and 1141 frontend tests pass in CI.** Schema head is
+> **6222 backend tests and 1141 frontend tests pass in CI.** Schema head is
 > `0015_copilot_conversations` across 15 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
@@ -440,7 +440,7 @@ Start the API:
 |---|---|
 | http://localhost:8000/health | `{"status":"ok", ...}` |
 | http://localhost:8000/health/db | `{"status":"ok","database":"reachable", ...}`, or 503 when it is not |
-| http://localhost:8000/docs | Swagger UI — 63 paths, 98 operations. Disabled when `ENVIRONMENT=production` |
+| http://localhost:8000/docs | Swagger UI — 64 paths, 99 operations. Disabled when `ENVIRONMENT=production` |
 
 ### Frontend
 
@@ -722,6 +722,13 @@ and citations must still come from the current turn's own lookups. Question and 
 stored only there -- never in the audit trail or the accounting record. See
 [docs/copilot-conversations.md](docs/copilot-conversations.md).
 
+**The attention list (Stage 7.12).** `…/intelligence/priorities` ranks one hotel's upcoming days by
+the seasonal forecast and lists the busiest three, the strongest anomalies the window saw and a
+moving demand trend -- each item with its figures, their source, a comparison and a limitation,
+in fixed templates that never advise. No language model is involved; the copilot reads the same
+list through a seventh tool. How the day ranking compares with a last-week baseline is measured
+offline and reported side by side, without a winner. See [docs/attention-list.md](docs/attention-list.md).
+
 ### V2 — NOT IMPLEMENTED
 
 None of these exists. Each would be built as its own stage, with its dependencies in
@@ -734,7 +741,7 @@ record in `ml/models/<model_version>/` — which is where Stage 6.3 wrote the fi
 | **Retraining and model promotion** | A drift or accuracy signal | A second model version, a registry able to hold more than one, and a promotion decision |
 | **Review sentiment** | Review text | Polarity plus an aspect breakdown (cleanliness, staff, location, value) and token-level explanations |
 | **Room-image classification** | Room photographs | Room type and feature tags for automatic media organisation |
-| **Recommendations** | User and hotel history | Ranked hotel suggestions, evaluated against a popularity baseline |
+| **Guest recommendations** | User and hotel history | Ranked hotel suggestions for guests, evaluated against a popularity baseline. Not Stage 7.12, which built manager-facing findings over one hotel's data; this needs guest accounts and cross-hotel data the platform does not have |
 | **Agents** | Hotel documents and tools | Multi-step autonomy. The copilot is single-turn and read-only, and cites the documents it searched (Stage 7.10); there is no agent, no conversation memory and no writing tool |
 
 Rules these must follow, fixed now so they are not negotiated later:

@@ -846,7 +846,8 @@ def test_the_v1_application_is_unaffected_by_the_flag() -> None:
     # the flag off it answers 503 LLM_DISABLED -- which is exactly why the documents match.
     # Stage 7.9 added five knowledge paths, none of which depends on the flag either.
     # Stage 7.11 added three conversation paths: like `ask`, they exist with the flag off.
-    assert len(off["paths"]) == 63
+    # Stage 7.12 added the attention list, which involves no language model at all.
+    assert len(off["paths"]) == 64
 
 
 # ======================================================================================

@@ -147,7 +147,7 @@ backend/app/
 │   ├── ml_drift.py             EXISTS — gains a route, not a rewrite
 │   ├── knowledge.py            NEW — document ingestion and retrieval
 │   ├── copilot.py              NEW — orchestration: prompt, tools, answer
-│   └── insight.py              NEW — recommendations over existing analytics
+│   └── insight.py              NEW — the attention list over existing analytics (Stage 7.12)
 ├── copilot/                    NEW package — the tool boundary
 │   ├── registry.py             name → contract → callable
 │   ├── contracts.py            Pydantic input/output schemas per tool
@@ -404,6 +404,21 @@ partial, labelled answer rather than looping.
 Where the answer feeds the UI rather than a human paragraph — recommendations, extracted filters —
 the request declares a Pydantic schema and the response is validated against it. A validation
 failure is a failure, not a coerced guess: it retries once, then returns a typed error.
+
+> **Amendment A7 (Stage 7.12) — the attention list, as built: no model involved.** Decided with the
+> user: Stage 7.12's "recommendations" are manager-facing findings computed **deterministically**
+> from one hotel's own data, so this section's structured-output path is not used for them — the
+> "structured output" is the typed `PrioritiesResponse`, and no language model writes any of it.
+> `GET …/intelligence/priorities` (`app/services/insight.py`) ranks the 14 days after an
+> observation window by the platform's seasonal day-of-week forecast and lists the busiest 3, the
+> 3 strongest observed anomalies and a moving booking-demand trend. Every item names its measure,
+> its figures and the service method each came from, a comparison, a limitation and an existing
+> view to look at; its sentences are nine closed templates with no imperative. The day ranking is
+> measured offline under `insight_ranking_v1` (declared first; precision@3 and NDCG@3 against a
+> last-week same-weekday baseline on the frozen `demand_daily_v1` dataset; no winner declared).
+> The copilot reads the same list through a seventh read-only tool, `get_hotel_priorities`; no
+> prompt changed. The guest-facing hotel recommender of the V1 backlog remains unbuilt. See
+> [attention-list.md](attention-list.md).
 
 ### 5.6 Testing without a live LLM
 
@@ -676,6 +691,7 @@ one call.
 | `get_demand_forecast` | `DemandPredictionService` | viewer | the trained model's prediction with full provenance and its limitation note |
 | `get_forecast_accuracy` | `DemandAccuracyService.evaluate` | manager | measured error over settled predictions, with the protocol id and the explicit "no production accuracy established" statement |
 | `search_hotel_knowledge` | `KnowledgeService.search` | viewer | ranked chunks with citations |
+| `get_hotel_priorities` | `InsightService.priorities` | viewer | *(Stage 7.12, Amendment A7)* the attention list, minus the hotel identifier |
 
 **Deliberately excluded from the first set:** `get_room_type_metrics` (V1's analytics does not
 break down by room type — it would need a new repository method and belongs in an analytics stage,

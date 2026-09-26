@@ -586,7 +586,8 @@ def test_exactly_one_route_serves_the_model_and_none_names_an_artifact() -> None
     # serving service, as a tool -- still exactly one route that loads the artifact.
     # Stage 7.9's knowledge routes are outside /ml and reach no model at all.
     # Stage 7.11's conversation routes are outside /ml and reach the model only as a tool.
-    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 98
+    # Stage 7.12's attention list reads the seasonal forecast, never the demand model.
+    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 99
 
     assert sorted(path for path in paths if "/ml/" in path) == sorted(ML_ENDPOINTS)
     for endpoint in ML_ENDPOINTS:

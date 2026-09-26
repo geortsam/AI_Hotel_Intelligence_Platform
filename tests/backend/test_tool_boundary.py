@@ -67,6 +67,7 @@ from app.copilot.tools import (
     forecast_accuracy,
     hotel_kpis,
     knowledge_search,
+    priorities,
     revenue_breakdown,
 )
 from app.core.config import Settings
@@ -115,6 +116,7 @@ from app.models.enums import (
     HotelRole,
 )
 from app.schemas.analytics import DailySeriesResponse, OverviewResponse, RevenueBreakdownResponse
+from app.schemas.insight import PrioritiesResponse
 from app.schemas.knowledge import KnowledgeSearchResponse
 from app.schemas.ml_performance import ForecastAccuracyResponse
 from app.schemas.ml_serving import DemandPredictionResponse
@@ -135,15 +137,24 @@ EXPECTED_TOOLS = (
     "get_demand_forecast",
     "get_forecast_accuracy",
     "get_hotel_kpis",
+    "get_hotel_priorities",
     "get_revenue_breakdown",
     "search_hotel_knowledge",
 )
 
-#: The five data tools of Stage 7.6. Two per-tool rules below are about THEIR shape -- output is
-#: the service response minus the hotel, input is exactly the required arguments -- and do not
-#: describe the knowledge tool, whose output replaces identifiers with source labels and whose
-#: `limit` is optional. Its own shape is pinned in `test_grounded_retrieval.py`.
-DATA_TOOLS = EXPECTED_TOOLS[:5]
+#: The data tools: the five of Stage 7.6 and Stage 7.12's `get_hotel_priorities`. Two per-tool
+#: rules below are about THEIR shape -- output is the service response minus the hotel, input is
+#: exactly the required arguments -- and do not describe the knowledge tool, whose output replaces
+#: identifiers with source labels and whose `limit` is optional. Its own shape is pinned in
+#: `test_grounded_retrieval.py`.
+DATA_TOOLS = (
+    "get_daily_series",
+    "get_demand_forecast",
+    "get_forecast_accuracy",
+    "get_hotel_kpis",
+    "get_hotel_priorities",
+    "get_revenue_breakdown",
+)
 
 #: Every spelling of "which hotel" the brief names, and a few it implies.
 TENANT_FIELDS = (
@@ -639,9 +650,10 @@ def test_non_object_arguments_become_empty_rather_than_crashing() -> None:
 # ======================================================================================
 
 
-def test_exactly_the_six_tools_are_registered() -> None:
-    """§7.2's six. `search_hotel_knowledge` was deferred by A1 until Stage 7.9 built its service,
-    and registered by Stage 7.10 -- the catalogue holds only tools that can run."""
+def test_exactly_the_seven_tools_are_registered() -> None:
+    """§7.2's six, and Stage 7.12's attention list. `search_hotel_knowledge` was deferred by A1
+    until Stage 7.9 built its service and registered by Stage 7.10; `get_hotel_priorities` arrived
+    with its service in Stage 7.12 -- the catalogue holds only tools that can run."""
     registry = build_default_registry()
 
     assert registry.names() == EXPECTED_TOOLS
@@ -656,6 +668,7 @@ def test_every_tool_module_is_registered_and_nothing_else_is() -> None:
         "forecast_accuracy",
         "hotel_kpis",
         "knowledge_search",
+        "priorities",
         "revenue_breakdown",
     ]
     tools = (
@@ -664,6 +677,7 @@ def test_every_tool_module_is_registered_and_nothing_else_is() -> None:
         forecast_accuracy,
         hotel_kpis,
         knowledge_search,
+        priorities,
         revenue_breakdown,
     )
     declared = sorted(module.CONTRACT.name for module in tools)
@@ -822,6 +836,13 @@ TOOL_MODULES: dict[str, tuple[Any, type[BaseModel], HotelRole, str]] = {
         HotelRole.VIEWER,
         "none",
     ),
+    # Stage 7.12. A viewer read, like `GET …/intelligence/priorities`, with no side effect.
+    "get_hotel_priorities": (
+        priorities,
+        PrioritiesResponse,
+        HotelRole.VIEWER,
+        "none",
+    ),
 }
 
 REQUIRED_ARGUMENTS = {
@@ -830,6 +851,7 @@ REQUIRED_ARGUMENTS = {
     "get_revenue_breakdown": ["date_from", "date_to"],
     "get_demand_forecast": ["target_date"],
     "get_forecast_accuracy": ["as_of_date", "window_from", "window_to"],
+    "get_hotel_priorities": ["date_from", "date_to"],
 }
 
 
@@ -907,7 +929,7 @@ def test_no_description_speaks_about_authorization(name: str) -> None:
 
 
 class RecordingServices:
-    """Stands in for the four services and records what each tool asked of them."""
+    """Stands in for the five services and records what each tool asked of them."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
@@ -937,6 +959,7 @@ def test_a_tool_passes_the_context_hotel_and_never_an_argument_hotel(name: str) 
             "window_to": "2026-03-31",
         },
         "search_hotel_knowledge": {"query": "pool"},
+        "get_hotel_priorities": {"date_from": "2026-01-01", "date_to": "2026-01-31"},
     }[name]
     parsed = module.CONTRACT.input_model.model_validate(arguments)
 
@@ -954,6 +977,7 @@ class _Bundle:
         self.demand_prediction = recorder
         self.forecast_performance = recorder
         self.knowledge = recorder
+        self.insight = recorder
 
 
 # ======================================================================================

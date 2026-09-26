@@ -202,6 +202,9 @@ APPROVED_RESOURCE_SEGMENTS = {
     # `messages` is the collection a turn is added to, not a verb.
     "conversations",
     "messages",
+    # Stage 7.12. The attention list, under `/intelligence`: a noun for what it is -- the items to
+    # look at first -- and not the banned "recommendations", which stays reserved.
+    "priorities",
 }
 
 #: Resources the SCHEMA models as global -- no hotel_id column, and a unique constraint with
@@ -338,6 +341,8 @@ def test_domain_surface_is_exactly_the_approved_hierarchy() -> None:
         "/api/v1/hotels/{hotel_public_id}/copilot/conversations",
         "/api/v1/hotels/{hotel_public_id}/copilot/conversations/{conversation_public_id}",
         "/api/v1/hotels/{hotel_public_id}/copilot/conversations/{conversation_public_id}/messages",
+        # Stage 7.12. The attention list.
+        "/api/v1/hotels/{hotel_public_id}/intelligence/priorities",
         "/api/v1/platform/audit-events",
         "/api/v1/auth/register",
         "/api/v1/auth/login",

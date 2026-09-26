@@ -123,7 +123,7 @@ surface was 82 operations, of which 77 required authentication.
 
 **Current state:** `api/` 31 files, `services/` 32, `schemas/` 26, `repositories/` 21, `models/`
 16, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 9, and the V2 packages `llm/` 11 and `copilot/`
-12. The HTTP surface is **63 paths / 98 operations**,
+12. The HTTP surface is **64 paths / 99 operations**,
 of which **82 require authentication**; the 5 that do not are the version-metadata endpoint,
 registration, login and the two health probes — the same five as at V1.
 

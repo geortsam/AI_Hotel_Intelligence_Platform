@@ -34,6 +34,7 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
+        "get_hotel_priorities",
         "get_revenue_breakdown",
         "search_hotel_knowledge"
       ]
@@ -72,6 +73,7 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
+        "get_hotel_priorities",
         "get_revenue_breakdown",
         "search_hotel_knowledge"
       ]
@@ -110,6 +112,7 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
+        "get_hotel_priorities",
         "get_revenue_breakdown",
         "search_hotel_knowledge"
       ]
@@ -148,6 +151,7 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
+        "get_hotel_priorities",
         "get_revenue_breakdown",
         "search_hotel_knowledge"
       ]
@@ -178,6 +182,7 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
+        "get_hotel_priorities",
         "get_revenue_breakdown",
         "search_hotel_knowledge"
       ]
@@ -208,6 +213,7 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
+        "get_hotel_priorities",
         "get_revenue_breakdown",
         "search_hotel_knowledge"
       ]
@@ -238,6 +244,7 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
+        "get_hotel_priorities",
         "get_revenue_breakdown",
         "search_hotel_knowledge"
       ]
@@ -276,6 +283,7 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
+        "get_hotel_priorities",
         "get_revenue_breakdown",
         "search_hotel_knowledge"
       ]
@@ -314,6 +322,7 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
+        "get_hotel_priorities",
         "get_revenue_breakdown",
         "search_hotel_knowledge"
       ]
@@ -353,6 +362,7 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
+        "get_hotel_priorities",
         "get_revenue_breakdown",
         "search_hotel_knowledge"
       ]
@@ -383,6 +393,7 @@
         "get_daily_series",
         "get_demand_forecast",
         "get_hotel_kpis",
+        "get_hotel_priorities",
         "get_revenue_breakdown",
         "search_hotel_knowledge"
       ]

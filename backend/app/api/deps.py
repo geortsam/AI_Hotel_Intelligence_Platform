@@ -75,6 +75,7 @@ from app.services.finance import (
 from app.services.guest import GuestService
 from app.services.health import HealthService
 from app.services.hotel import HotelService
+from app.services.insight import InsightService
 from app.services.intelligence import IntelligenceService
 from app.services.knowledge import KnowledgeService
 from app.services.llm_invocation_log import LlmInvocationLog
@@ -699,6 +700,16 @@ def get_knowledge_service(
 KnowledgeServiceDep = Annotated[KnowledgeService, Depends(get_knowledge_service)]
 
 
+def get_insight_service(
+    intelligence: IntelligenceServiceDep, scope: ScopeResolverDep
+) -> InsightService:
+    """The attention list (Stage 7.12), over the same intelligence service its routes use."""
+    return InsightService(intelligence, scope)
+
+
+InsightServiceDep = Annotated[InsightService, Depends(get_insight_service)]
+
+
 # --- the copilot (Stage 7.7) -----------------------------------------------------------------
 #
 # The composition root is the one place above `app.llm` that may name the factory and the budget
@@ -792,8 +803,9 @@ def get_tool_invocation_service(
     demand_prediction: DemandPredictionServiceDep,
     forecast_performance: ForecastPerformanceServiceDep,
     knowledge: KnowledgeServiceDep,
+    insight: InsightServiceDep,
 ) -> ToolInvocationService:
-    """The Stage 7.6 invocation boundary, over the four services the tools delegate to.
+    """The Stage 7.6 invocation boundary, over the five services the tools delegate to.
 
     Each delegated-to service is assembled by its own existing dependency, exactly as its route
     assembles it, so a tool and a route reach the same service built the same way.
@@ -803,6 +815,7 @@ def get_tool_invocation_service(
         demand_prediction=demand_prediction,
         forecast_performance=forecast_performance,
         knowledge=knowledge,
+        insight=insight,
     )
     return ToolInvocationService(db, default_tool_registry(), scope, audit, services)
 
@@ -931,6 +944,7 @@ __all__ = [
     "HealthServiceDep",
     "HotelAccessPolicyDep",
     "HotelServiceDep",
+    "InsightServiceDep",
     "IntelligenceServiceDep",
     "KnowledgeServiceDep",
     "LlmInvocationLogDep",
@@ -973,6 +987,7 @@ __all__ = [
     "get_health_service",
     "get_hotel_access_policy",
     "get_hotel_service",
+    "get_insight_service",
     "get_intelligence_service",
     "get_knowledge_service",
     "get_llm_invocation_log",

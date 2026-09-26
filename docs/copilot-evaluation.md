@@ -52,7 +52,10 @@ guess. That is a limitation of the prompt, recorded here rather than changed by 
 *Stage 7.10.* The copilot now renders `copilot_answer@v2` and offers six tools. The set is
 unchanged and its reference exchanges keep their turns -- none searches or cites -- but they are
 bound to v2, and the report (harness `copilot_eval_harness_v2`) names v2 and lists
-`search_hotel_knowledge` among the tools offered. No measure moved.
+`search_hotel_knowledge` among the tools offered. No measure moved. *Stage 7.12 added a seventh
+tool, `get_hotel_priorities`; both reports now list it among the tools offered, and again no
+measure moved. Its own ranking is measured separately, under `insight_ranking_v1` -- see
+[attention-list.md](attention-list.md).*
 
 | Category | Cases | Expected |
 |---|---|---|
