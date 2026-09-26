@@ -689,7 +689,13 @@ def test_v1_is_unchanged_and_v2_is_registered_beside_it() -> None:
     assert COPILOT_ANSWER_V2.checksum == (
         "6ab8b15ebde62af4b25d0e66de41faeef8970ee167bedbe31b8edea85937e268"
     )
-    assert set(REGISTRY) == {"boundary_probe@v1", "copilot_answer@v1", "copilot_answer@v2"}
+    # Stage 7.11 added copilot_conversation@v1 beside them.
+    assert set(REGISTRY) == {
+        "boundary_probe@v1",
+        "copilot_answer@v1",
+        "copilot_answer@v2",
+        "copilot_conversation@v1",
+    }
     assert PROMPT is COPILOT_ANSWER_V2
 
 

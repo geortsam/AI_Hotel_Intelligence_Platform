@@ -570,8 +570,14 @@ def test_an_unknown_prompt_raises_rather_than_returning_nothing() -> None:
 
 def test_this_stage_registers_only_what_it_needs() -> None:
     """Stage 7.5 needed no product prompt; Stage 7.7 added exactly one, the copilot's, and
-    Stage 7.10 its second version -- v1 kept beside it, unchanged."""
-    assert set(REGISTRY) == {"boundary_probe@v1", "copilot_answer@v1", "copilot_answer@v2"}
+    Stage 7.10 its second version -- v1 kept beside it, unchanged -- and Stage 7.11 the
+    conversation prompt."""
+    assert set(REGISTRY) == {
+        "boundary_probe@v1",
+        "copilot_answer@v1",
+        "copilot_answer@v2",
+        "copilot_conversation@v1",
+    }
 
 
 # ======================================================================================
@@ -839,7 +845,8 @@ def test_the_v1_application_is_unaffected_by_the_flag() -> None:
     # Stage 7.7 added the copilot route. It exists whether or not the flag is set -- with
     # the flag off it answers 503 LLM_DISABLED -- which is exactly why the documents match.
     # Stage 7.9 added five knowledge paths, none of which depends on the flag either.
-    assert len(off["paths"]) == 60
+    # Stage 7.11 added three conversation paths: like `ask`, they exist with the flag off.
+    assert len(off["paths"]) == 63
 
 
 # ======================================================================================

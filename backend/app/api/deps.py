@@ -35,6 +35,7 @@ from app.repositories.amenity import AmenityRepository, RoomTypeAmenityRepositor
 from app.repositories.analytics import AnalyticsRepository
 from app.repositories.audit import AuditRepository
 from app.repositories.booking import BookingRepository
+from app.repositories.copilot_conversation import CopilotConversationRepository
 from app.repositories.finance import (
     ExpenseCategoryRepository,
     ExpenseRepository,
@@ -64,6 +65,7 @@ from app.services.authorization import HotelAccessPolicy, PlatformAccessPolicy
 from app.services.availability import AvailabilitySearchService
 from app.services.booking import BookingService
 from app.services.copilot import CopilotService
+from app.services.copilot_conversation import CopilotConversationService
 from app.services.finance import (
     ExpenseCategoryService,
     ExpenseService,
@@ -738,6 +740,14 @@ def copilot_budget(
     counts refused requests too; checking the hotel after an actor refusal would let one caller's
     retries drain the property's allowance for every other member.
     """
+    _charge_copilot_budget(hotel_public_id, request, settings, current_user)
+
+
+def _charge_copilot_budget(
+    hotel_public_id: uuid.UUID, request: Request, settings: Settings, current_user: User
+) -> None:
+    """The one copilot allowance, charged. `copilot_budget` and `conversation_turn_budget` are
+    the two routes into it; each decides only what must be proved before it runs."""
     limiter: FixedWindowRateLimiter = request.app.state.rate_limiter
     window = settings.copilot_rate_limit_window_seconds
 
@@ -845,6 +855,61 @@ def get_copilot_service(
 CopilotServiceDep = Annotated[CopilotService, Depends(get_copilot_service)]
 
 
+# --- copilot conversations (Stage 7.11) ---------------------------------------------------------
+
+
+def get_copilot_conversation_service(
+    db: DbSession,
+    settings: SettingsDep,
+    scope: ScopeResolverDep,
+    copilot: CopilotServiceDep,
+    current_user: CurrentUserDep,
+) -> CopilotConversationService:
+    """The conversation service, bound to the authenticated caller -- whose conversations are the
+    only ones it can reach -- and to the configured retention period."""
+    return CopilotConversationService(
+        db,
+        CopilotConversationRepository(db),
+        scope,
+        copilot,
+        current_user,
+        retention_days=settings.copilot_conversation_retention_days,
+    )
+
+
+CopilotConversationServiceDep = Annotated[
+    CopilotConversationService, Depends(get_copilot_conversation_service)
+]
+
+
+def require_open_conversation(
+    hotel_public_id: uuid.UUID,
+    conversation_public_id: uuid.UUID,
+    service: CopilotConversationServiceDep,
+    _member: Annotated[None, Depends(require_copilot_member)],
+) -> None:
+    """The caller's own live conversation exists at this hotel and can take another turn.
+
+    Membership first (the route's own role dependency), then this, then the budget: a
+    non-member, someone else's conversation, an expired or unknown one and a full one are all
+    refused before any allowance is spent.
+    """
+    service.require_open(hotel_public_id, conversation_public_id)
+
+
+def conversation_turn_budget(
+    hotel_public_id: uuid.UUID,
+    request: Request,
+    settings: SettingsDep,
+    current_user: CurrentUserDep,
+    _open: Annotated[None, Depends(require_open_conversation)],
+) -> None:
+    """The copilot budget for continuing a conversation: the same allowance `copilot_budget`
+    charges, reached only after `require_open_conversation` -- ownership before cost, as a
+    property of the dependency graph."""
+    _charge_copilot_budget(hotel_public_id, request, settings, current_user)
+
+
 __all__ = [
     "COPILOT_BUDGET_MESSAGE",
     "AmenityServiceDep",
@@ -855,6 +920,7 @@ __all__ = [
     "AvailabilityServiceDep",
     "BookingServiceDep",
     "ChatModelDep",
+    "CopilotConversationServiceDep",
     "CopilotServiceDep",
     "CurrentUserDep",
     "DbSession",
@@ -884,6 +950,7 @@ __all__ = [
     "ToolInvocationServiceDep",
     "change_password_rate_limit",
     "client_address",
+    "conversation_turn_budget",
     "copilot_budget",
     "default_tool_registry",
     "get_amenity_service",
@@ -895,6 +962,7 @@ __all__ = [
     "get_availability_service",
     "get_booking_service",
     "get_chat_model",
+    "get_copilot_conversation_service",
     "get_copilot_service",
     "get_current_user",
     "get_db",
@@ -925,6 +993,7 @@ __all__ = [
     "login_rate_limit",
     "rate_limited",
     "require_copilot_member",
+    "require_open_conversation",
     "require_platform_admin",
     "require_role",
 ]

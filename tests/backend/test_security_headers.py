@@ -367,8 +367,9 @@ def test_the_openapi_document_is_unchanged() -> None:
 
     # Stage 7.7 added POST .../copilot/ask: 54 / 86 -> 55 / 87. No middleware route.
     # Stage 7.9 added the knowledge documents and their search: 55 / 87 -> 60 / 93.
-    assert len(spec["paths"]) == 60
-    assert len(operations) == 93
+    # Stage 7.11 added the copilot conversations: 60 / 93 -> 63 / 98.
+    assert len(spec["paths"]) == 63
+    assert len(operations) == 98
     # Built from the real factory, so the middleware is present -- and contributes nothing.
     assert not any("security" in path.lower() for path in spec["paths"])
 

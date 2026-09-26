@@ -65,6 +65,10 @@ APPROVED_TABLES = {
     # citable chunks each version is split into. Hotel-scoped; neither is ever deleted.
     "hotel_documents",
     "hotel_document_chunks",
+    # Stage 7.11. One caller's conversation with the copilot at one hotel, and its turns: the
+    # question and the answer as served. Owner-scoped, retention-bound, deleted with their turns.
+    "copilot_conversations",
+    "copilot_messages",
 }
 
 

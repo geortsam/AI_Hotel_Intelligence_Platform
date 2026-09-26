@@ -67,6 +67,18 @@ model tied to a source that does not exist is not made trustworthy by deleting t
 outcome is a new stop reason -- the persisted `llm_invocations` vocabulary is unchanged, and a
 replaced complete answer is still `completed` -- it is the additive `document_evidence` field.
 
+## Earlier turns (Stage 7.11)
+
+`answer_turn` is `ask` with three additions a multi-turn caller supplies: earlier turns, the
+number its citation labels start at, and the identity of the registered prompt to answer under.
+Earlier turns arrive as text -- each a question and the answer that was served for it, oldest
+first -- and `app.copilot.history` decides what of them the model is shown: labels stripped, a
+withheld answer shown as a fixed placeholder, whole turns only, within the context budget. They
+are placed between the system turn and the current question as the user and assistant turns they
+were. They are never evidence: the figure check sees only this turn's question and this turn's
+tool outputs, and citations resolve only against this turn's ledger. `ask` is `answer_turn` with
+none of the three, so the stateless endpoint behaves exactly as before.
+
 ## What is stored, and what is sent away
 
 One `llm_invocations` row per request: prompt identity, the upstream it was routed to, how the
@@ -88,7 +100,8 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -97,12 +110,13 @@ from app.copilot.catalogue import build_catalogue
 from app.copilot.citations import CitationCheck, EvidenceLedger, check_citations
 from app.copilot.contracts import ToolOutcome
 from app.copilot.grounding import ungrounded_figures
+from app.copilot.history import fit
 from app.copilot.loop import LoopResult, ToolLoop
 from app.copilot.registry import ToolRegistry
 from app.copilot.tools.knowledge_search import NAME as KNOWLEDGE_TOOL
 from app.core.errors import internal_fault, sqlstate_of
-from app.llm.base import Budget, ChatModel, ToolCall
-from app.llm.prompts.registry import COPILOT_ANSWER_V2
+from app.llm.base import Budget, ChatModel, Message, ToolCall
+from app.llm.prompts.registry import COPILOT_ANSWER_V2, PromptRecord, get_prompt
 from app.schemas.copilot import (
     CopilotAnswerResponse,
     CopilotCitation,
@@ -162,6 +176,17 @@ CITATION_WITHHELD_SENTENCES: dict[str, str] = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class AnsweredTurn:
+    """What `answer_turn` returns: the response, and where the next turn's labels start."""
+
+    response: CopilotAnswerResponse
+    #: One past every citation label this turn's searches issued.
+    next_label: int
+    #: How many earlier turns the model was shown, after the context budget.
+    context_turns: int
+
+
 class CopilotService:
     """Answers one question about one hotel, bounded, audited and accounted for."""
 
@@ -195,15 +220,35 @@ class CopilotService:
 
     def ask(self, hotel_public_id: uuid.UUID, question: str) -> CopilotAnswerResponse:
         """Answer *question* about the hotel the caller was authorized for. See the module."""
+        return self.answer_turn(hotel_public_id, question).response
+
+    def answer_turn(
+        self,
+        hotel_public_id: uuid.UUID,
+        question: str,
+        *,
+        earlier: Sequence[tuple[str, str]] = (),
+        first_label: int = 1,
+        prompt_identity: tuple[str, str] = (PROMPT.prompt_id, PROMPT.version),
+    ) -> AnsweredTurn:
+        """`ask`, shown *earlier* turns, numbering labels from *first_label*, under the registered
+        prompt *prompt_identity*. See "Earlier turns" in the module docstring."""
+        prompt = self._resolve_prompt(prompt_identity)
         hotel = self._scope.require_hotel(hotel_public_id)
         hotel_id = hotel.id
 
         offered = self._invocations.permitted_tools(hotel_public_id)
         catalogue = build_catalogue(self._registry, offered)
-        messages = PROMPT.render(question=question)
+        system, current = prompt.render(question=question)
+        kept = fit(earlier)
+        shown: list[Message] = []
+        for turn in kept:
+            shown.append(Message(role="user", content=turn.question))
+            shown.append(Message(role="assistant", content=turn.answer))
+        messages = (system, *shown, current)
         #: This request's citable excerpts. Created here, filled only by this request's own
         #: successful searches, and dropped with the request.
-        ledger = EvidenceLedger()
+        ledger = EvidenceLedger(first_label=first_label)
 
         def execute(call: ToolCall) -> ToolOutcome:
             # Bound to the path hotel, the offered names and this request's ledger. The model
@@ -214,8 +259,8 @@ class CopilotService:
 
         started = self._monotonic()
         result = ToolLoop(self._model).run(
-            prompt_id=PROMPT.prompt_id,
-            prompt_version=PROMPT.version,
+            prompt_id=prompt.prompt_id,
+            prompt_version=prompt.version,
             messages=messages,
             budget=self._budget,
             tools=catalogue,
@@ -268,7 +313,7 @@ class CopilotService:
         else:
             answer = ""
 
-        return CopilotAnswerResponse(
+        response = CopilotAnswerResponse(
             answer=answer,
             complete=stop_reason == "completed",
             stop_reason=stop_reason,
@@ -281,8 +326,8 @@ class CopilotService:
                 CopilotToolUse(tool=outcome.tool, outcome=outcome.outcome)
                 for outcome in result.outcomes
             ],
-            prompt_id=PROMPT.prompt_id,
-            prompt_version=PROMPT.version,
+            prompt_id=prompt.prompt_id,
+            prompt_version=prompt.version,
             invocation_public_id=invocation_public_id,
             citations=[
                 CopilotCitation(
@@ -298,8 +343,20 @@ class CopilotService:
             else [],
             document_evidence=evidence,
         )
+        return AnsweredTurn(
+            response=response, next_label=ledger.next_label, context_turns=len(kept)
+        )
 
     # --- internals ----------------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_prompt(identity: tuple[str, str]) -> PromptRecord:
+        """A registered prompt that takes exactly the question. Anything else is a programming
+        error, raised before any model is called."""
+        prompt = get_prompt(*identity)
+        if prompt.variables != ("question",):
+            raise ValueError(f"{prompt.identity} does not answer a question.")
+        return prompt
 
     @staticmethod
     def _document_evidence(result: LoopResult, check: CitationCheck) -> DocumentEvidence:
@@ -414,5 +471,6 @@ __all__ = [
     "NOT_FOUND_ANSWER",
     "PROMPT",
     "WITHHELD_SENTENCE",
+    "AnsweredTurn",
     "CopilotService",
 ]

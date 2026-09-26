@@ -198,6 +198,10 @@ APPROVED_RESOURCE_SEGMENTS = {
     "withdrawal",
     "knowledge",
     "search",
+    # Stage 7.11. A caller's conversations with the copilot, and the turns added to one. Nouns:
+    # `messages` is the collection a turn is added to, not a verb.
+    "conversations",
+    "messages",
 }
 
 #: Resources the SCHEMA models as global -- no hotel_id column, and a unique constraint with
@@ -330,6 +334,10 @@ def test_domain_surface_is_exactly_the_approved_hierarchy() -> None:
         "/api/v1/hotels/{hotel_public_id}/documents/{document_public_id}/versions",
         "/api/v1/hotels/{hotel_public_id}/documents/{document_public_id}/withdrawal",
         "/api/v1/hotels/{hotel_public_id}/knowledge/search",
+        # Stage 7.11. Start / list, read / delete, continue.
+        "/api/v1/hotels/{hotel_public_id}/copilot/conversations",
+        "/api/v1/hotels/{hotel_public_id}/copilot/conversations/{conversation_public_id}",
+        "/api/v1/hotels/{hotel_public_id}/copilot/conversations/{conversation_public_id}/messages",
         "/api/v1/platform/audit-events",
         "/api/v1/auth/register",
         "/api/v1/auth/login",

@@ -578,8 +578,9 @@ def test_the_api_surface_is_the_one_stage_73_published() -> None:
 
     # Stage 7.7 added POST .../copilot/ask: 54 / 86 -> 55 / 87.
     # Stage 7.9 added the knowledge documents and their search: 55 / 87 -> 60 / 93.
-    assert len(schema["paths"]) == 60
-    assert sum(len([m for m in spec if m in methods]) for spec in schema["paths"].values()) == 93
+    # Stage 7.11 added the copilot conversations: 60 / 93 -> 63 / 98.
+    assert len(schema["paths"]) == 63
+    assert sum(len([m for m in spec if m in methods]) for spec in schema["paths"].values()) == 98
 
 
 def test_the_response_schema_gained_nothing() -> None:

@@ -261,6 +261,32 @@ arguments, the outcome, the duration, and the request id that already correlates
 operational record, and free text there is a data-retention liability. Conversation content, when
 it is persisted at all (§7), lives in its own tenant-scoped table with its own retention rule.
 
+> **Amendment A6 (Stage 7.11) — conversations, as built.** Specified in full in
+> [copilot-conversations.md](copilot-conversations.md); migration `0015_copilot_conversations`
+> creates exactly two tables and alters none.
+>
+> - **Ownership.** A conversation belongs to one hotel and its creator. Every read filters by
+>   hotel, `actor_user_id` and retention in SQL; everyone else -- managers and owners included --
+>   gets the same 404 as an unknown conversation. The conversation repository is therefore on the
+>   architecture suite's `IDENTITY_AWARE` list: ownership is this table's domain.
+> - **Storage.** One `copilot_messages` row per stored turn -- question plus the answer as served,
+>   with its stop reason, document evidence, citations, prompt identity, `context_turns` and
+>   request id. No tool call or result is stored. Turns are immutable; conversations cascade
+>   their turns on delete; the composite `(conversation_id, hotel_id)` key keeps turns in-hotel.
+> - **Retention, enforced.** `copilot_conversation_retention_days` (default 30, exact 24-hour
+>   days): every query requires `last_activity_at > now() - retention`, and every start and
+>   continuation purges up to 100 expired conversations at its hotel. Physical deletion; no
+>   archive; no scheduler required.
+> - **Earlier turns are context, never evidence.** At most 6 earlier turns and 12,000 characters,
+>   whole turns only, citation labels stripped, a withheld answer shown as
+>   `(No answer was given.)`. Figures are grounded only by the current turn; citation labels
+>   continue across the conversation (`next_source_label`), so an earlier turn's label never
+>   resolves again. `copilot_conversation@v1` is `copilot_answer@v2` plus one sentence saying so;
+>   v2 is unchanged and still serves `/copilot/ask`.
+> - **Not audited.** Conversation text never enters `audit_events` or `llm_invocations`, and
+>   creating or deleting a conversation records no audit event: user content, not a hotel
+>   business change. Each turn still leaves its `llm_invocations` row and `tool.invoked` events.
+
 > **Amendment A1 (Stage 7.6).** Tool invocations are recorded in the **existing** append-only
 > `audit_events` trail, not in a table of their own: action `tool.invoked`, resource type `tool`,
 > reference = the *registered* tool name (or the literal `unknown`), `hotel_id` = the resolved
@@ -717,7 +743,8 @@ is the evaluation harness's job (Stage 7.8).
 **The response labels itself.** `answer`, `complete`, `stop_reason`, a fixed `notice` when not
 complete, `tools_used` (each registered tool name and its outcome; a name the model invented is
 reported as `null`), the prompt identity and `invocation_public_id`. No provider, model, token
-count, key or tenant identifier appears in it. Stateless: no conversation is kept.
+count, key or tenant identifier appears in it. Stateless: no conversation is kept. *(Still true
+of `/copilot/ask`. Stage 7.11 added conversations as separate endpoints -- Amendment A6.)*
 
 ---
 
@@ -814,8 +841,8 @@ vocabularies, and a reversible migration.
 | `hotel_document_chunks` | knowledge | retrievable units with citation identity | via `document_id`, CASCADE | `public_id` UUID; GIN index on the FTS column; ordinal unique per document |
 | `copilot_tool_invocations` | copilot | audit of every tool call | `hotel_id`, RESTRICT | tool name, argument hash, outcome, duration, request id. **No question or answer text** |
 | `llm_invocations` | copilot | cost and latency observability | `hotel_id`, RESTRICT | provider, model, prompt version, token counts, duration, finish reason |
-| `copilot_conversations` | multi-turn | session identity | `hotel_id`, RESTRICT | deferred: single-turn first |
-| `copilot_messages` | multi-turn | turn content | via conversation, CASCADE | deferred; carries its own retention rule because it holds free text |
+| `copilot_conversations` | multi-turn | session identity | `hotel_id`, RESTRICT | built in Stage 7.11 (0015): owner `actor_user_id`, RESTRICT; 1-20 turns; `next_source_label` |
+| `copilot_messages` | multi-turn | turn content | via `(conversation_id, hotel_id)`, CASCADE | built in Stage 7.11 (0015): one row per turn; immutable; covered by the conversation retention rule |
 
 **Not proposed:** an embeddings table. It is specified only in the conditional pgvector stage, and
 only if §9.2's retrieval measurement justifies it. Creating it earlier would be a table built for

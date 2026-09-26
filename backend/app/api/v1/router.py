@@ -17,6 +17,7 @@ from app.api.v1.endpoints import (
     availability,
     bookings,
     copilot,
+    copilot_conversations,
     expense_categories,
     expenses,
     guests,
@@ -98,6 +99,8 @@ api_router.include_router(ml_performance.router)
 api_router.include_router(copilot.router)
 # Stage 7.9. Hotel knowledge documents and full-text search. No language model involved.
 api_router.include_router(knowledge.router)
+# Stage 7.11. Copilot conversations: multi-turn memory, one caller's own, at one hotel.
+api_router.include_router(copilot_conversations.router)
 # The audit trail. Hotel-scoped like everything else that is a property's own data, and
 # read-only: there is no route that writes, edits or deletes an event, because a history a
 # client can append to is not evidence. Registered last because it observes every domain

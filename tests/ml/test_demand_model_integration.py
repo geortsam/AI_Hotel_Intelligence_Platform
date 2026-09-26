@@ -433,7 +433,8 @@ def test_the_public_api_gained_only_the_serving_endpoint() -> None:
     operations = sum(len([m for m in spec if m in methods]) for spec in paths.values())
     # Stage 7.7 added POST .../copilot/ask, outside /ml and not a training surface.
     # Stage 7.9 added six knowledge operations, likewise outside /ml.
-    assert operations == 93
+    # Stage 7.11 added five conversation operations, likewise outside /ml.
+    assert operations == 98
     # Four routes on the ML prefix since Stage 7.3, and only one of them reaches a model. The
     # 503 is what says which: an unavailable artifact is a failure only the serving route can
     # have, so declaring it is the structural difference rather than a naming convention.
@@ -459,8 +460,8 @@ def test_the_migration_chain_is_unchanged() -> None:
     revisions = sorted(p.name for p in versions.glob("*.py"))
     # Stage 6.8 added the tenth, for `demand_predictions`. What this file is responsible for is
     # that the ML work of Stage 6.3 needed no schema change of its own, and it still did not.
-    assert len(revisions) == 14
-    assert revisions[-1].endswith("0014_hotel_documents.py")
+    assert len(revisions) == 15
+    assert revisions[-1].endswith("0015_copilot_conversations.py")
 
 
 #: Committed beside the model: four JSON records. `model.pkl` is the Stage 6.5 payload, which is

@@ -529,6 +529,10 @@ NON_CREATING_POSTS = {
     # Stage 7.9. A withdrawal creates nothing: it changes the status of a version that already
     # has a URL, and the response is that version. `versions` DOES create one, and answers 201.
     "/api/v1/hotels/{hotel_public_id}/documents/{document_public_id}/withdrawal": "200",
+    # Stage 7.11. A continued turn belongs to the conversation, whose URL does not change, and
+    # is not separately addressable. Starting a conversation DOES create one, and answers 201.
+    "/api/v1/hotels/{hotel_public_id}/copilot/conversations/{conversation_public_id}"
+    "/messages": "200",
 }
 
 
@@ -706,6 +710,12 @@ IDENTITY_AWARE = {
     # the row. Admitted on exactly the same footing as the repository above, with the same
     # limit: it compares no role, reads no membership, and raises no authorization error.
     "app.repositories.audit_archive",
+    # Stage 7.11. Ownership is this table's domain: a conversation is readable only by its
+    # creator within its hotel, so every read filters by the caller's `actor_user_id` in SQL
+    # rather than reading a hotel's conversations broadly and filtering in Python. Admitted on
+    # the same footing as the audit repositories: it compares no role, reads no membership and
+    # raises no authorization error, and the tests below still cover it for all three.
+    "app.repositories.copilot_conversation",
 }
 
 

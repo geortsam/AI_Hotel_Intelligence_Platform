@@ -16,8 +16,8 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-6004%20backend%20%C2%B7%201141%20frontend-success)
-![API](https://img.shields.io/badge/API-60%20paths%20%C2%B7%2093%20operations-informational)
+![Tests](https://img.shields.io/badge/tests-6144%20backend%20%C2%B7%201141%20frontend-success)
+![API](https://img.shields.io/badge/API-63%20paths%20%C2%B7%2098%20operations-informational)
 
 </div>
 
@@ -29,10 +29,10 @@ more than one currency and the platform never converts between them.</sub></div>
 
 > ### Current state: **V1 complete and verified**
 >
-> Eleven domains over a 25-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
+> Eleven domains over a 27-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
 > guests, bookings, payments, reviews, the financial ledger, analytics and intelligence, plus the
 > stored demand predictions the served model writes and the measurements taken over them —
-> reachable as **60 API paths / 93 operations**, of which **88 require authentication**.
+> reachable as **63 API paths / 98 operations**, of which **93 require authentication**.
 > Authentication is Argon2id plus HS256
 > access tokens; authorization is a four-level hotel role hierarchy with a separate
 > platform-administrator capability. There is a complete React front end — all twelve
@@ -40,8 +40,8 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **6004 backend tests and 1141 frontend tests pass in CI.** Schema head is
-> `0014_hotel_documents` across 14 linear migrations.
+> **6144 backend tests and 1141 frontend tests pass in CI.** Schema head is
+> `0015_copilot_conversations` across 15 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
 > baseline — seasonal-naive day-of-week median forecasting, MAD-based intervals and anomaly
@@ -66,8 +66,9 @@ more than one currency and the platform never converts between them.</sub></div>
 > which neither CI nor the image installs — is present. Stage 7.8 evaluates it against recorded
 > exchanges. Stage 7.9 added hotel knowledge documents searched with PostgreSQL full-text search,
 > and Stage 7.10 let the copilot search them and cite what it uses -- every citation checked
-> against what that request actually retrieved. Retrieval quality on real documents is **not**
-> established. Nothing here is a placeholder pretending to be a feature —
+> against what that request actually retrieved. Stage 7.11 added multi-turn conversations, each
+> one caller's own, retention-bound, with earlier turns shown as context and never as evidence.
+> Retrieval quality on real documents is **not** established. Nothing here is a placeholder pretending to be a feature —
 > [docs/development-roadmap.md](docs/development-roadmap.md) separates what exists from what is
 > left for V2, and [Known limitations](#known-limitations) is the honest list.
 
@@ -221,7 +222,7 @@ flowchart LR
         S["<b>React SPA</b><br/>static bundle<br/>route-level code splitting"]
         A["<b>FastAPI</b><br/>api → services → repositories"]
         M["<b>demand_baseline_v1</b><br/>artifact, verified before load<br/>loaded once per process"]
-        D[("<b>PostgreSQL 18.6</b><br/>25 application tables<br/>constraints carry the rules")]
+        D[("<b>PostgreSQL 18.6</b><br/>27 application tables<br/>constraints carry the rules")]
     end
 
     B -- "HTTPS" --> N
@@ -315,7 +316,7 @@ Full detail, including the rules later stages must follow:
 | Validation | Pydantic v2, pydantic-settings | Request/response schemas, environment config |
 | ORM | SQLAlchemy 2.0 | Data mapping across 15 model modules |
 | Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
-| Migrations | Alembic | 14 linear revisions, head `0014_hotel_documents` |
+| Migrations | Alembic | 15 linear revisions, head `0015_copilot_conversations` |
 | Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
 | Frontend | React 18, TypeScript 5.7, Vite 6 | Dashboard SPA, route-level code splitting |
 | Intelligence (V1) | Python standard library | Deterministic statistical baseline — no NumPy or pandas on its path |
@@ -439,7 +440,7 @@ Start the API:
 |---|---|
 | http://localhost:8000/health | `{"status":"ok", ...}` |
 | http://localhost:8000/health/db | `{"status":"ok","database":"reachable", ...}`, or 503 when it is not |
-| http://localhost:8000/docs | Swagger UI — 60 paths, 93 operations. Disabled when `ENVIRONMENT=production` |
+| http://localhost:8000/docs | Swagger UI — 63 paths, 98 operations. Disabled when `ENVIRONMENT=production` |
 
 ### Frontend
 
@@ -589,7 +590,7 @@ Every push and pull request to `main` runs four jobs in parallel on `ubuntu-late
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
-PostgreSQL reports 18.6, that `migrate` exits 0 and leaves the schema at `0014`, that the API
+PostgreSQL reports 18.6, that `migrate` exits 0 and leaves the schema at `0015`, that the API
 and frontend both become healthy, that nginx serves the SPA at `/`, `/bookings`, `/reviews`
 and `/intelligence`, that `/api/v1/` is proxied through to FastAPI while an unknown `/api/`
 path still returns a real 404 rather than the SPA, that `SECRET_KEY` and `POSTGRES_PASSWORD`
@@ -712,6 +713,14 @@ documents." The copilot renders `copilot_answer@v2`. Measured on an author-writt
 recall@5 is 0.6957 against a pgvector threshold of 0.90 declared beforehand: a signal that
 paraphrased queries miss, not evidence about real documents. See
 [docs/copilot-evaluation.md](docs/copilot-evaluation.md) §8.
+
+**Conversations (Stage 7.11).** `…/copilot/conversations` holds multi-turn conversations: start,
+list, read, continue, delete. Each belongs to one hotel and its creator -- anyone else gets 404 --
+and expires, turns included, 30 days after it was last used (enforced in every query, purged on
+each write). The model is shown at most 6 earlier turns / 12,000 characters as context; figures
+and citations must still come from the current turn's own lookups. Question and answer text is
+stored only there -- never in the audit trail or the accounting record. See
+[docs/copilot-conversations.md](docs/copilot-conversations.md).
 
 ### V2 — NOT IMPLEMENTED
 

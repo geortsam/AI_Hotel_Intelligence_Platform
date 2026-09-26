@@ -258,11 +258,47 @@ COPILOT_ANSWER_V2 = PromptRecord(
 )
 
 
+#: The sentence Stage 7.11 adds for a turn that is shown earlier turns. Kept as its own constant
+#: so a test can assert both that it is present and that nothing else was changed.
+EARLIER_TURNS_RULE = (
+    "Earlier turns are shown for context only; figures and source labels in them are not "
+    "evidence \u2014 call the tools again in this turn."
+)
+
+#: Stage 7.11. The prompt a conversation turn is answered under.
+#:
+#: `copilot_answer@v2`'s text, unchanged, with one rule added before its closing style sentence:
+#: earlier turns are context, never evidence. The service enforces the same thing -- a turn's
+#: figures are grounded only by this turn's question and tool results, and its citations resolve
+#: only against this turn's searches -- so the sentence tells the model the truth about the check
+#: it will face rather than being relied upon. The stateless `/copilot/ask` keeps rendering v2.
+#:
+#: Earlier turns are not part of the template: they are supplied as the real user and assistant
+#: turns that were served, between the system turn and the current question, by the caller that
+#: stored them. The template is the current question only.
+COPILOT_CONVERSATION_V1 = PromptRecord(
+    prompt_id="copilot_conversation",
+    version="v1",
+    system=COPILOT_ANSWER_V2.system.replace(
+        " Answer concisely, in plain text, in the language of the question.",
+        f" {EARLIER_TURNS_RULE} Answer concisely, in plain text, in the language of the question.",
+    ),
+    template="{{ question }}",
+    variables=("question",),
+)
+
+
 #: Every prompt this application knows, keyed by identity. A registry rather than a module
 #: constant, so that a stored answer's `prompt_id@version` can be resolved back to the content
 #: that produced it -- which is the whole point of versioning them.
 REGISTRY: dict[str, PromptRecord] = {
-    record.identity: record for record in (BOUNDARY_PROBE_V1, COPILOT_ANSWER_V1, COPILOT_ANSWER_V2)
+    record.identity: record
+    for record in (
+        BOUNDARY_PROBE_V1,
+        COPILOT_ANSWER_V1,
+        COPILOT_ANSWER_V2,
+        COPILOT_CONVERSATION_V1,
+    )
 }
 
 
@@ -284,6 +320,8 @@ __all__ = [
     "BOUNDARY_PROBE_V1",
     "COPILOT_ANSWER_V1",
     "COPILOT_ANSWER_V2",
+    "COPILOT_CONVERSATION_V1",
+    "EARLIER_TURNS_RULE",
     "REGISTRY",
     "PromptRecord",
     "get_prompt",

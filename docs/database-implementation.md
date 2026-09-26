@@ -6,7 +6,8 @@
 > taking the head to `0011_demand_prediction_public_id` — and Stage 7.6 added a seventh,
 > `0012_audit_tool_invoked`, which widens two audit CHECKs and creates nothing, and Stage 7.7
 > an eighth, `0013_llm_invocations`, which creates one append-only table, and Stage 7.9 a ninth,
-> `0014_hotel_documents`, which creates the two knowledge-document tables. In particular, §9's environment notes describe the machine as it
+> `0014_hotel_documents`, which creates the two knowledge-document tables, and Stage 7.11 a
+> tenth, `0015_copilot_conversations`, which creates the two conversation tables. In particular, §9's environment notes describe the machine as it
 > was at Stage 2B, not as it is. See [architecture.md](architecture.md) and
 > [../database/README.md](../database/README.md).
 

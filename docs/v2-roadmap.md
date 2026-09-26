@@ -3,7 +3,7 @@
 > The ordered plan produced by Stage 7.1. Each stage is specified well enough to be implemented
 > on its own, in order, without re-deciding anything.
 >
-> **Implemented so far: Stages 7.2 to 7.10** — all of Track A, and the first six stages of
+> **Implemented so far: Stages 7.2 to 7.11** — all of Track A, and the first seven stages of
 > Track B. Every other stage below is a specification and nothing more; none of its code
 > exists.
 > A stage carries `· *done*` in its heading once it ships, with a note recording what was actually
@@ -484,7 +484,28 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | **Acceptance** | (1) every retrieval answer cites chunk and document `public_id`; (2) an uncited answer is refused; (3) the injection test passes; (4) the harness gains retrieval and citation scoring |
 | **Done when** | CI green and the harness measures citation validity |
 
-### Stage 7.11 — Conversations
+### Stage 7.11 — Conversations · *done*
+
+> **Built as approved** (architecture Amendment A6, [copilot-conversations.md](copilot-conversations.md)).
+> Migration **`0015_copilot_conversations`**: `copilot_conversations` and `copilot_messages`, two
+> new tables, no existing table altered; 27 application tables. Surface **60/93 → 63/98**: start,
+> list, read, continue, delete -- five operations, two more than the ~3 first planned, because a
+> transcript must be readable and a conversation deletable by its creator.
+>
+> One row per turn; ownership in SQL (the repository joins `IDENTITY_AWARE`); 404 for everyone
+> but the creator; the budget charged only after membership and, for a continuation, ownership and
+> room are proved. Retention 30 days by default, enforced in every query and by a bounded purge on
+> each write -- in exact 24-hour days, after an integration test caught `expires_at` drifting an
+> hour across the October daylight-saving change. History: 6 turns / 12,000 characters, whole
+> turns, labels stripped; citation labels continue across turns; `copilot_conversation@v1` added,
+> `copilot_answer@v2` unchanged. Not audited, by decision.
+>
+> One existing test was restated rather than evaded: the audit-retention rule's substring scan
+> (`retention_days=`) now names the conversation policy's two modules and gains a rule of its own
+> for that policy.
+>
+> Not built: sharing, summaries of dropped turns, any evaluation of multi-turn behaviour.
+> 0 dependencies, 0 frontend changes. 140 new tests; backend 6004 → 6144. Frontend untouched at 1141.
 
 | | |
 |---|---|

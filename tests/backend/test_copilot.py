@@ -102,8 +102,13 @@ def test_the_copilot_prompt_is_registered_by_identity() -> None:
     assert COPILOT_ANSWER_V1.identity == "copilot_answer@v1"
     assert REGISTRY["copilot_answer@v1"] is COPILOT_ANSWER_V1
     # Stage 7.10 registered v2 beside it. v1 is kept, unchanged, so an answer recorded under it
-    # stays attributable to what it said.
-    assert set(REGISTRY) == {"boundary_probe@v1", "copilot_answer@v1", "copilot_answer@v2"}
+    # stays attributable to what it said. Stage 7.11 added the conversation prompt.
+    assert set(REGISTRY) == {
+        "boundary_probe@v1",
+        "copilot_answer@v1",
+        "copilot_answer@v2",
+        "copilot_conversation@v1",
+    }
 
 
 def test_the_copilot_prompt_checksum_is_pinned_and_reproducible_by_hand() -> None:

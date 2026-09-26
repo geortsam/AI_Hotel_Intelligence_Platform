@@ -19,6 +19,13 @@ only from what `KnowledgeService.search` returned for the request's own hotel. S
 Citation identity is therefore enforced by the set of chunks actually retrieved, not by the syntax
 of what the model wrote. The Stage 7.6 rule that a tool returns no row identifier is kept.
 
+## Numbered from a chosen first label (Stage 7.11)
+
+A ledger numbers its labels from `first_label`, 1 by default. A multi-turn caller starts each
+turn's ledger where the previous turn's labels ended (turn 1 issues S1..S5, turn 2 starts at S6),
+so a label an earlier turn issued never names a different chunk in a later turn -- and, since a
+ledger holds only its own request's labels, never resolves there at all.
+
 ## Staged, then admitted
 
 A label is staged when the tool builds its output and admitted only when the invocation service
@@ -70,8 +77,14 @@ class Evidence:
 class EvidenceLedger:
     """The excerpts one request's searches returned, by label. Never shared between requests."""
 
+    #: The number the first label issued by this ledger carries. See the module docstring.
+    first_label: int = 1
     _admitted: dict[str, Evidence] = field(default_factory=dict)
     _staged: dict[str, Evidence] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.first_label < 1:
+            raise ValueError("Source labels are numbered from 1.")
 
     def stage(
         self,
@@ -86,7 +99,7 @@ class EvidenceLedger:
         for existing in (*self._admitted.values(), *self._staged.values()):
             if existing.chunk_public_id == chunk_public_id:
                 return existing.label
-        label = label_for(len(self._admitted) + len(self._staged) + 1)
+        label = label_for(self.first_label + len(self._admitted) + len(self._staged))
         self._staged[label] = Evidence(
             label=label,
             chunk_public_id=chunk_public_id,
@@ -111,6 +124,11 @@ class EvidenceLedger:
 
     def __len__(self) -> int:
         return len(self._admitted)
+
+    @property
+    def next_label(self) -> int:
+        """The number the next ledger should start at: one past every label this one issued."""
+        return self.first_label + len(self._admitted)
 
 
 @dataclass(frozen=True, slots=True)

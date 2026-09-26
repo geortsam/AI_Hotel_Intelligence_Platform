@@ -235,6 +235,13 @@ def test_the_copied_columns_are_declared_once() -> None:
 # ======================================================================================
 
 
+#: Stage 7.11 added a second, separate retention policy: copilot conversations. It is not the
+#: audit policy and never reads it; it has its own setting, read once by the composition root and
+#: applied once, by the conversation service. Named here so the audit rule below keeps its full
+#: strength for every other module -- and the conversation policy gets a rule of its own.
+CONVERSATION_POLICY_MODULES = {"api/deps.py", "services/copilot_conversation.py"}
+
+
 def test_the_policy_is_built_from_settings_and_nowhere_else() -> None:
     """No module may decide retention locally. A second definition is a second answer to "is
     this event eligible?", and the first disagreement archives something that should not be."""
@@ -242,11 +249,27 @@ def test_the_policy_is_built_from_settings_and_nowhere_else() -> None:
         name
         for name, source in sources().items()
         if name != "core/config.py"
-        and ("audit_retention_days" in source or "retention_days=" in source)
         and name != "services/retention.py"
+        and (
+            "audit_retention_days" in source
+            or ("retention_days=" in source and name not in CONVERSATION_POLICY_MODULES)
+        )
     ]
 
     assert offenders == [], offenders
+
+
+def test_the_conversation_policy_is_its_own_and_read_in_one_place() -> None:
+    """Stage 7.11. The conversation setting is read only where the service is built, and neither
+    conversation module ever touches the audit policy."""
+    readers = sorted(
+        name
+        for name, source in sources().items()
+        if "copilot_conversation_retention_days" in source and name != "core/config.py"
+    )
+    assert readers == ["api/deps.py"]
+    for name in CONVERSATION_POLICY_MODULES:
+        assert "audit_retention_days" not in sources()[name], name
 
 
 def test_the_default_retention_is_conservative() -> None:
@@ -444,16 +467,16 @@ def test_the_migration_chain_is_linear_and_ends_at_0008() -> None:
         assert revision and down, path.name
         chain[revision.group(1)] = None if down.group(1) == "None" else down.group(1).strip('"')
 
-    assert len(chain) == 14
+    assert len(chain) == 15
     heads = [rev for rev in chain if rev not in set(chain.values())]
     # Stage 4.5.15 added 0009 and Stage 6.8 added 0010. What this file is responsible for is
     # 0008's own position, which is unchanged; the head moves because the chain grew past it.
-    # Stage 7.6 added 0012; Stage 7.9 added 0014.
-    assert heads == ["0014_hotel_documents"]
+    # Stage 7.6 added 0012; Stage 7.9 added 0014; Stage 7.11 added 0015.
+    assert heads == ["0015_copilot_conversations"]
     assert chain["0008_audit_retention_archive"] == "0007_audit_events"
 
     parents = [down for down in chain.values() if down is not None]
-    assert len(parents) == len(set(parents)) == 13
+    assert len(parents) == len(set(parents)) == 14
 
 
 def test_no_earlier_migration_mentions_the_archive() -> None:

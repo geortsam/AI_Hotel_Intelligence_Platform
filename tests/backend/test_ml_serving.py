@@ -747,8 +747,9 @@ def test_exactly_one_serving_route_was_added() -> None:
 
     # Stage 7.7 added POST .../copilot/ask: 54 / 86 -> 55 / 87.
     # Stage 7.9 added the knowledge documents and their search: 55 / 87 -> 60 / 93.
-    assert len(schema["paths"]) == 60
-    assert operations == 93
+    # Stage 7.11 added the copilot conversations: 60 / 93 -> 63 / 98.
+    assert len(schema["paths"]) == 63
+    assert operations == 98
     assert sorted(path for path in schema["paths"] if "/ml/" in path) == sorted(
         [SCHEMA_PATH, STORED_PREDICTIONS_PATH, ACCURACY_PATH, DISTRIBUTION_PATH]
     )

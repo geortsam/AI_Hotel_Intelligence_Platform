@@ -585,7 +585,8 @@ def test_exactly_one_route_serves_the_model_and_none_names_an_artifact() -> None
     # Stage 7.7's copilot route is outside /ml and reaches the model only through the
     # serving service, as a tool -- still exactly one route that loads the artifact.
     # Stage 7.9's knowledge routes are outside /ml and reach no model at all.
-    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 93
+    # Stage 7.11's conversation routes are outside /ml and reach the model only as a tool.
+    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 98
 
     assert sorted(path for path in paths if "/ml/" in path) == sorted(ML_ENDPOINTS)
     for endpoint in ML_ENDPOINTS:

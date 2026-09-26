@@ -64,6 +64,8 @@ APP_LOGGERS = [
     # Stage 7.7. One event per copilot question: stop reason, counts, tokens, latency.
     # No question, no answer, no tool output, no provider or model name.
     "app.services.copilot",
+    # Stage 7.11. Purge counts and integrity-error SQLSTATEs -- never a question or an answer.
+    "app.services.copilot_conversation",
     "app.services.finance",
     "app.services.guest",
     "app.services.health",
