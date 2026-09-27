@@ -260,14 +260,21 @@ def test_the_policy_is_built_from_settings_and_nowhere_else() -> None:
 
 
 def test_the_conversation_policy_is_its_own_and_read_in_one_place() -> None:
-    """Stage 7.11. The conversation setting is read only where the service is built, and neither
-    conversation module ever touches the audit policy."""
+    """Stage 7.11. The conversation setting is read only where a retention is built from
+    settings, and neither conversation module ever touches the audit policy.
+
+    Two such places, each building the same `CopilotConversationRetention` from the same setting
+    rather than defining a second rule: the request dependency (`api/deps.py`, Stage 7.11) and the
+    global purge job's entry point (`purge_expired_conversations`, V2 closure F2), which takes
+    `settings` on the precedent of `archive_audit_events`. The operator command only passes
+    settings through and never reads the number itself."""
     readers = sorted(
         name
         for name, source in sources().items()
         if "copilot_conversation_retention_days" in source and name != "core/config.py"
     )
-    assert readers == ["api/deps.py"]
+    assert readers == ["api/deps.py", "services/copilot_conversation.py"]
+    assert "copilot_conversation_retention_days" not in sources()["jobs/purge_conversations.py"]
     for name in CONVERSATION_POLICY_MODULES:
         assert "audit_retention_days" not in sources()[name], name
 

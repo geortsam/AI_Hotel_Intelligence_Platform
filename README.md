@@ -716,8 +716,10 @@ paraphrased queries miss, not evidence about real documents. See
 
 **Conversations (Stage 7.11).** `…/copilot/conversations` holds multi-turn conversations: start,
 list, read, continue, delete. Each belongs to one hotel and its creator -- anyone else gets 404 --
-and expires, turns included, 30 days after it was last used (enforced in every query, purged on
-each write). The model is shown at most 6 earlier turns / 12,000 characters as context; figures
+and expires, turns included, 30 days after it was last used: unreachable at once (enforced in
+every query), then physically deleted by the next purge -- its hotel's next start or continuation,
+or `python -m app.jobs.purge_conversations`, which an operator should schedule (daily is
+recommended; the application schedules nothing). The model is shown at most 6 earlier turns / 12,000 characters as context; figures
 and citations must still come from the current turn's own lookups. Question and answer text is
 stored only there -- never in the audit trail or the accounting record. See
 [docs/copilot-conversations.md](docs/copilot-conversations.md).

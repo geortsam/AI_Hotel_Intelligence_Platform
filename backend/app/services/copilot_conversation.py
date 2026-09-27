@@ -30,9 +30,12 @@ a 409, never a duplicate.
 A conversation and its turns expire `copilot_conversation_retention_days` after their last
 activity. Every read, list, continue and delete admits only live conversations, by PostgreSQL's
 clock, so an expired conversation is a 404 the moment it expires and never reaches a model.
-Physical deletion needs no scheduler: every create and continue first purges up to
-`PURGE_BATCH` expired conversations at the same hotel, and `CopilotConversationRetention.purge`
-does the same across every hotel for an operator. Deletion is physical; nothing is archived.
+Physical deletion is separate from reachability, and happens in two places: every create and
+continue first purges up to `PURGE_BATCH` expired conversations at the same hotel, and
+:func:`purge_expired_conversations` purges every hotel, in bounded batches, until none is left --
+the job an operator runs, or schedules, with ``python -m app.jobs.purge_conversations``. An
+expired conversation at a hotel nobody uses is therefore unreachable at once and physically
+deleted by the next run of that job. Deletion is physical; nothing is archived.
 
 ## What is not written anywhere else
 
@@ -48,11 +51,13 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import uuid
+from dataclasses import dataclass
 from typing import Any, cast
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings
 from app.core.errors import (
     ConflictError,
     NotFoundError,
@@ -126,6 +131,64 @@ class CopilotConversationRetention:
                 extra={"conversations_purged": deleted},
             )
         return deleted
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationPurgeResult:
+    """What one global purge did, in counts only. No identifier, no question, no answer."""
+
+    #: Expired conversations physically deleted; their turns went with them (ON DELETE CASCADE).
+    conversations_deleted: int
+    #: Bounded batches run, including the last one, which found fewer than a full batch.
+    batches: int
+    #: The retention period the cutoff was computed from, in days of exactly 24 hours.
+    retention_days: int
+
+
+def purge_expired_conversations(
+    session: Session, settings: Settings, *, batch_size: int = PURGE_BATCH
+) -> ConversationPurgeResult:
+    """The job entry point: physically delete every expired conversation, at every hotel.
+
+    **A function, not an endpoint**, on the precedent of ``app.services.retention.
+    archive_audit_events``: a scheduler, the ``app.jobs.purge_conversations`` command or an
+    operator with a Python shell calls it with a session and the application's settings. There
+    is no route, so there is no destructive retention API to authorize, rate-limit or expose.
+
+    It adds nothing to the deletion rule. Each batch is :meth:`CopilotConversationRetention.purge`
+    at every hotel -- the same SQL cutoff (``last_activity_at <= now() - retention``), the same
+    bound, its own transaction -- and batches continue until one deletes fewer than
+    ``batch_size``, which means nothing expired was left when it ran. A conversation that expires
+    while the job runs is left for the next run. Running it again is safe: a second run finds
+    nothing and deletes nothing.
+
+    No actor, no model, no budget and no audit event, for the reasons ``retention.py`` gives: the
+    job acts for nobody, and its counts belong in the caller's output and logs rather than in the
+    tenant-visible audit history.
+    """
+    if batch_size < 1:
+        raise ValueError(f"batch_size must be at least 1, got {batch_size}")
+    retention_days = settings.copilot_conversation_retention_days
+    retention = CopilotConversationRetention(
+        session, CopilotConversationRepository(session), retention_days=retention_days
+    )
+    deleted = 0
+    batches = 0
+    while True:
+        purged = retention.purge(limit=batch_size)
+        deleted += purged
+        batches += 1
+        if purged < batch_size:
+            break
+    logger.info(
+        "global copilot conversation purge: %s deleted in %s batch(es)",
+        deleted,
+        batches,
+        extra={"conversations_purged": deleted, "purge_batches": batches},
+    )
+    return ConversationPurgeResult(
+        conversations_deleted=deleted, batches=batches, retention_days=retention_days
+    )
 
 
 class CopilotConversationService:
@@ -407,6 +470,8 @@ __all__ = [
     "MAX_PAGE_SIZE",
     "PROMPT_IDENTITY",
     "PURGE_BATCH",
+    "ConversationPurgeResult",
     "CopilotConversationRetention",
     "CopilotConversationService",
+    "purge_expired_conversations",
 ]

@@ -94,7 +94,11 @@ class ConversationSummary(BaseModel):
     created_at: dt.datetime
     last_activity_at: dt.datetime
     expires_at: dt.datetime = Field(
-        description="When the conversation and every turn in it will be deleted, unless used again."
+        description=(
+            "When the conversation expires unless used again: from then on it cannot be read, "
+            "listed or continued, and it is physically deleted, turns included, by the next "
+            "retention purge."
+        )
     )
     turn_count: int
     first_question_preview: str = Field(

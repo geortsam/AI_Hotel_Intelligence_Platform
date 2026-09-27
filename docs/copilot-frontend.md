@@ -95,7 +95,8 @@ around them was not checked. That is exactly what the server checks and no more.
 ## 5. Conversations
 
 - The list shows the caller's own live conversations at this hotel (first page, 20 most recently
-  used), each with its turn count, last use and the date it will be deleted unless used again.
+  used), each with its turn count, last use and the date it expires unless used again — after
+  which it cannot be opened, and the next retention purge deletes it.
 - **Reopen** reads the transcript. Stored turns carry no `notice`, `tools_used` or invocation
   reference, so each says *"Which data lookups ran for this earlier turn was not recorded"* —
   never "no lookups were made" — and an incomplete stored turn shows a fixed sentence for its

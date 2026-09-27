@@ -23,7 +23,7 @@ const OPTIONS: readonly { readonly mode: CopilotMode; readonly label: string; re
   {
     mode: 'conversation',
     label: 'Conversation',
-    hint: 'Stored for 30 days after last use, and deletable. Earlier turns are shown to the assistant as context.',
+    hint: 'Stored, and readable for 30 days after last use; deletable at any time. Earlier turns are shown to the assistant as context.',
   },
 ]
 

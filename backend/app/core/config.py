@@ -200,8 +200,9 @@ class Settings(BaseSettings):
     #
     # A conversation, and every turn in it, expires this many days after its last activity.
     # Applied in SQL by every read, list, continue and delete -- an expired conversation is a 404
-    # at once and never reaches a model -- and expired rows are physically deleted by a bounded
-    # purge. No scheduler is needed for the rule to hold. See `app.services.copilot_conversation`.
+    # at once and never reaches a model. Physical deletion is separate: a start or continuation
+    # purges its own hotel, and `python -m app.jobs.purge_conversations` purges every hotel when an
+    # operator (or the deployment's scheduler) runs it. See `app.services.copilot_conversation`.
     copilot_conversation_retention_days: int = Field(default=30, ge=1, le=365)
 
     @field_validator("cors_origins", mode="before")

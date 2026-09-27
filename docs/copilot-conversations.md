@@ -116,18 +116,61 @@ excerpt -- is ever replayed.
   does not move by an hour across a daylight-saving change.
 - **Enforced in every query:** list, read, continue and delete all require
   `last_activity_at > now() - retention`. An expired conversation is a 404 the moment it expires
-  and never reaches a model. No scheduler is needed for this to hold.
-- **Physically deleted:** every start and every continuation first purges up to 100 expired
-  conversations at the same hotel (turns cascade). `CopilotConversationRetention.purge()` does
-  the same across every hotel, for an operator or a job; there is no HTTP endpoint for it.
+  and never reaches a model. No scheduler is needed for **this** to hold.
+- **Physically deleted by the next purge, not at the expiry instant.** Unreachable and deleted
+  are two different moments. A conversation's rows are removed (turns cascade) by whichever runs
+  first:
+  - its hotel's next conversation **start or continuation**, which first purges up to 100 expired
+    conversations at that hotel; or
+  - the **operator command**, which purges every hotel, in batches of 100, until none is left:
+
+    ```bash
+    docker compose run --rm api python -m app.jobs.purge_conversations
+    ```
+
+  At a hotel where nobody starts or continues a conversation, only the command removes them, so
+  **how often it runs bounds how long expired text stays in the database.**
 - **Covers every stored text:** questions and answers exist only in `copilot_messages`. Nothing is
   archived.
+
+### Running the purge command
+
+`python -m app.jobs.purge_conversations` wraps `purge_expired_conversations(session, settings)`,
+the job function in `app.services.copilot_conversation`, which runs
+`CopilotConversationRetention.purge()` at every hotel until a batch finds fewer than 100. It uses
+the application's own settings — including `COPILOT_CONVERSATION_RETENTION_DAYS` — and database
+configuration, so it runs from the API image as it is.
+
+- **Output:** one line of counts — conversations deleted, batches run, the retention period in
+  days. Never an identifier, a question, an answer or a connection string; on failure, only the
+  exception's type.
+- **Exit status:** 0 when the purge completed; 1 when it failed (each batch is its own
+  transaction, so nothing past the last completed batch was deleted); 2 for a usage error.
+- **Side effects:** none beyond the deletion — no audit event (no actor exists to attribute it
+  to, and conversation lifecycle is not audited), no `llm_invocations` row, no model call, no
+  copilot allowance charged. There is no HTTP endpoint for it.
+- **Safe to repeat:** a second run finds nothing and deletes nothing.
+
+**Scheduling is a deployment responsibility, and the application does not do it.** Run the
+command periodically — **daily is the recommended cadence** — from the host's cron, a systemd
+timer or the platform's scheduler; for example, a crontab line:
+
+```
+15 3 * * *  cd /srv/hotel-intelligence && docker compose run --rm api python -m app.jobs.purge_conversations
+```
+
+With a daily run, expired text is physically gone within about a day of becoming unreachable.
+
+**Backups are not rewritten.** A database backup taken before a conversation was purged still
+contains it, until that backup is itself deleted under the deployment's backup-retention policy
+(see [deployment/backup-restore.md](deployment/backup-restore.md), which sets none). The purge
+bounds the live database, not copies of it.
 
 ## 8. What is written where
 
 | | question / answer text | per turn |
 |---|---|---|
-| `copilot_messages` | yes, until deletion or expiry | one row |
+| `copilot_messages` | yes, until the caller deletes it, or until the next retention purge after it expires | one row |
 | `llm_invocations` | **never** (no column for it) | one row, as for `/copilot/ask` |
 | `audit_events` | **never** | `tool.invoked` per tool call, as before |
 

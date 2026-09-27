@@ -776,7 +776,7 @@ describe('conversation mode', () => {
     expect(within(cards[1]!).getByText('Incomplete')).toBeInTheDocument()
     // A stored turn's citations still open their source.
     expect(within(cards[0]!).getByRole('button', { name: 'Show source S1' })).toBeInTheDocument()
-    expect(screen.getByText(/18 of 20 turns left\. Deleted after/)).toBeInTheDocument()
+    expect(screen.getByText(/18 of 20 turns left\. Expires /)).toBeInTheDocument()
   })
 
   it('continues a reopened conversation, where the new turn shows its lookups', async () => {

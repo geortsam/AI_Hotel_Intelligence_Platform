@@ -25,7 +25,9 @@ only with its conversation, through the composite foreign key's ON DELETE CASCAD
 
 Both tables hold free text, and both are covered by one rule: a conversation, and every turn in
 it, expires `copilot_conversation_retention_days` after its last activity. The rule is applied
-in SQL by every query, and expired rows are physically deleted by a bounded purge. See
+in SQL by every query, so an expired row is unreachable at once; it is physically deleted by
+the next bounded purge -- at its hotel's next start or continuation, or by the operator command
+`python -m app.jobs.purge_conversations`, whichever runs first. See
 `app.services.copilot_conversation`.
 """
 

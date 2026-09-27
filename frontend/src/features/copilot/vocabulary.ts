@@ -117,7 +117,7 @@ export const ONE_OFF_DISCLOSURE =
   'A one-off question is not stored. The question and its answer are kept only on this page; the server keeps an accounting record of the request with no text in it.'
 
 export const CONVERSATION_DISCLOSURE =
-  'A conversation is stored: your questions and the answers as shown are kept with this hotel and deleted 30 days after the conversation was last used (the default retention; each conversation shows its own deletion date). Only you can read it, and you can delete it at any time.'
+  'A conversation is stored: your questions and the answers as shown are kept with this hotel. 30 days after the conversation was last used (the default retention; each conversation shows its own expiry date) it can no longer be opened, and it is permanently deleted by the next scheduled clean-up. Only you can read it, and you can delete it at any time.'
 
 /* --- failures --------------------------------------------------------------------------- */
 

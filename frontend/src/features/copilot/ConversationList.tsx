@@ -13,8 +13,9 @@ import type { ConversationListState } from './useCopilot'
  *
  * The server lists only the caller's conversations; nobody else's — manager and owner
  * included — can appear here, because the query filters by owner in SQL. Each row shows when
- * the conversation will be deleted unless used again, which is the retention rule made
- * visible per conversation rather than stated once in a help page.
+ * the conversation expires unless used again — after which it cannot be opened, and the next
+ * retention clean-up deletes it — which is the retention rule made visible per conversation
+ * rather than stated once in a help page.
  *
  * Deleting takes two clicks: the first asks, the second deletes. It is physical and cannot be
  * undone, so the confirmation says so.
@@ -135,7 +136,7 @@ function ConversationRow({
         <p className={styles.preview}>{item.first_question_preview}</p>
         <p className={styles.meta}>
           {formatCount(item.turn_count)} {item.turn_count === 1 ? 'turn' : 'turns'} · last used{' '}
-          {formatDateTime(item.last_activity_at, timeZone)} · deleted after{' '}
+          {formatDateTime(item.last_activity_at, timeZone)} · expires{' '}
           {formatDateTime(item.expires_at, timeZone)} unless used again
         </p>
       </div>

@@ -151,7 +151,7 @@ export function CopilotPage() {
             {formatCount(open.turnsRemaining)} of 20 turns left
             {open.expiresAt === null
               ? '.'
-              : `. Deleted after ${formatDateTime(open.expiresAt, timeZone)} unless used again.`}
+              : `. Expires ${formatDateTime(open.expiresAt, timeZone)} unless used again.`}
           </p>
         ) : null}
 
