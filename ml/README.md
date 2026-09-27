@@ -70,13 +70,33 @@ return an invented prediction.
 
 ## Current state
 
-**One trained artifact, `demand_baseline_v1`, fitted offline and served.** `requirements-ml.txt`
-pins scikit-learn and nothing else; CI's quality-gates job installs it (so Python 3.14
-compatibility is verified rather than assumed), and since Stage 6.7 `backend/requirements.txt`
-pins the same version so the API image can deserialise and score the artifact. Tests assert that
-no module under `backend/app` imports sklearn, NumPy, SciPy, pandas, PyTorch, joblib or pickle
-directly, that the only path to the artifact is `app.ml.artifact_store`, and that no
-gradient-boosting library, deep-learning framework or LLM client is imported anywhere.
+**Four model records; exactly one model is served.**
+
+| Model | Status | Stage |
+|---|---|---|
+| `demand_baseline_v1` | **Served.** The one model the deployed API serves (`GET …/ml/demand-forecast`, and the copilot's `get_demand_forecast` tool through the same service), named by `APPROVED_MODEL` in `backend/app/ml/serving.py` — 7-day horizon, canonical digest `436bf6b3…`. Unchanged by Stage 7.14. Being served establishes nothing about its accuracy: its record, too, says `production_ready: false`. | fitted 6.5, served since 6.6 |
+| `demand_h7_v1` | **Offline only.** 7-day horizon, measured on `demand_daily_h7_v1` | 7.14 |
+| `demand_h14_v1` | **Offline only.** 14-day horizon, measured on `demand_daily_h14_v1` | 7.14 |
+| `demand_h28_v1` | **Offline only.** 28-day horizon, measured on `demand_daily_h28_v1` | 7.14 |
+
+The three Stage 7.14 models are committed evaluation records and nothing more: four JSON records
+each, with the fitted payload generated locally and never committed. They are **not served, not
+promoted and not selected**. No route, copilot tool or setting reaches them; `APPROVED_MODEL` and
+the served digest are unchanged; `ml/horizons.py` and its two pipelines are outside the
+thirteen-module import closure the image ships, and no shipped module mentions them (pinned by
+test); each registry records `serving_enabled: false` and `production_ready: false`; and no record
+ranks the horizons or picks one. Their `acceptance_v2` PASS says each measurement followed its
+protocol, not that any of them is accurate. See
+[`../docs/ml-multi-horizon.md`](../docs/ml-multi-horizon.md).
+
+`requirements-ml.txt` pins scikit-learn and nothing else; CI's quality-gates job installs it (so
+Python 3.14 compatibility is verified rather than assumed), and since Stage 6.7
+`backend/requirements.txt` pins the same version so the API image can deserialise and score the
+served artifact. Tests assert that no module under `backend/app` imports sklearn, NumPy, SciPy,
+pandas, PyTorch, joblib or pickle directly, that the only path to the artifact is
+`app.ml.artifact_store`, that no gradient-boosting library or deep-learning framework is imported
+anywhere, and that the one language-model SDK, `anthropic` (Stage 7.5), is imported by exactly one
+module, `backend/app/llm/providers/anthropic_provider.py`.
 
 | Path | |
 |---|---|
@@ -94,19 +114,27 @@ gradient-boosting library, deep-learning framework or LLM client is imported any
 | `models/demand_baseline_v1/registry.json` | the registry entry: versions, checksums, metrics, acceptance result, claim flags, artifact pointer |
 | `models/demand_baseline_v1/artifact.json` | the artifact's metadata: format, checksums, training extent, reproducibility digest |
 | `models/demand_baseline_v1/model.pkl` | the fitted payload — **generated, never committed** |
-| `data/` | raw payload ignored; the 263 KB processed dataset is committed so the evaluation can run in CI |
+| `horizons.py` | Stage 7.14 — horizon specs, the frozen `multi_horizon_v1` protocol, `acceptance_v2`, dataset build and measurement. **Offline only**: not in the image |
+| `pipelines/build_horizon_datasets.py` | the command that builds each horizon dataset twice and refuses any difference |
+| `pipelines/evaluate_horizons.py` | the command that measures each horizon and writes its four records |
+| `manifests/demand_daily_h{7,14,28}_v1.json` | the three horizon datasets' committed records |
+| `models/demand_h{7,14,28}_v1/` | `metrics.json`, `validation.json`, `registry.json`, `artifact.json` per offline model; `model.pkl` **generated, never committed** |
+| `data/` | raw payload ignored; the four processed datasets (`demand_daily_v1`, `demand_daily_h{7,14,28}_v1`) are committed so the evaluations can run in CI |
 
 ```
 python -m ml.pipelines.build_demand_dataset --download --verify
 python -m ml.pipelines.evaluate_demand_model --verify
 python -m ml.pipelines.validate_demand_model
 python -m ml.pipelines.build_demand_artifact --verify
+PYTHONPATH=backend python -m ml.pipelines.build_horizon_datasets --check
+PYTHONPATH=backend python -m ml.pipelines.evaluate_horizons --check
 ```
 
 Detail: [`../docs/ml-training-data.md`](../docs/ml-training-data.md) for the dataset and its
 provenance, [`../docs/ml-model-evaluation.md`](../docs/ml-model-evaluation.md) for the backtest,
 [`../docs/ml-model-validation.md`](../docs/ml-model-validation.md) for the robustness analysis
-and the acceptance result, and [`../docs/ml-model-card.md`](../docs/ml-model-card.md) for the
+and the acceptance result, [`../docs/ml-multi-horizon.md`](../docs/ml-multi-horizon.md) for the
+three offline Stage 7.14 models, and [`../docs/ml-model-card.md`](../docs/ml-model-card.md) for the
 model card — which covers the artifact, the inference contract and the trust boundary, and
 states, in those words, that this is an offline research candidate and not a production
 forecasting model.

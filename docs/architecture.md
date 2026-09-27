@@ -121,22 +121,42 @@ identifiers at the API boundary are UUIDs; internal `BIGINT` keys are never seri
 `repositories/` 18, `models/` 14, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 2 — and the HTTP
 surface was 82 operations, of which 77 required authentication.
 
-**Current state:** `api/` 31 files, `services/` 32, `schemas/` 26, `repositories/` 21, `models/`
-16, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 9, and the V2 packages `llm/` 11 and `copilot/`
-12. The HTTP surface is **64 paths / 99 operations**,
-of which **82 require authentication**; the 5 that do not are the version-metadata endpoint,
+**Current state (through Stage 7.14):** `api/` 34 files, `services/` 35, `schemas/` 29,
+`repositories/` 23, `models/` 18, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 10, and the V2
+packages `llm/` 11, `copilot/` 16, `knowledge/` 2 and `jobs/` 2 (tracked `.py` files, each
+`__init__.py` included). The HTTP surface is **64 paths / 99 operations**, of which **94 require
+authentication**; the 5 that do not are the version-metadata endpoint (`GET /api/v1/`),
 registration, login and the two health probes — the same five as at V1.
 
-**What moved it, and when.** Stage 6.6 added one read-only, hotel-scoped, authenticated route —
-the demand model's serving boundary — taking the surface to 83 operations. Stage 6.11 added a
-second, `GET .../ml/demand-predictions`, taking it to 84. Stage 7.3 added two more,
-`GET .../ml/forecast-accuracy` and `GET .../ml/prediction-distribution`, taking it to 86. Those
-four are the only API changes since V1, all under the same `/ml` segment, and **only the first of
-them reaches a model**: the serving route declares a `503` for an unavailable artifact and the
-other three declare none, because they load none. The serving route is also the only place the
-application reaches the offline `ml/` package, through a single module behind a lazy import. See
-[ml-serving.md](ml-serving.md), [ml-prediction-read-api.md](ml-prediction-read-api.md) and
-[ml-forecast-performance-api.md](ml-forecast-performance-api.md).
+**What moved it, and when.** Seventeen operations have been added since V1; none was removed.
+
+| Stage | Added | Operations after |
+|---|---|---|
+| 6.6 | `GET …/ml/demand-forecast` — the demand model's serving boundary | 83 |
+| 6.11 | `GET …/ml/demand-predictions` | 84 |
+| 7.3 | `GET …/ml/forecast-accuracy`, `GET …/ml/prediction-distribution` | 86 |
+| 7.7 | `POST …/copilot/ask` | 87 |
+| 7.9 | `GET`/`POST …/documents`, `GET …/documents/{id}`, `POST …/documents/{id}/versions`, `POST …/documents/{id}/withdrawal`, `GET …/knowledge/search` | 93 |
+| 7.11 | `GET`/`POST …/copilot/conversations`, `GET`/`DELETE …/copilot/conversations/{id}`, `POST …/copilot/conversations/{id}/messages` | 98 |
+| 7.12 | `GET …/intelligence/priorities` | 99 |
+
+All seventeen are hotel-scoped and authenticated. Stages 7.13 and 7.14 and the V2 closure changed
+no route: the copilot screen is front-end only, the multi-horizon models are offline, and the
+conversation purge is an operator command (`python -m app.jobs.purge_conversations`), not an
+endpoint.
+
+Of the four `/ml` routes, **only the serving route loads the model**: it declares a `503` for an
+unavailable artifact and the other three declare none, because they load none. The copilot's
+`get_demand_forecast` tool delegates to the same `DemandPredictionService`, so a copilot question
+can reach the served model too — through the same service, with an unavailable model returned to
+the language model as a tool error rather than as a `503`. The three copilot routes that run a
+question (`ask`, starting a conversation, adding a message) declare a `503` of their own, for a
+language model that is disabled or unreachable. Either way the application reaches the offline
+`ml/` package through one module only, behind a lazy import. See [ml-serving.md](ml-serving.md),
+[ml-prediction-read-api.md](ml-prediction-read-api.md),
+[ml-forecast-performance-api.md](ml-forecast-performance-api.md),
+[knowledge-documents.md](knowledge-documents.md), [copilot-conversations.md](copilot-conversations.md)
+and [attention-list.md](attention-list.md).
 
 The three reading routes are not symmetric in what they require. `demand-predictions` and
 `prediction-distribution` need membership alone; `forecast-accuracy` additionally declares
