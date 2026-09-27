@@ -764,11 +764,50 @@ def test_no_domain_repository_knows_that_users_exist() -> None:
     assert offenders == [], f"these repositories import identity models: {offenders}"
 
 
+#: Why each identity-aware repository is skipped below, in its own words. One shared reason used
+#: to name the membership repository for all of them, which was untrue for the other five.
+IDENTITY_AWARE_REPOSITORY_SKIP_REASONS = {
+    "app.repositories.user": (
+        "app.repositories.user is authentication's own storage: it writes the user row, so it "
+        "legitimately takes a user"
+    ),
+    "app.repositories.membership": (
+        "app.repositories.membership is the user-to-hotel relation: it legitimately takes a "
+        "user_id to read a user's memberships"
+    ),
+    "app.repositories.platform_admin": (
+        "app.repositories.platform_admin is the user-to-platform grant: it legitimately takes a "
+        "user_id to read a user's grant"
+    ),
+    "app.repositories.audit": (
+        "app.repositories.audit is identity-aware by design (Stage 4.5.12): the audit trail "
+        "records who acted and reports it back"
+    ),
+    "app.repositories.audit_archive": (
+        "app.repositories.audit_archive is identity-aware by design (Stage 4.5.14): the archive "
+        "keeps each event's actor ids, including the actor's public id"
+    ),
+    "app.repositories.copilot_conversation": (
+        "app.repositories.copilot_conversation is identity-aware by design (Stage 7.11): "
+        "conversations are owner-scoped, so it filters by the caller's actor_user_id"
+    ),
+}
+
+
+def test_every_skipped_identity_aware_repository_has_its_own_reason() -> None:
+    """The skip below reads its reason from the table above. A repository admitted to
+    IDENTITY_AWARE without an entry would otherwise fail with a bare KeyError, and an entry left
+    behind after one leaves would describe a skip that no longer happens."""
+    skipped = {m.__name__ for m in DOMAIN_REPOSITORIES if m.__name__ in IDENTITY_AWARE}
+
+    assert set(IDENTITY_AWARE_REPOSITORY_SKIP_REASONS) == skipped
+
+
 @pytest.mark.parametrize("module", DOMAIN_REPOSITORIES, ids=ids(DOMAIN_REPOSITORIES))
 def test_no_domain_repository_accepts_a_user_identity(module: ModuleType) -> None:
     """Not by import, and not by argument either: the second is how the rule usually erodes."""
     if module.__name__ in IDENTITY_AWARE:
-        pytest.skip("the membership repository is the one that legitimately takes a user_id")
+        pytest.skip(IDENTITY_AWARE_REPOSITORY_SKIP_REASONS[module.__name__])
 
     tree = ast.parse(inspect.getsource(module))
     taken = {
