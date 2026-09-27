@@ -27,11 +27,12 @@ and readable.
 with the window it covers; the multi-currency banner appears because the period holds entries in
 more than one currency and the platform never converts between them.</sub></div>
 
-> ### Current state: **V1 complete and verified**
+> ### Current state: **V1 complete and verified; V2 complete through Stage 7.14**
 >
 > Eleven domains over a 27-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
 > guests, bookings, payments, reviews, the financial ledger, analytics and intelligence, plus the
-> stored demand predictions the served model writes and the measurements taken over them —
+> stored demand predictions the served model writes and the measurements taken over them, and
+> V2's copilot accounting records, hotel knowledge documents and copilot conversations —
 > reachable as **64 API paths / 99 operations**, of which **94 require authentication**.
 > Authentication is Argon2id plus HS256
 > access tokens; authorization is a four-level hotel role hierarchy with a separate
@@ -68,7 +69,12 @@ more than one currency and the platform never converts between them.</sub></div>
 > and Stage 7.10 let the copilot search them and cite what it uses -- every citation checked
 > against what that request actually retrieved. Stage 7.11 added multi-turn conversations, each
 > one caller's own, retention-bound, with earlier turns shown as context and never as evidence.
-> Retrieval quality on real documents is **not** established. Nothing here is a placeholder pretending to be a feature —
+> Stage 7.12 added a deterministic attention list with no model involved; Stage 7.13 the copilot
+> screen in the front end; Stage 7.14 three **offline** demand models at 7, 14 and 28 days, each
+> measured beside its own baseline and none of them served. Retrieval quality on real documents,
+> the copilot's answer quality with a real model, and the offline models' production accuracy are
+> **not** established, and no business value is claimed. The conditional Stage 7.15 (pgvector)
+> has not been triggered. Nothing here is a placeholder pretending to be a feature —
 > [docs/development-roadmap.md](docs/development-roadmap.md) separates what exists from what is
 > left for V2, and [Known limitations](#known-limitations) is the honest list.
 
@@ -731,6 +737,21 @@ in fixed templates that never advise. No language model is involved; the copilot
 list through a seventh tool. How the day ranking compares with a last-week baseline is measured
 offline and reported side by side, without a winner. See [docs/attention-list.md](docs/attention-list.md).
 
+**The copilot screen (Stage 7.13).** `/copilot` in the front end asks one-off questions (nothing
+stored, the default) or holds a conversation (stored under the retention rule). Every answer is
+labelled generated and rendered as plain text; the data lookups a response reports are listed;
+citations open the cited excerpt from the document version the server named. The browser decides
+no authorization: the server offers the model only the tools the caller's role permits. See
+[docs/copilot-frontend.md](docs/copilot-frontend.md).
+
+**Offline multi-horizon models (Stage 7.14).** Three further model versions — `demand_h7_v1`,
+`demand_h14_v1`, `demand_h28_v1` — each fitted on a dataset rebuilt at its own horizon and
+measured under the frozen `multi_horizon_v1` protocol beside a same-weekday baseline. They are
+**offline research candidates**: nothing serves them, `demand_baseline_v1` remains the only served
+model, their forecasts are uncapped, and their on-the-books feature is an offline approximation.
+No production accuracy, generalisation or business value is claimed. See
+[docs/ml-multi-horizon.md](docs/ml-multi-horizon.md).
+
 ### V2 — NOT IMPLEMENTED
 
 None of these exists. Each would be built as its own stage, with its dependencies in
@@ -740,7 +761,7 @@ record in `ml/models/<model_version>/` — which is where Stage 6.3 wrote the fi
 | Module | Input | Output |
 |---|---|---|
 | **Drift detection** | Stored predictions and features | A statistic, a threshold and an alert. Stage 6.10 observes distributions and deliberately decides nothing |
-| **Retraining and model promotion** | A drift or accuracy signal | A second model version, a registry able to hold more than one, and a promotion decision |
+| **Retraining and model promotion** | A drift or accuracy signal | Retraining, and a decision to promote a new version to serving. Stage 7.14 did create three more model versions, but **offline** — none is served, none replaced `demand_baseline_v1`, and nothing selects between versions |
 | **Review sentiment** | Review text | Polarity plus an aspect breakdown (cleanliness, staff, location, value) and token-level explanations |
 | **Room-image classification** | Room photographs | Room type and feature tags for automatic media organisation |
 | **Guest recommendations** | User and hotel history | Ranked hotel suggestions for guests, evaluated against a popularity baseline. Not Stage 7.12, which built manager-facing findings over one hotel's data; this needs guest accounts and cross-hotel data the platform does not have |

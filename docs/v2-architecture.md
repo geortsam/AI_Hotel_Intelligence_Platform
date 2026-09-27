@@ -1,8 +1,12 @@
 # V2 architecture — definition, Stage 7.1
 
-> **Nothing in this document is implemented.** It is a specification written before any V2 code
-> exists, so that each V2 stage can be implemented against a contract rather than invented at the
-> keyboard. Where it says a component "will" do something, that component does not exist yet.
+> **Written before any V2 code existed; V2 is now implemented through Stage 7.14.** This is the
+> Stage 7.1 specification, written so that each V2 stage could be implemented against a contract
+> rather than invented at the keyboard. Its original text is kept as written. Where the
+> implementation differs from it or adds to it, a numbered amendment says so in place, and the
+> amendments -- not the original wording -- describe what exists. Where the original says a
+> component "will" do something, read the amendment beside it; the conditional Stage 7.15
+> (pgvector) is the one specified component that has not been built.
 >
 > **V1 is frozen.** Every V1 API contract, table, migration, model artifact and test stays as it
 > is. V2 adds; it does not edit. The one exception this document allows itself to *propose* — not
@@ -21,9 +25,10 @@
 > | A3 | 7.8 — Evaluation harness | 2026-09-26 | §9.2, §9.3 |
 > | A4 | 7.9 — Knowledge documents | 2026-09-25 | §6.3, §9.3 |
 > | A5 | 7.10 — Grounded document answers | 2026-09-26 | §6.6, §7.2 |
-> | A6 | 7.11 — Conversations | 2026-09-26 | §4.4, §7.5 |
+> | A6 | 7.11 — Conversations | 2026-09-26 | §4.4, §7.5, §10 |
 > | A7 | 7.12 — Attention list | 2026-09-26 | §5.5, §7.2 |
 > | A8 | 7.13 — Copilot front end | 2026-09-26 | §8 |
+> | A9 | V2 closure — audit F2 and documentation | 2026-09-27 | banner, §2.1, §4.4 (A6 retention), §7.2, §9.2, §10 |
 
 ---
 
@@ -142,6 +147,13 @@ process (§5.7), not for a second deployable.
 
 ### 2.1 Proposed module layout
 
+> **Amendment A9 (V2 closure) — the layout as built.** The tree below is the modules that exist.
+> Two entries of the Stage 7.1 proposal did not survive: there is no `models/copilot.py`, and there
+> is no tool-invocation model or table at all -- Amendment A1 records each tool call as a
+> `tool.invoked` event on the existing `audit_events` trail (§4.4, §10). `copilot/contracts.py`
+> holds the shared contract types; each tool's own input and output schemas live in its module
+> under `copilot/tools/`.
+
 ```
 backend/app/
 ├── services/
@@ -150,21 +162,35 @@ backend/app/
 │   ├── ml_serving.py           EXISTS — reused unchanged
 │   ├── ml_accuracy.py          EXISTS — gains a route, not a rewrite
 │   ├── ml_drift.py             EXISTS — gains a route, not a rewrite
-│   ├── knowledge.py            NEW — document ingestion and retrieval
-│   ├── copilot.py              NEW — orchestration: prompt, tools, answer
+│   ├── knowledge.py            NEW — document ingestion and retrieval (Stage 7.9)
+│   ├── tool_invocation.py      NEW — authorizes, runs and audits one tool call (Stage 7.6)
+│   ├── copilot.py              NEW — orchestration: prompt, tools, answer (Stage 7.7)
+│   ├── copilot_conversation.py NEW — conversations and their retention purge (Stage 7.11)
 │   └── insight.py              NEW — the attention list over existing analytics (Stage 7.12)
 ├── copilot/                    NEW package — the tool boundary
 │   ├── registry.py             name → contract → callable
-│   ├── contracts.py            Pydantic input/output schemas per tool
-│   └── tools/                  one module per tool, each delegating to a service
+│   ├── contracts.py            ToolContract, ToolContext, ToolOutcome and the argument/output bases
+│   ├── catalogue.py            the per-role tool catalogue a model is offered
+│   ├── loop.py                 the bounded tool loop
+│   ├── grounding.py            the figure check
+│   ├── citations.py            source labels, the evidence ledger, citation validation (Stage 7.10)
+│   ├── history.py              which earlier turns a model is shown (Stage 7.11)
+│   └── tools/                  one module per tool (seven), each delegating to a service
+├── knowledge/
+│   └── chunking.py             NEW — pure document chunking (Stage 7.9)
 ├── llm/                        NEW package — provider abstraction
 │   ├── base.py                 the ChatModel protocol
+│   ├── boundary.py, circuit.py the deadline guard and the circuit breaker (§5.8)
+│   ├── errors.py, factory.py   the failure taxonomy; the configured model
 │   ├── providers/              one adapter per provider
 │   ├── prompts/                versioned, content-addressed prompt records
 │   └── testing.py              recorded and scripted providers for tests
+├── jobs/
+│   └── purge_conversations.py  NEW — operator command for the global retention purge (V2 closure)
 └── models/
     ├── knowledge.py            NEW — documents, chunks
-    └── copilot.py              NEW — conversations, messages, tool invocations
+    ├── llm_invocation.py       NEW — one content-free row per copilot question
+    └── copilot_conversation.py NEW — conversations, messages
 ```
 
 `copilot/` is a package rather than a service module because the tool registry is a *contract
@@ -686,7 +712,9 @@ as "not found in this hotel's documents". That is the grounding contract, and §
 
 ### 7.2 Proposed initial tool set
 
-Six tools, each mapping to capability that already exists. The brief's examples are deliberately
+*Amendment A9:* six tools were proposed here at Stage 7.1; **seven are registered** — the six in
+the table and `get_hotel_priorities` (Stage 7.12, Amendment A7). Each maps to capability that
+already exists. The brief's examples are deliberately
 *not* adopted wholesale: `get_occupancy` and `get_revenue_metrics` are folded into `get_hotel_kpis`
 because `analytics/overview` already returns both, and a second tool would be a second name for
 one call.
@@ -843,6 +871,17 @@ copilot makes a claim to a user, not after.
   numbers absent from tool output are hallucinations and are counted as such.
 - **Citation validity**: does every cited chunk exist, belong to this tenant, and contain the
   claim?
+
+  > *Amendment A9 — what is actually checked.* The copilot service resolves every citation-like
+  > token in an answer against the request's evidence ledger: it must name a source label that a
+  > document search in *this* request returned, for *this* hotel, from an active version;
+  > otherwise the answer is replaced (`document_evidence: citation_rejected`, Amendment A5). The
+  > evaluation measure `citation_validity` (copilot-evaluation.md) scores that every citation the
+  > model wrote is well formed and names a label it was shown, and `cited_figure_grounding` that
+  > every figure in a cited sentence traces to that sentence's excerpts, the structured tool
+  > outputs or the question. **Whether a cited excerpt
+  > semantically supports the claim is not checked and not claimed**: that is label correctness,
+  > and it would need semantic evaluation.
 - **Refusal correctness**: for questions the data cannot answer, does it decline rather than
   invent?
 - **Retrieval quality**: recall at the working cut-off over a hand-built question/chunk set — the
@@ -890,12 +929,22 @@ vocabularies, and a reversible migration.
 
 | Table | Stage | Purpose | Tenant | Notes |
 |---|---|---|---|---|
-| `hotel_documents` | knowledge | one row per document version | `hotel_id` → `hotels`, RESTRICT | `public_id` UUID; unique `(hotel_id, slug, version)`; status vocabulary as CHECK |
-| `hotel_document_chunks` | knowledge | retrievable units with citation identity | via `document_id`, CASCADE | `public_id` UUID; GIN index on the FTS column; ordinal unique per document |
-| `copilot_tool_invocations` | copilot | audit of every tool call | `hotel_id`, RESTRICT | tool name, argument hash, outcome, duration, request id. **No question or answer text** |
-| `llm_invocations` | copilot | cost and latency observability | `hotel_id`, RESTRICT | provider, model, prompt version, token counts, duration, finish reason |
+| `hotel_documents` | knowledge | one row per document version | `hotel_id` → `hotels`, RESTRICT | built in Stage 7.9 (0014): `public_id` UUID; versions chained by a unique `supersedes_id`, kept in-hotel by a composite `(supersedes_id, hotel_id)` key; status, language and bounds as CHECKs; a version is immutable and never deleted (trigger) |
+| `hotel_document_chunks` | knowledge | retrievable units with citation identity | via `document_id` → `hotel_documents`, RESTRICT | built in Stage 7.9 (0014): `public_id` UUID; append-only (trigger); `search_vector` with a GIN index; ordinal unique per document |
+| `audit_events` *(existing)* | copilot | audit of every tool call | `hotel_id`, RESTRICT | *Amendment A1:* no `copilot_tool_invocations` table was built. Each tool call is one `tool.invoked` event on the V1 append-only trail (migration 0012 widened its two CHECKs), with `{outcome, error_code, duration_ms, arguments_sha256}`. **No arguments, question, answer or tool output** |
+| `llm_invocations` | copilot | cost and latency observability | `hotel_id`, RESTRICT | built in Stage 7.7 (0013): provider, model, prompt version, token counts, latency, stop reason; append-only (trigger); no column for any text |
 | `copilot_conversations` | multi-turn | session identity | `hotel_id`, RESTRICT | built in Stage 7.11 (0015): owner `actor_user_id`, RESTRICT; 1-20 turns; `next_source_label` |
 | `copilot_messages` | multi-turn | turn content | via `(conversation_id, hotel_id)`, CASCADE | built in Stage 7.11 (0015): one row per turn; immutable; covered by the conversation retention rule |
+
+**Hotel deletion (Amendment A9).** `DELETE /hotels/{id}` is a hard delete that answers **409**
+while any `RESTRICT` key still references the hotel, and cascades nothing — V1's rule, unchanged.
+V2 adds four such references: `demand_predictions`, `llm_invocations`, `hotel_documents` and
+`copilot_conversations`. The application offers no way to delete the first three
+(`llm_invocations` is append-only by trigger, and a document version is never deleted), so a hotel
+that has served a prediction, answered a copilot question or stored a document can no longer be
+deleted — as V1's append-only `audit_events` already made true of any hotel with an audited
+write. It can still be deactivated (`is_active: false`). A conversation reference goes away when
+its owner deletes it, or when it expires and is purged.
 
 **Not proposed:** an embeddings table. It is specified only in the conditional pgvector stage, and
 only if §9.2's retrieval measurement justifies it. Creating it earlier would be a table built for

@@ -17,8 +17,9 @@ stages, each carrying its state in its heading:
 | `· defined, not started` | specified in enough detail to be reviewed and built, and **no code exists** |
 
 *V2 — FUTURE / NOT IMPLEMENTED* is a backlog of capabilities, not stages: one-line notes with no
-objective, no acceptance criteria and no commitment. Nothing in it exists in this repository, and
-an item only becomes a stage when it is written up as one. Where a V2 item is mentioned elsewhere
+objective, no acceptance criteria and no commitment. An item only becomes a stage when it is
+written up as one. Rows marked *Done* record what a later stage delivered out of the backlog, and
+what of it is still outstanding; every other row does not exist in this repository. Where a V2 item is mentioned elsewhere
 in the documentation it is labelled the same way.
 
 ---
@@ -528,10 +529,11 @@ separate future capability: **[ml-prediction-read-api.md](ml-prediction-read-api
 
 # V2 — FUTURE / NOT IMPLEMENTED
 
-**None of the following exists in this repository** — no code, no dependency, no configuration —
-with one exception: the first row of the machine-learning table, which records what Stages 6.6-6.11
-delivered out of this backlog and what of it is still outstanding. It is kept rather than deleted
-so the served model can be read against the item it came from.
+**Rows marked *Done* record what a later stage delivered out of this backlog, and what of it is
+still outstanding** — they are kept rather than deleted, so the delivered work can be read against
+the item it came from. The V2 stages themselves are specified and recorded in
+[v2-roadmap.md](v2-roadmap.md). **Every row not marked *Done* does not exist in this repository**
+— no code, no dependency, no configuration.
 
 ## Machine learning
 
@@ -541,8 +543,8 @@ so the served model can be read against the item it came from.
 | Richer feature pipeline | *Done offline in Stage 7.14* — horizon-matched datasets at 7, 14 and 28 days admit the rolling means and the on-the-books count (13 / 12 / 11 features), measured under the frozen `multi_horizon_v1` protocol; see [ml-multi-horizon.md](ml-multi-horizon.md). Still backlog: **serving** any of these models (with its own capacity-capping rule), and a production-equivalent on-the-books feature — the offline one is day-resolution and status-agnostic. The served 7-day model still uses 9 of 15 columns |
 | Review sentiment | polarity and aspect breakdown over review text |
 | Room-image classification | class set fixed before training |
-| AI recommendations | evaluated with ranking metrics against a popularity baseline |
-| A registry for several coexisting model versions | Stage 6.4 added a single-entry registry and a model card; nothing selects between versions, and no artifact is stored |
+| AI recommendations | guest-facing, cross-hotel suggestions evaluated with ranking metrics against a popularity baseline — **not built**. Stage 7.12 built something else: a deterministic, manager-facing attention list over one hotel's own data, measured under `insight_ranking_v1` against a last-week baseline with no winner declared ([attention-list.md](attention-list.md)) |
+| A registry for several coexisting model versions | *Partly done.* `ml/models/` holds four model directories, each with committed `metrics.json`, `validation.json`, `registry.json` and `artifact.json` records and a never-committed payload: the served `demand_baseline_v1` (Stages 6.3–6.5) and the offline Stage 7.14 candidates `demand_h7_v1`, `demand_h14_v1` and `demand_h28_v1`. Still backlog: anything that **selects or promotes** between versions — the application's `APPROVED_MODEL` names the one served model, and nothing chooses among the others |
 
 Rules these must follow, unchanged from the original plan: predictions persisted with the model
 version that produced them; a missing artifact surfacing as an explicit unavailable-model error
@@ -553,10 +555,10 @@ single chronological split. Stage 6.3 discharged the last of those three.
 
 | Item | Note |
 |---|---|
-| LLM hotel analyst | none of the repository's "intelligence" is generative today |
-| Retrieval-augmented generation | no vector store, no embeddings |
-| Agent / LangGraph workflows | no agent framework of any kind |
-| AI evaluation harness | would be required before any of the above could be claimed |
+| LLM hotel analyst | *Done in Stages 7.5–7.11 and 7.13* — a read-only copilot over one hotel's analytics, forecast, measured accuracy, documents and attention list: a provider boundary with budgets and a circuit breaker, seven read-only tools, checked figures and citations, conversations, and a front end. It answers only where a deployment enables a provider, and **no real model has been evaluated**. Still backlog: writing tools |
+| Retrieval-augmented generation | *Done lexically in Stages 7.9–7.10* — PostgreSQL full-text search over the hotel's own documents, with request-scoped, validated citations. Still backlog: embeddings and a vector store — the conditional Stage 7.15, **not triggered** |
+| Agent / LangGraph workflows | not built — no agent framework of any kind, and no autonomous action |
+| AI evaluation harness | *Done in Stage 7.8, extended in 7.10* — frozen question sets replayed through the production copilot stack in CI, with independent scorers. A live evaluation of a real model is opt-in and has not been run, so no accuracy is claimed for the copilot |
 
 ## Security
 

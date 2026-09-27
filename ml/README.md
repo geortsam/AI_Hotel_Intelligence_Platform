@@ -25,8 +25,11 @@
 > statistical baseline in `backend/app/ml/timeseries.py` and `backend/app/services/intelligence.py`,
 > implemented in the Python standard library: seasonal-naive day-of-week median forecasting,
 > MAD-based intervals and anomaly detection, split-window trend detection, and deterministic
-> insight templates. No LLM, no embeddings, no vector database, no RAG, no agent — anywhere in the
-> repository. See [`../docs/architecture.md` §5](../docs/architecture.md#5-data-and-intelligence-architecture)
+> insight templates. Nothing in `ml/` calls a language model. The repository's generative features
+> — the copilot's language-model boundary, its read-only tool loop, lexical document retrieval with
+> checked citations, and conversations (Stages 7.5–7.11) — live under `backend/app` (`llm/`,
+> `copilot/`, `knowledge/`), not here; there are no embeddings, no vector database and no agent
+> framework anywhere in the repository. See [`../docs/architecture.md` §5](../docs/architecture.md#5-data-and-intelligence-architecture)
 > and [`../docs/development-roadmap.md`](../docs/development-roadmap.md).
 
 All machine-learning work lives here, deliberately outside `backend/`. `.dockerignore` excluded

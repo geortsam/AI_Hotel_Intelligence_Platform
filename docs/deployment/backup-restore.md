@@ -244,7 +244,12 @@ default.
 ## 10. Security
 
 **The archive contains everything the database contains** — every user row, every Argon2id
-password hash, every audit event. Treat it with the same care as the database itself:
+password hash, every audit event, and the text of every copilot conversation stored when the dump
+was taken. That includes conversations that later expire, or are deleted by their owner, and are
+purged from the live database: the retention purge (`python -m app.jobs.purge_conversations`,
+see [../copilot-conversations.md](../copilot-conversations.md) §7) never touches an archive, so
+such text is gone only when the archive holding it is deleted under the retention window you
+decide in §9. Treat the archive with the same care as the database itself:
 
 - store it where the database's own credentials would be acceptable;
 - never commit one to Git. Nothing in `.gitignore` will save you from `git add -f`;

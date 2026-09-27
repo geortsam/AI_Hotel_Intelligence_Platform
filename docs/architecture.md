@@ -164,7 +164,9 @@ added the fifth, `0014_hotel_documents`: `hotel_documents` (one immutable row pe
 `document.*` audit actions. Stage 7.11 added the sixth, `0015_copilot_conversations`:
 `copilot_conversations` and `copilot_messages`, one caller's multi-turn memory at one hotel,
 retention-bound and deleted with their turns. Head `0015` across 15 linear revisions, 27
-application tables. See [knowledge-documents.md](knowledge-documents.md) and
+application tables. Four of V2's tables reference `hotels` with `RESTRICT`, so — as V1's
+append-only audit trail already did — they can make a hotel undeletable: `DELETE /hotels/{id}`
+still answers 409 rather than cascading. See [v2-architecture.md](v2-architecture.md) §10. See [knowledge-documents.md](knowledge-documents.md) and
 [copilot-conversations.md](copilot-conversations.md).
 
 ---
@@ -428,17 +430,20 @@ backend, and never the other way.
 ### 5.3 FUTURE — NOT IMPLEMENTED
 
 Served demand forecasting has moved out of this table: Stages 6.6-6.7 implemented it, and §5.1c
-describes what that does and does not mean. None of the following exists. They are recorded as
+describes what that does and does not mean. So has an ML surface in the front end: the analytics
+screen (Stage 7.2) reads `/ml/demand-forecast`, and the forecasting screen (Stage 7.4) reads
+`/ml/demand-predictions`, `/ml/forecast-accuracy` and `/ml/prediction-distribution`. Stage 7.14's
+three offline multi-horizon model versions are measured records, not served models. None of the
+following exists. They are recorded as
 direction, not as capability:
 
 | Module | Input | Output |
 |---|---|---|
 | Drift detection | stored predictions and features | a statistic, a threshold, an alert. Stage 6.10 observes distributions and decides nothing |
-| Retraining and model promotion | a drift or accuracy signal | a second model version, a registry able to hold more than one, a promotion decision |
+| Retraining and model promotion | a drift or accuracy signal | retraining, and a decision to promote a new version to serving. Stage 7.14 created three more model versions offline ([ml-multi-horizon.md](ml-multi-horizon.md)); none is served, and nothing selects between versions |
 | Review sentiment | review text | polarity, aspect breakdown |
 | Room image classification | room photographs | room type / feature tags |
 | Recommendations | user and hotel history | ranked hotel suggestions |
-| An ML surface in the front end | — | no React view reads any `/ml/` route today |
 
 Rules these must follow when they are built — the first three are already met by the demand model:
 

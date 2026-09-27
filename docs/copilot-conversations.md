@@ -30,6 +30,14 @@ resolved hotel AND the caller's `actor_user_id` AND retention in one WHERE claus
 conversation repository is on the architecture suite's `IDENTITY_AWARE` list -- ownership is this
 table's domain.
 
+**Losing membership.** Membership is checked on every request, so a member removed from hotel A
+gets A's 404 for all of their conversations there at once (tested). Removal does not delete them:
+they keep their `last_activity_at`, expire under the retention rule like any other, and are
+physically removed by the next purge (§7). Ownership is the creator's **account**, not the
+membership, so if the same account is made a member of A again before a conversation expires, that
+conversation is reachable again -- by that account only. That last case follows from the query
+rules above; it is not covered by a dedicated test.
+
 ## 2. The data model
 
 | Table | One row per | Key columns |
