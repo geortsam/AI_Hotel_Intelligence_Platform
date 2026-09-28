@@ -190,32 +190,102 @@ figures, the worst days for each method and the fold-level comparison counts are
   row's features to come back identical, with a positive control on the cutoff day itself.
 * On-the-books: a booking entered after the cutoff, or cancelled on or before it, is not counted;
   one cancelled after it is (dropping it would leak the cancellation). Tested at every horizon.
-* During the stage, the three committed on-the-books columns were also **recomputed independently
-  from the raw source** with a per-night formulation sharing no code with the pipeline: 0
-  mismatches in 4,386 rows, and 0 target mismatches. That check needs the raw source, which CI
-  does not have, so it is recorded here rather than run on every push.
+* The three committed on-the-books columns are also **recomputed independently from the raw
+  source** with a per-night formulation sharing no code with the pipeline:
+  `ml/pipelines/audit_horizon_on_books.py` (committed in F18; run during the stage as a one-off
+  script). Result: 0 mismatches in 4,386 rows, and 0 target mismatches — at the stage, and again at
+  `c4b5dbd` before it was committed. It needs the raw source, so it is an operator check; see §9.
 * Every committed row's `prediction_cutoff` is exactly the end of `target − h` (tested).
 
 ## 9. Reproducing
 
 ```bash
-PYTHONPATH=backend python -m ml.pipelines.build_horizon_datasets --check
-```
-
-```bash
 PYTHONPATH=backend python -m ml.pipelines.evaluate_horizons --check
 ```
 
-The first rebuilds every dataset twice from the raw source and compares it with the committed file;
-the second re-measures every horizon and compares every record's content checksum. CI runs the
-second's equivalent in `tests/ml/test_multi_horizon_integration.py`, including a refit that must
-reproduce each model's canonical digest:
+This re-measures every horizon from the committed datasets and compares every record's content
+checksum. CI runs its equivalent in `tests/ml/test_multi_horizon_integration.py`, including a
+refit that must reproduce each model's canonical digest:
 
 | Model | Canonical digest | Fitted rows | Training extent |
 |---|---|---|---|
 | `demand_h7_v1` | `beaf0307…bd48c4` | 804 | 2015-09-29 – 2016-11-09 |
 | `demand_h14_v1` | `37296b0a…b115cc` | 790 | 2015-10-06 – 2016-11-09 |
 | `demand_h28_v1` | `2c716f33…1c2782` | 762 | 2015-10-20 – 2016-11-09 |
+
+### Verifying against the raw source
+
+Two checks go back past the committed datasets to the source they were built from. **CI runs
+neither, on purpose**: the 16.9 MB raw file is not committed, is not stored anywhere CI can reach,
+and CI does not download it (tests never touch the network; see
+[ml-training-data.md §4](ml-training-data.md#4-raw-processed-and-what-is-committed)). They are
+operator checks, run by hand — the natural moment is after a change to the pipeline or to the
+Stage 6.1 contract it builds on (`app.ml.dataset`).
+
+**1. Get the source.** *Hotel booking demand datasets* (Antonio, de Almeida & Nunes, 2019,
+doi:10.1016/j.dib.2018.11.126, CC BY 4.0), as redistributed at TidyTuesday commit
+`d75aaa0d31596ad6487ae0db20138067d301e031`. Place it at `ml/data/raw/demand_daily_v1_source.csv`
+(ignored by `.gitignore`), for example with:
+
+```bash
+curl -fL -o ml/data/raw/demand_daily_v1_source.csv https://raw.githubusercontent.com/rfordatascience/tidytuesday/d75aaa0d31596ad6487ae0db20138067d301e031/data/2020/2020-02-11/hotels.csv
+```
+
+Its SHA-256 must be `7c2ae42a7353905ea136e5c2287f17c92c5435826598bfbb8491c6f0c7b1fc06`
+(16,855,599 bytes). Both commands below check it before reading a row — the rebuild against the
+constant in `ml/pipelines/offline_demand.py`, the audit against the digest every committed horizon
+manifest records — and refuse any other file.
+
+**2. Rebuild every dataset and compare.**
+
+```bash
+PYTHONPATH=backend python -m ml.pipelines.build_horizon_datasets --check
+```
+
+Builds each of the three datasets twice from the source, requires the two builds to be
+byte-identical and to carry the SHA-256 the frozen protocol records, and compares the result with
+the committed file. It writes nothing. Success is one line per horizon, `demand_daily_hN_v1:
+matches (<sha256>)`, and exit status 0.
+
+**3. Audit on-the-books and targets independently.**
+
+```bash
+PYTHONPATH=backend python -m ml.pipelines.audit_horizon_on_books
+```
+
+(`--source PATH` audits a file elsewhere.) Imports only the standard library — not the pipeline,
+not `ml.horizons`, not `app` — and checks every committed row at 7, 14 and 28 days: the
+on-the-books count at the cutoff and the realised target, recomputed night by night from the
+definition in §8, plus each row's cutoff and its empty capacity column. It first requires each
+committed dataset to match its manifest's `processed_sha256`. It writes nothing. Success is:
+
+```
+h=7: rows=1462 on_books mismatches=0 target mismatches=0 cutoff mismatches=0 capacity mismatches=0
+h=14: rows=1462 on_books mismatches=0 target mismatches=0 cutoff mismatches=0 capacity mismatches=0
+h=28: rows=1462 on_books mismatches=0 target mismatches=0 cutoff mismatches=0 capacity mismatches=0
+audit passed: 4386 rows at 3 horizons, 0 mismatches
+```
+
+and exit status 0. Any mismatch is printed with its column, hotel, date, committed and recomputed
+value, and exits 1; a wrong source, a dataset that no longer matches its manifest, a missing
+horizon, an empty dataset or an unreadable source row exits 2. An empty committed value is
+reported, never read as zero.
+
+**What a pass means, and what it does not.** That the committed datasets are exactly what the
+current code, and an independent recount, derive from the pinned source. It establishes nothing
+about accuracy, production accuracy or business value (§7).
+
+**Why this does not weaken anything CI enforces.** The committed datasets are frozen by digest:
+the protocol, the manifests and the tests pin each one, and every model record is re-measured
+from them in CI. What only these two checks can detect is *code drift* — the pipeline, or the
+Stage 6.1 contract it shares with production, no longer producing those files from the source.
+
+**What CI does cover** (`tests/ml/test_audit_horizon_on_books.py`) is the audit's machinery, at
+fixture level only: the committed 300-row verbatim excerpt of the source, the three datasets the
+real pipeline builds from it, and every refusal and report above. On that sample the pipeline
+leaves some on-the-books values empty where the recount is 0 — the Stage 6.1 contract writes no
+value for a date its extract has no entry for; the full source has no such row — and the tests
+pin exactly that difference. **None of it is the raw-source verification.**
 
 ## 10. Tests
 
@@ -229,3 +299,8 @@ aggregating across horizons; the documentation's figures against the registry.
 
 `tests/ml/test_multi_horizon_integration.py` — re-measures all three horizons and reproduces every
 record and canonical digest.
+
+`tests/ml/test_audit_horizon_on_books.py` — the independent audit's machinery at fixture level
+(see §9): digest checks, zero-mismatch success, detection and reporting of each kind of mismatch,
+all three horizons, no silent skipping, and that the audit imports only the standard library and
+does not ship in the image.

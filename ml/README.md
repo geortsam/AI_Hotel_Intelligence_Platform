@@ -117,6 +117,7 @@ module, `backend/app/llm/providers/anthropic_provider.py`.
 | `horizons.py` | Stage 7.14 — horizon specs, the frozen `multi_horizon_v1` protocol, `acceptance_v2`, dataset build and measurement. **Offline only**: not in the image |
 | `pipelines/build_horizon_datasets.py` | the command that builds each horizon dataset twice and refuses any difference |
 | `pipelines/evaluate_horizons.py` | the command that measures each horizon and writes its four records |
+| `pipelines/audit_horizon_on_books.py` | F18 — the independent audit of the three horizon datasets against the raw source; standard library only, writes nothing. **Operator-run**: see below |
 | `manifests/demand_daily_h{7,14,28}_v1.json` | the three horizon datasets' committed records |
 | `models/demand_h{7,14,28}_v1/` | `metrics.json`, `validation.json`, `registry.json`, `artifact.json` per offline model; `model.pkl` **generated, never committed** |
 | `data/` | raw payload ignored; the four processed datasets (`demand_daily_v1`, `demand_daily_h{7,14,28}_v1`) are committed so the evaluations can run in CI |
@@ -128,7 +129,35 @@ python -m ml.pipelines.validate_demand_model
 python -m ml.pipelines.build_demand_artifact --verify
 PYTHONPATH=backend python -m ml.pipelines.build_horizon_datasets --check
 PYTHONPATH=backend python -m ml.pipelines.evaluate_horizons --check
+PYTHONPATH=backend python -m ml.pipelines.audit_horizon_on_books
 ```
+
+## Verifying against the raw source
+
+The committed datasets are frozen by digest, and CI re-measures every model record from them. Two
+checks go further back, to the source the Stage 7.14 datasets were built from, and **CI runs
+neither on purpose**: the 16.9 MB raw file is not committed, not stored anywhere CI can reach, and
+not downloaded by CI, whose tests never touch the network. They are offline operator checks.
+
+1. **Get the source** — *Hotel booking demand datasets* (Antonio, de Almeida & Nunes, 2019,
+   CC BY 4.0) at the TidyTuesday commit the manifests record — into
+   `ml/data/raw/demand_daily_v1_source.csv`. Its SHA-256 must be
+   `7c2ae42a7353905ea136e5c2287f17c92c5435826598bfbb8491c6f0c7b1fc06`; both commands below verify
+   it before reading a row and refuse any other file.
+2. **Rebuild and compare** — `PYTHONPATH=backend python -m ml.pipelines.build_horizon_datasets
+   --check`: each dataset built twice, byte-identical, and equal to the committed file. Success is
+   `demand_daily_hN_v1: matches (<sha256>)` for 7, 14 and 28, exit 0.
+3. **Audit independently** — `PYTHONPATH=backend python -m ml.pipelines.audit_horizon_on_books`:
+   every committed row's on-the-books count and target recomputed night by night from the raw
+   rows, with code that imports nothing from the pipeline. Success is `audit passed: 4386 rows at
+   3 horizons, 0 mismatches`, exit 0; a mismatch exits 1 and is printed; a wrong source or a
+   missing or altered dataset exits 2.
+
+A pass shows the committed datasets are what the code and an independent recount derive from the
+pinned source — it guards against code drift. It says nothing about accuracy, production
+accuracy or business value. CI tests the audit's machinery on the committed 300-row excerpt
+(`tests/ml/test_audit_horizon_on_books.py`), which is **not** the raw-source verification. Full
+procedure: [`../docs/ml-multi-horizon.md` §9](../docs/ml-multi-horizon.md#verifying-against-the-raw-source).
 
 Detail: [`../docs/ml-training-data.md`](../docs/ml-training-data.md) for the dataset and its
 provenance, [`../docs/ml-model-evaluation.md`](../docs/ml-model-evaluation.md) for the backtest,
