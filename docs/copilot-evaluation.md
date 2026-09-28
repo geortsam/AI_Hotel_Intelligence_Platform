@@ -203,9 +203,107 @@ before an image change and an embedding cost.
 
 - Whether a cited excerpt actually supports the sentence citing it, beyond its figures.
 - Any real model's citation behaviour: that takes a live capture of §8.1.
-- Retrieval on real documents: none exist in this repository.
+- Retrieval on real documents: none exist in this repository. §8.4 is the procedure for measuring
+  an operator-supplied corpus.
 
 ```bash
 python -m tests.evaluation.knowledge_harness --write-reference   # after an INTENDED change
 WRITE_RETRIEVAL_REPORT=1 python -m pytest tests/integration/test_knowledge_retrieval_eval.py
 ```
+
+### 8.4 Measuring on real hotel documents (operator procedure)
+
+§8.2's criterion needs a measurement this repository cannot make on its own: no real hotel's
+documents are in it, and none may be. `tests/evaluation/real_retrieval.py` measures an
+**operator-supplied** set the same way `knowledge_retrieval_v1` is measured -- cutoff 5,
+threshold 0.90, the real upload and search routes, real PostgreSQL -- and reports whether the
+result is qualifying evidence. **It does not implement Stage 7.15**, and nothing it reports is a
+reason to start it unless the verdict below says so.
+
+**What qualifies.** The documents are a real hotel's own operational documents, used with that
+hotel's permission and containing no guest personal data; the queries are of the kind the copilot
+sends (short searches for what a member of staff would ask). Developer-written material --
+including every document and query of `knowledge_retrieval_v1` -- does not qualify, and the harness
+refuses v1's identity and any of v1's documents outright. The harness cannot tell real documents
+from invented ones, so the specification **attests** it; the verdict is TRIGGER CONDITION
+SATISFIED or NOT SATISFIED only when `real_hotel_documents` and `copilot_like_queries` are both
+attested, and NOT ASSESSABLE otherwise.
+
+**1. Prepare the corpus, outside the repository.** One plain UTF-8 text file per document -- the
+upload route accepts text only, at most 100,000 characters, with a title and optional source of at
+most 200 characters and one of `simple`, `english`, `greek`, `french`, `german`, `italian`,
+`spanish` as its language. Paragraphs are separated by a blank line. The harness refuses any
+document or specification inside the repository, which keeps them out of Git and out of every
+image.
+
+**2. Find each document's chunks.** `python -m tests.evaluation.real_retrieval --list-chunks FILE`
+prints the document's `text_sha256` and, for each chunk the route will store, its ordinal, word
+count and SHA-256 -- no text. Chunks are the route's own: normalise (CRLF to LF, trailing
+whitespace trimmed per line, the whole trimmed), split at blank lines, then into runs of at most 200
+words, ordinals from 0.
+
+**3. Write the specification**, a JSON file next to the documents:
+
+```json
+{
+  "set_id": "<a new name, never knowledge_retrieval>",
+  "version": "v1",
+  "cutoff": 5,
+  "threshold": 0.9,
+  "attestation": {
+    "real_hotel_documents": true,
+    "copilot_like_queries": true,
+    "permission_to_use": true,
+    "contains_no_guest_personal_data": true
+  },
+  "documents": [
+    {"document_id": "…", "title": "…", "language": "english", "source": "…",
+     "file": "relative/or/absolute/path.txt", "text_sha256": "<from --list-chunks>"}
+  ],
+  "queries": [
+    {"query_id": "…", "query": "…", "expected": [["<document_id>", 0, "<chunk sha256>"]]}
+  ],
+  "corpus_sha256": "…",
+  "query_set_sha256": "…"
+}
+```
+
+Every query names at least one expected chunk, chosen **before** the measurement. `corpus_sha256`
+is the SHA-256 of the canonical JSON (sorted keys, no whitespace) of the documents' `document_id`,
+`title`, `language`, `source` and `text_sha256`, sorted by `document_id`; `query_set_sha256` the
+same over each query's `query_id`, `query` and `expected`, sorted by `query_id`
+(`corpus_digest` and `query_set_digest` in the module compute both). Once written, the set is
+frozen: a changed document, query or expected chunk is a new `version`, never an edit.
+
+**4. Run it against a disposable database.**
+
+```bash
+python scripts/testdb.py create <name>_test
+python -m tests.evaluation.real_retrieval --spec /path/outside/spec.json --database-url postgresql+psycopg://postgres:<password>@localhost:5432/<name>_test
+python scripts/testdb.py drop <name>_test
+```
+
+The database must pass `tests/db_safety.py`; the harness migrates it from empty, creates one
+hotel, requires it to hold no document, uploads every document through `POST …/documents`
+(requiring the stored checksum to equal `text_sha256` and every expected chunk to exist with its
+declared hash), runs every query through `GET …/knowledge/search` with `limit=5`, and refuses any
+result that is not a chunk it uploaded. `--set-sha256` refuses a specification that is not the
+one recorded. Any refusal exits 2; nothing is repaired or skipped.
+
+**5. Read the report.** It is JSON with no document, query or chunk text: the set identity and its
+SHA-256, the corpus and query-set SHA-256s, the counts of documents, chunks and queries, cutoff,
+threshold, recalled / scored queries, recall@5, whether that is below, equal to or above 0.90, the
+attestation, and the verdict. recall@5 is the share of queries with at least one expected chunk in
+the first 5 results; the comparison with 0.90 is exact, and **equal to 0.90 is not below it**.
+
+| Attested as qualifying | recall@5 | Verdict |
+|---|---|---|
+| yes | below 0.90 | TRIGGER CONDITION SATISFIED — EVIDENCE SUPPORTS PROCEEDING TO STAGE 7.15 |
+| yes | 0.90 or above | TRIGGER CONDITION NOT SATISFIED |
+| no | any | NOT ASSESSABLE |
+
+**What CI does.** It never sees a real document: CI is hermetic, downloads nothing and stores
+nothing. `tests/evaluation/test_real_retrieval.py` tests every refusal and the arithmetic, and
+`tests/integration/test_real_retrieval_run.py` runs the upload-and-search path on PostgreSQL with
+two placeholder strings that are attested as not qualifying -- machinery, not evidence. Retention
+of the operator's documents is the operator's and the hotel's to decide; this repository sets none.
