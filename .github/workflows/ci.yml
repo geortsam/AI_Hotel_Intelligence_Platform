@@ -3088,7 +3088,9 @@ jobs:
           fi
           assert_all_pinned frontend/Dockerfile         "FROM"              '^FROM '                  2
           assert_all_pinned docker-compose.yml          "service image"     '^ +image: postgres'      1
-          assert_all_pinned .github/workflows/ci.yml    "service container" '^ +image: postgres'      1
+          # Two service containers since F17: quality-gates' and mutation-checks', the same
+          # image by the same digest. Each must carry it; the count only keeps the pattern honest.
+          assert_all_pinned .github/workflows/ci.yml    "service container" '^ +image: postgres'      2
 
           [ "$fail" -eq 0 ] || exit 1
           echo
