@@ -584,7 +584,7 @@ Tests live at the repository root and import `app` via `pythonpath = ["backend"]
 
 ### Continuous integration
 
-Every push and pull request to `main` runs four jobs in parallel on `ubuntu-latest`
+Every push and pull request to `main` runs five jobs in parallel on `ubuntu-latest`
 (`.github/workflows/ci.yml`):
 
 | Job | What it runs |
@@ -593,6 +593,7 @@ Every push and pull request to `main` runs four jobs in parallel on `ubuntu-late
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 | `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical |
+| `Mutation checks` | re-applies the 79 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that

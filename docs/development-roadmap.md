@@ -132,8 +132,9 @@ builds each image twice to prove every shipped file is identical.
 
 ## CI
 
-Four GitHub Actions jobs on every push: `quality-gates`, `frontend-quality-gates`,
-`docker-runtime` and `image-reproducibility`. The Docker job does not lint YAML — it runs the
+Five GitHub Actions jobs on every push: `quality-gates`, `frontend-quality-gates`,
+`docker-runtime`, `image-reproducibility` and `mutation-checks`, which re-runs the V2 stages'
+recorded mutation checks (`tests/mutation/`). The Docker job does not lint YAML — it runs the
 real stack in a disposable project and asserts the topology, TLS, the trust boundary, backup and
 restore, and that a failed migration blocks the API from starting.
 
