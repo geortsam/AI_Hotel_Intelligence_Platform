@@ -1,6 +1,7 @@
 import { AlertTriangle, Info, OctagonAlert } from 'lucide-react'
 
 import { Badge } from '@/components/ui/Badge'
+import { formatRatioAsPercent } from '@/features/dashboard/format'
 import { formatDate, formatMoney } from '@/lib/format'
 import type { Insight, InsightSeverity } from '@/types/intelligence'
 
@@ -61,9 +62,11 @@ export function InsightList({ insights }: InsightListProps) {
               <span className={styles.dates}>
                 {formatDate(insight.date_from)} &ndash; {formatDate(insight.date_to)}
               </span>
+              {/* `confidence` is the level of the forecast's prediction interval (0.95), not a
+                  measure of how reliable the model is -- so it is named for what it is. */}
               {insight.confidence === null ? null : (
                 <span className={styles.confidence}>
-                  Model confidence {insight.confidence}
+                  {formatRatioAsPercent(insight.confidence)} prediction interval
                 </span>
               )}
             </p>

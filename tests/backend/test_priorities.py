@@ -125,6 +125,7 @@ class FakeIntelligence:
             model=MODEL,
             window=self.window(date_from, date_to),
             metrics_scanned=["occupied_room_nights"],
+            metrics_not_assessed=[],
             anomalies=self.anomaly_points,
         )
 

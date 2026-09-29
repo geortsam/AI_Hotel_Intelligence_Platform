@@ -4,6 +4,7 @@ import type {
   DemandTrend,
   InsightsReport,
   OccupancyForecast,
+  PrioritiesReport,
   RevenueForecast,
 } from '@/types/intelligence'
 
@@ -141,6 +142,22 @@ export const intelligenceService = {
         date_to: query.dateTo,
         horizon_days: query.horizonDays,
       },
+      ...(signal ? { signal } : {}),
+    })
+  },
+
+  /**
+   * The Stage 7.12 attention list for the observation window: upcoming peak days, then observed
+   * anomalies, then the demand trend, ranked by the server. Read-only, and nothing about it is
+   * computed here -- every item, rank and sentence is the server's.
+   */
+  priorities(
+    hotelPublicId: string,
+    query: { readonly dateFrom: string; readonly dateTo: string },
+    signal?: AbortSignal,
+  ): Promise<PrioritiesReport> {
+    return api.get<PrioritiesReport>(`/hotels/${hotelPublicId}/intelligence/priorities`, {
+      query: { date_from: query.dateFrom, date_to: query.dateTo },
       ...(signal ? { signal } : {}),
     })
   },

@@ -36,6 +36,7 @@ from app.ml.timeseries import (
     ForecastMethod,
     ForecastPoint,
     Observation,
+    anomaly_assessability,
     detect_anomalies,
     forecast_series,
     measure_trend,
@@ -61,12 +62,24 @@ from app.schemas.intelligence import (
     SeverityLiteral,
     SupportingMetric,
     TrainingWindow,
+    UnassessedMetric,
 )
 from app.services.scope import HotelScopeResolver
 
 ZERO = decimal.Decimal("0")
 MONEY_PLACES = decimal.Decimal("0.01")
 RATE_PLACES = decimal.Decimal("0.0001")
+PERCENT_PLACES = decimal.Decimal("0.1")
+
+
+def _percent(rate: decimal.Decimal) -> str:
+    """A fraction in [0, 1] as a percentage to one decimal place, e.g. 0.2009 -> "20.1%".
+
+    Presentation only: the value itself is still returned as the fraction, in
+    ``supporting_metrics``, and the dashboard rounds occupancy the same way.
+    """
+    return f"{(rate * 100).quantize(PERCENT_PLACES, rounding=decimal.ROUND_HALF_UP)}%"
+
 
 METHODOLOGY = (
     "Day-of-week seasonal median over the training window, with a robust prediction "
@@ -236,15 +249,31 @@ class IntelligenceService:
     def anomalies(
         self, hotel_public_id: uuid.UUID, date_from: dt.date, date_to: dt.date
     ) -> AnomalyResponse:
-        """Scan occupancy, booking volume and room revenue for unusual days."""
+        """Scan occupancy, booking volume and room revenue for unusual days.
+
+        A metric the scan could not judge -- too few days, or no measurable spread -- is listed
+        in ``metrics_not_assessed`` with its reason, so an empty ``anomalies`` list is never
+        read as "nothing unusual" for it.
+        """
         hotel = self._scope.require_hotel(hotel_public_id)
         window = self._observation_window(date_from, date_to)
 
-        found: list[AnomalyPoint] = []
-        found += self._scan(OCCUPANCY_METRIC, self._occupancy_observations(hotel.id, window))
-        found += self._scan(BOOKINGS_METRIC, self._booking_observations(hotel.id, window))
+        series: list[tuple[str, list[Observation]]] = [
+            (OCCUPANCY_METRIC, self._occupancy_observations(hotel.id, window)),
+            (BOOKINGS_METRIC, self._booking_observations(hotel.id, window)),
+        ]
         for currency, observations in self._revenue_observations(hotel.id, window).items():
-            found += self._scan(f"{ROOM_REVENUE_METRIC}[{currency}]", observations)
+            series.append((f"{ROOM_REVENUE_METRIC}[{currency}]", observations))
+
+        found: list[AnomalyPoint] = []
+        unassessed: list[UnassessedMetric] = []
+        for metric, observations in series:
+            reason = anomaly_assessability(observations)
+            if reason is not None:
+                unassessed.append(
+                    UnassessedMetric(metric=metric, reason=reason, observations=len(observations))
+                )
+            found += self._scan(metric, observations)
 
         return AnomalyResponse(
             hotel_public_id=hotel.public_id,
@@ -253,6 +282,7 @@ class IntelligenceService:
             metrics_scanned=sorted(
                 {point.metric for point in found} | self._scannable(hotel.id, window)
             ),
+            metrics_not_assessed=sorted(unassessed, key=lambda item: item.metric),
             anomalies=sorted(found, key=lambda point: (point.metric, point.date)),
         )
 
@@ -497,6 +527,25 @@ class IntelligenceService:
                 )
             ]
 
+        if result.direction == "no_activity":
+            return [
+                Insight(
+                    type="demand_trend",
+                    severity="info",
+                    title="No bookings were taken in this window",
+                    explanation=(
+                        f"No booking was taken on any of the {result.observations} days "
+                        "observed, so no demand direction is reported."
+                    ),
+                    supporting_metrics=[
+                        SupportingMetric(name="observations", value=str(result.observations)),
+                        SupportingMetric(name="bookings_taken", value="0"),
+                    ],
+                    date_from=window.date_from,
+                    date_to=window.date_to,
+                )
+            ]
+
         severity: SeverityLiteral = "info" if result.direction != "decreasing" else "warning"
         change = _quantise(result.relative_change, RATE_PLACES)
         change_text = (
@@ -608,7 +657,7 @@ class IntelligenceService:
                 explanation=(
                     f"The model expects {total} occupied room nights across "
                     f"{horizon.days} days against a capacity of {capacity}"
-                    + (f", an occupancy rate of {rate}" if rate is not None else "")
+                    + (f", an occupancy rate of {_percent(rate)}" if rate is not None else "")
                     + f". {seasonal} of {len(usable)} days used a day-of-week seasonal "
                     "median; the rest fell back to the window median."
                 ),

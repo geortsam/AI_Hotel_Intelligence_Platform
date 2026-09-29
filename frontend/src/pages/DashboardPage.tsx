@@ -30,7 +30,11 @@ import { TrendChart, type TrendPoint } from '@/features/dashboard/TrendChart'
 import { useDashboardData } from '@/features/dashboard/useDashboardData'
 import { toAnalyticsRange } from '@/services/analytics/analyticsService'
 import { useHotelContext } from '@/session/HotelProvider'
-import type { DailySeriesResponse, OverviewResponse } from '@/types/analytics'
+import type {
+  DailySeriesResponse,
+  OverviewResponse,
+  RoomRevenueByCurrency,
+} from '@/types/analytics'
 import type { Hotel } from '@/types/hotel'
 
 import styles from './DashboardPage.module.css'
@@ -231,6 +235,29 @@ interface BoardProps {
   readonly periodLabel: string
 }
 
+/**
+ * Why the RevPAR tile shows a dash -- the reason that actually applies, not the first one that
+ * comes to mind.
+ *
+ * The backend sends `revpar: null` only when there are no available room nights (no active
+ * rooms). A period with no room revenue in this currency sends no bucket at all, so `room` is
+ * null even when the hotel has plenty of active rooms -- "0 of 112 room nights" beside it. That
+ * is a different reason, and the tile must not blame the rooms for it. RevPAR is not computed
+ * here in either case: the server did not report one, so none is shown.
+ */
+function revparUnavailableReason(
+  availableRoomNights: number,
+  room: RoomRevenueByCurrency | null,
+): string {
+  if (availableRoomNights === 0) {
+    return 'The hotel has no active rooms, so RevPAR is undefined.'
+  }
+  if (room === null) {
+    return 'No room revenue was recorded in this period, so RevPAR was not reported.'
+  }
+  return 'RevPAR was not reported for this period.'
+}
+
 /** True when the range genuinely holds nothing, as distinct from failing to load. */
 function isEmptyPeriod(overview: OverviewResponse): boolean {
   return (
@@ -340,7 +367,10 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
           caption={`Revenue per available room night (${formatCount(
             overview.occupancy.available_room_nights,
           )} available)`}
-          unavailableReason="The hotel has no active rooms, so RevPAR is undefined."
+          unavailableReason={revparUnavailableReason(
+            overview.occupancy.available_room_nights,
+            room,
+          )}
           delta={computeDelta(room?.revpar ?? null, previousRoom?.revpar ?? null)}
           deltaLabel={deltaLabel}
         />

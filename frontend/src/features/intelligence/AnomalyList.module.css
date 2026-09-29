@@ -286,3 +286,26 @@
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
+
+/* --- metrics the scan could not assess ---------------------------------------------------- */
+
+.unassessed {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+}
+
+.unassessedTitle {
+  margin: 0 0 var(--space-2);
+  font-weight: var(--weight-semibold);
+}
+
+.unassessedList {
+  margin: 0;
+  padding-left: var(--space-4);
+  color: var(--color-text-muted);
+  line-height: var(--leading-relaxed);
+}

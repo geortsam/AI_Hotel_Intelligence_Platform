@@ -20,6 +20,7 @@ import type {
   DemandTrend,
   InsightsReport,
   OccupancyForecast,
+  PrioritiesReport,
   RevenueForecast,
 } from '@/types/intelligence'
 
@@ -164,6 +165,7 @@ function anomalyReport(overrides: Partial<AnomalyReport> = {}): AnomalyReport {
     model: MODEL,
     window: { date_from: '2026-06-15', date_to: '2026-09-12', days: 90, observations: 90 },
     metrics_scanned: ['bookings_created', 'occupied_room_nights', 'room_revenue[EUR]'],
+    metrics_not_assessed: [],
     anomalies: [
       {
         metric: 'occupied_room_nights',
@@ -210,6 +212,71 @@ function insightsReport(overrides: Partial<InsightsReport> = {}): InsightsReport
         date_from: '2026-08-14',
         date_to: '2026-08-14',
         confidence: '0.95',
+      },
+    ],
+    ...overrides,
+  }
+}
+
+/** Transcribed from a live `GET …/intelligence/priorities` response's shape. */
+function prioritiesReport(overrides: Partial<PrioritiesReport> = {}): PrioritiesReport {
+  return {
+    hotel_public_id: TEST_HOTEL.public_id,
+    method: {
+      ranking: 'seasonal-naive-dow-median',
+      ranking_version: '1.0.0',
+      training_days: 90,
+      horizon_days: 14,
+      k: 3,
+      evaluation_protocol: 'insight_ranking_v1',
+      evaluation_protocol_checksum: 'e'.repeat(64),
+      baseline: 'same_weekday_last_week',
+    },
+    window: { date_from: '2026-06-15', date_to: '2026-09-12', days: 90, observations: 90 },
+    horizon: { date_from: '2026-09-13', date_to: '2026-09-26', days: 14 },
+    items: [
+      {
+        rank: 1,
+        kind: 'upcoming_peak_day',
+        date_from: '2026-09-18',
+        date_to: '2026-09-18',
+        measure: 'occupied_room_nights',
+        figures: [
+          {
+            name: 'predicted_room_nights',
+            value: '14.0',
+            unit: 'room_nights',
+            source: 'IntelligenceService.occupancy_forecast',
+          },
+        ],
+        observation: '2026-09-18 ranks 1 of 14 upcoming days by forecast occupied room nights.',
+        comparison: null,
+        limitation: 'A forecast, not a booking.',
+        look_at: {
+          view: 'occupancy_forecast',
+          path: `/api/v1/hotels/${TEST_HOTEL.public_id}/intelligence/forecast/occupancy`,
+          date_from: '2026-09-13',
+          date_to: '2026-09-26',
+        },
+      },
+      {
+        rank: 2,
+        kind: 'observed_anomaly',
+        date_from: '2026-08-14',
+        date_to: '2026-08-14',
+        measure: 'occupied_room_nights',
+        figures: [
+          { name: 'modified_z_score', value: '5.3960', unit: 'z_score', source: 'IntelligenceService.anomalies' },
+        ],
+        observation: 'On 2026-08-14 occupied_room_nights was 16, above the window median of 4.',
+        comparison: 'The threshold is 3.5.',
+        limitation: 'A statistical flag over the observation window.',
+        look_at: {
+          view: 'anomalies',
+          path: `/api/v1/hotels/${TEST_HOTEL.public_id}/intelligence/anomalies`,
+          date_from: '2026-06-15',
+          date_to: '2026-09-12',
+        },
       },
     ],
     ...overrides,
@@ -305,6 +372,7 @@ beforeEach(() => {
   fetchStub.on('GET', '/demand-trend', { body: demandTrend() })
   fetchStub.on('GET', '/intelligence/anomalies', { body: anomalyReport() })
   fetchStub.on('GET', '/intelligence/insights', { body: insightsReport() })
+  fetchStub.on('GET', '/intelligence/priorities', { body: prioritiesReport() })
   /*
    * Stage 7.4 added a fifth section to this page, for the TRAINED model rather than the
    * statistical forecaster these tests are about. Its four reads are stubbed here so that
@@ -455,9 +523,11 @@ describe('the request contract', () => {
     expect(requestsFor('/demand-trend')).toHaveLength(1)
     expect(requestsFor('/intelligence/anomalies')).toHaveLength(1)
     expect(requestsFor('/intelligence/insights')).toHaveLength(1)
-    // auth/me, hotels, the four reads for the default tab, and Stage 7.4's four for the
-    // trained-model section. Ten is a constant: it does not grow with days, points or rows.
-    expect(fetchStub.calls).toHaveLength(10)
+    expect(requestsFor('/intelligence/priorities')).toHaveLength(1)
+    // auth/me, hotels, the four reads for the default tab, the attention list, and Stage
+    // 7.4's four for the trained-model section. Eleven is a constant: it does not grow with
+    // days, points or rows.
+    expect(fetchStub.calls).toHaveLength(11)
     for (const path of [
       '/analytics/daily',
       '/ml/demand-predictions',
@@ -520,12 +590,13 @@ describe('the forecast', () => {
     expect(screen.getByText('2.5000')).toBeInTheDocument()
   })
 
-  it('names the interval by the confidence the server stated', async () => {
+  it('names the interval by the level the server stated, not as model confidence', async () => {
     renderPage()
     await screen.findByText('Booking demand is increasing')
 
     const chart = await screen.findByRole('img', { name: 'Occupied room nights forecast' })
-    expect(chart).toHaveAccessibleDescription(/0\.95 confidence prediction interval/)
+    expect(chart).toHaveAccessibleDescription(/the 95\.0% prediction interval/)
+    expect(chart).not.toHaveAccessibleDescription(/confidence/)
     expect(chart).toHaveAccessibleDescription(/never combined/)
     expect(chart).toHaveAccessibleDescription(/1 of 3 days have no prediction/)
   })
@@ -632,6 +703,22 @@ describe('the demand trend', () => {
     expect(await screen.findByText('Not enough data')).toBeInTheDocument()
     expect(screen.queryByText('Stable')).not.toBeInTheDocument()
   })
+
+  it('renders a window with no bookings at all as no activity, not as stable', async () => {
+    fetchStub.on('GET', '/demand-trend', {
+      body: demandTrend({
+        direction: 'no_activity',
+        earlier_median: '0',
+        recent_median: '0',
+        relative_change: null,
+      }),
+    })
+    renderPage()
+
+    expect(await screen.findByText('No booking activity')).toBeInTheDocument()
+    expect(screen.getByText(/No booking was taken on any day of the observation window/)).toBeInTheDocument()
+    expect(screen.queryByText('Stable')).not.toBeInTheDocument()
+  })
 })
 
 describe('anomalies', () => {
@@ -673,14 +760,160 @@ describe('anomalies', () => {
     expect(table.textContent).not.toMatch(/critical|severe|high risk/i)
   })
 
-  it('says what was scanned when nothing was unusual', async () => {
+  it('says nothing was unusual when every scanned metric was assessed', async () => {
     fetchStub.on('GET', '/intelligence/anomalies', { body: anomalyReport({ anomalies: [] }) })
     renderPage()
 
-    expect(await screen.findByText('Nothing unusual in this window')).toBeInTheDocument()
-    // The empty case is unambiguous: nothing was unusual, not nothing was looked at.
-    expect(screen.getByText(/3 metrics were scanned/)).toBeInTheDocument()
+    expect(
+      await screen.findByText('Nothing unusual in the metrics that could be assessed'),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/3 metrics were assessed/)).toBeInTheDocument()
     expect(screen.getByText(/room_revenue\[EUR\]/)).toBeInTheDocument()
+    expect(screen.queryByText('Could not be assessed')).not.toBeInTheDocument()
+  })
+
+  it('never calls an unassessable scan "nothing unusual"', async () => {
+    // The demo's shape: every metric has a median absolute deviation of zero.
+    fetchStub.on('GET', '/intelligence/anomalies', {
+      body: anomalyReport({
+        anomalies: [],
+        metrics_not_assessed: [
+          { metric: 'bookings_created', reason: 'no_variation', observations: 90 },
+          { metric: 'occupied_room_nights', reason: 'no_variation', observations: 90 },
+          { metric: 'room_revenue[EUR]', reason: 'too_few_observations', observations: 3 },
+        ],
+      }),
+    })
+    renderPage()
+
+    const region = await screen.findByRole('region', { name: 'Anomalies' })
+    expect(
+      await within(region).findByText('Anomalies could not be assessed in this window'),
+    ).toBeInTheDocument()
+    expect(within(region).queryByText(/Nothing unusual/)).not.toBeInTheDocument()
+    expect(within(region).getByText(/not a finding that nothing was unusual/)).toBeInTheDocument()
+    // Each metric is named with the server's reason, in words: two share one reason.
+    expect(within(region).getAllByText(/no usual spread to judge a day against/)).toHaveLength(2)
+    expect(within(region).getAllByText(/too few days in the window/)).toHaveLength(1)
+  })
+
+  it('limits "nothing unusual" to the metrics that were assessed, and names the rest', async () => {
+    fetchStub.on('GET', '/intelligence/anomalies', {
+      body: anomalyReport({
+        anomalies: [],
+        metrics_not_assessed: [
+          { metric: 'bookings_created', reason: 'no_variation', observations: 90 },
+        ],
+      }),
+    })
+    renderPage()
+
+    const region = await screen.findByRole('region', { name: 'Anomalies' })
+    expect(
+      await within(region).findByText('Nothing unusual in the metrics that could be assessed'),
+    ).toBeInTheDocument()
+    const summary = within(region).getByText(/2 metrics were assessed/)
+    expect(summary.textContent).toContain('occupied_room_nights')
+    expect(summary.textContent).not.toContain('bookings_created')
+    const note = within(region).getByRole('note')
+    expect(within(note).getByText('bookings_created')).toBeInTheDocument()
+  })
+
+  it('still names unassessed metrics beside flagged days', async () => {
+    fetchStub.on('GET', '/intelligence/anomalies', {
+      body: anomalyReport({
+        metrics_not_assessed: [
+          { metric: 'bookings_created', reason: 'no_variation', observations: 90 },
+        ],
+      }),
+    })
+    renderPage()
+
+    const region = await screen.findByRole('region', { name: 'Anomalies' })
+    expect(await within(region).findByText('Above normal')).toBeInTheDocument()
+    expect(within(region).getByText('Could not be assessed')).toBeInTheDocument()
+  })
+
+  it('treats an answer without metrics_not_assessed as malformed', async () => {
+    const { metrics_not_assessed: _omitted, ...legacy } = anomalyReport({ anomalies: [] })
+    fetchStub.on('GET', '/intelligence/anomalies', { body: legacy })
+    renderPage()
+
+    const region = await screen.findByRole('region', { name: 'Anomalies' })
+    expect(await within(region).findByText('Unexpected response')).toBeInTheDocument()
+    expect(within(region).queryByText(/Nothing unusual/)).not.toBeInTheDocument()
+  })
+})
+
+/* --- the attention list (Stage 7.12) -------------------------------------------------------- */
+
+describe('the attention list', () => {
+  it('asks the existing priorities route with the observation window, by GET only', async () => {
+    renderPage()
+    await screen.findByRole('heading', { name: 'Attention list' })
+    await waitFor(() => expect(requestsFor('/intelligence/priorities')).not.toHaveLength(0))
+
+    const url = urlOf('/intelligence/priorities')
+    expect(url.pathname).toBe(`/api/v1/hotels/${TEST_HOTEL.public_id}/intelligence/priorities`)
+    // The page's default observation window: the 90 days ending today (pinned to 12 Sep).
+    expect(url.searchParams.get('date_from')).toBe('2026-06-15')
+    expect(url.searchParams.get('date_to')).toBe('2026-09-12')
+    for (const call of requestsFor('/intelligence/priorities')) {
+      expect(call.method).toBe('GET')
+    }
+  })
+
+  it('shows every item in the server’s order with its rank, kind, sentences and figures', async () => {
+    renderPage()
+
+    const region = await screen.findByRole('region', { name: 'Attention list' })
+    const items = await within(region).findAllByRole('listitem')
+    expect(items).toHaveLength(2)
+    expect(within(items[0]!).getByText('Upcoming peak day')).toBeInTheDocument()
+    expect(within(items[0]!).getByText('Rank 1')).toBeInTheDocument()
+    expect(within(items[0]!).getByText(/ranks 1 of 14 upcoming days/)).toBeInTheDocument()
+    expect(within(items[0]!).getByText('predicted_room_nights')).toBeInTheDocument()
+    expect(within(items[0]!).getByText('A forecast, not a booking.')).toBeInTheDocument()
+    expect(within(items[1]!).getByText('Observed anomaly')).toBeInTheDocument()
+    expect(within(items[1]!).getByText('Rank 2')).toBeInTheDocument()
+    expect(within(items[1]!).getByText('The threshold is 3.5.')).toBeInTheDocument()
+    expect(within(region).getByText(/insight_ranking_v1/)).toBeInTheDocument()
+  })
+
+  it('offers nothing to act on: it is read-only', async () => {
+    renderPage()
+
+    const region = await screen.findByRole('region', { name: 'Attention list' })
+    await within(region).findAllByRole('listitem')
+    expect(within(region).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(region).queryByRole('link')).not.toBeInTheDocument()
+    expect(region.textContent).not.toMatch(/recommend/i)
+  })
+
+  it('renders an empty list as a result, not a failure', async () => {
+    fetchStub.on('GET', '/intelligence/priorities', { body: prioritiesReport({ items: [] }) })
+    renderPage()
+
+    const region = await screen.findByRole('region', { name: 'Attention list' })
+    expect(
+      await within(region).findByText('Nothing on the attention list for this window'),
+    ).toBeInTheDocument()
+  })
+
+  it('renders its own failure without taking the page down', async () => {
+    fetchStub.on('GET', '/intelligence/priorities', {
+      status: 500,
+      body: errorBody('INTERNAL_ERROR', 'Backend detail that must not be shown.'),
+    })
+    renderPage()
+
+    const region = await screen.findByRole('region', { name: 'Attention list' })
+    expect(
+      await within(region).findByText('Intelligence is temporarily unavailable'),
+    ).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('Backend detail that must not be shown.')
+    // The rest of the page still renders.
+    expect(screen.getByText('Booking demand is increasing')).toBeInTheDocument()
   })
 })
 
@@ -693,7 +926,11 @@ describe('findings', () => {
       screen.getByText('Median bookings taken per day moved from 2 to 5.'),
     ).toBeInTheDocument()
     expect(screen.getByText('Warning')).toBeInTheDocument()
-    expect(screen.getByText('Model confidence 0.95')).toBeInTheDocument()
+    // 0.95 is the level of the forecast's prediction interval. It says nothing about how
+    // reliable the model is, so it is never called "model confidence".
+    const findings = screen.getByRole('region', { name: 'Findings' })
+    expect(within(findings).getByText('95.0% prediction interval')).toBeInTheDocument()
+    expect(screen.queryByText(/model confidence/i)).not.toBeInTheDocument()
   })
 
   it('formats a monetary supporting metric in its own currency', async () => {
@@ -755,7 +992,7 @@ describe('failures', () => {
     renderPage()
 
     expect(await screen.findByText('Unexpected response')).toBeInTheDocument()
-    expect(screen.queryByText('Nothing unusual in this window')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Nothing unusual/)).not.toBeInTheDocument()
   })
 
   it('lets one endpoint fail without blanking the others', async () => {
@@ -927,6 +1164,7 @@ describe('accessibility', () => {
       'Forecast',
       'Booking demand',
       'Anomalies',
+      'Attention list',
       'Findings',
       // Stage 7.4. Last, and at the same level as its siblings: it is a peer section of this
       // page rather than a sub-part of the findings above it.

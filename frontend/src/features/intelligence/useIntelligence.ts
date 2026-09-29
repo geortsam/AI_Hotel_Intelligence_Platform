@@ -8,6 +8,7 @@ import type {
   DemandTrend,
   InsightsReport,
   OccupancyForecast,
+  PrioritiesReport,
   RevenueForecast,
 } from '@/types/intelligence'
 
@@ -74,6 +75,7 @@ export interface IntelligenceState {
   readonly trend: Resource<DemandTrend>
   readonly anomalies: Resource<AnomalyReport>
   readonly insights: Resource<InsightsReport>
+  readonly priorities: Resource<PrioritiesReport>
 
   readonly reload: () => void
 }
@@ -228,7 +230,9 @@ export function useIntelligence(
         { dateFrom: window.dateFrom, dateTo: window.dateTo },
         signal,
       ),
-    hasArray('anomalies'),
+    // Both lists are required: an answer without `metrics_not_assessed` cannot say which
+    // metrics an empty `anomalies` list actually covers, so it is treated as malformed.
+    (value) => hasArray('anomalies')(value) && hasArray('metrics_not_assessed')(value),
     [id, window.dateFrom, window.dateTo, attempt],
   )
 
@@ -248,9 +252,21 @@ export function useIntelligence(
     [id, window.dateFrom, window.dateTo, params.horizonDays, attempt],
   )
 
+  const priorities = useResource<PrioritiesReport>(
+    on,
+    (signal) =>
+      intelligenceService.priorities(
+        id!,
+        { dateFrom: window.dateFrom, dateTo: window.dateTo },
+        signal,
+      ),
+    hasArray('items'),
+    [id, window.dateFrom, window.dateTo, attempt],
+  )
+
   const reload = useCallback(() => {
     setAttempt((n) => n + 1)
   }, [])
 
-  return { window, horizon, occupancy, revenue, trend, anomalies, insights, reload }
+  return { window, horizon, occupancy, revenue, trend, anomalies, insights, priorities, reload }
 }

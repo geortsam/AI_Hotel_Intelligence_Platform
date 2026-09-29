@@ -537,6 +537,66 @@ describe('an empty period', () => {
   })
 })
 
+/* --- RevPAR: the reason given must be the one that applies ----------------------------- */
+
+/**
+ * The live case this was found in: 16 active rooms (112 available room nights over 7 days), a
+ * booking staying, but no room revenue recorded -- so the backend sent no room-revenue bucket.
+ * Not an empty period, which is why the whole-page empty state does not cover it.
+ */
+const NO_ROOM_REVENUE = {
+  ...CURRENT_OVERVIEW,
+  bookings_by_stay: { ...CURRENT_OVERVIEW.bookings_by_stay, total: 1 },
+  occupancy: {
+    ...CURRENT_OVERVIEW.occupancy,
+    occupied_room_nights: 0,
+    room_nights_sold: 0,
+    available_room_nights: 112,
+    occupancy_rate: '0.0000',
+  },
+  room_revenue: [],
+}
+
+const NO_ACTIVE_ROOMS = {
+  ...NO_ROOM_REVENUE,
+  occupancy: { ...NO_ROOM_REVENUE.occupancy, available_room_nights: 0, occupancy_rate: null },
+}
+
+describe('the RevPAR explanation', () => {
+  beforeEach(() => {
+    stubSession()
+    fetchStub.on('GET', 'analytics/daily', { body: DAILY })
+  })
+
+  it('blames missing room revenue, not the rooms, when active rooms exist', async () => {
+    stubOverview(NO_ROOM_REVENUE, NO_ROOM_REVENUE)
+    mount()
+    await screen.findByText('0 of 112 room nights')
+
+    const revpar = screen.getByText('RevPAR').closest('div')!
+    expect(
+      within(revpar).getByText(
+        'No room revenue was recorded in this period, so RevPAR was not reported.',
+      ),
+    ).toBeInTheDocument()
+    // The old sentence claimed the hotel had no active rooms beside "0 of 112 room nights".
+    expect(screen.queryByText(/no active rooms, so RevPAR/)).not.toBeInTheDocument()
+    // Nothing is computed to fill the gap: no RevPAR of zero is invented.
+    expect(within(revpar).queryByText(/EUR\s*0\.00/)).not.toBeInTheDocument()
+  })
+
+  it('says the hotel has no active rooms only when there are no available room nights', async () => {
+    stubOverview(NO_ACTIVE_ROOMS, NO_ACTIVE_ROOMS)
+    mount()
+    await screen.findByText('0 of 0 room nights')
+
+    const revpar = screen.getByText('RevPAR').closest('div')!
+    expect(
+      within(revpar).getByText('The hotel has no active rooms, so RevPAR is undefined.'),
+    ).toBeInTheDocument()
+  })
+})
+
 /* --- failures --------------------------------------------------------------------------- */
 
 function stubOverviewFailure(status: number, body: unknown, headers?: Record<string, string>) {

@@ -35,6 +35,7 @@ from app.ml.timeseries import (
     TREND_THRESHOLD,
     ForecastMethod,
     Observation,
+    anomaly_assessability,
     detect_anomalies,
     forecast_series,
     measure_trend,
@@ -276,6 +277,34 @@ def test_too_little_history_yields_no_anomalies() -> None:
     assert detect_anomalies(series([1, 500, 1])) == []
 
 
+# --- whether a series could be scanned at all -----------------------------------------------------
+
+
+def test_too_few_days_cannot_be_assessed() -> None:
+    assert anomaly_assessability(series([1, 500, 1])) == "too_few_observations"
+
+
+def test_a_constant_series_cannot_be_assessed() -> None:
+    assert anomaly_assessability(series([7] * 20)) == "no_variation"
+
+
+def test_zeros_with_one_busy_day_cannot_be_assessed_either() -> None:
+    """The demo's shape: the series did vary, but more than half the days share the median, so
+    the MAD is zero and no day can be judged. The scan flags nothing -- and that must not be
+    read as "nothing unusual"."""
+    observations = series([0] * 89 + [166])
+
+    assert anomaly_assessability(observations) == "no_variation"
+    assert detect_anomalies(observations) == []
+
+
+def test_a_series_with_spread_can_be_assessed() -> None:
+    observations = series([10, 11, 9, 12, 8, 10, 11, 9, 10, 12, 9, 11, 10, 400])
+
+    assert anomaly_assessability(observations) is None
+    assert len(detect_anomalies(observations)) == 1
+
+
 def test_the_score_matches_the_documented_formula() -> None:
     """score = 0.6745 x (value - median) / MAD, recomputed by hand."""
     values = [10, 11, 9, 12, 8, 10, 11, 9, 10, 12, 9, 11, 10, 400]
@@ -356,10 +385,28 @@ def test_growth_from_nothing_has_no_relative_change() -> None:
     assert result.relative_change is None
 
 
-def test_a_series_of_zeros_is_stable_not_increasing() -> None:
+def test_a_window_with_no_bookings_at_all_is_no_activity_not_stable() -> None:
+    """Zero on every day: there is no demand whose direction could be observed. "Stable"
+    would describe a direction; "no_activity" says what the window held."""
     result = measure_trend(series([0] * 12))
 
-    assert result.direction == "stable"
+    assert result.direction == "no_activity"
+    assert result.earlier_median == 0 and result.recent_median == 0
+    assert result.relative_change is None
+    assert result.observations == 12
+
+
+def test_one_busy_day_in_a_window_of_zeros_is_not_no_activity() -> None:
+    """Both halves' medians are zero, but bookings were taken: the window did hold activity,
+    so it must never be reported as having none. (The median comparison itself is unchanged.)"""
+    result = measure_trend(series([0] * 11 + [166]))
+
+    assert result.direction != "no_activity"
+    assert result.earlier_median == 0 and result.recent_median == 0
+
+
+def test_non_zero_flat_demand_is_still_stable() -> None:
+    assert measure_trend(series([3] * 12)).direction == "stable"
 
 
 def test_too_little_history_reports_insufficient_data() -> None:

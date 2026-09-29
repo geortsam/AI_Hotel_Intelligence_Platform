@@ -100,6 +100,11 @@ recomputable.
 *Zero baseline:* a relative change from zero is undefined. `relative_change` is then null and
 the direction follows the absolute move.
 
+*No activity:* a window in which no booking was taken on **any** day is `no_activity`, not
+`stable` -- there is no demand whose direction could be observed. A window whose medians are
+both zero but which did hold bookings (a few busy days among many empty ones) is not
+`no_activity`; the median comparison above still classifies it.
+
 ### Anomaly detection — modified z-score on the MAD
 
 ```
@@ -111,15 +116,21 @@ deviation:* the outlier inflates the very standard deviation used to judge it, s
 hide behind the damage they do to the statistic.
 
 Scanned metrics: `occupied_room_nights`, `bookings_created`, and `room_revenue[<CCY>]` for
-each currency with history. `metrics_scanned` is returned, so an empty result reads as
-"nothing was unusual" rather than "nothing was examined".
+each currency with history. `metrics_scanned` names every metric looked at, and
+`metrics_not_assessed` names those that could not be judged at all, with a reason:
+`too_few_observations` or `no_variation`. An empty `anomalies` list means "nothing was
+unusual" only for the scanned metrics that were assessed; for the others the scan
+established nothing either way.
 
 Every flag carries metric, date, value, window median, MAD, score, threshold and direction —
 the whole basis, not a verdict.
 
-**MAD = 0 yields no anomalies.** A series that has never varied offers no notion of usual
-spread, and a value cannot be unusual against it. Arbitrary values are never labelled
-anomalous.
+**MAD = 0 yields no anomalies -- and no verdict.** A median absolute deviation of zero means at
+least half the days share the median value exactly. That is not the same as a series that
+never varied: a window of zeros with one busy day has a MAD of zero too. Either way the
+modified z-score has no usual spread to divide by, so no day can be judged unusual *or* usual,
+and the metric is reported in `metrics_not_assessed` as `no_variation` rather than left to read
+as "nothing unusual". Arbitrary values are never labelled anomalous.
 
 ### Explainable insights
 

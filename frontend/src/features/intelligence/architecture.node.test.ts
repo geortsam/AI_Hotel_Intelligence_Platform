@@ -114,6 +114,7 @@ describe('the source scan itself works', () => {
   it('covers every source file this stage added', () => {
     expect(sources.map((file) => file.name).sort()).toEqual([
       'AnomalyList.tsx',
+      'AttentionList.tsx',
       'ForecastChart.tsx',
       'InsightList.tsx',
       'IntelligencePage.tsx',
@@ -266,7 +267,8 @@ describe('every request goes through the shared client', () => {
   it('scopes every path to the hotel’s public identifier', () => {
     const service = named('intelligenceService.ts')
     const paths = service.match(/`\/hotels\/[^`]*`/g) ?? []
-    expect(paths).toHaveLength(5)
+    // Five Stage 5.16 reads, and the Stage 7.12 attention list.
+    expect(paths).toHaveLength(6)
     for (const path of paths) {
       expect(path).toMatch(/^`\/hotels\/\$\{hotelPublicId\}\/intelligence\//)
     }
@@ -300,12 +302,12 @@ describe('every request goes through the shared client', () => {
     }
 
     /*
-     * Ten `query: {` blocks exist — five are the method signatures' camelCase parameter
-     * types, five are the snake_case objects actually put on the wire. Only the latter are
+     * Twelve `query: {` blocks exist — six are the method signatures' camelCase parameter
+     * types, six are the snake_case objects actually put on the wire. Only the latter are
      * the contract, and `date_from` is what distinguishes them.
      */
     const sent = blocks.filter((block) => block.includes('date_from'))
-    expect(sent).toHaveLength(5)
+    expect(sent).toHaveLength(6)
 
     const keys = new Set<string>()
     for (const block of sent) {

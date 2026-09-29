@@ -42,7 +42,11 @@ DEFAULT_HORIZON_DAYS = 7
 MAX_OBSERVATION_DAYS = 366
 
 ForecastMethodLiteral = Literal["seasonal_dow_median", "overall_median", "insufficient_data"]
-TrendDirectionLiteral = Literal["increasing", "decreasing", "stable", "insufficient_data"]
+TrendDirectionLiteral = Literal[
+    "increasing", "decreasing", "stable", "no_activity", "insufficient_data"
+]
+#: Why one metric could not be scanned for anomalies. Closed; see `anomaly_assessability`.
+AnomalyUnassessedReasonLiteral = Literal["too_few_observations", "no_variation"]
 SeverityLiteral = Literal["info", "warning", "critical"]
 
 
@@ -176,7 +180,8 @@ class DemandTrendResponse(BaseModel):
     The window is split in half and the halves' medians compared; the classification is
     ``increasing`` or ``decreasing`` when the relative change exceeds ``threshold``, and
     ``stable`` otherwise. Both medians and the threshold are returned so the answer can be
-    recomputed by hand.
+    recomputed by hand. A window in which no booking was taken on any day is ``no_activity``,
+    not ``stable``: there is no demand whose direction could be observed.
     """
 
     hotel_public_id: uuid.UUID
@@ -209,8 +214,23 @@ class AnomalyPoint(BaseModel):
     direction: Literal["above", "below"]
 
 
+class UnassessedMetric(BaseModel):
+    """A metric the anomaly scan looked at but could judge no day of, and why."""
+
+    metric: str
+    reason: AnomalyUnassessedReasonLiteral
+    #: The days the metric had in the window, so ``too_few_observations`` can be checked.
+    observations: int
+
+
 class AnomalyResponse(BaseModel):
-    """Anomalies across the observed metrics, ordered by metric then date."""
+    """Anomalies across the observed metrics, ordered by metric then date.
+
+    An empty ``anomalies`` list means "nothing unusual" only for the metrics that are in
+    ``metrics_scanned`` and not in ``metrics_not_assessed``. A metric in the second list was
+    looked at but could not be judged at all -- too few days, or a median absolute deviation of
+    zero -- which establishes nothing either way.
+    """
 
     hotel_public_id: uuid.UUID
     model: ModelMetadata
@@ -218,6 +238,9 @@ class AnomalyResponse(BaseModel):
     #: The metrics that were scanned, named so an empty result is unambiguous: nothing was
     #: unusual, rather than nothing was looked at.
     metrics_scanned: list[str]
+    #: Scanned metrics that could not be assessed, ordered by metric. Empty when every scanned
+    #: metric was assessed.
+    metrics_not_assessed: list[UnassessedMetric]
     anomalies: list[AnomalyPoint]
 
 
@@ -302,4 +325,5 @@ __all__ = [
     "SupportingMetric",
     "TrainingWindow",
     "TrendDirectionLiteral",
+    "UnassessedMetric",
 ]

@@ -30,8 +30,16 @@
 /** `ForecastMethodLiteral`. A single response can mix methods across its days. */
 export type ForecastMethod = 'seasonal_dow_median' | 'overall_median' | 'insufficient_data'
 
-/** `TrendDirectionLiteral`. */
-export type TrendDirection = 'increasing' | 'decreasing' | 'stable' | 'insufficient_data'
+/**
+ * `TrendDirectionLiteral`. `no_activity` is a window in which no booking was taken on any day:
+ * there is no demand whose direction could be observed, so it is not `stable`.
+ */
+export type TrendDirection =
+  | 'increasing'
+  | 'decreasing'
+  | 'stable'
+  | 'no_activity'
+  | 'insufficient_data'
 
 /** `SeverityLiteral`. Carried by insights only — an anomaly has no severity. */
 export type InsightSeverity = 'info' | 'warning' | 'critical'
@@ -184,12 +192,27 @@ export interface AnomalyPoint {
   readonly direction: 'above' | 'below'
 }
 
+/** `AnomalyUnassessedReasonLiteral`. Why a scanned metric could not be judged at all. */
+export type UnassessedReason = 'too_few_observations' | 'no_variation'
+
+/** `UnassessedMetric` — a metric the scan looked at but could judge no day of. */
+export interface UnassessedMetric {
+  readonly metric: string
+  readonly reason: UnassessedReason
+  readonly observations: number
+}
+
 export interface AnomalyReport {
   readonly hotel_public_id: string
   readonly model: ModelMetadata
   readonly window: ObservationWindow
-  /** Named so an empty result is unambiguous: nothing was unusual, not nothing was examined. */
+  /** Every metric the scan looked at, so an empty result never reads as "nothing examined". */
   readonly metrics_scanned: readonly string[]
+  /**
+   * The scanned metrics that could not be judged. An empty `anomalies` list means "nothing
+   * unusual" only for the scanned metrics that are NOT in this list.
+   */
+  readonly metrics_not_assessed: readonly UnassessedMetric[]
   readonly anomalies: readonly AnomalyPoint[]
 }
 
@@ -224,6 +247,63 @@ export interface InsightsReport {
 }
 
 /* --- the bounds the routers declare ------------------------------------------------------ */
+
+/* --- the attention list (Stage 7.12), transcribed from `app.schemas.insight` --------------- */
+
+/** `PriorityKind`. Closed. */
+export type PriorityKind = 'upcoming_peak_day' | 'observed_anomaly' | 'demand_trend'
+
+/** `PriorityFigure` — one number an item rests on, and the service it came from. */
+export interface PriorityFigure {
+  readonly name: string
+  /** A string, so a decimal keeps its scale and a count stays a count. */
+  readonly value: string
+  readonly unit: string
+  readonly source: string
+}
+
+/** `LookAt` — the existing read-only route the item's data can be read from. */
+export interface LookAt {
+  readonly view: string
+  readonly path: string
+  readonly date_from: string
+  readonly date_to: string
+}
+
+/** `PriorityItem`. Every sentence is a fixed server template filled from `figures`. */
+export interface PriorityItem {
+  readonly rank: number
+  readonly kind: PriorityKind
+  readonly date_from: string
+  readonly date_to: string
+  readonly measure: string
+  readonly figures: readonly PriorityFigure[]
+  readonly observation: string
+  readonly comparison: string | null
+  readonly limitation: string
+  readonly look_at: LookAt
+}
+
+/** `PriorityMethod` — how the list was ranked, and the protocol that ranking is measured under. */
+export interface PriorityMethod {
+  readonly ranking: string
+  readonly ranking_version: string
+  readonly training_days: number
+  readonly horizon_days: number
+  readonly k: number
+  readonly evaluation_protocol: string
+  readonly evaluation_protocol_checksum: string
+  readonly baseline: string
+}
+
+/** `PrioritiesResponse` — `GET /hotels/{h}/intelligence/priorities`. */
+export interface PrioritiesReport {
+  readonly hotel_public_id: string
+  readonly method: PriorityMethod
+  readonly window: ObservationWindow
+  readonly horizon: ForecastHorizon
+  readonly items: readonly PriorityItem[]
+}
 
 /** `MIN_TRAINING_DAYS` / `MAX_TRAINING_DAYS` / `DEFAULT_TRAINING_DAYS`. */
 export const MIN_TRAINING_DAYS = 14

@@ -28,7 +28,7 @@ import datetime as dt
 import decimal
 import statistics
 from enum import StrEnum
-from typing import NamedTuple
+from typing import Final, Literal, NamedTuple
 
 #: Identifies the forecasting model in every response, so a stored prediction can be traced
 #: to the code that produced it. Bump the version when the arithmetic changes.
@@ -108,7 +108,7 @@ class Anomaly(NamedTuple):
 class TrendResult(NamedTuple):
     """A demand-direction classification and the two numbers that produced it."""
 
-    #: "increasing", "decreasing", "stable" or "insufficient_data".
+    #: "increasing", "decreasing", "stable", "no_activity" or "insufficient_data".
     direction: str
     earlier_median: decimal.Decimal | None
     recent_median: decimal.Decimal | None
@@ -198,6 +198,37 @@ def forecast_series(
     return points
 
 
+#: Why an anomaly scan of one series could judge no day at all. Closed.
+UnassessedReason = Literal["too_few_observations", "no_variation"]
+TOO_FEW_OBSERVATIONS: Final = "too_few_observations"
+NO_VARIATION: Final = "no_variation"
+
+
+def anomaly_assessability(
+    observations: list[Observation],
+    *,
+    minimum_observations: int = MIN_TRAINING_OBSERVATIONS,
+) -> UnassessedReason | None:
+    """Why *observations* cannot be scanned for anomalies, or None when they can.
+
+    ``too_few_observations`` -- fewer than *minimum_observations* days.
+
+    ``no_variation`` -- the median absolute deviation is zero: at least half the days share
+    the median value exactly. That is not the same as "never varied" -- a window of zeros with
+    one busy day has a MAD of zero -- but it leaves the modified z-score with no measure of
+    usual spread to divide by, so no day can be judged unusual *or* usual.
+
+    Either way the scan established nothing, which is different from establishing that
+    nothing was unusual.
+    """
+    if len(observations) < minimum_observations:
+        return TOO_FEW_OBSERVATIONS
+    values = [observation.value for observation in observations]
+    if _mad(values, _median(values)) == ZERO:
+        return NO_VARIATION
+    return None
+
+
 def detect_anomalies(
     observations: list[Observation],
     *,
@@ -208,20 +239,18 @@ def detect_anomalies(
 
     ``score = 0.6745 * (value - median) / MAD``
 
-    Returns an empty list -- never a fabricated flag -- when the series is too short or when
-    the MAD is zero. A MAD of zero means the series has never varied, and a value cannot be
-    called unusual against a history with no notion of usual spread.
+    Returns an empty list -- never a fabricated flag -- when :func:`anomaly_assessability`
+    says the series cannot be judged. An empty list therefore means "nothing flagged", and
+    only a caller that has also checked assessability may say "nothing unusual".
 
     Results are ordered by date, so the same input always produces the same output.
     """
-    if len(observations) < minimum_observations:
+    if anomaly_assessability(observations, minimum_observations=minimum_observations):
         return []
 
     values = [observation.value for observation in observations]
     centre = _median(values)
     spread = _mad(values, centre)
-    if spread == ZERO:
-        return []
 
     anomalies: list[Anomaly] = []
     for observation in sorted(observations, key=lambda item: item.date):
@@ -262,6 +291,17 @@ def measure_trend(
             direction="insufficient_data",
             earlier_median=None,
             recent_median=None,
+            relative_change=None,
+            observations=len(ordered),
+        )
+
+    if all(item.value == ZERO for item in ordered):
+        # Nothing was taken on any day. Two medians of zero would compare as "stable", which
+        # describes a direction nobody could observe; this says what the window held instead.
+        return TrendResult(
+            direction="no_activity",
+            earlier_median=ZERO,
+            recent_median=ZERO,
             relative_change=None,
             observations=len(ordered),
         )
@@ -309,12 +349,16 @@ __all__ = [
     "MODEL_NAME",
     "MODEL_VERSION",
     "MODIFIED_Z_CONSTANT",
+    "NO_VARIATION",
+    "TOO_FEW_OBSERVATIONS",
     "TREND_THRESHOLD",
     "Anomaly",
     "ForecastMethod",
     "ForecastPoint",
     "Observation",
     "TrendResult",
+    "UnassessedReason",
+    "anomaly_assessability",
     "detect_anomalies",
     "forecast_series",
     "measure_trend",

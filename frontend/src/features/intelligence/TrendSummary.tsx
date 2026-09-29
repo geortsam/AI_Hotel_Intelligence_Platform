@@ -1,4 +1,4 @@
-import { Minus, TrendingDown, TrendingUp, HelpCircle } from 'lucide-react'
+import { CircleOff, HelpCircle, Minus, TrendingDown, TrendingUp } from 'lucide-react'
 
 import { UNAVAILABLE } from '@/lib/format'
 import type { DemandTrend, TrendDirection } from '@/types/intelligence'
@@ -29,6 +29,11 @@ export interface TrendSummaryProps {
  *
  * A window too sparse to split is answered honestly by the API and is rendered honestly
  * here. It is not "stable".
+ *
+ * ## `no_activity` is a fifth, and it is not "stable" either
+ *
+ * A window in which no booking was taken on any day holds no demand whose direction could be
+ * observed. The server says so, and so does this label.
  */
 const PRESENTATION: Readonly<
   Record<TrendDirection, { label: string; icon: typeof TrendingUp; tone: string }>
@@ -36,6 +41,7 @@ const PRESENTATION: Readonly<
   increasing: { label: 'Increasing', icon: TrendingUp, tone: 'up' },
   decreasing: { label: 'Decreasing', icon: TrendingDown, tone: 'down' },
   stable: { label: 'Stable', icon: Minus, tone: 'flat' },
+  no_activity: { label: 'No booking activity', icon: CircleOff, tone: 'unknown' },
   insufficient_data: { label: 'Not enough data', icon: HelpCircle, tone: 'unknown' },
 }
 
@@ -54,7 +60,9 @@ export function TrendSummary({ trend }: TrendSummaryProps) {
       <p className={styles.basis}>
         {trend.direction === 'insufficient_data'
           ? 'The observation window did not hold enough booking history to split in half and compare.'
-          : 'Classified by comparing the median of the window’s earlier half with its recent half. Both medians and the threshold are below, so the classification can be checked.'}
+          : trend.direction === 'no_activity'
+            ? 'No booking was taken on any day of the observation window, so there is no demand whose direction could be classified.'
+            : 'Classified by comparing the median of the window’s earlier half with its recent half. Both medians and the threshold are below, so the classification can be checked.'}
       </p>
 
       <dl className={styles.fields}>

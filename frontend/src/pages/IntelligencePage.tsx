@@ -1,13 +1,23 @@
 import { useId, useState, type ReactNode } from 'react'
-import { AlertTriangle, Building2, Lightbulb, Radar, WifiOff } from 'lucide-react'
+import {
+  AlertTriangle,
+  Building2,
+  HelpCircle,
+  Lightbulb,
+  ListOrdered,
+  Radar,
+  WifiOff,
+} from 'lucide-react'
 
 import { PageContainer } from '@/components/ui/PageContainer'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { StateMessage } from '@/features/dashboard/StateMessage'
+import { formatRatioAsPercent } from '@/features/dashboard/format'
 import type { PeriodId } from '@/features/dashboard/period'
 import { ForecastPerformanceSection } from '@/features/forecastPerformance/ForecastPerformanceSection'
-import { AnomalyList } from '@/features/intelligence/AnomalyList'
+import { AnomalyList, UnassessedMetrics } from '@/features/intelligence/AnomalyList'
+import { AttentionList } from '@/features/intelligence/AttentionList'
 import { ForecastChart, type ForecastChartPoint } from '@/features/intelligence/ForecastChart'
 import { InsightList } from '@/features/intelligence/InsightList'
 import { TrendSummary } from '@/features/intelligence/TrendSummary'
@@ -165,8 +175,10 @@ export function IntelligencePage() {
       method: point.method,
     })) ?? []
 
+  /* The level of the prediction interval -- "95.0%" -- which the chart labels as such. It is
+   * not a confidence in the model, and is never called one. */
   const confidenceOf = (value: string | null | undefined): string | null =>
-    value === null || value === undefined ? null : `${value} confidence`
+    value === null || value === undefined ? null : formatRatioAsPercent(value)
 
   return (
     <Frame>
@@ -407,16 +419,30 @@ export function IntelligencePage() {
           label="Loading anomalies"
           onRetry={intelligence.reload}
         >
-          {(report) => (
+          {(report) => {
+            /* Which scanned metrics the scan could actually judge. Only for these does an
+             * empty list mean "nothing unusual"; the others are named, with the reason. */
+            const unassessed = new Set(report.metrics_not_assessed.map((item) => item.metric))
+            const assessed = report.metrics_scanned.filter((metric) => !unassessed.has(metric))
+            return (
             <>
-              {report.anomalies.length === 0 ? (
+              {report.anomalies.length === 0 && assessed.length === 0 ? (
+                <StateMessage
+                  icon={HelpCircle}
+                  tone="status"
+                  title="Anomalies could not be assessed in this window"
+                  detail={`None of the ${formatCount(report.metrics_scanned.length)} scanned ${
+                    report.metrics_scanned.length === 1 ? 'metric' : 'metrics'
+                  } could be judged, so this is not a finding that nothing was unusual.`}
+                />
+              ) : report.anomalies.length === 0 ? (
                 <StateMessage
                   icon={Radar}
                   tone="status"
-                  title="Nothing unusual in this window"
-                  detail={`${formatCount(report.metrics_scanned.length)} ${
-                    report.metrics_scanned.length === 1 ? 'metric was' : 'metrics were'
-                  } scanned — ${report.metrics_scanned.join(', ')} — and no day exceeded the threshold.`}
+                  title="Nothing unusual in the metrics that could be assessed"
+                  detail={`${formatCount(assessed.length)} ${
+                    assessed.length === 1 ? 'metric was' : 'metrics were'
+                  } assessed — ${assessed.join(', ')} — and no day exceeded the threshold.`}
                 />
               ) : (
                 <>
@@ -430,9 +456,54 @@ export function IntelligencePage() {
                   <AnomalyList anomalies={report.anomalies} />
                 </>
               )}
+              {report.metrics_not_assessed.length === 0 ? null : (
+                <UnassessedMetrics metrics={report.metrics_not_assessed} />
+              )}
               <Provenance model={report.model} />
             </>
-          )}
+            )
+          }}
+        </Gate>
+      </section>
+
+      {/* --- attention list ------------------------------------------------------------- */}
+
+      <section className={styles.block} aria-labelledby="intelligence-attention">
+        <h2 className={styles.blockTitle} id="intelligence-attention">
+          Attention list
+        </h2>
+        <p className={styles.blockNote}>
+          Upcoming peak days, then observed anomalies, then the demand trend, as ranked by the
+          server from the same statistics shown above. Each sentence is a fixed template filled
+          from the figures listed with it. It is read-only and suggests no action.
+        </p>
+        <Gate
+          resource={intelligence.priorities}
+          label="Loading the attention list"
+          onRetry={intelligence.reload}
+        >
+          {(report) =>
+            report.items.length === 0 ? (
+              <StateMessage
+                icon={ListOrdered}
+                tone="status"
+                title="Nothing on the attention list for this window"
+                detail="No upcoming peak day, anomaly or demand movement met the list's criteria. This is a result, not a failure to analyse."
+              />
+            ) : (
+              <>
+                <AttentionList items={report.items} />
+                <p className={styles.provenance}>
+                  <span className={styles.modelName}>
+                    {report.method.ranking} v{report.method.ranking_version}
+                  </span>
+                  Upcoming days ranked over the next {formatCount(report.method.horizon_days)}{' '}
+                  days; the ranking is measured offline under {report.method.evaluation_protocol}{' '}
+                  against {report.method.baseline}.
+                </p>
+              </>
+            )
+          }
         </Gate>
       </section>
 

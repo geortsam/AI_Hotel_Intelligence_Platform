@@ -161,7 +161,8 @@ def get_anomalies(
     date_from: WindowFrom,
     date_to: WindowTo,
 ) -> AnomalyResponse:
-    """An empty list means nothing was unusual; ``metrics_scanned`` says what was examined."""
+    """``metrics_scanned`` says what was examined and ``metrics_not_assessed`` what of it could
+    not be judged; an empty list means nothing was unusual only for the metrics that were."""
     return service.anomalies(hotel_public_id, date_from, date_to)
 
 

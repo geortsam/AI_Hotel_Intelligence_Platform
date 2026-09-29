@@ -611,7 +611,13 @@ def test_demand_trend_reports_both_medians_and_the_threshold(
     body = api.get(url(flat_hotel, "demand-trend"), params=WINDOW).json()
 
     assert body["metric"] == "bookings_created"
-    assert body["direction"] in {"increasing", "decreasing", "stable", "insufficient_data"}
+    assert body["direction"] in {
+        "increasing",
+        "decreasing",
+        "stable",
+        "no_activity",
+        "insufficient_data",
+    }
     assert Decimal(body["threshold"]) == Decimal("0.10")
 
 
@@ -619,10 +625,11 @@ def test_demand_trend_counts_bookings_as_taken_not_as_stayed(
     api: TestClient, flat_hotel: str
 ) -> None:
     """booked_at is today for every fixture booking, so a window over the STAY dates sees no
-    creations. A demand trend is about bookings being taken."""
+    creations. A demand trend is about bookings being taken -- and a window in which none was
+    taken is reported as having no activity, not as stable demand."""
     body = api.get(url(flat_hotel, "demand-trend"), params=WINDOW).json()
 
-    assert body["direction"] == "stable"
+    assert body["direction"] == "no_activity"
     assert Decimal(body["earlier_median"]) == 0
     assert Decimal(body["recent_median"]) == 0
 
@@ -641,12 +648,20 @@ def test_a_short_window_reports_insufficient_data(api: TestClient, flat_hotel: s
 # --- anomalies ------------------------------------------------------------------------------------
 
 
-def test_a_flat_history_produces_no_anomalies(api: TestClient, flat_hotel: str) -> None:
-    """A constant series has no notion of usual spread, so nothing can be called unusual."""
+def test_a_flat_history_is_reported_as_not_assessed_not_as_nothing_unusual(
+    api: TestClient, flat_hotel: str
+) -> None:
+    """A constant series has no notion of usual spread, so no day can be called unusual -- or
+    usual. The response must say the metric could not be judged, rather than leave an empty
+    list to be read as a clean bill of health."""
     body = api.get(url(flat_hotel, "anomalies"), params=WINDOW).json()
 
     assert body["anomalies"] == []
     assert "occupied_room_nights" in body["metrics_scanned"]
+    unassessed = {item["metric"]: item for item in body["metrics_not_assessed"]}
+    assert unassessed["occupied_room_nights"]["reason"] == "no_variation"
+    assert unassessed["occupied_room_nights"]["observations"] > 0
+    assert set(unassessed) <= set(body["metrics_scanned"])
 
 
 def test_a_genuine_spike_is_flagged_with_its_basis(api: TestClient) -> None:
@@ -669,10 +684,12 @@ def test_a_genuine_spike_is_flagged_with_its_basis(api: TestClient) -> None:
     assert found["direction"] == "above"
     assert Decimal(found["modified_z_score"]) > Decimal(found["threshold"])
     assert Decimal(found["median_absolute_deviation"]) > 0
+    assert "occupied_room_nights" not in {m["metric"] for m in body["metrics_not_assessed"]}
 
 
 def test_the_scan_names_what_it_looked_at(api: TestClient, flat_hotel: str) -> None:
-    """An empty list must read as "nothing was unusual", not "nothing was examined"."""
+    """An empty list must never read as "nothing was examined": every metric looked at is
+    named, and the ones that could not be judged are named again in metrics_not_assessed."""
     body = api.get(url(flat_hotel, "anomalies"), params=WINDOW).json()
 
     assert set(body["metrics_scanned"]) >= {
@@ -724,6 +741,10 @@ def test_an_occupancy_outlook_insight_is_produced(api: TestClient, flat_hotel: s
 
     outlook = next(i for i in body["insights"] if i["type"] == "occupancy_outlook")
     assert Decimal(outlook["confidence"]) == Decimal("0.95")
+    # Two of four rooms every night: the sentence gives a percentage, the metric the fraction.
+    assert "an occupancy rate of 50.0%" in outlook["explanation"]
+    rate = next(m for m in outlook["supporting_metrics"] if m["name"] == "predicted_occupancy_rate")
+    assert Decimal(rate["value"]) == Decimal("0.5")
     assert {m["name"] for m in outlook["supporting_metrics"]} == {
         "predicted_room_nights",
         "available_room_nights",

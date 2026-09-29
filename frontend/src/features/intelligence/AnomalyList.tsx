@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp } from 'lucide-react'
 
 import { formatDate } from '@/lib/format'
 import { useIsCompact } from '@/lib/useIsCompact'
-import type { AnomalyPoint } from '@/types/intelligence'
+import type { AnomalyPoint, UnassessedMetric, UnassessedReason } from '@/types/intelligence'
 
 import styles from './AnomalyList.module.css'
 
@@ -101,6 +101,37 @@ export function AnomalyList({ anomalies }: AnomalyListProps) {
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+/**
+ * Why the scan could judge no day of a metric, in words. The reason is the server's; only its
+ * wording is chosen here.
+ */
+const UNASSESSED_REASON: Readonly<Record<UnassessedReason, string>> = {
+  too_few_observations: 'too few days in the window to judge any of them',
+  no_variation:
+    'at least half the days share the same value, so there is no usual spread to judge a day against',
+}
+
+/**
+ * The scanned metrics that could not be assessed. Listed so that "no day was flagged" is never
+ * read as "nothing was unusual" for them: the scan established nothing either way.
+ */
+export function UnassessedMetrics({ metrics }: { metrics: readonly UnassessedMetric[] }) {
+  return (
+    <div className={styles.unassessed} role="note">
+      <p className={styles.unassessedTitle}>Could not be assessed</p>
+      <ul className={styles.unassessedList}>
+        {metrics.map((item) => (
+          <li key={item.metric}>
+            <span className={styles.code}>{item.metric}</span> &mdash;{' '}
+            {UNASSESSED_REASON[item.reason]} ({item.observations}{' '}
+            {item.observations === 1 ? 'day' : 'days'} observed).
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
