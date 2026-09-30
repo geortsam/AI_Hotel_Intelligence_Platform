@@ -822,8 +822,16 @@ def test_the_response_schema_is_exactly_the_documented_contract() -> None:
         "cutoff_date",
         "prediction_cutoff",
         "predicted_room_nights",
+        # The capacity report: reported beside the prediction, never applied to it.
+        "available_room_nights",
+        "exceeds_capacity",
         "model",
         "features_used",
+    }
+    assert set(schemas["DemandPredictionResponse"]["required"]) >= {
+        "predicted_room_nights",
+        "available_room_nights",
+        "exceeds_capacity",
     }
     assert set(schemas["DemandModelMetadata"]["properties"]) == {
         "model_name",

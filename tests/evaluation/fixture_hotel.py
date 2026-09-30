@@ -282,6 +282,8 @@ FORECASTS: dict[dt.date, DemandPredictionResponse] = {
             FORECAST_TARGET - dt.timedelta(days=SERVED_HORIZON_DAYS - 1), dt.time(0), dt.UTC
         ),
         predicted_room_nights=15.43,
+        available_room_nights=ROOMS,
+        exceeds_capacity=False,
         model=DemandModelMetadata(
             model_name=APPROVED_MODEL.model_name,
             model_version=APPROVED_MODEL.model_version,

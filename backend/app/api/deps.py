@@ -443,7 +443,9 @@ def get_demand_prediction_service(
     writing service -- the repositories query and flush, and the service decides what a complete
     operation is.
     """
-    return DemandPredictionService(db, MlDemandRepository(db), MlPredictionRepository(db), scope)
+    return DemandPredictionService(
+        db, MlDemandRepository(db), MlPredictionRepository(db), scope, AnalyticsRepository(db)
+    )
 
 
 DemandPredictionServiceDep = Annotated[

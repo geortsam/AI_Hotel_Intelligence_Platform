@@ -81,6 +81,20 @@ class DemandPredictionResponse(BaseModel):
     #: count: it is a regression output and rounding it here would discard the only information
     #: a consumer has about how close the estimate sits to a boundary.
     predicted_room_nights: float
+    #: The room nights this hotel can hold on ``target_date``: its active rooms, on the same
+    #: current-inventory basis the analytics and intelligence layers use (rooms carry no
+    #: history). One day's capacity, because the prediction is for one day.
+    available_room_nights: int = Field(
+        description="Room nights the hotel can hold on target_date: its active rooms."
+    )
+    #: True when ``predicted_room_nights`` is strictly greater than ``available_room_nights``
+    #: -- the same comparison the occupancy forecast uses. The prediction is NOT altered: the
+    #: approved model is uncapped by contract, and this says the number cannot be read as a
+    #: possible occupancy for this hotel.
+    exceeds_capacity: bool = Field(
+        description="True when predicted_room_nights is greater than available_room_nights. "
+        "The prediction itself is never capped or changed."
+    )
 
     model: DemandModelMetadata
     #: The feature columns the prediction was computed from, in the order the model consumes

@@ -436,6 +436,8 @@ def test_no_internal_identifier_reaches_the_response(
         "cutoff_date",
         "prediction_cutoff",
         "predicted_room_nights",
+        "available_room_nights",
+        "exceeds_capacity",
         "model",
         "features_used",
     }

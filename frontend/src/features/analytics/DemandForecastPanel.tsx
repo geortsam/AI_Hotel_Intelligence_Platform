@@ -1,4 +1,6 @@
-import { Info } from 'lucide-react'
+import { AlertTriangle, Info } from 'lucide-react'
+
+import { formatCount } from '@/lib/format'
 
 import type { ForecastOutcome } from './useAnalyticsReport'
 import styles from './DemandForecastPanel.module.css'
@@ -43,6 +45,15 @@ export interface DemandForecastPanelProps {
  * `422 INSUFFICIENT_HISTORY` is the model declining because the days its lag features read hold
  * no occupancy — which is the serving stage working exactly as designed, and is what a new
  * property will see. It renders as an explanation, not as a fault, and never as a zero.
+ *
+ * ## An estimate above the hotel's capacity is not an occupancy
+ *
+ * The approved model is uncapped by contract and was fitted on hotels far larger than a small
+ * property, so it can answer with more room nights than the hotel has (docs/ml-serving.md §9).
+ * The server reports the hotel's capacity for the day and says when the estimate exceeds it;
+ * this panel reads that verdict rather than comparing the numbers itself. The number is still
+ * shown, exactly as the model produced it — but it is labelled as the model's output, not as
+ * occupied room nights, and a note says why it cannot be read as one.
  */
 export function DemandForecastPanel({ outcome, isLoading }: DemandForecastPanelProps) {
   if (isLoading || outcome === null) {
@@ -71,13 +82,15 @@ export function DemandForecastPanel({ outcome, isLoading }: DemandForecastPanelP
 
   const { prediction } = outcome
   const { model } = prediction
+  const overCapacity = prediction.exceeds_capacity === true
 
   return (
     <div className={styles.panel}>
       <p className={styles.eyebrow}>Modelled estimate — not a recorded figure</p>
 
       <p className={styles.targetDate}>
-        Occupied room nights on <strong>{formatDay(prediction.target_date)}</strong>
+        {overCapacity ? 'Model output for ' : 'Occupied room nights on '}
+        <strong>{formatDay(prediction.target_date)}</strong>
       </p>
 
       {/* One decimal, through `Intl` rather than `toFixed`. The model emits a float at full
@@ -85,6 +98,22 @@ export function DemandForecastPanel({ outcome, isLoading }: DemandForecastPanelP
           `Intl` is how every other figure in this application is formatted, and it keeps the
           rounding in one well-understood place. */}
       <p className={styles.value}>{formatRoomNights(prediction.predicted_room_nights)}</p>
+
+      {overCapacity ? (
+        <div className={styles.capacity} role="note" aria-label="Estimate above capacity">
+          <AlertTriangle className={styles.capacityIcon} size={15} aria-hidden="true" />
+          <div>
+            <p className={styles.capacityTitle}>Above this hotel&rsquo;s capacity</p>
+            <p className={styles.capacityDetail}>
+              {prediction.available_room_nights === 0
+                ? 'This hotel has no active rooms, so no occupancy is possible that day.'
+                : `This hotel can hold ${formatCount(prediction.available_room_nights)} room nights that day, so the estimate cannot be read as its occupancy.`}{' '}
+              The model was trained on much larger hotels and is not limited by capacity. The
+              number is shown exactly as the model produced it.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <p className={styles.caption}>
         Forecast {prediction.forecast_horizon_days} days ahead, using demand recorded up to{' '}

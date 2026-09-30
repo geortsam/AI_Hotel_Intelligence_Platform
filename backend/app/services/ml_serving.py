@@ -106,6 +106,7 @@ from app.ml.serving import (
     feature_window,
 )
 from app.models.hotel import Hotel
+from app.repositories.analytics import AnalyticsRepository
 from app.repositories.ml_demand import MlDemandRepository
 from app.repositories.ml_prediction import MlPredictionRepository
 from app.schemas.ml_serving import DemandModelMetadata, DemandPredictionResponse
@@ -142,14 +143,19 @@ class DemandPredictionService:
         repository: MlDemandRepository,
         predictions: MlPredictionRepository,
         scope: HotelScopeResolver,
+        rooms: AnalyticsRepository,
     ) -> None:
         # The session is held because this service owns a unit of work, exactly as every other
-        # writing service does. The repositories hold it too, for their queries; neither of
-        # them commits.
+        # writing service does. The repositories hold it too, for their queries; none of them
+        # commits.
         self._session = session
         self._repository = repository
         self._predictions = predictions
         self._scope = scope
+        # Read for ONE thing, `active_room_count`: the capacity the analytics and intelligence
+        # layers already use, taken from them rather than re-counted here so the three cannot
+        # disagree about how many rooms a hotel has.
+        self._rooms = rooms
 
     def forecast_demand(
         self,
@@ -220,6 +226,13 @@ class DemandPredictionService:
             features=features,
         )
 
+        # Capacity is reported beside the prediction, never applied to it. The approved model is
+        # uncapped by contract and can exceed a small hotel's rooms (docs/ml-serving.md §9); the
+        # comparison is strict, as the occupancy forecast's is, so a prediction exactly at
+        # capacity is still a possible occupancy. Read before anything is written.
+        capacity = self._rooms.active_room_count(hotel.id)
+        exceeds_capacity = value > capacity
+
         # The prediction and its record commit together. Nothing has been written before this
         # point, which is what makes every refusal above leave the table untouched.
         self._record(hotel, target_date, window, features, value, model)
@@ -231,6 +244,8 @@ class DemandPredictionService:
             cutoff_date=window.date_to,
             prediction_cutoff=window.cutoff,
             predicted_room_nights=value,
+            available_room_nights=capacity,
+            exceeds_capacity=exceeds_capacity,
             model=DemandModelMetadata(
                 model_name=model.model_name,
                 model_version=model.model_version,

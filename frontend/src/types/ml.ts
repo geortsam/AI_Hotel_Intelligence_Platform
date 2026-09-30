@@ -42,6 +42,13 @@ export interface DemandPredictionResponse {
    * of room nights, not a ledger amount. No money value in this application is ever a float.
    */
   readonly predicted_room_nights: number
+  /** The room nights the hotel can hold on `target_date`: its active rooms (one day). */
+  readonly available_room_nights: number
+  /**
+   * The server's verdict that `predicted_room_nights` is greater than `available_room_nights`.
+   * The prediction itself is never capped; this only says it cannot be read as an occupancy.
+   */
+  readonly exceeds_capacity: boolean
   readonly model: DemandModelMetadata
   /** The feature columns the model consumed, in its canonical order. */
   readonly features_used: readonly string[]

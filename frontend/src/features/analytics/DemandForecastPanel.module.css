@@ -110,3 +110,35 @@
   flex-shrink: 0;
   margin-top: 2px;
 }
+
+/* The model's output exceeds the hotel's rooms. Warning tone, and the words carry the meaning:
+   the icon and colour only repeat what the title and detail say. */
+.capacity {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-3);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
+}
+
+.capacityIcon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--color-warning);
+}
+
+.capacityTitle {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.capacityDetail {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}

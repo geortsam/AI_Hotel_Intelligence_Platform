@@ -143,6 +143,8 @@ function demandForecast(overrides: Record<string, unknown> = {}) {
     cutoff_date: '2026-09-06',
     prediction_cutoff: '2026-09-07T00:00:00Z',
     predicted_room_nights: 122.91338862512222,
+    available_room_nights: 200,
+    exceeds_capacity: false,
     model: {
       model_name: 'demand_baseline',
       model_version: 'demand_baseline_v1',
@@ -365,6 +367,76 @@ describe('the demand estimate', () => {
     expect(await screen.findByText('122.9')).toBeInTheDocument()
     expect(screen.getByText(/modelled estimate/i)).toBeInTheDocument()
     expect(screen.getByText('demand_baseline_v1')).toBeInTheDocument()
+  })
+
+  it('labels an estimate within capacity as occupied room nights, with no capacity note', async () => {
+    renderPage()
+    await screen.findByText('122.9')
+
+    expect(screen.getByText(/occupied room nights on/i)).toBeInTheDocument()
+    expect(screen.queryByRole('note', { name: 'Estimate above capacity' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/above this hotel/i)).not.toBeInTheDocument()
+  })
+
+  it('treats an estimate exactly at capacity as a possible occupancy', async () => {
+    fetchStub.on('GET', '/ml/demand-forecast', {
+      body: demandForecast({
+        predicted_room_nights: 15,
+        available_room_nights: 15,
+        exceeds_capacity: false,
+      }),
+    })
+    renderPage()
+
+    expect(await screen.findByText('15.0')).toBeInTheDocument()
+    expect(screen.getByText(/occupied room nights on/i)).toBeInTheDocument()
+    expect(screen.queryByRole('note', { name: 'Estimate above capacity' })).not.toBeInTheDocument()
+  })
+
+  it('shows an over-capacity estimate unaltered, as model output, and says why', async () => {
+    fetchStub.on('GET', '/ml/demand-forecast', {
+      body: demandForecast({
+        predicted_room_nights: 165.88738625163177,
+        available_room_nights: 15,
+        exceeds_capacity: true,
+      }),
+    })
+    renderPage()
+
+    // The model's number, not clipped to 15 and not hidden.
+    expect(await screen.findByText('165.9')).toBeInTheDocument()
+    expect(screen.queryByText('15.0')).not.toBeInTheDocument()
+    // Not presented as this hotel's occupancy.
+    expect(screen.queryByText(/occupied room nights on/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/model output for/i)).toBeInTheDocument()
+    const note = screen.getByRole('note', { name: 'Estimate above capacity' })
+    expect(within(note).getByText('Above this hotel’s capacity')).toBeInTheDocument()
+    expect(note.textContent).toContain('This hotel can hold 15 room nights that day')
+    expect(note.textContent).toContain('cannot be read as its occupancy')
+    expect(note.textContent).toContain('shown exactly as the model produced it')
+  })
+
+  it('says plainly when the hotel has no active rooms at all', async () => {
+    fetchStub.on('GET', '/ml/demand-forecast', {
+      body: demandForecast({ available_room_nights: 0, exceeds_capacity: true }),
+    })
+    renderPage()
+
+    const note = await screen.findByRole('note', { name: 'Estimate above capacity' })
+    expect(note.textContent).toContain('This hotel has no active rooms')
+    expect(note.textContent).not.toContain('can hold 0')
+  })
+
+  it('reads the server-s verdict rather than comparing the numbers itself', async () => {
+    // Deliberately inconsistent: only the server decides, so no note may appear.
+    fetchStub.on('GET', '/ml/demand-forecast', {
+      body: demandForecast({ available_room_nights: 15, exceeds_capacity: false }),
+    })
+    renderPage()
+    await screen.findByText('122.9')
+
+    expect(screen.queryByRole('note', { name: 'Estimate above capacity' })).not.toBeInTheDocument()
+    expect(screen.getByText(/occupied room nights on/i)).toBeInTheDocument()
   })
 
   it('states that the model is not production ready and claims no accuracy', async () => {

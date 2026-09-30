@@ -870,11 +870,23 @@ def test_only_the_forecast_tool_declares_a_side_effect() -> None:
 
 @pytest.mark.parametrize("name", DATA_TOOLS)
 def test_each_output_is_the_service_response_minus_the_hotel(name: str) -> None:
+    """Every field a tool drops is declared in `withheld`, with a reason; nothing else is lost."""
     module, response, _, _ = TOOL_MODULES[name]
-    assert set(module.CONTRACT.output_model.model_fields) == (
-        set(response.model_fields) - {HOTEL_IDENTIFIER_FIELD}
-    )
+    output = set(module.CONTRACT.output_model.model_fields)
+    assert output <= set(response.model_fields)
+    assert set(response.model_fields) - output <= set(module.CONTRACT.withheld)
     assert HOTEL_IDENTIFIER_FIELD in module.CONTRACT.withheld
+
+
+def test_the_forecast_tool_withholds_exactly_the_capacity_report_and_the_hotel() -> None:
+    """The capacity report is not shown to the model until that is decided; nothing else is
+    withheld, so the prediction and its provenance still reach it unchanged."""
+    module = TOOL_MODULES["get_demand_forecast"][0]
+    assert set(module.CONTRACT.withheld) == {
+        HOTEL_IDENTIFIER_FIELD,
+        "available_room_nights",
+        "exceeds_capacity",
+    }
 
 
 @pytest.mark.parametrize("name", DATA_TOOLS)
@@ -913,6 +925,39 @@ def test_a_tool_adds_no_business_logic_sql_or_model_call(name: str) -> None:
     source = source_of(path)
     for forbidden in ["commit", "session", "execute(", "select(", "sum(", "mean(", "round("]:
         assert forbidden not in source, f"{path.name} contains {forbidden!r}"
+
+
+def test_the_forecast_tool_gives_the_model_the_prediction_without_the_capacity_report() -> None:
+    """Run for real against a response that carries the capacity report: the model receives the
+    prediction and its provenance unchanged, and neither capacity field."""
+    from tests.evaluation.fixture_hotel import FORECAST_TARGET, FORECASTS
+
+    served = FORECASTS[FORECAST_TARGET].model_copy(
+        update={
+            "predicted_room_nights": 165.9,
+            "available_room_nights": 15,
+            "exceeds_capacity": True,
+        }
+    )
+
+    class Forecasts:
+        def forecast_demand(self, *_: object) -> object:
+            return served
+
+    class Services:
+        demand_prediction = Forecasts()
+
+    module = TOOL_MODULES["get_demand_forecast"][0]
+    output = module.run(
+        ToolContext(hotel_public_id=HOTEL, services=cast(ToolServices, Services())),
+        module.CONTRACT.input_model.model_validate({"target_date": str(FORECAST_TARGET)}),
+    )
+
+    shown = output.model_dump()
+    assert "available_room_nights" not in shown
+    assert "exceeds_capacity" not in shown
+    assert shown == served.model_dump(exclude=set(module.CONTRACT.withheld))
+    assert shown["predicted_room_nights"] == 165.9
 
 
 def test_the_forecast_tool_does_not_let_the_model_choose_a_horizon() -> None:

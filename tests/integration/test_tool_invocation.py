@@ -169,7 +169,7 @@ def assemble(session: Session, user: User) -> tuple[ToolInvocationService, ToolS
     services = ToolServices(
         analytics=AnalyticsService(AnalyticsRepository(session), scope),
         demand_prediction=DemandPredictionService(
-            session, MlDemandRepository(session), predictions, scope
+            session, MlDemandRepository(session), predictions, scope, AnalyticsRepository(session)
         ),
         forecast_performance=ForecastPerformanceService(
             DemandAccuracyService(predictions, MlDemandRepository(session), scope),

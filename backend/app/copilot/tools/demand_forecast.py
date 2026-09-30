@@ -74,6 +74,14 @@ CONTRACT = ToolContract(
     output_model=DemandForecastOutput,
     delegates_to="DemandPredictionService.forecast_demand",
     side_effect="records_served_prediction",
+    withheld={
+        HOTEL_IDENTIFIER_FIELD: "the hotel is fixed by the request; the model never needs it",
+        # The capacity report was added for the Analytics screen. Whether the copilot's model
+        # should see it is a separate decision, not yet taken, so this tool's output contract
+        # is unchanged until it is.
+        "available_room_nights": "added for the Analytics screen; not yet decided for the model",
+        "exceeds_capacity": "added for the Analytics screen; not yet decided for the model",
+    },
 )
 
 
@@ -81,6 +89,4 @@ def run(context: ToolContext, arguments: DemandForecastArguments) -> DemandForec
     response = context.services.demand_prediction.forecast_demand(
         context.hotel_public_id, arguments.target_date, SERVED_HORIZON_DAYS
     )
-    return DemandForecastOutput.model_validate(
-        response.model_dump(exclude={HOTEL_IDENTIFIER_FIELD})
-    )
+    return DemandForecastOutput.model_validate(response.model_dump(exclude=set(CONTRACT.withheld)))

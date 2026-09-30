@@ -231,6 +231,46 @@ def test_the_number_is_the_one_this_hotels_own_history_produces(
     assert body["predicted_room_nights"] == expected_prediction(QUIET_ROOMS)
 
 
+def test_a_small_hotel_is_told_the_estimate_exceeds_its_rooms_and_the_number_is_unchanged(
+    api: TestClient, quiet: Hotel, session: Session
+) -> None:
+    """The documented small-hotel case (docs/ml-serving.md §9): the model answers on the scale of
+    the hotels it was fitted on. The response says so; the number, and the stored row, do not
+    move."""
+    body = api.get(url(quiet), params=params()).json()
+
+    assert body["available_room_nights"] == QUIET_ROOMS
+    assert body["predicted_room_nights"] == expected_prediction(QUIET_ROOMS)
+    assert body["predicted_room_nights"] > QUIET_ROOMS
+    assert body["exceeds_capacity"] is True
+    stored = session.execute(
+        sa.text("SELECT predicted_room_nights FROM demand_predictions WHERE target_date = :t"),
+        {"t": TARGET},
+    ).scalar_one()
+    assert stored == body["predicted_room_nights"]
+
+
+def test_capacity_is_the_active_rooms_and_a_larger_hotel_is_within_it(
+    engine: Engine, session: Session
+) -> None:
+    """Idle active rooms count, an inactive room does not -- the analytics layer's own rule."""
+    hotel = seed_hotel(session, slug="ml-roomy", rooms=BUSY_ROOMS)
+    idle = make_room_type(session, hotel, code="IDL")
+    for index in range(150):
+        make_room(session, hotel, idle, number=f"9{index:03d}")
+    retired = make_room(session, hotel, idle, number="RETIRED")
+    retired.is_active = False
+    session.commit()
+    client = member_client(engine, hotel, email="roomy@example.test")
+
+    body = client.get(url(hotel), params=params()).json()
+
+    assert body["available_room_nights"] == BUSY_ROOMS + 150
+    assert body["predicted_room_nights"] == expected_prediction(BUSY_ROOMS)
+    assert body["predicted_room_nights"] <= BUSY_ROOMS + 150
+    assert body["exceeds_capacity"] is False
+
+
 def test_the_response_carries_no_internal_identifier(api: TestClient, quiet: Hotel) -> None:
     response = api.get(url(quiet), params=params())
     body = response.json()
@@ -242,6 +282,8 @@ def test_the_response_carries_no_internal_identifier(api: TestClient, quiet: Hot
         "cutoff_date",
         "prediction_cutoff",
         "predicted_room_nights",
+        "available_room_nights",
+        "exceeds_capacity",
         "model",
         "features_used",
     }
@@ -355,8 +397,14 @@ def test_enlarging_one_hotel_does_not_move_anothers_prediction(
 def test_bookings_inside_the_horizon_cannot_change_the_prediction(
     api: TestClient, session: Session, quiet: Hotel
 ) -> None:
-    """Writes on the target day and on every day between the cutoff and it. None may be read."""
-    before = api.get(url(quiet), params=params()).content
+    """Writes on the target day and on every day between the cutoff and it. None may be read.
+
+    The rooms added to hold those bookings DO change the capacity report, as they should: it is
+    the hotel's current active rooms, reported beside the prediction and never an input to it.
+    Everything else in the response must be byte-for-byte what it was."""
+    capacity_report = ("available_room_nights", "exceeds_capacity")
+    first = api.get(url(quiet), params=params()).json()
+    before = {k: v for k, v in first.items() if k not in capacity_report}
 
     room_type = session.execute(
         sa.select(RoomType).where(RoomType.hotel_id == quiet.id)
@@ -375,7 +423,10 @@ def test_bookings_inside_the_horizon_cannot_change_the_prediction(
     ).scalar_one()
 
     assert written == 21, "the horizon was not populated, so this proves nothing"
-    assert api.get(url(quiet), params=params()).content == before
+    after = api.get(url(quiet), params=params()).json()
+    assert {k: v for k, v in after.items() if k not in capacity_report} == before
+    assert first["available_room_nights"] == QUIET_ROOMS
+    assert after["available_room_nights"] == QUIET_ROOMS + 3
 
 
 def test_the_cutoff_is_seven_days_before_the_target_and_is_utc(

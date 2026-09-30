@@ -325,6 +325,18 @@ class FakePredictions:
         return True
 
 
+class FakeRooms:
+    """The one method the service reads from the analytics repository."""
+
+    def __init__(self, count: int) -> None:
+        self.count = count
+        self.asked: list[int] = []
+
+    def active_room_count(self, hotel_id: int) -> int:
+        self.asked.append(hotel_id)
+        return self.count
+
+
 class FakeScope:
     def __init__(self, hotel: FakeHotel) -> None:
         self._hotel = hotel
@@ -346,7 +358,7 @@ def isolated_store() -> Iterator[None]:
 
 
 def build_service(
-    *, level: int | None = 40, predictions: FakePredictions | None = None
+    *, level: int | None = 40, predictions: FakePredictions | None = None, rooms: int = 1000
 ) -> tuple[DemandPredictionService, FakeSession, FakePredictions]:
     session = FakeSession()
     recorder = predictions or FakePredictions()
@@ -355,6 +367,7 @@ def build_service(
         FakeDemand(level),  # type: ignore[arg-type]
         recorder,  # type: ignore[arg-type]
         FakeScope(FakeHotel(id=7, public_id=uuid.uuid4())),  # type: ignore[arg-type]
+        FakeRooms(rooms),  # type: ignore[arg-type]
     )
     return service, session, recorder
 
@@ -532,6 +545,7 @@ def test_the_event_names_nothing_a_hotel_owns(
         FakeDemand(40),  # type: ignore[arg-type]
         FakePredictions(),  # type: ignore[arg-type]
         FakeScope(hotel),  # type: ignore[arg-type]
+        FakeRooms(1000),  # type: ignore[arg-type]
     )
 
     response = service.forecast_demand(uuid.uuid4(), TARGET, 7)
@@ -585,7 +599,10 @@ def test_the_api_surface_is_the_one_stage_73_published() -> None:
 
 
 def test_the_response_schema_gained_nothing() -> None:
-    """Persistence is invisible from outside. No field, no parameter, no status code."""
+    """Persistence is invisible from outside. No field, no parameter, no status code.
+
+    The two capacity fields were added later, for the Analytics screen, and are not persisted --
+    listed here so this test still proves persistence itself added nothing."""
     schemas = create_app(Settings(environment="test", debug=True)).openapi()["components"][
         "schemas"
     ]
@@ -597,6 +614,8 @@ def test_the_response_schema_gained_nothing() -> None:
         "cutoff_date",
         "prediction_cutoff",
         "predicted_room_nights",
+        "available_room_nights",
+        "exceeds_capacity",
         "model",
         "features_used",
     }
@@ -623,3 +642,105 @@ def test_no_accuracy_claim_was_introduced() -> None:
 
     # And the artifact still says it in machine-readable form.
     assert APPROVED_MODEL.model_version == "demand_baseline_v1"
+
+
+# --- the capacity report: beside the prediction, never applied to it ------------------------
+
+
+def with_rooms(rooms: int) -> tuple[DemandPredictionService, FakePredictions, FakeRooms]:
+    session = FakeSession()
+    recorder = FakePredictions()
+    counter = FakeRooms(rooms)
+    service = DemandPredictionService(
+        session,  # type: ignore[arg-type]
+        FakeDemand(40),  # type: ignore[arg-type]
+        recorder,  # type: ignore[arg-type]
+        FakeScope(FakeHotel(id=7, public_id=uuid.uuid4())),  # type: ignore[arg-type]
+        counter,  # type: ignore[arg-type]
+    )
+    return service, recorder, counter
+
+
+def model_answers(monkeypatch: pytest.MonkeyPatch, value: float) -> None:
+    """Pin what the model returns, so each boundary is exact rather than approximate."""
+    monkeypatch.setattr(
+        "app.services.ml_serving.predict_room_nights", lambda *_args, **_kwargs: value
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "rooms", "exceeds"),
+    [
+        (14.99, 15, False),  # below capacity
+        (15.0, 15, False),  # exactly at capacity: a possible occupancy
+        (15.01, 15, True),  # above capacity
+        (165.88738625163177, 15, True),  # the demo harbour hotel's real case
+        (0.0, 0, False),  # no active rooms, and nothing predicted
+        (0.5, 0, True),  # no active rooms: any occupancy exceeds them
+    ],
+)
+def test_the_capacity_report_compares_one_day_strictly_and_changes_nothing(
+    artifact: ArtifactLocation,
+    monkeypatch: pytest.MonkeyPatch,
+    value: float,
+    rooms: int,
+    exceeds: bool,
+) -> None:
+    """Strictly greater, as the occupancy forecast's `capacity_clamped` is. Zero rooms follows the
+    same rule: occupied cannot exceed available, so any positive estimate exceeds none."""
+    artifact_store.configure(artifact)
+    model_answers(monkeypatch, value)
+    service, recorder, _ = with_rooms(rooms)
+
+    response = service.forecast_demand(uuid.uuid4(), TARGET, 7)
+
+    assert response.available_room_nights == rooms
+    assert response.exceeds_capacity is exceeds
+    # The model's number, untouched, in the response and in the stored row.
+    assert response.predicted_room_nights == value
+    assert recorder.recorded[0]["predicted_room_nights"] == value
+    assert "available_room_nights" not in recorder.recorded[0]
+    assert "exceeds_capacity" not in recorder.recorded[0]
+
+
+def test_capacity_never_moves_the_real_models_number(artifact: ArtifactLocation) -> None:
+    """The same history scored for a 1-room and a 1000-room hotel: one number, two reports."""
+    artifact_store.configure(artifact)
+    tiny, _, _ = with_rooms(1)
+    large, _, _ = with_rooms(1000)
+
+    small_report = tiny.forecast_demand(uuid.uuid4(), TARGET, 7)
+    large_report = large.forecast_demand(uuid.uuid4(), TARGET, 7)
+
+    assert small_report.predicted_room_nights == large_report.predicted_room_nights
+    assert small_report.predicted_room_nights > 1
+    assert small_report.exceeds_capacity is True
+    assert large_report.exceeds_capacity is False
+
+
+def test_capacity_is_counted_for_the_scoped_hotel_once(artifact: ArtifactLocation) -> None:
+    artifact_store.configure(artifact)
+    service, _, counter = with_rooms(15)
+
+    service.forecast_demand(uuid.uuid4(), TARGET, 7)
+
+    assert counter.asked == [7]
+
+
+def test_a_refusal_reads_no_capacity_and_reports_none(artifact: ArtifactLocation) -> None:
+    """The error paths are unchanged: a refused forecast never gets as far as capacity."""
+    artifact_store.configure(artifact)
+    session = FakeSession()
+    counter = FakeRooms(15)
+    service = DemandPredictionService(
+        session,  # type: ignore[arg-type]
+        FakeDemand(None),  # type: ignore[arg-type]
+        FakePredictions(),  # type: ignore[arg-type]
+        FakeScope(FakeHotel(id=7, public_id=uuid.uuid4())),  # type: ignore[arg-type]
+        counter,  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(InsufficientHistoryError):
+        service.forecast_demand(uuid.uuid4(), TARGET, 7)
+
+    assert counter.asked == []
