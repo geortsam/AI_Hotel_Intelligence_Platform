@@ -459,10 +459,9 @@ def response_problems(
     return problems
 
 
-#: FastAPI documents its own 422 body on routes that declare none. The application never sends
-#: it: ``app.core.errors`` registers a ``RequestValidationError`` handler that answers with the
-#: shared envelope instead (asserted below), so that documented body is not what the frontend
-#: reads, and comparing against it would report a mismatch that cannot happen.
+#: FastAPI's own 422 body. It used to be documented on routes that declare no 422, although the
+#: application never sends it; ``app.core.errors.document_validation_errors`` now corrects the
+#: document, so a bound route's 422 is compared like any other refusal and this must not appear.
 FASTAPI_DEFAULT_422 = "#/components/schemas/HTTPValidationError"
 
 
@@ -474,8 +473,6 @@ def refusal_problems(
     for status, refusal in operation["responses"].items():
         schema = json_schema(refusal)
         if not status.startswith(("4", "5")) or schema is None:
-            continue
-        if status == "422" and schema.get("$ref") == FASTAPI_DEFAULT_422:
             continue
         where = f"{binding.method.upper()} {binding.path.removeprefix(HOTEL)} {status}"
         problems.extend(
@@ -558,7 +555,8 @@ def test_the_error_envelope_always_carries_every_field_the_frontend_reads() -> N
 
 
 def test_a_validation_failure_is_answered_with_the_envelope_not_fastapi_default() -> None:
-    """Why ``FASTAPI_DEFAULT_422`` is skipped: the application-wide handler replaces that body.
+    """The application-wide handler replaces FastAPI's body, which is why the document no longer
+    names ``FASTAPI_DEFAULT_422``.
 
     Exercised on a route that needs no database; the handler is registered on the application,
     not per route, so the copilot routes answer the same way."""
@@ -571,6 +569,7 @@ def test_a_validation_failure_is_answered_with_the_envelope_not_fastapi_default(
     body = response.json()
     assert set(body) == {"error"}
     assert body["error"]["code"] == "VALIDATION_ERROR"
+    assert FASTAPI_DEFAULT_422 not in repr(application.openapi())
 
 
 def test_every_contract_type_is_checked_against_some_route() -> None:

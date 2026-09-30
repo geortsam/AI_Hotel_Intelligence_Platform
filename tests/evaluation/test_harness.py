@@ -12,6 +12,7 @@ from __future__ import annotations
 import ast
 import functools
 import json
+import os
 import re
 import socket
 import subprocess
@@ -467,6 +468,23 @@ def test_the_live_script_refuses_to_run_without_explicit_consent() -> None:
     )
     assert result.returncode != 0
     assert "--confirm-paid-api-call" in result.stderr
+
+
+def test_the_live_script_explains_a_missing_key_instead_of_crashing() -> None:
+    """With LLM_ENABLED=true and no key the settings refuse to load. The script turns that into
+    its usual message and exit status 2 -- before any model is built, so nothing is called."""
+    env = {k: v for k, v in os.environ.items() if not k.upper().startswith("LLM_")}
+    env["LLM_ENABLED"] = "true"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--out", "unused", "--confirm-paid-api-call"],
+        capture_output=True,
+        text=True,
+        cwd=REPOSITORY_ROOT,
+        env=env,
+    )
+    assert result.returncode == 2
+    assert "LLM_ENABLED must be true and LLM_API_KEY set." in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_the_live_script_never_names_a_vendor_sdk_or_reads_a_key_itself() -> None:

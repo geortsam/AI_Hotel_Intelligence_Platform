@@ -406,7 +406,9 @@ provider name, model name, base URL, API key, request timeout, max retries, per-
 ceiling, per-actor and per-hotel rate limits, and a master `llm_enabled` flag. **With
 `llm_enabled` false the application starts, serves every V1 endpoint, and the copilot endpoints
 answer a clean `503` with a documented error code** — the same posture `ml/demand-forecast` takes
-when the artifact is unavailable.
+when the artifact is unavailable. `llm_enabled` true **without** an API key is refused when the
+settings load, so that misconfiguration stops the process from starting instead of answering
+every question with a failure.
 
 ### 5.3 Prompts as versioned records
 

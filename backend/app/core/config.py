@@ -30,6 +30,10 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        # A refused configuration stops the process, and the error lands in a log. Pydantic
+        # would otherwise print the settings input beside it -- secrets included -- so the
+        # input is withheld; the message names the variable at fault, which is what helps.
+        hide_input_in_errors=True,
     )
 
     # --- Application -------------------------------------------------------
@@ -246,6 +250,22 @@ class Settings(BaseSettings):
             raise ValueError(
                 "SECRET_KEY must be set in production. Authentication cannot sign tokens "
                 "without it, and this application will not fall back to a default."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _llm_key_required_when_enabled(self) -> Settings:
+        """Refuse to load a configuration that switches the copilot on without an API key.
+
+        That is a misconfiguration, not a disabled copilot. Caught here, the process never
+        starts: before this rule it started, `GET /api/v1/` reported `copilot_enabled: true`,
+        and every question then failed at request time, because the chat model is built per
+        request. Enforced in every environment; a whitespace-only key counts as none.
+        """
+        if self.llm_enabled and not (self.llm_api_key or "").strip():
+            raise ValueError(
+                "LLM_ENABLED is true but LLM_API_KEY is not set. Set the key, or set "
+                "LLM_ENABLED=false to run without a provider."
             )
         return self
 

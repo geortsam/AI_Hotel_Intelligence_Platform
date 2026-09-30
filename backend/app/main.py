@@ -21,7 +21,7 @@ from app import __version__
 from app.api.routes import health as health_routes
 from app.api.v1.router import api_router as api_v1_router
 from app.core.config import Settings, get_settings
-from app.core.errors import register_exception_handlers
+from app.core.errors import document_validation_errors, register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.rate_limit import FixedWindowRateLimiter
 from app.db.session import dispose_engine
@@ -127,6 +127,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # new API version is introduced.
     app.include_router(health_routes.router)
     app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
+
+    # The handler registered above replaces FastAPI's 422 body; this makes /openapi.json say so.
+    document_validation_errors(app)
 
     return app
 

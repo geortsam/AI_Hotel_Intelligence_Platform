@@ -16,7 +16,7 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-6830%20backend%20%C2%B7%201258%20frontend-success)
+![Tests](https://img.shields.io/badge/tests-6848%20backend%20%C2%B7%201258%20frontend-success)
 ![API](https://img.shields.io/badge/API-64%20paths%20%C2%B7%2099%20operations-informational)
 
 </div>
@@ -41,7 +41,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **6830 backend tests and 1258 frontend tests pass in CI.** Schema head is
+> **6848 backend tests and 1258 frontend tests pass in CI.** Schema head is
 > `0015_copilot_conversations` across 15 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
@@ -644,6 +644,8 @@ environment only — never hard-coded — so one artifact runs in every environm
 | `CORS_ORIGINS` | localhost:5173, localhost:3000 | Comma-separated |
 | `DATABASE_URL` | *(empty)* | Declared; unused until Stage 2 |
 | `SECRET_KEY` | *(empty)* | Declared; unused until authentication exists |
+| `LLM_ENABLED` | `false` | Switches the copilot on; reported to clients as `copilot_enabled` on `GET /api/v1/` |
+| `LLM_API_KEY` | *(empty)* | Required when `LLM_ENABLED=true`: the API refuses to start without it. Never logged or returned |
 
 `.env` is git-ignored. `.env.example` contains no real secrets and never should.
 

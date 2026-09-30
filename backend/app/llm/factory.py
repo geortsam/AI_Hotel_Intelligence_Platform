@@ -78,11 +78,13 @@ def build_chat_model(settings: Settings) -> ChatModel:
     is configured, and should not: the answer is a `LlmDisabledError` at call time, which is the
     documented behaviour and the one a route will translate into its 503.
 
-    An enabled deployment with no API key is a **misconfiguration**, not a disabled one, and is
-    refused here at construction rather than at the first request. A deployment that has said
-    `llm_enabled=true` has asked for a working provider; discovering at 3am that it has been
-    answering `LLM_DISABLED` for a week because a secret was not mounted is the failure mode this
-    check exists to prevent.
+    An enabled deployment with no API key is a **misconfiguration**, not a disabled one. It is
+    refused when the settings are loaded (`Settings._llm_key_required_when_enabled`), so such a
+    deployment never starts. This function is called per request, so the check below cannot
+    stop a process starting; it remains as a second guard for a `Settings` built without
+    validation (`model_construct`). A deployment that has said `llm_enabled=true` has asked for
+    a working provider; discovering at 3am that it has been answering `LLM_DISABLED` for a week
+    because a secret was not mounted is the failure mode these checks exist to prevent.
     """
     if not settings.llm_enabled:
         return GuardedChatModel(_UnreachableModel(), enabled=False)

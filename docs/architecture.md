@@ -219,7 +219,9 @@ the migration rather than later in the API.
 5. The endpoint calls a service.
 6. The service applies business rules and calls repositories.
 7. The response is serialised through a response schema.
-8. Domain errors map to one uniform error envelope (`core/errors.py`).
+8. Domain errors map to one uniform error envelope (`core/errors.py`). Request-validation
+   failures use it too, and `/openapi.json` documents every 422 as that envelope rather
+   than FastAPI's default `HTTPValidationError` body, which the server never sends.
 9. Security headers are applied on the way out (`middleware/security_headers.py`).
 
 All nine steps exist. Step 8 is worth reading in full before changing anything near it: the

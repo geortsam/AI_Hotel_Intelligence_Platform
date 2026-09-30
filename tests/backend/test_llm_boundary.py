@@ -810,10 +810,50 @@ def test_a_disabled_deployment_still_gets_a_chat_model() -> None:
         model.complete(request_for())
 
 
-def test_enabling_without_a_key_is_refused_at_construction() -> None:
-    """A misconfiguration, not a disabled deployment: fail now rather than at 3am."""
+@pytest.mark.parametrize("key", [None, "", "   "])
+@pytest.mark.parametrize("environment", ["development", "test", "production"])
+def test_enabling_without_a_key_is_refused_when_the_settings_load(
+    key: str | None, environment: str
+) -> None:
+    """A misconfiguration, not a disabled deployment: the process must not start at all.
+    Before, it started, reported the copilot as enabled, and failed every question."""
+    with pytest.raises(ValueError, match="LLM_API_KEY is not set"):
+        Settings(
+            environment=environment,
+            secret_key="a-test-only-secret-not-used-for-anything",
+            llm_enabled=True,
+            llm_api_key=key,
+        )
+
+
+def test_the_same_refusal_applies_to_the_environment_a_deployment_uses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="LLM_API_KEY is not set"):
+        Settings(_env_file=None)
+
+
+def test_the_refusal_repeats_no_setting_it_was_given() -> None:
+    """The refusal stops the process and is logged. Pydantic would print the settings input
+    beside it, truncated only in the middle, so a short secret -- or the start of a long one --
+    would be echoed verbatim. The echo is switched off, so neither is."""
+    with pytest.raises(ValueError) as refused:
+        Settings(_env_file=None, secret_key="Zq9-sk", llm_enabled=True, llm_api_key=" ")
+    text = str(refused.value)
+    assert "LLM_API_KEY is not set" in text
+    assert "Zq9-sk" not in text
+    assert "secret_key" not in text
+
+
+def test_the_factory_still_refuses_settings_that_skipped_validation() -> None:
+    """The second guard: `model_construct` bypasses validators, the factory does not."""
+    unvalidated = Settings.model_construct(environment="test", llm_enabled=True, llm_api_key=None)
+
     with pytest.raises(ValueError, match="llm_api_key is not set"):
-        build_chat_model(Settings(environment="test", llm_enabled=True))
+        build_chat_model(unvalidated)
 
 
 def test_an_enabled_deployment_builds_a_guarded_provider() -> None:

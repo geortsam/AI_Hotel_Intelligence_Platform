@@ -20,11 +20,18 @@ import pkgutil
 from types import ModuleType
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 import app.api.v1.endpoints as endpoints_package
 import app.repositories as repositories_package
 import app.services as services_package
 from app.core.config import Settings
+from app.core.errors import (
+    VALIDATION_ERROR_DESCRIPTION,
+    document_validation_errors,
+    register_exception_handlers,
+)
 from app.main import create_app
 
 
@@ -424,6 +431,99 @@ def test_every_error_response_uses_the_shared_envelope() -> None:
 
     assert set(schemas["ErrorResponse"]["properties"]) == {"error"}
     assert set(schemas["ErrorBody"]["properties"]) == {"code", "message", "details"}
+
+
+#: The only operations that take no parameter and no body, so cannot fail validation.
+PARAMETERLESS_OPERATIONS = {
+    ("get", "/health"),
+    ("get", "/health/db"),
+    ("get", "/api/v1/auth/me"),
+    ("get", "/api/v1/"),
+}
+
+
+def operations_of(document: dict) -> list[tuple[str, str, dict]]:
+    return [
+        (method, path, operation)
+        for path, item in document["paths"].items()
+        for method, operation in item.items()
+    ]
+
+
+def test_every_documented_422_is_the_envelope_the_handler_really_sends() -> None:
+    """FastAPI documents ``HTTPValidationError`` (``{"detail": [...]}``) on every route that
+    declares no 422, yet the application answers validation failures with ``ErrorResponse``.
+    69 of 99 operations used to say the wrong thing; none may now."""
+    document = openapi()
+    documented = {
+        (method, path): operation["responses"]["422"]
+        for method, path, operation in operations_of(document)
+        if "422" in operation["responses"]
+    }
+
+    assert len(documented) == 95
+    for key, refusal in documented.items():
+        schema = refusal["content"]["application/json"]["schema"]
+        assert schema == {"$ref": "#/components/schemas/ErrorResponse"}, key
+    everything = {(method, path) for method, path, _ in operations_of(document)}
+    assert everything - set(documented) == PARAMETERLESS_OPERATIONS
+
+
+def test_fastapis_own_validation_schemas_are_gone_from_the_document() -> None:
+    schemas = openapi()["components"]["schemas"]
+
+    assert "HTTPValidationError" not in schemas
+    assert "ValidationError" not in schemas
+    assert "ErrorResponse" in schemas
+
+
+def test_a_422_a_route_declared_itself_keeps_its_own_words() -> None:
+    """Only FastAPI's filled-in 422 is rewritten; a route's own description stands."""
+    paths = openapi()["paths"]
+
+    overview = paths["/api/v1/hotels/{hotel_public_id}/analytics/overview"]["get"]
+    assert overview["responses"]["422"]["description"].startswith("The range is reversed")
+    login = paths["/api/v1/auth/login"]["post"]
+    assert login["responses"]["422"]["description"] == VALIDATION_ERROR_DESCRIPTION
+
+
+def test_the_documented_422_matches_a_real_one() -> None:
+    """The body a real validation failure carries has exactly the documented fields."""
+    application = create_app(Settings(environment="test"))
+    schemas = application.openapi()["components"]["schemas"]
+
+    body = TestClient(application).post("/api/v1/auth/register", json={"email": "x"}).json()
+
+    assert set(body) == set(schemas["ErrorResponse"]["properties"])
+    assert set(body["error"]) == set(schemas["ErrorBody"]["properties"])
+    assert body["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_the_corrected_document_is_built_once() -> None:
+    application = create_app(Settings(environment="test"))
+
+    assert application.openapi() is application.openapi()
+
+
+def test_the_correction_supplies_the_envelope_when_no_route_declared_it() -> None:
+    """An application whose routes never named ``ErrorResponse`` still gets a complete document."""
+    bare = FastAPI()
+
+    @bare.get("/items")
+    def items(limit: int = 10) -> dict[str, int]:
+        return {"limit": limit}
+
+    register_exception_handlers(bare)
+    document_validation_errors(bare)
+    document = bare.openapi()
+
+    refusal = document["paths"]["/items"]["get"]["responses"]["422"]
+    assert refusal["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ErrorResponse"
+    }
+    schemas = document["components"]["schemas"]
+    assert {"ErrorResponse", "ErrorBody", "ErrorDetail"} <= set(schemas)
+    assert "HTTPValidationError" not in schemas
 
 
 def test_every_collection_declares_the_shared_pagination_envelope() -> None:

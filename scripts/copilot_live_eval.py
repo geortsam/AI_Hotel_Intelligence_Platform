@@ -84,8 +84,12 @@ def main(argv: list[str] | None = None) -> int:
     from tests.evaluation.questions import COPILOT_EVAL_V1
     from tests.evaluation.replay import RecordingModel, Replays
 
-    settings = Settings()
-    if not settings.llm_enabled or not settings.llm_api_key:
+    try:
+        settings = Settings()
+    except ValueError:
+        # LLM_ENABLED=true without a key is refused as the settings load; same answer as below.
+        settings = None
+    if settings is None or not settings.llm_enabled or not settings.llm_api_key:
         print("LLM_ENABLED must be true and LLM_API_KEY set.", file=sys.stderr)
         return 2
 

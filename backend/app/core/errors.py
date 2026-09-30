@@ -483,6 +483,68 @@ def register_exception_handlers(app: FastAPI) -> None:
         return response
 
 
+#: The schemas FastAPI generates for its own 422 body, which this application never sends.
+FASTAPI_VALIDATION_SCHEMAS = ("HTTPValidationError", "ValidationError")
+_SCHEMA_REF = "#/components/schemas/"
+VALIDATION_ERROR_DESCRIPTION = (
+    "The request failed validation. The body is the shared error envelope: `error.code` is "
+    "`VALIDATION_ERROR` and `error.details` names each invalid field."
+)
+
+
+def document_validation_errors(app: FastAPI) -> None:
+    """Make the OpenAPI document describe the 422 body the application really sends.
+
+    FastAPI documents its own ``HTTPValidationError`` (``{"detail": [...]}``) on every route that
+    takes parameters and declares no 422 of its own. This application never sends that body:
+    :func:`register_exception_handlers` answers every ``RequestValidationError`` with the shared
+    :class:`ErrorResponse` envelope. Left alone, the document contradicts the server on most
+    operations, and a client generated from it would parse every validation failure wrongly.
+
+    So the generated document is corrected once, where it is generated: each 422 that FastAPI
+    filled in is pointed at ``ErrorResponse``, and the two FastAPI schemas are dropped once
+    nothing references them. A 422 a route declared itself is left exactly as written, and a
+    route with no parameters, which cannot fail validation, still documents no 422. Paths,
+    operations and every other response are untouched.
+    """
+    generate = app.openapi
+
+    def openapi() -> dict[str, Any]:
+        if app.openapi_schema is not None:
+            return app.openapi_schema
+        schema = generate()
+        default_body = f"{_SCHEMA_REF}{FASTAPI_VALIDATION_SCHEMAS[0]}"
+        corrected = False
+        for operations in schema.get("paths", {}).values():
+            for operation in operations.values():
+                refusal = operation.get("responses", {}).get("422")
+                if refusal is None:
+                    continue
+                body = refusal.get("content", {}).get("application/json", {}).get("schema", {})
+                if body.get("$ref") != default_body:
+                    continue
+                refusal["description"] = VALIDATION_ERROR_DESCRIPTION
+                refusal["content"] = {
+                    "application/json": {"schema": {"$ref": f"{_SCHEMA_REF}ErrorResponse"}}
+                }
+                corrected = True
+        components = schema.get("components", {}).get("schemas", {})
+        if corrected and "ErrorResponse" not in components:
+            generated = ErrorResponse.model_json_schema(ref_template=_SCHEMA_REF + "{model}")
+            for name, definition in generated.pop("$defs", {}).items():
+                components.setdefault(name, definition)
+            components["ErrorResponse"] = generated
+        for name in FASTAPI_VALIDATION_SCHEMAS:
+            components.pop(name, None)
+        text = repr(schema)
+        leftover = [name for name in FASTAPI_VALIDATION_SCHEMAS if _SCHEMA_REF + name in text]
+        if leftover:  # pragma: no cover - a route declaring FastAPI's model by hand
+            raise RuntimeError(f"OpenAPI still references FastAPI's {leftover}")
+        return schema
+
+    app.openapi = openapi  # type: ignore[method-assign]
+
+
 __all__ = [
     "AUDIT_RELATIONS",
     "GENERIC_CONFLICT_MESSAGE",
@@ -493,6 +555,7 @@ __all__ = [
     "NotFoundError",
     "ValidationError",
     "constraint_name_of",
+    "document_validation_errors",
     "error_response",
     "internal_fault",
     "is_audit_integrity_failure",
