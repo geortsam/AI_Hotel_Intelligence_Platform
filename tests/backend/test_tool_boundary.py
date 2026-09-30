@@ -47,6 +47,7 @@ from app.copilot.contracts import (
     ToolOutput,
     ToolServices,
 )
+from app.copilot.grounding import ungrounded_figures
 from app.copilot.loop import (
     MAX_CALLS_PER_ROUND,
     MAX_TOOL_FAILURES,
@@ -70,6 +71,7 @@ from app.copilot.tools import (
     priorities,
     revenue_breakdown,
 )
+from app.copilot.tools.demand_forecast import CAPACITY_CAVEAT
 from app.core.config import Settings
 from app.core.errors import (
     AppError,
@@ -870,23 +872,20 @@ def test_only_the_forecast_tool_declares_a_side_effect() -> None:
 
 @pytest.mark.parametrize("name", DATA_TOOLS)
 def test_each_output_is_the_service_response_minus_the_hotel(name: str) -> None:
-    """Every field a tool drops is declared in `withheld`, with a reason; nothing else is lost."""
     module, response, _, _ = TOOL_MODULES[name]
-    output = set(module.CONTRACT.output_model.model_fields)
-    assert output <= set(response.model_fields)
-    assert set(response.model_fields) - output <= set(module.CONTRACT.withheld)
+    assert set(module.CONTRACT.output_model.model_fields) == (
+        set(response.model_fields) - {HOTEL_IDENTIFIER_FIELD}
+    )
     assert HOTEL_IDENTIFIER_FIELD in module.CONTRACT.withheld
 
 
-def test_the_forecast_tool_withholds_exactly_the_capacity_report_and_the_hotel() -> None:
-    """The capacity report is not shown to the model until that is decided; nothing else is
-    withheld, so the prediction and its provenance still reach it unchanged."""
+def test_the_forecast_tool_withholds_only_the_hotel() -> None:
+    """The capacity report reaches the model, typed as the service types it."""
     module = TOOL_MODULES["get_demand_forecast"][0]
-    assert set(module.CONTRACT.withheld) == {
-        HOTEL_IDENTIFIER_FIELD,
-        "available_room_nights",
-        "exceeds_capacity",
-    }
+    assert set(module.CONTRACT.withheld) == {HOTEL_IDENTIFIER_FIELD}
+    output_fields = module.CONTRACT.output_model.model_fields
+    assert output_fields["available_room_nights"].annotation is int
+    assert output_fields["exceeds_capacity"].annotation is bool
 
 
 @pytest.mark.parametrize("name", DATA_TOOLS)
@@ -927,18 +926,12 @@ def test_a_tool_adds_no_business_logic_sql_or_model_call(name: str) -> None:
         assert forbidden not in source, f"{path.name} contains {forbidden!r}"
 
 
-def test_the_forecast_tool_gives_the_model_the_prediction_without_the_capacity_report() -> None:
-    """Run for real against a response that carries the capacity report: the model receives the
-    prediction and its provenance unchanged, and neither capacity field."""
+def forecast_tool_output(**update: object) -> tuple[dict[str, Any], Any]:
+    """Run the real forecast tool against the evaluation hotel's forecast, with *update* applied
+    to the service response. Returns what the model is shown, and what the service returned."""
     from tests.evaluation.fixture_hotel import FORECAST_TARGET, FORECASTS
 
-    served = FORECASTS[FORECAST_TARGET].model_copy(
-        update={
-            "predicted_room_nights": 165.9,
-            "available_room_nights": 15,
-            "exceeds_capacity": True,
-        }
-    )
+    served = FORECASTS[FORECAST_TARGET].model_copy(update=update)
 
     class Forecasts:
         def forecast_demand(self, *_: object) -> object:
@@ -952,12 +945,67 @@ def test_the_forecast_tool_gives_the_model_the_prediction_without_the_capacity_r
         ToolContext(hotel_public_id=HOTEL, services=cast(ToolServices, Services())),
         module.CONTRACT.input_model.model_validate({"target_date": str(FORECAST_TARGET)}),
     )
+    return output.model_dump(), served
 
-    shown = output.model_dump()
-    assert "available_room_nights" not in shown
-    assert "exceeds_capacity" not in shown
-    assert shown == served.model_dump(exclude=set(module.CONTRACT.withheld))
-    assert shown["predicted_room_nights"] == 165.9
+
+@pytest.mark.parametrize(
+    ("predicted", "available", "exceeds"),
+    [
+        (165.9, 15, True),  # above capacity: the demo harbour hotel's shape
+        (15.43, 20, False),  # within capacity: the evaluation hotel's own forecast
+        (15.0, 15, False),  # exactly at capacity: still a possible occupancy
+        (165.9, 15, False),  # inconsistent on purpose: the verdict is the service's, not re-made
+    ],
+)
+def test_the_forecast_tool_passes_the_capacity_report_through_unchanged(
+    predicted: float, available: int, exceeds: bool
+) -> None:
+    """The model sees the prediction, the capacity and the verdict exactly as the service
+    produced them: nothing recomputed, nothing clipped, nothing withheld but the hotel."""
+    shown, served = forecast_tool_output(
+        predicted_room_nights=predicted, available_room_nights=available, exceeds_capacity=exceeds
+    )
+
+    assert shown["available_room_nights"] == served.available_room_nights == available
+    assert shown["exceeds_capacity"] is served.exceeds_capacity is exceeds
+    assert shown["predicted_room_nights"] == served.predicted_room_nights == predicted
+    assert shown == served.model_dump(exclude={HOTEL_IDENTIFIER_FIELD})
+
+
+def test_the_forecast_tool_tells_the_model_an_over_capacity_estimate_is_not_occupancy() -> None:
+    """The caveat is in the description the model reads -- the catalogue entry -- not only in
+    the contract object, and it says what the flag means in so many words."""
+    module = TOOL_MODULES["get_demand_forecast"][0]
+    assert "When exceeds_capacity is true" in CAPACITY_CAVEAT
+    assert "available room-night capacity" in CAPACITY_CAVEAT
+    assert "MUST NOT be presented as the hotel's actual occupancy" in CAPACITY_CAVEAT
+    assert "model estimate" in CAPACITY_CAVEAT
+    assert CAPACITY_CAVEAT in module.CONTRACT.description
+
+    [spec] = [
+        spec
+        for spec in build_catalogue(build_default_registry(), EXPECTED_TOOLS)
+        if spec.name == "get_demand_forecast"
+    ]
+    assert CAPACITY_CAVEAT in spec.description
+    assert "model estimate, not a measured figure" in spec.description
+
+
+def test_an_answer_may_quote_the_estimate_and_the_capacity_it_exceeds() -> None:
+    """The capacity is a figure the tool returned, so an answer may quote it. The grounding rule
+    itself is unchanged: without the field, the same answer's capacity is ungrounded."""
+    shown, _ = forecast_tool_output(
+        predicted_room_nights=165.9, available_room_nights=15, exceeds_capacity=True
+    )
+    answer = (
+        "The demand model estimates 165.9 room nights, above the hotel's 15 available room "
+        "nights, so it is a model estimate and not the hotel's occupancy."
+    )
+    question = "How busy will we be?"
+
+    assert ungrounded_figures(answer, outputs=[shown], question=question) == ()
+    without_capacity = {k: v for k, v in shown.items() if k != "available_room_nights"}
+    assert ungrounded_figures(answer, outputs=[without_capacity], question=question) == ("15",)
 
 
 def test_the_forecast_tool_does_not_let_the_model_choose_a_horizon() -> None:

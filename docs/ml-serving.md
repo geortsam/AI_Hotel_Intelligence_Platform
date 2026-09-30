@@ -402,10 +402,12 @@ Stated plainly, because the endpoint's existence is not a claim that the number 
    on the same current-inventory basis the analytics and occupancy forecast use -- and
    `exceeds_capacity`, true exactly when `predicted_room_nights > available_room_nights` (strict,
    as the occupancy forecast's comparison is; a hotel with no active rooms exceeds its capacity
-   with any positive estimate). Neither is stored, and neither is shown to the copilot's model
-   yet: `get_demand_forecast` declares both as withheld. The Analytics screen shows an
-   over-capacity estimate as the model's output, not as occupied room nights, with a note
-   saying why.
+   with any positive estimate). Neither is stored. The copilot's `get_demand_forecast` tool
+   passes both to its model exactly as the service computed them, and the tool's description
+   tells the model that when `exceeds_capacity` is true, `predicted_room_nights` is a model
+   estimate above the hotel's current capacity and must not be described as the hotel's actual
+   occupancy. The Analytics screen shows an over-capacity estimate as the model's output, not as
+   occupied room nights, with a note saying why.
 3. **~~The shipped API image cannot serve this endpoint.~~ Resolved by Stage 6.7.** The
    production image now installs scikit-learn, carries an allowlist of thirteen `ml/` modules,
    and regenerates the approved model in a disposable build stage that refuses to produce an

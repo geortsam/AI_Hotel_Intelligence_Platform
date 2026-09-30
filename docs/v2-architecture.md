@@ -726,7 +726,7 @@ one call.
 | `get_hotel_kpis` | `AnalyticsService.overview` | viewer | occupancy, ADR, RevPAR, room nights, booking counts, per currency, for a bounded date range |
 | `get_daily_series` | `AnalyticsService.daily` | viewer | the same measures as a daily series, capped at a maximum span |
 | `get_revenue_breakdown` | `AnalyticsService.revenue_by_category` | viewer | ledger revenue by category and currency |
-| `get_demand_forecast` | `DemandPredictionService` | viewer | the trained model's prediction with full provenance and its limitation note |
+| `get_demand_forecast` | `DemandPredictionService` | viewer | the trained model's prediction with full provenance and its limitation note, and the hotel's one-day capacity (`available_room_nights`, `exceeds_capacity`); when `exceeds_capacity` is true the estimate is above capacity and is never presented as occupancy |
 | `get_forecast_accuracy` | `DemandAccuracyService.evaluate` | manager | measured error over settled predictions, with the protocol id and the explicit "no production accuracy established" statement |
 | `search_hotel_knowledge` | `KnowledgeService.search` | viewer | ranked chunks with citations |
 | `get_hotel_priorities` | `InsightService.priorities` | viewer | *(Stage 7.12, Amendment A7)* the attention list, minus the hotel identifier |

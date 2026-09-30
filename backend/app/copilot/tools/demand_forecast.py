@@ -4,7 +4,8 @@
 - **min role** — viewer, the same as `GET …/ml/demand-forecast`.
 - **input** — `target_date` only. The horizon is **not** an argument: the served model fixes it.
 - **output** — `DemandPredictionResponse` without `hotel_public_id`: the prediction, its full
-  provenance, and the model metadata including its `production_ready` flag and methodology.
+  provenance, the model metadata including its `production_ready` flag and methodology, and the
+  hotel's capacity that day (`available_room_nights`, `exceeds_capacity`).
 - **side effects** — **`records_served_prediction`**; see below.
 - **errors** — the service's own `AppError`s (model unavailable, insufficient history, …),
   returned to the model.
@@ -18,6 +19,14 @@ service: the write is the service's own, it is idempotent under
 `uq_demand_predictions_identity`, it changes no business record, and a forecast shown to a model
 is a forecast served — not recording it would make the accuracy of what the copilot said
 unmeasurable. Recorded in Amendment A1.
+
+## The capacity report is passed on, not recomputed
+
+The served model is uncapped by contract and can estimate more room nights than a small hotel has
+(docs/ml-serving.md §9). The service reports the hotel's capacity for the day beside the
+prediction, and this tool hands both fields to the model exactly as the service computed them --
+no second comparison here, and no change to `predicted_room_nights`. The description tells the
+model what `exceeds_capacity` means, so an estimate above capacity is not stated as occupancy.
 
 ## Why the horizon is fixed here
 
@@ -33,7 +42,6 @@ import datetime as dt
 from pydantic import Field
 
 from app.copilot.contracts import (
-    HOTEL_IDENTIFIER_FIELD,
     ToolArguments,
     ToolContext,
     ToolContract,
@@ -52,12 +60,23 @@ class DemandForecastArguments(ToolArguments):
     )
 
 
+#: What the model is told about `exceeds_capacity`. Part of the tool description, which the model
+#: reads; the system prompt and its checksum are untouched.
+CAPACITY_CAVEAT = (
+    "When exceeds_capacity is true, the model estimate is above the hotel's available "
+    "room-night capacity and MUST NOT be presented as the hotel's actual occupancy; it remains "
+    "a model estimate."
+)
+
+
 class DemandForecastOutput(ToolOutput):
     target_date: dt.date
     forecast_horizon_days: int
     cutoff_date: dt.date
     prediction_cutoff: dt.datetime
     predicted_room_nights: float
+    available_room_nights: int
+    exceeds_capacity: bool
     model: DemandModelMetadata
     features_used: list[str]
 
@@ -67,21 +86,14 @@ CONTRACT = ToolContract(
     description=(
         "The demand model's forecast of occupied room nights for the current hotel on one "
         "target date, with the model's version, status, production-readiness flag, "
-        "methodology and the features it used. It is a model estimate, not a measured figure."
+        "methodology and the features it used, and the hotel's available room nights that "
+        "day. It is a model estimate, not a measured figure. " + CAPACITY_CAVEAT
     ),
     min_role=HotelRole.VIEWER,
     input_model=DemandForecastArguments,
     output_model=DemandForecastOutput,
     delegates_to="DemandPredictionService.forecast_demand",
     side_effect="records_served_prediction",
-    withheld={
-        HOTEL_IDENTIFIER_FIELD: "the hotel is fixed by the request; the model never needs it",
-        # The capacity report was added for the Analytics screen. Whether the copilot's model
-        # should see it is a separate decision, not yet taken, so this tool's output contract
-        # is unchanged until it is.
-        "available_room_nights": "added for the Analytics screen; not yet decided for the model",
-        "exceeds_capacity": "added for the Analytics screen; not yet decided for the model",
-    },
 )
 
 
