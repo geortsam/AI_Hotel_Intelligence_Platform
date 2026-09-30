@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { CopilotPage } from '@/pages/CopilotPage'
+import { resetAuthBridge, setAuthBridge } from '@/services/api/client'
+import { copilotService } from '@/services/copilot/copilotService'
 import { ROUTES } from '@/router/routes'
 import { useHotelContext } from '@/session/HotelProvider'
 import {
@@ -189,6 +191,17 @@ function documentDetail(overrides: Partial<DocumentDetail> = {}): DocumentDetail
   }
 }
 
+/** `GET /api/v1/` as the backend sends it; only `copilot_enabled` is read by the screen. */
+function apiMeta(copilotEnabled: boolean) {
+  return {
+    name: 'AI Hotel Intelligence Platform',
+    version: '0.1.0',
+    api_version: 'v1',
+    documentation: '/docs',
+    copilot_enabled: copilotEnabled,
+  }
+}
+
 function failure(status: number, code: string, headers?: Record<string, string>): StubResponse {
   return {
     status,
@@ -220,6 +233,7 @@ beforeEach(() => {
   fetchStub.on('GET', '/copilot/conversations/', { body: transcript([storedTurn(1)]) })
   fetchStub.on('DELETE', '/copilot/conversations/', { status: 204 })
   fetchStub.on('GET', '/documents/', { body: documentDetail() })
+  fetchStub.on('GET', '=/api/v1/', { body: apiMeta(true) })
 })
 
 afterEach(() => {
@@ -264,8 +278,13 @@ function requestsFor(fragment: string, method: string) {
   return fetchStub.calls.filter((call) => call.method === method && call.url.includes(fragment))
 }
 
+/** The question box, once the server has said whether the copilot is on. */
 async function questionBox() {
-  return screen.findByLabelText('Your question')
+  await screen.findByLabelText('Your question')
+  await waitFor(() => {
+    expect(screen.queryByText(/Checking whether the copilot is switched on/)).not.toBeInTheDocument()
+  })
+  return screen.getByLabelText('Your question')
 }
 
 async function ask(question: string, button: RegExp = /^Ask$/) {
@@ -282,6 +301,138 @@ async function chooseConversationMode() {
 function answerCards() {
   return screen.getAllByRole('article')
 }
+
+/* --- 0. whether the copilot is switched on ---------------------------------------------- */
+
+describe('the copilot switch, as the server reports it', () => {
+  it('reads the switch from the public API root, without the session token', async () => {
+    renderCopilot()
+    await questionBox()
+
+    const [request] = fetchStub.calls.filter(
+      (call) => call.method === 'GET' && new URL(call.url, 'http://localhost').pathname === '/api/v1/',
+    )
+    expect(request).toBeDefined()
+    expect(new URL(request!.url, 'http://localhost').search).toBe('')
+    expect(request!.authorization).toBeNull()
+  })
+
+  it('never attaches the session token to the metadata request, even with a session live', async () => {
+    // The page's own request can run before the session is wired to the client, so it cannot
+    // prove this; the service is called directly with a live token instead.
+    setAuthBridge({ getToken: () => 'live-session-token', onUnauthenticated: () => {} })
+    try {
+      await copilotService.capability()
+    } finally {
+      resetAuthBridge()
+    }
+
+    const request = fetchStub.calls.find(
+      (call) => new URL(call.url, 'http://localhost').pathname === '/api/v1/',
+    )
+    expect(request).toBeDefined()
+    expect(request!.authorization).toBeNull()
+  })
+
+  it('shows the box disabled under a clear message when the server says the copilot is off', async () => {
+    fetchStub.on('GET', '=/api/v1/', { body: apiMeta(false) })
+    renderCopilot()
+
+    expect(
+      await screen.findByText('The copilot is switched off in this deployment'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/The server reports that its language model is not enabled/),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Your question')).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Ask$/ })).toBeDisabled()
+    // Nothing leaves the process, so the provider disclosure is not shown.
+    expect(screen.queryByRole('note', { name: 'What happens to your question' })).not.toBeInTheDocument()
+  })
+
+  it('sends no question while the copilot is off, even when the form is submitted', async () => {
+    fetchStub.on('GET', '=/api/v1/', { body: apiMeta(false) })
+    renderCopilot()
+    await screen.findByText('The copilot is switched off in this deployment')
+
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText('Your question'), 'Anything')
+    expect(screen.getByLabelText('Your question')).toHaveValue('')
+    fireEvent.submit(screen.getByRole('form', { name: 'Ask the copilot' }))
+    await user.click(screen.getByRole('button', { name: /^Ask$/ }))
+
+    expect(requestsFor('/copilot/ask', 'POST')).toHaveLength(0)
+    expect(requestsFor('/copilot/conversations', 'POST')).toHaveLength(0)
+  })
+
+  it('keeps the box disabled in conversation mode too, and still lists stored conversations', async () => {
+    fetchStub.on('GET', '=/api/v1/', { body: apiMeta(false) })
+    fetchStub.on('GET', '/copilot/conversations?', { body: listPage([summary()]) })
+    renderCopilot()
+    await screen.findByText('The copilot is switched off in this deployment')
+    await chooseConversationMode()
+
+    expect(await screen.findByText('Your conversations')).toBeInTheDocument()
+    expect(screen.getByLabelText('Your question')).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Start conversation$/ })).toBeDisabled()
+  })
+
+  it('holds the box disabled until the server has answered, then offers it when on', async () => {
+    let answerMeta: (() => void) | undefined
+    const pending = new Promise<void>((resolve) => {
+      answerMeta = resolve
+    })
+    fetchStub.on('GET', '=/api/v1/', { body: apiMeta(true) })
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (new URL(String(input), 'http://localhost').pathname === '/api/v1/') {
+        await pending
+      }
+      return original(input, init)
+    }) as typeof fetch
+    try {
+      renderCopilot()
+      expect(await screen.findByText('Checking whether the copilot is switched on…')).toBeInTheDocument()
+      expect(screen.getByLabelText('Your question')).toBeDisabled()
+
+      act(() => {
+        answerMeta!()
+      })
+      await waitFor(() => {
+        expect(screen.getByLabelText('Your question')).toBeEnabled()
+      })
+      expect(screen.queryByText(/switched off/)).not.toBeInTheDocument()
+    } finally {
+      globalThis.fetch = original
+    }
+  })
+
+  it('asks normally when the server says the copilot is on', async () => {
+    renderCopilot()
+    await ask('How full were we last week?')
+
+    expect(await screen.findByText('Occupancy was 0.72 over the period.')).toBeInTheDocument()
+    expect(requestsFor('/copilot/ask', 'POST')).toHaveLength(1)
+    expect(screen.queryByText(/Could not confirm/)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['a failed request', { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'x', details: [] } } }],
+    ['a body without the switch', { body: { name: 'x', version: '0', api_version: 'v1', documentation: null } }],
+    ['a switch that is not a boolean', { body: { ...apiMeta(true), copilot_enabled: 'false' } }],
+  ])('does not invent a state from %s: the box stays offered and says so', async (_label, meta) => {
+    fetchStub.on('GET', '=/api/v1/', meta)
+    renderCopilot()
+
+    expect(
+      await screen.findByText(/Could not confirm whether the copilot is switched on/),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('The copilot is switched off in this deployment')).not.toBeInTheDocument()
+    expect(await questionBox()).toBeEnabled()
+    await ask('Anything')
+    expect(requestsFor('/copilot/ask', 'POST')).toHaveLength(1)
+  })
+})
 
 /* --- 1. one-off answer ------------------------------------------------------------------ */
 

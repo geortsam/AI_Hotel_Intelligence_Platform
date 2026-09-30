@@ -16,7 +16,7 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-6767%20backend%20%C2%B7%201247%20frontend-success)
+![Tests](https://img.shields.io/badge/tests-6830%20backend%20%C2%B7%201258%20frontend-success)
 ![API](https://img.shields.io/badge/API-64%20paths%20%C2%B7%2099%20operations-informational)
 
 </div>
@@ -41,7 +41,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **6767 backend tests and 1247 frontend tests pass in CI.** Schema head is
+> **6830 backend tests and 1258 frontend tests pass in CI.** Schema head is
 > `0015_copilot_conversations` across 15 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
@@ -525,6 +525,19 @@ noticed no rows.
 **Read [docs/deployment/first-run-bootstrap.md](docs/deployment/first-run-bootstrap.md) before
 running the grant** — it covers the checks to make first, how to verify the result, secret
 handling, what is *not* audited, and what to do if the wrong user was granted.
+
+**Demo data, optionally.** `scripts/seed_demo.py` fills a *new, empty, migrated* database with
+deterministic, synthetic data for two fictional hotels and a demo owner account. The data runs
+from a year of history through the stays in house on the reference date, to four months of
+future bookings. It refuses any database that already holds a row and never deletes anything.
+The data is for looking at the screens, not evidence of anything:
+
+```bash
+.venv/Scripts/python.exe scripts/seed_demo.py --database-url <empty-migrated-db-url> --reference-date today
+```
+
+See [database/README.md](database/README.md#demo-data) for creating the database, the
+`DEMO_OWNER_PASSWORD` variable, `--seed` and the other options, and how to refresh it safely.
 
 ## Testing and quality checks
 

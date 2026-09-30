@@ -248,7 +248,9 @@ def test_a_day_the_forecast_cannot_score_is_never_listed() -> None:
     assert [i.kind for i in response.items if i.kind == "upcoming_peak_day"] == []
 
 
-@pytest.mark.parametrize("direction", ["stable", "insufficient_data"])
+@pytest.mark.parametrize(
+    "direction", ["stable", "insufficient_data", "no_activity", "sparse_activity"]
+)
 def test_a_trend_that_did_not_move_is_not_listed(direction: str) -> None:
     assert "demand_trend" not in [i.kind for i in priorities(direction=direction).items]
 

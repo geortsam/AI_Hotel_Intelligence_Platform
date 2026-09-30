@@ -33,12 +33,16 @@ export type ForecastMethod = 'seasonal_dow_median' | 'overall_median' | 'insuffi
 /**
  * `TrendDirectionLiteral`. `no_activity` is a window in which no booking was taken on any day:
  * there is no demand whose direction could be observed, so it is not `stable`.
+ * `sparse_activity` is a window that did hold bookings, but in which both halves' medians are
+ * zero — more than half the days of each half had none — so the median comparison cannot see
+ * them and establishes no direction.
  */
 export type TrendDirection =
   | 'increasing'
   | 'decreasing'
   | 'stable'
   | 'no_activity'
+  | 'sparse_activity'
   | 'insufficient_data'
 
 /** `SeverityLiteral`. Carried by insights only — an anomaly has no severity. */

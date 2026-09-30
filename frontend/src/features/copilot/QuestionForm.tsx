@@ -18,17 +18,22 @@ import styles from './QuestionForm.module.css'
  *
  * `busy` disables the button while a question is in flight; the hook's own guard refuses a
  * second submit even if one gets past the button in the same tick.
+ *
+ * `unavailable` disables the whole form — the box and the button — when the server has not
+ * said the copilot is switched on. A submit that reaches the handler anyway is dropped.
  */
 
 export const MAX_QUESTION_LENGTH = 2000
 
 export interface QuestionFormProps {
   readonly busy: boolean
+  /** True while the copilot is switched off, or not yet known to be on. */
+  readonly unavailable?: boolean
   readonly submitLabel: string
   readonly onAsk: (question: string) => Promise<boolean>
 }
 
-export function QuestionForm({ busy, submitLabel, onAsk }: QuestionFormProps) {
+export function QuestionForm({ busy, unavailable = false, submitLabel, onAsk }: QuestionFormProps) {
   const [question, setQuestion] = useState('')
   const fieldId = useId()
   const countId = useId()
@@ -37,7 +42,7 @@ export function QuestionForm({ busy, submitLabel, onAsk }: QuestionFormProps) {
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (busy || blank) {
+    if (busy || unavailable || blank) {
       return
     }
     void onAsk(question).then((answered) => {
@@ -58,7 +63,7 @@ export function QuestionForm({ busy, submitLabel, onAsk }: QuestionFormProps) {
         rows={3}
         maxLength={MAX_QUESTION_LENGTH}
         value={question}
-        disabled={busy}
+        disabled={busy || unavailable}
         aria-describedby={countId}
         placeholder="For example: how did occupancy compare between the first and second half of last month?"
         onChange={(event) => {
@@ -69,7 +74,7 @@ export function QuestionForm({ busy, submitLabel, onAsk }: QuestionFormProps) {
         <span className={styles.count} id={countId}>
           {formatCount(question.length)} of {formatCount(MAX_QUESTION_LENGTH)} characters
         </span>
-        <Button type="submit" variant="primary" size="sm" disabled={busy || blank}>
+        <Button type="submit" variant="primary" size="sm" disabled={busy || unavailable || blank}>
           <Send size={14} aria-hidden="true" />
           {busy ? 'Answering…' : submitLabel}
         </Button>

@@ -120,3 +120,12 @@ export interface ConversationTranscript {
   readonly turns_remaining: number
   readonly turns: readonly StoredTurn[]
 }
+
+/**
+ * The one field of `ApiMetaResponse` (`GET /api/v1/`, `app.schemas.meta`) this screen reads:
+ * whether the deployment has the copilot switched on — the server's `llm_enabled`, and nothing
+ * about provider, model or credentials. The response carries other fields; none is read here.
+ */
+export interface ApiMetaResponse {
+  readonly copilot_enabled: boolean
+}

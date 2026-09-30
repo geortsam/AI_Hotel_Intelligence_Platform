@@ -9,6 +9,7 @@ import { ExchangeView } from '@/features/copilot/ExchangeView'
 import { ModeSelector } from '@/features/copilot/ModeSelector'
 import { QuestionForm } from '@/features/copilot/QuestionForm'
 import { useCopilot } from '@/features/copilot/useCopilot'
+import { useCopilotCapability } from '@/features/copilot/useCopilotCapability'
 import {
   CONVERSATION_DISCLOSURE,
   describeCopilotFailure,
@@ -43,6 +44,14 @@ import styles from './CopilotPage.module.css'
  *   conversation lives on the server, under its retention rule. Nothing is written to
  *   `localStorage` or `sessionStorage`.
  *
+ * ## Whether the copilot is on is the server's statement
+ *
+ * `GET /api/v1/` reports the deployment's `copilot_enabled` switch. When it is false the question
+ * box is shown disabled under a message saying so, and nothing is sent. Until the answer
+ * arrives the box is disabled too. If the answer cannot be read, the box stays offered and the
+ * screen says it could not confirm — the server's `LLM_DISABLED` refusal is still handled — so
+ * the screen never claims a state the server did not report.
+ *
  * ## Disclosure comes before the question
  *
  * What leaves the process — the question and the lookup results, to an external provider —
@@ -56,6 +65,7 @@ export function CopilotPage() {
   const timeZone = hotel?.timezone ?? 'UTC'
 
   const copilot = useCopilot(hotelPublicId)
+  const capability = useCopilotCapability()
 
   if (hotelContext.status === 'empty') {
     return (
@@ -103,6 +113,16 @@ export function CopilotPage() {
       ? null
       : describeCopilotFailure(copilot.failure.error, copilot.failure.context)
   const full = conversationMode && open !== null && open.turnsRemaining === 0
+  const submitLabel = conversationMode
+    ? open === null
+      ? 'Start conversation'
+      : 'Ask in this conversation'
+    : 'Ask'
+  // Only a server that said "on", or whose answer could not be read, is sent a question.
+  const askIfOffered = (question: string): Promise<boolean> =>
+    capability === 'enabled' || capability === 'unknown'
+      ? copilot.ask(question)
+      : Promise.resolve(false)
 
   return (
     <Frame>
@@ -207,8 +227,28 @@ export function CopilotPage() {
             title="Questions are not available on this visit"
             detail="This deployment has no language model enabled. Your stored conversations can still be read and deleted."
           />
+        ) : capability === 'disabled' ? (
+          <>
+            <StateMessage
+              icon={BotOff}
+              tone="status"
+              title="The copilot is switched off in this deployment"
+              detail="The server reports that its language model is not enabled, so questions cannot be sent. Your stored conversations can still be read and deleted."
+            />
+            <QuestionForm busy={busy} unavailable submitLabel={submitLabel} onAsk={askIfOffered} />
+          </>
         ) : (
           <>
+            {capability === 'checking' ? (
+              <p className={styles.note} role="status" aria-busy="true">
+                Checking whether the copilot is switched on…
+              </p>
+            ) : capability === 'unknown' ? (
+              <p className={styles.note} role="status">
+                Could not confirm whether the copilot is switched on. If it is not, the server will
+                refuse the question.
+              </p>
+            ) : null}
             <div className={styles.disclosure} role="note" aria-label="What happens to your question">
               <p>{PROVIDER_DISCLOSURE}</p>
               <p>{conversationMode ? CONVERSATION_DISCLOSURE : ONE_OFF_DISCLOSURE}</p>
@@ -221,14 +261,9 @@ export function CopilotPage() {
             ) : (
               <QuestionForm
                 busy={busy}
-                submitLabel={
-                  conversationMode
-                    ? open === null
-                      ? 'Start conversation'
-                      : 'Ask in this conversation'
-                    : 'Ask'
-                }
-                onAsk={copilot.ask}
+                unavailable={capability === 'checking'}
+                submitLabel={submitLabel}
+                onAsk={askIfOffered}
               />
             )}
           </>

@@ -396,17 +396,69 @@ def test_a_window_with_no_bookings_at_all_is_no_activity_not_stable() -> None:
     assert result.observations == 12
 
 
-def test_one_busy_day_in_a_window_of_zeros_is_not_no_activity() -> None:
-    """Both halves' medians are zero, but bookings were taken: the window did hold activity,
-    so it must never be reported as having none. (The median comparison itself is unchanged.)"""
-    result = measure_trend(series([0] * 11 + [166]))
+def test_one_busy_day_in_a_window_of_zeros_is_sparse_activity() -> None:
+    """Both halves' medians are zero, but bookings were taken. The window did hold activity,
+    so it is not `no_activity`; and the medians cannot see that activity, so it is not
+    `stable` either -- the demo database's shape, 166 bookings on one day of ninety."""
+    result = measure_trend(series([0] * 89 + [166]))
 
-    assert result.direction != "no_activity"
+    assert result.direction == "sparse_activity"
     assert result.earlier_median == 0 and result.recent_median == 0
+    assert result.relative_change is None
+    assert result.observations == 90
+
+
+def test_one_busy_day_in_the_earlier_half_is_sparse_activity_too() -> None:
+    assert measure_trend(series([166] + [0] * 11)).direction == "sparse_activity"
+
+
+def test_scattered_activity_on_a_minority_of_days_is_sparse_activity() -> None:
+    """Two active days in each half of six: four zeros each, so both medians are zero."""
+    result = measure_trend(series([0, 3, 0, 0, 5, 0, 0, 0, 2, 0, 0, 4]))
+
+    assert result.direction == "sparse_activity"
+
+
+def test_activity_on_exactly_half_the_days_is_not_sparse() -> None:
+    """The boundary. Three active days in each half of six: the even-length median averages
+    the two middle values, (0 + 2) / 2 = 1, so both medians register the activity and the
+    ordinary comparison applies."""
+    result = measure_trend(series([0, 0, 0, 2, 2, 2, 2, 0, 2, 0, 2, 0]))
+
+    assert result.earlier_median == 1 and result.recent_median == 1
+    assert result.direction == "stable"
+
+
+def test_a_fall_to_a_zero_recent_median_is_decreasing_not_sparse() -> None:
+    """Only BOTH medians at zero is sparse. A non-zero earlier half falling to a zero recent
+    half is a measured fall of 100%."""
+    result = measure_trend(series([4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 1]))
+
+    assert result.direction == "decreasing"
+    assert result.relative_change == -1
 
 
 def test_non_zero_flat_demand_is_still_stable() -> None:
     assert measure_trend(series([3] * 12)).direction == "stable"
+
+
+def test_every_zero_one_window_of_eight_days_is_classified_as_documented() -> None:
+    """Exhaustive over all 256 windows of eight 0/1 days: `stable` always rests on non-zero
+    medians in both halves, and two zero medians are `no_activity` or `sparse_activity`
+    according to whether any booking was taken -- never a direction."""
+    for mask in range(256):
+        values = [(mask >> bit) & 1 for bit in range(8)]
+        result = measure_trend(series(values))
+        both_zero = result.earlier_median == 0 and result.recent_median == 0
+
+        if sum(values) == 0:
+            assert result.direction == "no_activity", values
+        elif both_zero:
+            assert result.direction == "sparse_activity", values
+        else:
+            assert result.direction in ("increasing", "decreasing", "stable"), values
+        if result.direction == "stable":
+            assert result.earlier_median and result.recent_median, values
 
 
 def test_too_little_history_reports_insufficient_data() -> None:

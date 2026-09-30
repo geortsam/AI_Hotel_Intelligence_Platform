@@ -43,7 +43,7 @@ MAX_OBSERVATION_DAYS = 366
 
 ForecastMethodLiteral = Literal["seasonal_dow_median", "overall_median", "insufficient_data"]
 TrendDirectionLiteral = Literal[
-    "increasing", "decreasing", "stable", "no_activity", "insufficient_data"
+    "increasing", "decreasing", "stable", "no_activity", "sparse_activity", "insufficient_data"
 ]
 #: Why one metric could not be scanned for anomalies. Closed; see `anomaly_assessability`.
 AnomalyUnassessedReasonLiteral = Literal["too_few_observations", "no_variation"]
@@ -181,7 +181,10 @@ class DemandTrendResponse(BaseModel):
     ``increasing`` or ``decreasing`` when the relative change exceeds ``threshold``, and
     ``stable`` otherwise. Both medians and the threshold are returned so the answer can be
     recomputed by hand. A window in which no booking was taken on any day is ``no_activity``,
-    not ``stable``: there is no demand whose direction could be observed.
+    not ``stable``: there is no demand whose direction could be observed. A window that did
+    hold bookings, but in which both halves' medians are zero -- more than half the days of
+    each half had none -- is ``sparse_activity``: the median comparison cannot see those
+    bookings, so it establishes no direction, stable included.
     """
 
     hotel_public_id: uuid.UUID

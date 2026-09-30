@@ -3,6 +3,12 @@
 Not a domain endpoint: it exposes no business data and touches no table. It exists so the
 version prefix is a real, discoverable resource rather than an empty namespace, which also
 makes router registration verifiable by a test.
+
+``copilot_enabled`` is the one capability it reports, so the copilot screen can say the copilot
+is off before anyone types a question rather than after the first refusal. It is read from
+``Settings.llm_enabled`` -- the same switch ``app.llm.factory.build_chat_model`` obeys -- and is
+not a second setting. It is a boolean and only a boolean: the provider, the model, the base URL
+and whether a key is configured stay on the server.
 """
 
 from __future__ import annotations
@@ -20,7 +26,8 @@ router = APIRouter(tags=["meta"])
     "/",
     response_model=ApiMetaResponse,
     summary="API metadata",
-    description="Identifies this API version and links to its documentation.",
+    description="Identifies this API version, links to its documentation, and says whether "
+    "the copilot is switched on in this deployment.",
 )
 def api_meta(settings: SettingsDep) -> ApiMetaResponse:
     return ApiMetaResponse(
@@ -28,4 +35,5 @@ def api_meta(settings: SettingsDep) -> ApiMetaResponse:
         version=__version__,
         api_version="v1",
         documentation="/docs" if settings.docs_enabled else None,
+        copilot_enabled=settings.llm_enabled,
     )

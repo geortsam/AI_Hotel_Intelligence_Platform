@@ -719,6 +719,23 @@ describe('the demand trend', () => {
     expect(screen.getByText(/No booking was taken on any day of the observation window/)).toBeInTheDocument()
     expect(screen.queryByText('Stable')).not.toBeInTheDocument()
   })
+
+  it('renders bookings too sparse for the medians as their own state, not as stable', async () => {
+    fetchStub.on('GET', '/demand-trend', {
+      body: demandTrend({
+        direction: 'sparse_activity',
+        earlier_median: '0',
+        recent_median: '0',
+        relative_change: null,
+      }),
+    })
+    renderPage()
+
+    expect(await screen.findByText('Too sparse to judge')).toBeInTheDocument()
+    expect(screen.getByText(/Bookings were taken, but on more than half the days/)).toBeInTheDocument()
+    expect(screen.queryByText('Stable')).not.toBeInTheDocument()
+    expect(screen.queryByText('No booking activity')).not.toBeInTheDocument()
+  })
 })
 
 describe('anomalies', () => {

@@ -1,4 +1,4 @@
-import { CircleOff, HelpCircle, Minus, TrendingDown, TrendingUp } from 'lucide-react'
+import { CircleDashed, CircleOff, HelpCircle, Minus, TrendingDown, TrendingUp } from 'lucide-react'
 
 import { UNAVAILABLE } from '@/lib/format'
 import type { DemandTrend, TrendDirection } from '@/types/intelligence'
@@ -34,6 +34,12 @@ export interface TrendSummaryProps {
  *
  * A window in which no booking was taken on any day holds no demand whose direction could be
  * observed. The server says so, and so does this label.
+ *
+ * ## `sparse_activity` is a sixth: bookings were taken, and no direction can be given
+ *
+ * When more than half the days of each half had no bookings, both medians are zero and the
+ * comparison is blind to the bookings the window does hold. That used to read "Stable". It is
+ * labelled for what it is, and like `no_activity` it carries no direction.
  */
 const PRESENTATION: Readonly<
   Record<TrendDirection, { label: string; icon: typeof TrendingUp; tone: string }>
@@ -42,6 +48,7 @@ const PRESENTATION: Readonly<
   decreasing: { label: 'Decreasing', icon: TrendingDown, tone: 'down' },
   stable: { label: 'Stable', icon: Minus, tone: 'flat' },
   no_activity: { label: 'No booking activity', icon: CircleOff, tone: 'unknown' },
+  sparse_activity: { label: 'Too sparse to judge', icon: CircleDashed, tone: 'unknown' },
   insufficient_data: { label: 'Not enough data', icon: HelpCircle, tone: 'unknown' },
 }
 
@@ -62,7 +69,9 @@ export function TrendSummary({ trend }: TrendSummaryProps) {
           ? 'The observation window did not hold enough booking history to split in half and compare.'
           : trend.direction === 'no_activity'
             ? 'No booking was taken on any day of the observation window, so there is no demand whose direction could be classified.'
-            : 'Classified by comparing the median of the window’s earlier half with its recent half. Both medians and the threshold are below, so the classification can be checked.'}
+            : trend.direction === 'sparse_activity'
+              ? 'Bookings were taken, but on more than half the days of each half of the window there were none. Both medians are therefore zero and cannot register those bookings, so no direction — stable included — is reported.'
+              : 'Classified by comparing the median of the window’s earlier half with its recent half. Both medians and the threshold are below, so the classification can be checked.'}
       </p>
 
       <dl className={styles.fields}>

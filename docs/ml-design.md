@@ -101,9 +101,29 @@ recomputable.
 the direction follows the absolute move.
 
 *No activity:* a window in which no booking was taken on **any** day is `no_activity`, not
-`stable` -- there is no demand whose direction could be observed. A window whose medians are
-both zero but which did hold bookings (a few busy days among many empty ones) is not
-`no_activity`; the median comparison above still classifies it.
+`stable` -- there is no demand whose direction could be observed.
+
+*Sparse activity:* a window that did hold bookings but in which **both** halves' medians are
+zero is `sparse_activity`. The daily values are non-negative counts, so a zero median means
+more than half the days of that half had no bookings; the median is then blind to every booking
+the window holds, whether there was one busy day or a scattering of them. Two zero medians
+used to compare as `stable`, which described a steadiness the method never observed. No new
+statistic is involved: this is the one case in which the comparison above has nothing to
+compare, reported as such, with no direction and a null `relative_change`.
+
+What each outcome guarantees, and nothing more:
+
+| `direction` | Meaning |
+|---|---|
+| `insufficient_data` | fewer than 7 days in the window; nothing compared |
+| `no_activity` | no booking taken on any day |
+| `sparse_activity` | bookings were taken, but both halves' medians are zero; no direction |
+| `increasing` | earlier median zero and recent median above zero, or a relative rise above the threshold |
+| `decreasing` | a relative fall beyond the threshold (a recent median of zero after a non-zero earlier one is a fall of 1) |
+| `stable` | a relative change within the threshold, which requires a non-zero median in both halves |
+
+The attention list reports only `increasing` and `decreasing`; every other outcome, including
+`sparse_activity`, produces no item there.
 
 ### Anomaly detection — modified z-score on the MAD
 

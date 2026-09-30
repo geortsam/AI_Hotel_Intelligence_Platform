@@ -108,7 +108,8 @@ class Anomaly(NamedTuple):
 class TrendResult(NamedTuple):
     """A demand-direction classification and the two numbers that produced it."""
 
-    #: "increasing", "decreasing", "stable", "no_activity" or "insufficient_data".
+    #: "increasing", "decreasing", "stable", "no_activity", "sparse_activity" or
+    #: "insufficient_data".
     direction: str
     earlier_median: decimal.Decimal | None
     recent_median: decimal.Decimal | None
@@ -284,6 +285,14 @@ def measure_trend(
 
     An odd-length window gives the extra day to the recent half, which is the half a reader
     cares more about.
+
+    Two outcomes report no direction because the comparison has nothing to compare:
+
+    * ``no_activity`` -- no booking was taken on any day.
+    * ``sparse_activity`` -- bookings were taken, but both halves' medians are zero. The
+      values are non-negative counts, so a zero median means more than half the days of that
+      half had no bookings. The median is then blind to every booking in the window, and
+      calling two zero medians "stable" would describe a steadiness nobody observed.
     """
     ordered = sorted(observations, key=lambda item: item.date)
     if len(ordered) < minimum_observations:
@@ -312,8 +321,10 @@ def measure_trend(
 
     if earlier == ZERO:
         # A relative change from zero is undefined. Direction still follows the absolute
-        # move, which is the honest reading of "it was nothing, now it is something".
-        direction = "increasing" if recent > ZERO else "stable"
+        # move, which is the honest reading of "it was nothing, now it is something". When
+        # the recent median is zero as well, the window did hold bookings (the all-zero case
+        # returned above) but on too few days for either median to register them.
+        direction = "increasing" if recent > ZERO else "sparse_activity"
         return TrendResult(
             direction=direction,
             earlier_median=earlier,

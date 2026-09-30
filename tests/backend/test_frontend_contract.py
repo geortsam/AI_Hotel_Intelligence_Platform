@@ -6,6 +6,10 @@ generates them and, until this test, nothing compared them: a backend field rena
 made nullable or given a new closed value would have left the frontend compiling cleanly against
 a shape the server no longer sends.
 
+The screen also reads one field of the public API root, ``copilot_enabled`` from
+``app.schemas.meta``, to disable the question box when the copilot is switched off. That route is
+bound below like the others; no other screen's contract is checked here.
+
 ## How
 
 The backend is the authority, so the comparison runs here, against ``create_app().openapi()``
@@ -59,7 +63,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from app.api.v1.endpoints import copilot, copilot_conversations, knowledge
+from app.api.v1.endpoints import copilot, copilot_conversations, knowledge, meta
 from app.copilot.registry import build_default_registry
 from app.core.config import Settings
 from app.core.errors import AppError, ConflictError, error_response
@@ -396,6 +400,15 @@ BINDINGS = (
         KNOWLEDGE_SERVICE,
         "api.get<DocumentDetail>(`/hotels/${hotelPublicId}/documents/${encodeURIComponent(documentPublicId)}`",
     ),
+    # The public API root, read by the copilot screen for its one `copilot_enabled` switch.
+    Binding(
+        "get",
+        "/api/v1/",
+        "200",
+        "ApiMetaResponse",
+        COPILOT_SERVICE,
+        "api.get<ApiMetaResponse>('/'",
+    ),
 )
 
 #: What `conversationPath` in the service expands to, so the bindings above mean what they say.
@@ -494,7 +507,7 @@ EXCLUDING_FLAGS = (
 def bound_routes() -> list[APIRoute]:
     return [
         route
-        for module in (copilot, copilot_conversations, knowledge)
+        for module in (copilot, copilot_conversations, knowledge, meta)
         for route in module.router.routes
         if isinstance(route, APIRoute)
     ]

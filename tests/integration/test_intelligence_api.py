@@ -616,6 +616,7 @@ def test_demand_trend_reports_both_medians_and_the_threshold(
         "decreasing",
         "stable",
         "no_activity",
+        "sparse_activity",
         "insufficient_data",
     }
     assert Decimal(body["threshold"]) == Decimal("0.10")
@@ -632,6 +633,47 @@ def test_demand_trend_counts_bookings_as_taken_not_as_stayed(
     assert body["direction"] == "no_activity"
     assert Decimal(body["earlier_median"]) == 0
     assert Decimal(body["recent_median"]) == 0
+
+
+def sparse_window() -> dict[str, str]:
+    """Sixty days around today, when every fixture booking was taken (``booked_at`` is the
+    database's ``now()``). Padded by a month on each side, so a difference between the
+    database's day and this process's day cannot move the busy day out of the window."""
+    today = dt.datetime.now(dt.UTC).date()
+    return {
+        "date_from": str(today - dt.timedelta(days=29)),
+        "date_to": str(today + dt.timedelta(days=30)),
+    }
+
+
+def test_bookings_taken_on_one_day_of_sixty_are_sparse_activity_not_stable(
+    api: TestClient, flat_hotel: str
+) -> None:
+    """Every booking was taken on one day, so both halves' medians are zero. Before, that was
+    "stable"; the medians could not see the bookings at all."""
+    body = api.get(url(flat_hotel, "demand-trend"), params=sparse_window()).json()
+
+    assert body["direction"] == "sparse_activity"
+    assert Decimal(body["earlier_median"]) == 0
+    assert Decimal(body["recent_median"]) == 0
+    assert body["relative_change"] is None
+
+
+def test_the_sparse_activity_finding_says_bookings_were_taken_and_no_direction_is_given(
+    api: TestClient, flat_hotel: str
+) -> None:
+    body = api.get(url(flat_hotel, "insights"), params=sparse_window()).json()
+
+    trend = [i for i in body["insights"] if i["type"] == "demand_trend"]
+    assert len(trend) == 1
+    finding = trend[0]
+    assert finding["title"] == "Bookings were too sparse to establish a demand direction"
+    assert "No direction is reported" in finding["explanation"]
+    assert "stable" not in finding["title"].lower()
+    figures = {m["name"]: m["value"] for m in finding["supporting_metrics"]}
+    assert figures["observations"] == "60"
+    assert figures["days_with_bookings"] == "1"
+    assert int(figures["bookings_taken"]) > 0
 
 
 def test_a_short_window_reports_insufficient_data(api: TestClient, flat_hotel: str) -> None:

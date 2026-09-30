@@ -33,7 +33,11 @@ export interface RecordedCall {
 }
 
 export interface FetchStub {
-  /** Route by method and a path fragment, e.g. `'POST', '/auth/login'`. */
+  /**
+   * Route by method and a path fragment, e.g. `'POST', '/auth/login'`. A fragment starting with
+   * `=` matches one path exactly instead, query ignored — `'=/api/v1/'` is the API root and
+   * nothing under it, which no substring can say.
+   */
   on(method: string, pathFragment: string, response: StubResponse | StubHandler): void
   /** Every request that was issued, in order, with its Authorization header. */
   readonly calls: RecordedCall[]
@@ -66,7 +70,13 @@ export function installFetchStub(): FetchStub {
 
     const key = [...handlers.keys()].find((candidate) => {
       const [handlerMethod, fragment] = candidate.split(' ')
-      return handlerMethod === method && url.includes(fragment ?? '')
+      if (handlerMethod !== method) {
+        return false
+      }
+      const wanted = fragment ?? ''
+      return wanted.startsWith('=')
+        ? new URL(url, 'http://localhost').pathname === wanted.slice(1)
+        : url.includes(wanted)
     })
     if (key === undefined) {
       throw new Error(`No stub configured for ${method} ${url}`)

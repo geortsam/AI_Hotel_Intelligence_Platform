@@ -245,6 +245,13 @@ This is what seeded demo data looks like, and it is reported rather than worked 
 synthetic history was manufactured** to make the dataset larger — the pipeline instead fails
 explicitly with `InsufficientDataError`, which is the honest outcome.
 
+*Later addition.* `scripts/seed_demo.py` now generates a synthetic demo database (see
+[database/README.md](../database/README.md#demo-data)). Its bookings are spread by lead time, so
+the defects in the table above do not recur there. **That changes nothing written here.** The
+probe describes the old demo database. Synthetic rows are made for viewing the screens and are
+never a training, validation or evaluation source. The offline model remains trained on the
+public dataset recorded in `ml/manifests/`.
+
 The pipeline itself is verified against a real PostgreSQL 18.6 using deterministic fixture data
 in a disposable database, which is where the cutoff, capacity and isolation claims are actually
 attacked.

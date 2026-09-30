@@ -1,6 +1,7 @@
 import { api } from '@/services/api/client'
 import type { Page } from '@/types/api'
 import type {
+  ApiMetaResponse,
   ConversationSummary,
   ConversationTranscript,
   ConversationTurnResponse,
@@ -27,6 +28,8 @@ import type {
  *   answer as served are stored with the conversation, which expires 30 days (by default)
  *   after it was last used.
  * * the reads and the delete are not charged.
+ * * `capability` reads the public API metadata for its `copilot_enabled` switch. Not charged,
+ *   not scoped to a hotel, and sent without the session token, because the route is public.
  *
  * Every call throws `ApiError`. The copilot-specific codes (`LLM_DISABLED`,
  * `LLM_BUDGET_EXHAUSTED`, `LLM_RATE_LIMITED`, `LLM_UNAVAILABLE`, `LLM_INVALID_RESPONSE`,
@@ -42,6 +45,11 @@ function conversationPath(hotelPublicId: string, conversationPublicId: string): 
 }
 
 export const copilotService = {
+  /** Whether the deployment has the copilot switched on. The server's switch, read as-is. */
+  capability(signal?: AbortSignal) {
+    return api.get<ApiMetaResponse>('/', { anonymous: true, ...(signal ? { signal } : {}) })
+  },
+
   /** One stateless question. Not stored. */
   ask(hotelPublicId: string, question: string, signal?: AbortSignal) {
     return api.post<CopilotAnswerResponse>(`/hotels/${hotelPublicId}/copilot/ask`, {

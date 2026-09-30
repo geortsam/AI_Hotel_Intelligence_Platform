@@ -9,6 +9,8 @@ truth for what the API actually exposes.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -423,6 +425,67 @@ def test_api_meta_hides_documentation_link_in_production() -> None:
     )
 
     assert client.get("/api/v1/").json()["documentation"] is None
+
+
+#: A value no real provider would issue, so finding it in a response can only mean a leak.
+FAKE_LLM_KEY = "sk-test-meta-must-never-echo-this-0000"
+
+
+def meta_for(**settings: Any) -> dict[str, object]:
+    client = TestClient(create_app(Settings(environment="test", **settings)))
+    response = client.get("/api/v1/")
+    assert response.status_code == 200
+    body: dict[str, object] = response.json()
+    return body
+
+
+def test_api_meta_reports_the_copilot_disabled_by_default() -> None:
+    """`llm_enabled` is off unless a deployment says otherwise, and the metadata says so."""
+    assert meta_for()["copilot_enabled"] is False
+
+
+def test_api_meta_reports_the_copilot_enabled_when_the_switch_is_on() -> None:
+    assert meta_for(llm_enabled=True, llm_api_key=FAKE_LLM_KEY)["copilot_enabled"] is True
+
+
+def test_api_meta_reads_the_switch_not_the_presence_of_a_key() -> None:
+    """A key without the switch is not an enabled copilot -- the factory's own rule."""
+    assert meta_for(llm_enabled=False, llm_api_key=FAKE_LLM_KEY)["copilot_enabled"] is False
+
+
+def test_api_meta_exposes_exactly_its_five_fields_and_no_llm_configuration() -> None:
+    """The capability is one boolean. Provider, model, base URL and key stay on the server."""
+    client = TestClient(
+        create_app(
+            Settings(
+                environment="test",
+                llm_enabled=True,
+                llm_api_key=FAKE_LLM_KEY,
+                llm_model="model-name-that-must-not-appear",
+                llm_base_url="https://gateway.invalid/v1",
+            )
+        )
+    )
+    response = client.get("/api/v1/")
+
+    assert set(response.json()) == {
+        "name",
+        "version",
+        "api_version",
+        "documentation",
+        "copilot_enabled",
+    }
+    for secret in (FAKE_LLM_KEY, "model-name-that-must-not-appear", "gateway.invalid", "anthropic"):
+        assert secret not in response.text
+
+
+def test_api_meta_schema_declares_copilot_enabled_as_a_required_boolean() -> None:
+    schema = create_app(Settings(environment="test")).openapi()["components"]["schemas"][
+        "ApiMetaResponse"
+    ]
+
+    assert schema["properties"]["copilot_enabled"]["type"] == "boolean"
+    assert "copilot_enabled" in schema["required"]
 
 
 def test_every_domain_is_nested_unless_the_schema_makes_it_global() -> None:

@@ -85,6 +85,7 @@ describe('the source scan itself works', () => {
       'knowledgeService.ts',
       'useCitationSource.ts',
       'useCopilot.ts',
+      'useCopilotCapability.ts',
       'vocabulary.ts',
     ])
   })

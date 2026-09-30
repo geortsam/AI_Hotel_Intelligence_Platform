@@ -16,3 +16,12 @@ class ApiMetaResponse(BaseModel):
     documentation: str | None = Field(
         default=None, description="Path to interactive docs; null when disabled."
     )
+    copilot_enabled: bool = Field(
+        description=(
+            "Whether this deployment has the copilot switched on -- the value of its "
+            "`llm_enabled` setting, and nothing else. False means every question is refused "
+            "with LLM_DISABLED. True does not promise an answer: a question can still be "
+            "refused while the provider is unavailable or an allowance is spent. Names no "
+            "provider, model or credential."
+        )
+    )

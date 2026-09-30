@@ -44,3 +44,97 @@ on first cluster creation; nothing is delegated to it today, because migration `
 `docker-compose.yml` pins `postgres:18.6-alpine`. The schema uses PostgreSQL-specific features
 deliberately -- identity columns, stored generated columns, `EXCLUDE USING gist`, JSONB -- so it
 is not portable to SQLite and is not intended to be.
+
+## Demo data
+
+`scripts/seed_demo.py` fills an **empty, fully migrated** database with synthetic data for two
+fictional hotels: rooms and room types, guests, a year of past stays, the stays in house on the
+reference date, four months of future bookings, captured payments, reviews, and a non-room
+revenue and expense ledger. It also creates one demo owner account with an `owner` membership
+at both hotels. The data exists to be looked at. It is **not evidence** of anything: never
+train, evaluate or measure on it.
+
+### Create a demo database
+
+Use a name **without** the `_test` suffix, for example `hotel_intelligence_demo`. That keeps it
+outside the integration suite's reach, because the suite refuses any target whose name does not
+end in `_test`. It also keeps it apart from the older demo database `hotel_intelligence_test`,
+whose name collides with CI's.
+
+```bash
+psql -U postgres -c "CREATE DATABASE hotel_intelligence_demo"
+```
+
+```bash
+.venv/Scripts/python.exe -m alembic -x url=postgresql+psycopg://postgres:<password>@localhost:5432/hotel_intelligence_demo upgrade head
+```
+
+Set the demo owner's password in the environment (12 to 256 characters; it is never printed),
+then seed:
+
+```bash
+export DEMO_OWNER_PASSWORD='<choose one>'
+```
+
+```bash
+.venv/Scripts/python.exe scripts/seed_demo.py --database-url postgresql+psycopg://postgres:<password>@localhost:5432/hotel_intelligence_demo --reference-date today
+```
+
+Point the API at it with `DATABASE_URL` and sign in as `demo.owner@example.com`.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--reference-date` | *required* | The "today" the data describes, as `YYYY-MM-DD`, or `today` for the machine's date. The data is as of 12:00 hotel-local on that date. |
+| `--seed` | `7151` | The random seed. Same seed + same reference date + same options = the same data. |
+| `--history-days` | `365` | Days of stays before the reference date (28 to 1000). |
+| `--future-days` | `120` | Days of stays after it (0 to 365). Only bookings already taken by the reference moment exist. |
+| `--owner-email` | `demo.owner@example.com` | The demo owner's login. The password always comes from `DEMO_OWNER_PASSWORD`. |
+| `--dry-run` | — | Build the dataset in memory and print its summary and fingerprint. Touches no database. |
+| `--database-url` | — | The target. Required unless `--dry-run`. **Never** read from `DATABASE_URL` or `TEST_DATABASE_URL`. |
+
+**Choosing the reference date.** The dashboard and the intelligence page anchor their windows on
+the real current date in the hotel's time zone. Seed with `--reference-date today` for a demo you
+will look at now. A fixed date gives an exactly reproducible database, but its "recent" weeks
+drift into the past as the calendar moves on.
+
+### Determinism
+
+The script prints a **fingerprint**: a SHA-256 over every seeded row, keyed by natural key with
+surrogate keys left out. The same seed, reference date and options give the same fingerprint on
+any machine and any Python version. `--dry-run` prints it without a database.
+
+Before committing, the rows are read back and compared with the plan. After committing, they are
+read again on a fresh connection, and that reading is the fingerprint reported.
+
+- **Randomness:** only `random.Random.random()`, seeded with an integer and split into
+  independent streams by SHA-256.
+- **Public identifiers:** UUIDv5 values derived from the seed.
+- **Dates:** every date is an offset from the reference date, and the only calendar effect is the
+  weekday. So moving the reference date by whole weeks moves the whole dataset exactly.
+- **No trend, season or anomaly** is injected.
+- **Outside the fingerprint:** the owner's password hash (salted) and the account's timestamps
+  (the real `now()`).
+
+### Resetting safely
+
+The script **never deletes, truncates, overwrites or migrates** anything. It writes in a single
+transaction into a database that is at the migration head and holds no row in any application
+table. Anything else is refused before the first write, with the tables that hold rows named. A
+failure part-way rolls everything back.
+
+To refresh the demo, for example to move it to a new reference date:
+
+1. Create a **new** database.
+2. Migrate it and seed it as above.
+3. Point `DATABASE_URL` at it.
+4. Drop the old one yourself, and only once you have confirmed nothing in it needs keeping. No
+   script here will do that for you.
+
+The seed does not populate these tables, which it leaves empty:
+
+- `daily_hotel_metrics`: nothing in the application writes it.
+- the audit trail
+- demand predictions
+- hotel documents
+- copilot conversations
+- LLM invocation records

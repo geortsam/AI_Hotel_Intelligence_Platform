@@ -504,7 +504,8 @@ class IntelligenceService:
     # --- insight builders ---------------------------------------------------------------
 
     def _trend_insight(self, hotel: Hotel, window: ObservationWindow) -> list[Insight]:
-        result = measure_trend(self._booking_observations(hotel.id, window))
+        observations = self._booking_observations(hotel.id, window)
+        result = measure_trend(observations)
         if result.direction == "insufficient_data":
             return [
                 Insight(
@@ -540,6 +541,33 @@ class IntelligenceService:
                     supporting_metrics=[
                         SupportingMetric(name="observations", value=str(result.observations)),
                         SupportingMetric(name="bookings_taken", value="0"),
+                    ],
+                    date_from=window.date_from,
+                    date_to=window.date_to,
+                )
+            ]
+
+        if result.direction == "sparse_activity":
+            active_days = sum(1 for item in observations if item.value > ZERO)
+            taken = sum((item.value for item in observations), ZERO)
+            return [
+                Insight(
+                    type="demand_trend",
+                    severity="info",
+                    title="Bookings were too sparse to establish a demand direction",
+                    explanation=(
+                        f"Bookings were taken on {active_days} of the {result.observations} "
+                        f"days observed ({taken} in total), but more than half the days of "
+                        "each half of the window had none. Both halves' median is therefore "
+                        "zero, and the median comparison cannot tell whether demand rose, "
+                        "fell or held steady. No direction is reported."
+                    ),
+                    supporting_metrics=[
+                        SupportingMetric(name="observations", value=str(result.observations)),
+                        SupportingMetric(name="days_with_bookings", value=str(active_days)),
+                        SupportingMetric(name="bookings_taken", value=str(taken)),
+                        SupportingMetric(name="earlier_median", value=str(result.earlier_median)),
+                        SupportingMetric(name="recent_median", value=str(result.recent_median)),
                     ],
                     date_from=window.date_from,
                     date_to=window.date_to,
