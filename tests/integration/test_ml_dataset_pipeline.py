@@ -464,6 +464,45 @@ def test_lags_reach_back_before_the_first_target_date(session: Session) -> None:
     )
 
 
+def test_an_observed_date_with_nothing_on_the_books_at_the_cutoff_reads_zero(
+    session: Session, pipeline: MlDatasetService
+) -> None:
+    """The date has occupied nights, so its booking record is the one its target is counted
+    from. Nothing in it was on the books a day ahead: an observed 0, not a missing value."""
+    hotel = make_hotel(session, slug="ml-on-books-zero")
+    room_type = make_room_type(session, hotel)
+    guest = make_guest(session, hotel)
+    room = make_room(session, hotel, room_type, number="990")
+    build_stay(session, hotel, room, guest, check_in=ANCHOR, nights=1, booked_at=utc(ANCHOR, 9))
+
+    [row] = pipeline.build_for_hotel(hotel.id, hotel.public_id).rows
+    assert (row.target_date, row.target_room_nights) == (ANCHOR, 1)
+    assert row.features["on_books_room_nights_at_cutoff"] == 0
+
+
+def test_a_day_without_occupied_nights_is_not_a_target_and_reads_as_missing(
+    session: Session, pipeline: MlDatasetService
+) -> None:
+    """Nothing records that the hotel's bookings for an empty day were captured, so the day is
+    unobserved: no row for it, and every lag or window reaching it is None, never 0."""
+    hotel = make_hotel(session, slug="ml-gap-day")
+    room_type = make_room_type(session, hotel)
+    guest = make_guest(session, hotel)
+    room = make_room(session, hotel, room_type, number="995")
+    booked = utc(ANCHOR - dt.timedelta(days=60))
+    gap = ANCHOR + dt.timedelta(days=10)
+    after_gap = gap + dt.timedelta(days=1)
+    build_stay(session, hotel, room, guest, check_in=ANCHOR, nights=10, booked_at=booked)
+    build_stay(session, hotel, room, guest, check_in=after_gap, nights=10, booked_at=booked)
+
+    rows = {r.target_date: r for r in pipeline.build_for_hotel(hotel.id, hotel.public_id).rows}
+    assert gap not in rows
+    after = rows[after_gap]
+    assert after.features["demand_lag_1"] is None
+    assert after.features["demand_rolling_mean_7"] is None
+    assert rows[gap - dt.timedelta(days=1)].features["demand_lag_1"] == 1
+
+
 def test_the_report_describes_what_was_built(session: Session) -> None:
     hotel = make_hotel(session, slug="ml-report")
     room_type = make_room_type(session, hotel)

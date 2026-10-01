@@ -515,6 +515,16 @@ def build_histories(
     and there is no honest way to produce that feature from it. Leaving the mapping empty is
     the whole of the fix: Stage 6.1 already treats an absent value as missing rather than zero,
     so the feature reports as unavailable instead of quietly reading as "no rooms".
+
+    ``demand_by_date`` holds only the covered dates the source has occupied nights for. A
+    covered date without any stays absent -- ``None`` to every lag and window that reaches it --
+    because the coverage window bounds truncation, not observation: it is computed from the
+    bookings themselves, and nothing in the source records that a date without them was
+    observed (docs/ml-training-data.md §7).
+
+    ``on_books_by_date`` holds a value for every covered target date, ``0`` included. It is
+    counted over the same booking records as that date's target, so a target with nothing on the
+    books at its cutoff had nothing on the books: an observed zero, not a missing value.
     """
     demand = demand_by_date(parsed.bookings)
     on_books = on_books_by_date(parsed.bookings, horizon_days=horizon_days)
@@ -532,9 +542,7 @@ def build_histories(
             HotelHistory(
                 hotel_public_id=offline_hotel_id(hotel_key),
                 demand_by_date=covered,
-                on_books_by_date={
-                    day: count for day, count in hotel_on_books.items() if day in covered
-                },
+                on_books_by_date={day: hotel_on_books.get(day, 0) for day in covered},
                 rooms_existing_by_date={},
             )
         )

@@ -30,9 +30,11 @@ mismatches in 4,386 rows", committed unchanged in what it computes (see the hist
 * each manifest's ``horizon_days`` and ``name``, which must be the horizon being audited.
 
 A committed value that is not a whole number is a mismatch, and an **empty** one is reported, not
-read as zero. The Stage 6.1 contract writes no on-the-books value for a date its extract holds no
-entry for; on the pinned source that never happens for a committed row (the audit finds 0 such
-rows), but on a sparse sample it does, and the tests pin exactly that difference.
+read as zero. The pipeline writes an on-the-books value for every row it emits -- ``0`` where
+nothing was on the books at the cutoff, because a row's date is an observed one and its
+on-the-books is counted over the same records as its target -- so an empty value is a dataset
+this code did not produce. On the committed 300-row excerpt the audit and the pipeline agree on
+every row, zeros included, and the tests pin that.
 
 It writes nothing, reaches no network, and is not part of the shipped image (the runtime stage
 copies ``ml/`` modules by name; a test pins the import closure).

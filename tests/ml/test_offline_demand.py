@@ -54,6 +54,7 @@ from ml.pipelines.offline_demand import (
     OfflineSourceError,
     ParsedSource,
     build_from_source,
+    build_histories,
     build_manifest,
     build_offline_dataset,
     coverage_window,
@@ -448,6 +449,27 @@ def test_on_the_books_is_supported_and_actually_populated() -> None:
         row for row in dataset.rows if row.features["on_books_room_nights_at_cutoff"] is not None
     ]
     assert len(populated) > len(dataset.rows) // 2
+
+
+def test_a_covered_date_with_nothing_on_the_books_at_its_cutoff_reads_zero_not_missing() -> None:
+    """Its on-the-books is counted over the same bookings as its target, so finding none on the
+    books at the cutoff is an observed zero -- not a value the source failed to supply."""
+    walk_in = BASE + dt.timedelta(days=20)
+    rows = spread(40)
+    rows[20] = booking(arrival=walk_in, nights=1, lead_time=0)
+    dataset = build_offline_dataset(parse(rows), train_fraction=0.5, validation_fraction=0.25)
+
+    row = next(r for r in dataset.rows if r.target_date == walk_in)
+    assert row.target_room_nights == 1
+    assert row.features["on_books_room_nights_at_cutoff"] == 0
+
+
+def test_on_the_books_is_written_for_every_covered_target_and_for_nothing_else() -> None:
+    """Exactly the observed target dates carry it: a date that is not a target has no target
+    for the count to belong to, so it gets no value at all, zero included."""
+    histories, _, _ = build_histories(fixture_source())
+    for history in histories:
+        assert history.on_books_by_date.keys() == history.demand_by_date.keys()
 
 
 def test_an_unsupported_feature_is_never_invented() -> None:

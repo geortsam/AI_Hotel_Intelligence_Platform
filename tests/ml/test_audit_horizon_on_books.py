@@ -10,14 +10,14 @@ What runs here is the audit's own code against throwaway repository roots built 
 committed 300-row verbatim excerpt of the source (``fixtures/hotel_booking_demand_sample.csv``):
 
 * ``excerpt_root`` -- the three horizon datasets and manifests **the real pipeline** builds from
-  the excerpt, as built. On these the audit and the pipeline agree on every target, cutoff and
-  capacity value and on every on-the-books value the pipeline wrote; the only difference is that
-  on this sparse sample the pipeline leaves some on-the-books values empty where the recount is
-  0 (the Stage 6.1 contract writes no value for a date its extract has no entry for). The first
-  test pins exactly that, and nothing looser. The committed full-source datasets have no such
-  row -- the operator run reports 0 mismatches.
-* ``agreeing_root`` -- the same datasets without those rows, so the success path and every
-  deliberate break can be checked against a baseline of zero mismatches.
+  the excerpt, as built. On these the audit and the pipeline agree on every row -- target,
+  cutoff, capacity and on-the-books -- including the on-the-books values that are 0: this sparse
+  sample has some at every horizon, and the pipeline writes them as 0 because an observed target
+  date's on-the-books is counted over the same records as its target. The first test pins that.
+  (Before that contract was settled the pipeline left those values empty, and this test pinned
+  the difference instead.)
+* ``agreeing_root`` -- the same datasets, as the zero-mismatch baseline the success path and
+  every deliberate break are checked against.
 """
 
 from __future__ import annotations
@@ -119,17 +119,14 @@ def excerpt_root(tmp_path: Path) -> Root:
 
 @pytest.fixture
 def agreeing_root(excerpt_root: Root) -> Root:
-    root, source = excerpt_root
-    for h in HORIZONS:
-        fields, rows = read_rows(paths(root, h)[0])
-        write_rows(root, h, fields, [row for row in rows if row[ON_BOOKS] != ""])
-    return root, source
+    """The excerpt exactly as the pipeline builds it, which the audit agrees with row for row."""
+    return excerpt_root
 
 
 # --- fixture-level agreement ---------------------------------------------------------------------
 
 
-def test_on_the_excerpt_the_only_difference_is_an_empty_value_where_the_recount_is_zero(
+def test_on_the_excerpt_the_audit_agrees_with_every_row_zero_on_the_books_included(
     excerpt_root: Root,
 ) -> None:
     root, source = excerpt_root
@@ -139,12 +136,10 @@ def test_on_the_excerpt_the_only_difference_is_an_empty_value_where_the_recount_
     assert [r.horizon_days for r in results] == [7, 14, 28]
     for result in results:
         _, rows = read_rows(paths(root, result.horizon_days)[0])
-        empty = sum(row[ON_BOOKS] == "" for row in rows)
-        assert result.rows == len(rows) > empty > 0, "every row audited; the sample has gaps"
-        assert {(m.column, m.committed, m.recomputed) for m in result.mismatches} == {
-            (ON_BOOKS, "", "0")
-        }
-        assert len(result.mismatches) == empty
+        zeros = sum(row[ON_BOOKS] == "0" for row in rows)
+        assert result.rows == len(rows) > zeros > 0, "every row audited; the sample has zeros"
+        assert not any(row[ON_BOOKS] == "" for row in rows)
+        assert result.clean, result.mismatches[:3]
 
 
 def test_where_every_row_agrees_the_audit_passes_at_every_horizon(agreeing_root: Root) -> None:

@@ -83,6 +83,14 @@ class MlDatasetService:
         ``lookback_days`` before the first target date, so the extraction window is wider than
         the window of rows produced. Without that, the first 28 days of every dataset would
         arrive with their lags empty for no reason other than where the query started.
+
+        **Which dates are observed.** A target date is one with recorded occupied nights; a
+        date without any is absent from ``demand_by_date`` and its lags read ``None``, because
+        nothing here records that the hotel's bookings for it were captured. On-the-books is
+        different: it is counted over the same booking records as the target date it belongs
+        to, so for an observed target the query finding nothing means nothing was on the books
+        at the cutoff -- a ``0``, written explicitly rather than left for an absent key to turn
+        into ``None``. It is written for target dates only.
         """
         bounds = self._repository.first_and_last_stay_date(hotel_id)
         if bounds is None:
@@ -109,13 +117,13 @@ class MlDatasetService:
             hotel_id, target_from, target_to, horizon_days
         )
 
+        targets = tuple(day for day in sorted(demand) if target_from <= day <= target_to)
         history = HotelHistory(
             hotel_public_id=hotel_public_id,
             demand_by_date=demand,
-            on_books_by_date=on_books,
+            on_books_by_date={day: on_books.get(day, 0) for day in targets},
             rooms_existing_by_date=rooms,
         )
-        targets = tuple(day for day in sorted(demand) if target_from <= day <= target_to)
         return history, targets
 
     def build_for_hotel(

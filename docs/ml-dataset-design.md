@@ -192,6 +192,27 @@ history must not look like a hotel that sold nothing. A rolling mean over a part
 window is `None`, not an average of what happens to be there — a partial mean changes meaning
 with the amount of history available, which looks fine in training and drifts in production.
 
+**What makes a day observed.** The extract carries two different facts, and neither may stand in
+for the other:
+
+| Date | What the extract can prove | Value |
+|---|---|---|
+| has recorded occupied nights | observed: its booking record is the one the target is counted from | the count |
+| has none | nothing: no column records that the hotel's bookings for it were captured | absent — no row, and `None` to every lag and window that reaches it |
+
+On-the-books belongs to an observed target date and is counted over the same booking records as
+its target, so "nothing was on the books at the cutoff" is written as **`0`** — an observed zero,
+not a missing value. It is written for target dates only.
+
+The consequence is stated rather than hidden: **an observed zero-demand day cannot be told apart
+from an unrecorded one**, so no target is ever 0 today. `hotels.created_at` and
+`rooms.created_at` record when rows entered the database, not when the hotel's booking record
+became complete (back-dated imports are expected — see the next paragraph), and
+`daily_hotel_metrics`, the per-day snapshot that could record it, is empty. Representing a
+zero-demand day needs an explicit observation record — for example a declared period for which
+this database holds the hotel's complete bookings — and that is an open decision, not something
+this pipeline infers.
+
 Demand above known capacity is *reported rather than dropped* because the schema legitimately
 permits it: a room sold on a date before that room's row was created. Dropping those rows would
 hide a real data-quality problem.

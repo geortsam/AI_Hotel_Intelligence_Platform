@@ -215,6 +215,11 @@ observed are different facts, and nothing in the source documentation says an ab
 an empty hotel. A lag or rolling window reaching across a gap comes back `None`, never `0`, and
 a test holds that.
 
+On-the-books is not a gap of this kind. For a covered target date it is counted over the same
+bookings as the target, so a date with nothing on the books at its cutoff is written as `0`, an
+observed zero. On this source that never happens (the minimum, one day ahead, is 18 room
+nights); on the 300-row test excerpt it does, and a test holds that too.
+
 ---
 
 ## 8. Offline schema

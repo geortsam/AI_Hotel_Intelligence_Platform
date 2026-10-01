@@ -244,6 +244,40 @@ def test_the_report_counts_what_is_missing_without_raising() -> None:
     assert report.missing_feature_counts["demand_lag_1"] == 1
 
 
+def test_a_lag_on_an_observed_zero_reads_zero_and_the_row_stays_complete() -> None:
+    """An explicit 0 is a day the extract observed with no demand: a value, not a gap."""
+    demand = series({i: 0 if i == 33 else 3 for i in range(41)})
+    row = build_row(history(demand), BASE + dt.timedelta(days=40))
+    assert row.features["demand_lag_7"] == 0
+    assert row.has_complete_features
+
+
+def test_a_window_averages_an_observed_zero_and_is_none_across_an_absent_day() -> None:
+    """The same day, observed as 0 and then not observed at all."""
+    target = BASE + dt.timedelta(days=40)
+    observed = series({i: 0 if i == 33 else 3 for i in range(41)})
+    with_zero = build_row(history(observed), target)
+    assert with_zero.features["demand_rolling_mean_7"] == pytest.approx(18 / 7)
+
+    unobserved = dict(observed)
+    del unobserved[BASE + dt.timedelta(days=33)]
+    row = build_row(history(unobserved), target)
+    assert row.features["demand_rolling_mean_7"] is None
+    assert row.features["demand_lag_7"] is None
+    assert row.features["demand_lag_1"] == 3
+
+
+def test_on_the_books_is_whatever_the_extract_supplied_and_none_when_it_supplied_nothing() -> None:
+    """The contract does not decide what an absent on-the-books value means. An extract that
+    counted nothing on the books for an observed date supplies 0, which is kept; a source that
+    cannot reconstruct the feature supplies nothing, which stays None."""
+    demand = series({0: 4})
+    supplied = build_row(history(demand, on_books=series({0: 0})), BASE)
+    assert supplied.features["on_books_room_nights_at_cutoff"] == 0
+    unsupplied = build_row(history(demand, on_books={}), BASE)
+    assert unsupplied.features["on_books_room_nights_at_cutoff"] is None
+
+
 # --- 10-11. leakage -------------------------------------------------------------------------------
 
 

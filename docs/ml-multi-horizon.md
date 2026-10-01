@@ -282,10 +282,11 @@ Stage 6.1 contract it shares with production, no longer producing those files fr
 
 **What CI does cover** (`tests/ml/test_audit_horizon_on_books.py`) is the audit's machinery, at
 fixture level only: the committed 300-row verbatim excerpt of the source, the three datasets the
-real pipeline builds from it, and every refusal and report above. On that sample the pipeline
-leaves some on-the-books values empty where the recount is 0 — the Stage 6.1 contract writes no
-value for a date its extract has no entry for; the full source has no such row — and the tests
-pin exactly that difference. **None of it is the raw-source verification.**
+real pipeline builds from it, and every refusal and report above. On that sample some target
+dates had nothing on the books at their cutoff; the pipeline writes those as 0 — an observed
+target date's on-the-books is counted over the same bookings as its target — and the tests pin
+that the audit agrees with every row. (The full source has no such date.) **None of it is the
+raw-source verification.**
 
 ## 10. Tests
 
