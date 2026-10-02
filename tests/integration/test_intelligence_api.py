@@ -11,6 +11,9 @@ The two properties that matter most here cannot be checked without a database:
   the hotel's declared observed days and no others: inside a span a day without bookings is a
   0, outside every span a day is left out whatever was recorded for it. Every hotel built here
   declares :data:`OBSERVED` unless a test says otherwise.
+* **Two observation axes** (Issue 2). Bookings created is booking intake -- bookings taken
+  through the platform, by the day they were taken -- and a declared stay-date period never
+  changes it; a stay-date gap never produces an occupancy or revenue signal.
 
 The series are built with real bookings through the real API, so the numbers the models see
 are the numbers Stage 3B.10 would report for the same dates.
@@ -24,6 +27,7 @@ import datetime as dt
 import uuid
 from collections.abc import Iterator
 from decimal import Decimal
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -31,6 +35,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.ml.timeseries import MIN_TRAINING_OBSERVATIONS
 from app.models import DailyHotelMetric
 from tests.integration.conftest import (
     authenticated_client,
@@ -685,6 +690,260 @@ def test_several_spans_count_every_observed_day_once(api: TestClient) -> None:
     body = api.get(url(hotel, "forecast/occupancy"), params=FORECAST).json()
 
     assert training_window(body)["observations"] == 20
+
+
+# --- two observation axes: stay dates and booking intake (Issue 2) ------------------------------
+
+#: Twenty-eight days after the fixture history, with no stay date in them. The booking-intake
+#: tests move every booking's ``booked_at`` into this window, so its intake series has a known
+#: shape whatever the stay dates were.
+INTAKE_START = HORIZON_END + dt.timedelta(days=7)
+INTAKE_DAYS = [INTAKE_START + dt.timedelta(days=offset) for offset in range(28)]
+INTAKE = {"date_from": str(INTAKE_DAYS[0]), "date_to": str(INTAKE_DAYS[-1])}
+
+
+def take_bookings_on(api: TestClient, hotel: str, days: list[dt.date]) -> None:
+    """Set the day each of *hotel*'s bookings was TAKEN: the n-th booking, in id order, on
+    ``days[n]`` at 12:00 UTC.
+
+    The API stamps ``booked_at`` with the server's clock, so the disposable test database is
+    written directly to give the booking-intake series a chosen shape. Noon UTC keeps the
+    calendar day the same in any database session time zone."""
+    engine = api.app.state.test_engine  # type: ignore[attr-defined]
+    with sessionmaker(bind=engine, future=True)() as session:
+        ids = (
+            session.execute(
+                sa.text(
+                    "SELECT b.id FROM bookings b JOIN hotels h ON h.id = b.hotel_id "
+                    "WHERE h.public_id = CAST(:hotel AS uuid) ORDER BY b.id"
+                ),
+                {"hotel": hotel},
+            )
+            .scalars()
+            .all()
+        )
+        assert len(ids) == len(days), (len(ids), len(days))
+        for booking_id, day in zip(ids, days, strict=True):
+            session.execute(
+                sa.text("UPDATE bookings SET booked_at = :taken WHERE id = :id"),
+                {"taken": dt.datetime.combine(day, dt.time(12), tzinfo=dt.UTC), "id": booking_id},
+            )
+        session.commit()
+
+
+def without_identity(body: dict[str, Any]) -> dict[str, Any]:
+    """A response minus the two fields that differ between two hotels' identical answers."""
+    return {k: v for k, v in body.items() if k not in {"hotel_public_id", "model"}}
+
+
+def intake_hotel(api: TestClient, slug: str, observed: list[tuple[dt.date, dt.date]]) -> str:
+    """Four weeks of stays (two rooms a night, fifty-six bookings), all TAKEN in the second half
+    of :data:`INTAKE`: two a day, and twenty-eight more on its last day."""
+    hotel = make_hotel(api, slug, rooms=4, observed=observed)
+    fill_history(api, hotel, make_guest(api, hotel))
+    second_half = INTAKE_DAYS[14:]
+    take_bookings_on(api, hotel, [*second_half, *second_half, *[INTAKE_DAYS[-1]] * 28])
+    return hotel
+
+
+def test_a_declared_stay_period_leaves_the_booking_intake_series_untouched(
+    api: TestClient,
+) -> None:
+    """The same bookings, taken on the same days, at two hotels. One declares its stay dates
+    observed from the middle of the window, one declares nothing.
+
+    Bookings created is booking intake, not stay-date demand: its trend and its scan are the
+    same at both hotels, and its window counts every calendar day. The stay-date occupancy
+    series -- the one the declaration governs -- is what differs."""
+    middle = INTAKE_DAYS[14]
+    declared = intake_hotel(api, "intake-declared", [(middle, INTAKE_DAYS[-1])])
+    undeclared = intake_hotel(api, "intake-undeclared", [])
+
+    trends = [api.get(url(h, "demand-trend"), params=INTAKE).json() for h in (declared, undeclared)]
+    scans = [api.get(url(h, "anomalies"), params=INTAKE).json() for h in (declared, undeclared)]
+
+    # Nothing taken in the first half, two a day in the second: rising intake at both.
+    assert trends[0]["direction"] == "increasing"
+    assert without_identity(trends[0]) == without_identity(trends[1])
+
+    assert intake(scans[0]) == intake(scans[1])
+    [flag] = intake(scans[0])[0]
+    assert (flag["date"], Decimal(flag["value"])) == (str(INTAKE_DAYS[-1]), 30)
+
+    # The window is the calendar window for both, observed stay dates or not.
+    for body in (*trends, *scans):
+        assert body["window"]["days"] == body["window"]["observations"] == 28
+
+    occupancy = [
+        {m["metric"]: m for m in scan["metrics_not_assessed"]}["occupied_room_nights"]
+        for scan in scans
+    ]
+    assert occupancy[0] == {
+        "metric": "occupied_room_nights",
+        "reason": "no_variation",
+        "observations": 14,
+    }
+    assert occupancy[1] == {
+        "metric": "occupied_room_nights",
+        "reason": "too_few_observations",
+        "observations": 0,
+    }
+
+
+def intake(scan: dict[str, Any]) -> tuple[list[Any], list[Any]]:
+    """The booking-intake part of an anomaly scan: its flags and its not-assessed entry."""
+    return (
+        [a for a in scan["anomalies"] if a["metric"] == "bookings_created"],
+        [m for m in scan["metrics_not_assessed"] if m["metric"] == "bookings_created"],
+    )
+
+
+def spiky_hotel(
+    api: TestClient, slug: str, observed: list[tuple[dt.date, dt.date]]
+) -> tuple[str, dt.date]:
+    """One or two rooms a night, alternating, and five on one day: the spike. Every booking was
+    TAKEN on the spike day, so booking intake is busy exactly where the spike is."""
+    hotel = make_hotel(api, slug, rooms=6, observed=observed)
+    guest = make_guest(api, hotel)
+    spike = HISTORY_START + dt.timedelta(days=20)
+    for offset in range(HISTORY_DAYS):
+        night = HISTORY_START + dt.timedelta(days=offset)
+        for index in range(5 if night == spike else 1 + offset % 2):
+            stay(api, hotel, guest, room=f"{101 + index}", night=night)
+    take_bookings_on(api, hotel, [spike] * 46)
+    return hotel, spike
+
+
+def test_an_unobserved_stay_date_raises_no_occupancy_or_revenue_anomaly(api: TestClient) -> None:
+    """The spike is an occupancy and revenue anomaly where it is observed. Left out of the
+    declared spans, it is unknown, so neither metric flags it -- while booking intake on that
+    same day, which the spans do not govern, is reported identically at both hotels."""
+    spike = HISTORY_START + dt.timedelta(days=20)
+    observed, _ = spiky_hotel(
+        api, "spike-observed", [(HISTORY_START, HORIZON_START - dt.timedelta(days=1))]
+    )
+    unobserved, _ = spiky_hotel(
+        api,
+        "spike-unobserved",
+        [
+            (HISTORY_START, spike - dt.timedelta(days=1)),
+            (spike + dt.timedelta(days=1), HORIZON_START - dt.timedelta(days=1)),
+        ],
+    )
+
+    seen = api.get(url(observed, "anomalies"), params=WINDOW).json()
+    unseen = api.get(url(unobserved, "anomalies"), params=WINDOW).json()
+
+    def stay_dated(scan: dict[str, Any]) -> set[tuple[str, str]]:
+        return {
+            (a["metric"], a["date"]) for a in scan["anomalies"] if a["metric"] != "bookings_created"
+        }
+
+    assert stay_dated(seen) == {
+        ("occupied_room_nights", str(spike)),
+        ("room_revenue[EUR]", str(spike)),
+    }
+    assert stay_dated(unseen) == set()
+
+    assert intake(seen) == intake(unseen)
+
+
+@pytest.mark.parametrize(
+    ("observed_days", "named"),
+    [(0, True), (3, True), (MIN_TRAINING_OBSERVATIONS, False)],
+)
+def test_revenue_on_unobserved_days_is_named_not_assessed_when_too_little_is_observed(
+    api: TestClient, observed_days: int, named: bool
+) -> None:
+    """Revenue earned only on days nobody declared observed. When the window holds too few
+    observed stay dates to judge any stay-date metric, the currency is listed as not assessed,
+    with those observed days -- unknown, not "never traded". With enough observed days it stays
+    absent, exactly as it is absent from the revenue forecast."""
+    observed = (
+        [(HISTORY_START, HISTORY_START + dt.timedelta(days=observed_days - 1))]
+        if observed_days
+        else []
+    )
+    hotel = make_hotel(api, f"revenue-unknown-{observed_days}", rooms=2, observed=observed)
+    guest = make_guest(api, hotel)
+    for offset in (20, 21, 22):
+        stay(api, hotel, guest, room="101", night=HISTORY_START + dt.timedelta(days=offset))
+
+    scan = api.get(url(hotel, "anomalies"), params=WINDOW).json()
+    unjudged = {m["metric"]: m for m in scan["metrics_not_assessed"]}
+
+    if named:
+        assert unjudged["room_revenue[EUR]"] == {
+            "metric": "room_revenue[EUR]",
+            "reason": "too_few_observations",
+            "observations": observed_days,
+        }
+        assert "room_revenue[EUR]" in scan["metrics_scanned"]
+        # The same count the occupancy series reports: both are stay-date metrics.
+        assert unjudged["occupied_room_nights"]["observations"] == observed_days
+    else:
+        assert "room_revenue[EUR]" not in unjudged
+        assert "room_revenue[EUR]" not in scan["metrics_scanned"]
+
+
+def test_the_revenue_forecast_tells_unknown_revenue_apart_from_none(api: TestClient) -> None:
+    """Two hotels with no forecast currency. One has stays but declares nothing: its revenue is
+    unknown, which the training window says by holding no observed day. The other declares the
+    window and sold nothing: no currency was traded on an observed day."""
+    unknown = make_hotel(api, "revenue-undeclared", rooms=2, observed=[])
+    fill_history(api, unknown, make_guest(api, unknown), rooms_per_night=1)
+    nothing = make_hotel(api, "revenue-never-traded", rooms=2)
+
+    unknown_body = api.get(url(unknown, "forecast/revenue"), params=FORECAST).json()
+    nothing_body = api.get(url(nothing, "forecast/revenue"), params=FORECAST).json()
+
+    assert unknown_body["currencies"] == nothing_body["currencies"] == []
+    assert training_window(unknown_body)["observations"] == 0
+    assert training_window(nothing_body)["observations"] == HISTORY_DAYS
+
+    unknown_scan = api.get(url(unknown, "anomalies"), params=WINDOW).json()
+    nothing_scan = api.get(url(nothing, "anomalies"), params=WINDOW).json()
+    assert "room_revenue[EUR]" in {m["metric"] for m in unknown_scan["metrics_not_assessed"]}
+    assert not any(m.startswith("room_revenue") for m in nothing_scan["metrics_scanned"])
+
+
+def test_too_few_observed_days_give_no_prediction_and_say_why(api: TestClient) -> None:
+    """Three observed days of real occupancy are below the seven the model needs: every point is
+    insufficient_data with no value -- not a zero -- and the finding counts observed days."""
+    hotel = make_hotel(
+        api,
+        "three-observed",
+        rooms=2,
+        observed=[(HISTORY_START, HISTORY_START + dt.timedelta(days=2))],
+    )
+    fill_history(api, hotel, make_guest(api, hotel), rooms_per_night=1)
+
+    forecast = api.get(url(hotel, "forecast/occupancy"), params=FORECAST).json()
+    insights = api.get(url(hotel, "insights"), params={**WINDOW, "horizon_days": 7}).json()
+
+    assert training_window(forecast)["observations"] == 3
+    assert {p["method"] for p in forecast["points"]} == {"insufficient_data"}
+    assert {p["predicted_room_nights"] for p in forecast["points"]} == {None}
+    outlook = next(
+        i for i in insights["insights"] if i["title"] == "Not enough history to forecast occupancy"
+    )
+    assert outlook["explanation"].startswith("The window holds 3 observed days")
+
+
+def test_an_unobserved_window_is_named_as_unknown_in_the_findings(api: TestClient) -> None:
+    hotel = make_hotel(api, "no-observed-day", rooms=2, observed=[])
+    fill_history(api, hotel, make_guest(api, hotel), rooms_per_night=1)
+
+    insights = api.get(url(hotel, "insights"), params={**WINDOW, "horizon_days": 7}).json()
+
+    outlook = next(
+        i for i in insights["insights"] if i["title"] == "Not enough history to forecast occupancy"
+    )
+    assert outlook["explanation"].startswith(
+        "No day of the window lies inside a declared observation period"
+    )
+    assert "unknown rather than zero" in outlook["explanation"]
+    assert {m["name"]: m["value"] for m in outlook["supporting_metrics"]}["observations"] == "0"
 
 
 # --- insufficient data ----------------------------------------------------------------------------

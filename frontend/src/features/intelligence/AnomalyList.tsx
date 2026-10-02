@@ -116,6 +116,14 @@ const UNASSESSED_REASON: Readonly<Record<UnassessedReason, string>> = {
 }
 
 /**
+ * A stay-date metric with no observed day at all: none of its dates lies inside a declared
+ * observation period, so its values are unknown -- a different statement from a short window.
+ * (Bookings created counts every calendar day, so it never reaches 0 observations.)
+ */
+const NOTHING_OBSERVED =
+  'no day in the window lies inside a declared observation period, so its values are unknown rather than zero'
+
+/**
  * The scanned metrics that could not be assessed. Listed so that "no day was flagged" is never
  * read as "nothing was unusual" for them: the scan established nothing either way.
  */
@@ -127,8 +135,14 @@ export function UnassessedMetrics({ metrics }: { metrics: readonly UnassessedMet
         {metrics.map((item) => (
           <li key={item.metric}>
             <span className={styles.code}>{item.metric}</span> &mdash;{' '}
-            {UNASSESSED_REASON[item.reason]} ({item.observations}{' '}
-            {item.observations === 1 ? 'day' : 'days'} observed).
+            {item.reason === 'too_few_observations' && item.observations === 0 ? (
+              <>{NOTHING_OBSERVED}.</>
+            ) : (
+              <>
+                {UNASSESSED_REASON[item.reason]} ({item.observations}{' '}
+                {item.observations === 1 ? 'day' : 'days'} observed).
+              </>
+            )}
           </li>
         ))}
       </ul>

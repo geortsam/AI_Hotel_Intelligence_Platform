@@ -219,6 +219,12 @@ On-the-books belongs to an observed target date and is counted over the same boo
 its target, so "nothing was on the books at the cutoff" is written as **`0`** — an observed zero,
 not a missing value. It is written for target dates only.
 
+**Stay dates only.** A declared period describes **stay dates**. Booking intake — bookings counted
+by the day they were taken (`booked_at`) — is a different axis that no period describes, and the
+intelligence demand trend reads it as every calendar day of its window
+([ml-design.md](ml-design.md) §2, "Two observation axes"). Never use
+`demand_observation_periods` as a proxy for booking-intake observation.
+
 Demand above known capacity is *reported rather than dropped* because the schema legitimately
 permits it: a room sold on a date before that room's row was created. Dropping those rows would
 hide a real data-quality problem.

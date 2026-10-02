@@ -45,6 +45,36 @@ says `insufficient_data` and carries no number.
 
 ## 2. Capabilities and methodology
 
+### Two observation axes: stay dates and booking intake
+
+Two kinds of series feed this layer, and each answers to its own evidence:
+
+| Axis | Series | A day is in the series when | A day with nothing on it |
+|---|---|---|---|
+| **Stay date** | occupied room nights, room revenue — the forecasts, their anomaly scans and the occupancy outlook | it lies inside a period declared in `demand_observation_periods` (migration 0016, both ends inclusive) | inside a period: **0**. Outside every period: left out — unknown, never 0 |
+| **Booking intake** | bookings created, by `booked_at` — the demand trend and its anomaly scan | always: every calendar day of the window | **0**: no booking was taken through the platform that day |
+
+They are kept apart on purpose. A declared period says the hotel's booking record is complete
+for those **stay dates**; it says nothing about which bookings were **taken** on a day. So it is
+never applied to the intake series — **do not use `demand_observation_periods` as a proxy for
+booking-intake observation** — and the intake series is never read as observed stay-date demand.
+The trend measures bookings taken through the platform: a hotel that started (or stopped) taking
+bookings here inside the window shows that as rising (or falling) intake, which is exactly what
+the series measures. Declaring booking-intake observation would need a declaration of its own;
+none exists.
+
+What the responses report:
+
+* `training_window.observations` — the observed stay dates fed to the forecast. **0** means no
+  declared period covers the training window: every point is `insufficient_data` with a null
+  value, and the page says that no observation period has been declared — not that the history
+  is short, and never a 0 forecast.
+* `window.observations` on the trend, anomaly, insight and priority responses — the window's
+  **calendar days**, the length of the intake series. It is not a stay-date count: a stay-date
+  metric that could not be judged reports its own observed days in `metrics_not_assessed`.
+* An empty revenue forecast with `training_window.observations` **0** means room revenue is
+  **unknown**; with observed days, it means no currency was traded on any of them.
+
 ### Occupancy forecast — seasonal-naive day-of-week median
 
 For each horizon date *D*, take every training-window observation falling on the same weekday
@@ -76,7 +106,9 @@ The same model applied to daily room revenue, **independently per currency**. So
 `booking_room_nights.rate` — the per-night truth. Payments are money moving rather than
 revenue earned; `room_types.base_price` is a list price. Tests assert neither reaches the
 calculation, and that a ledger revenue line does not either (room revenue is not in the
-ledger — approved decision 21).
+ledger — approved decision 21). Its days are the training window's observed stay dates, and its
+currencies are those earned on at least one of them: a currency seen only on unobserved days is
+not forecast.
 
 ### Demand trend — split-window median comparison
 
@@ -136,7 +168,13 @@ deviation:* the outlier inflates the very standard deviation used to judge it, s
 hide behind the damage they do to the statistic.
 
 Scanned metrics: `occupied_room_nights`, `bookings_created`, and `room_revenue[<CCY>]` for
-each currency with history. `metrics_scanned` names every metric looked at, and
+each currency earned on an observed stay date. When the window holds fewer observed stay dates
+than the scan needs, a currency earned only on unobserved days is listed too, in
+`metrics_not_assessed` as `too_few_observations` with the observed-day count (**0** when nothing
+is observed) — its revenue is unknown, which is not the same as a currency never traded. With
+enough observed days such a currency stays absent, as it is from the forecast. The
+stay-date metrics' counts are observed days; `bookings_created` counts every calendar day (see
+"Two observation axes" above). `metrics_scanned` names every metric looked at, and
 `metrics_not_assessed` names those that could not be judged at all, with a reason:
 `too_few_observations` or `no_variation`. An empty `anomalies` list means "nothing was
 unusual" only for the scanned metrics that were assessed; for the others the scan

@@ -298,6 +298,15 @@ export function IntelligencePage() {
             >
               {(forecast) => (
                 <>
+                  {forecast.training_window.observations === 0 ? (
+                    /* No observed day: the history is unknown, which is not the same as short. */
+                    <p className={styles.observationNote} role="status">
+                      No prediction &mdash; no observation period has been declared for the
+                      history this forecast trains on, {formatDate(forecast.training_window.date_from)}{' '}
+                      &ndash; {formatDate(forecast.training_window.date_to)}. Those days are unknown,
+                      not zero.
+                    </p>
+                  ) : null}
                   <ForecastChart
                     metric="Occupied room nights"
                     points={occupancyPoints}
@@ -311,7 +320,7 @@ export function IntelligencePage() {
                     Trained on {formatCount(forecast.training_window.days)} days of history,{' '}
                     {formatDate(forecast.training_window.date_from)} &ndash;{' '}
                     {formatDate(forecast.training_window.date_to)}, from{' '}
-                    {formatCount(forecast.training_window.observations)} observations.
+                    {formatCount(forecast.training_window.observations)} observed days.
                   </p>
                 </>
               )}
@@ -323,7 +332,15 @@ export function IntelligencePage() {
               onRetry={intelligence.reload}
             >
               {(forecast) =>
-                forecast.currencies.length === 0 ? (
+                forecast.currencies.length === 0 && forecast.training_window.observations === 0 ? (
+                  /* Unknown, not "never traded": no observed day, so revenue cannot be read. */
+                  <StateMessage
+                    icon={Radar}
+                    tone="status"
+                    title="No prediction — no observation period has been declared"
+                    detail={`No observation period has been declared for the history this forecast trains on, ${formatDate(forecast.training_window.date_from)} – ${formatDate(forecast.training_window.date_to)}, so the property’s room revenue on those days is unknown rather than zero.`}
+                  />
+                ) : forecast.currencies.length === 0 ? (
                   <StateMessage
                     icon={Radar}
                     tone="status"

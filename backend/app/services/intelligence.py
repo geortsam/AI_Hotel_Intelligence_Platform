@@ -16,6 +16,14 @@ predicting it -- the only forward read is ``on_the_books``, which is reported as
 clearly-labelled fact and is never fed to a model.
 
 **Currency follows Stage 3B.10**: independent per-currency forecasts, no FX, no totals.
+
+**Two observation axes, never one.** Occupancy and room revenue are STAY-DATE series: a stay date
+is observed only inside a period declared in ``demand_observation_periods`` (migration 0016), so
+an observed date with nothing sold is a 0 and an unobserved date is left out -- the rule the
+demand model reads too. Bookings created is a BOOKING-INTAKE series, counted by the day a booking
+was taken through this platform: every day of the window is a value, 0 when nothing was taken. A
+declared stay-date period says nothing about which bookings were TAKEN on a day, so it is never
+applied to the intake series, and the intake series is never read as observed stay-date demand.
 """
 
 from __future__ import annotations
@@ -32,6 +40,7 @@ from app.ml.timeseries import (
     MIN_TRAINING_OBSERVATIONS,
     MODEL_NAME,
     MODEL_VERSION,
+    TOO_FEW_OBSERVATIONS,
     TREND_THRESHOLD,
     Anomaly,
     ForecastMethod,
@@ -278,6 +287,15 @@ class IntelligenceService:
                     UnassessedMetric(metric=metric, reason=reason, observations=len(observations))
                 )
             found += self._scan(metric, observations)
+        observed = len(self._observed_days(hotel.id, window))
+        for currency in self._unobserved_currencies(hotel.id, window):
+            unassessed.append(
+                UnassessedMetric(
+                    metric=f"{ROOM_REVENUE_METRIC}[{currency}]",
+                    reason=TOO_FEW_OBSERVATIONS,
+                    observations=observed,
+                )
+            )
 
         return AnomalyResponse(
             hotel_public_id=hotel.public_id,
@@ -377,6 +395,9 @@ class IntelligenceService:
             raise ValidationError(
                 f"The requested window spans {days} days; the maximum is {MAX_OBSERVATION_DAYS}."
             )
+        # `observations` is the window's calendar days: the window is shared by the
+        # booking-intake series (one value per day) and the stay-date series (observed days
+        # only), so it cannot be either stay-date count. See ObservationWindow.
         return ObservationWindow(date_from=date_from, date_to=date_to, days=days, observations=days)
 
     # --- series assembly ----------------------------------------------------------------
@@ -420,6 +441,13 @@ class IntelligenceService:
     def _booking_observations(
         self, hotel_id: int, window: TrainingWindow | ObservationWindow
     ) -> list[Observation]:
+        """Bookings TAKEN per day -- booking intake through this platform, by ``booked_at``.
+
+        Every calendar day of the window is a value, 0 when no booking was taken. This is not a
+        stay-date series and is deliberately NOT filtered by the declared observation periods:
+        those say a stay date's booking record is complete, not which bookings were taken on a
+        day. Do not use ``demand_observation_periods`` as a proxy for booking-intake observation.
+        """
         counts = self._repository.bookings_created_by_day(
             hotel_id, window.date_from, window.date_to
         )
@@ -452,9 +480,29 @@ class IntelligenceService:
                 return decimal.Decimal(row.room_revenue)
         return ZERO
 
+    def _unobserved_currencies(self, hotel_id: int, window: ObservationWindow) -> list[str]:
+        """Currencies earned in the window that its observed days cannot assess, ascending.
+
+        When the window holds fewer observed stay dates than the scan needs, no stay-date metric
+        can be judged -- occupancy says so through its own short series. A currency earned only
+        on unobserved days has no series at all, so without this it would vanish, and an unknown
+        revenue would read exactly like a currency the hotel never traded in. With enough
+        observed days, a currency absent from all of them stays absent, as in the forecast.
+        """
+        days = self._observed_days(hotel_id, window)
+        if len(days) >= MIN_TRAINING_OBSERVATIONS:
+            return []
+        history = self._repository.room_revenue_by_day(hotel_id, window.date_from, window.date_to)
+        traded = {row.currency for rows in history.values() for row in rows}
+        on_observed_days = {row.currency for day in days for row in history.get(day, [])}
+        return sorted(traded - on_observed_days)
+
     def _scannable(self, hotel_id: int, window: ObservationWindow) -> set[str]:
         """Every metric the scan covered, whether or not it produced a flag."""
-        currencies = self._revenue_observations(hotel_id, window).keys()
+        currencies = [
+            *self._revenue_observations(hotel_id, window),
+            *self._unobserved_currencies(hotel_id, window),
+        ]
         return {OCCUPANCY_METRIC, BOOKINGS_METRIC} | {
             f"{ROOM_REVENUE_METRIC}[{currency}]" for currency in currencies
         }
@@ -673,15 +721,22 @@ class IntelligenceService:
         predictions = forecast_series(observations, self._days(horizon.date_from, horizon.date_to))
         usable = [point for point in predictions if point.value is not None]
         if not usable:
+            # No observed day at all is a different statement from a short history: the
+            # occupancy of those dates is unknown, not low.
+            reason = (
+                "No day of the window lies inside a declared observation period, so its "
+                "occupancy is unknown rather than zero"
+                if not observations
+                else f"The window holds {len(observations)} observed days"
+            )
             return [
                 Insight(
                     type="data_sufficiency",
                     severity="info",
                     title="Not enough history to forecast occupancy",
                     explanation=(
-                        f"The window holds {len(observations)} daily observations; at least "
-                        f"{MIN_TRAINING_OBSERVATIONS} are needed before occupancy is "
-                        "forecast. No prediction has been made."
+                        f"{reason}; at least {MIN_TRAINING_OBSERVATIONS} observed days are "
+                        "needed before occupancy is forecast. No prediction has been made."
                     ),
                     supporting_metrics=[
                         SupportingMetric(name="observations", value=str(len(observations))),

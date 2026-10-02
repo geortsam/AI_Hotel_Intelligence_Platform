@@ -658,6 +658,134 @@ describe('the forecast', () => {
   })
 })
 
+/* --- stay-date observation ------------------------------------------------------------------ */
+
+/**
+ * A hotel with no declared observation period over the training window: the server observed
+ * no day, so every point is `insufficient_data` with a null prediction.
+ */
+function unobservedForecast(): OccupancyForecast {
+  const base = occupancyForecast()
+  return occupancyForecast({
+    training_window: { ...base.training_window, observations: 0 },
+    points: base.points.map((point) => ({
+      ...point,
+      predicted_room_nights: null,
+      predicted_occupancy_rate: null,
+      interval_lower: null,
+      interval_upper: null,
+      confidence_level: null,
+      method: 'insufficient_data' as const,
+      observations: 0,
+      capacity_clamped: false,
+    })),
+  })
+}
+
+describe('stay-date observation', () => {
+  it('says why there is no prediction when no observation period covers the history', async () => {
+    fetchStub.on('GET', '/forecast/occupancy', { body: unobservedForecast() })
+    renderPage()
+
+    const note = await screen.findByText(
+      /No prediction — no observation period has been declared for the history this forecast trains on/,
+    )
+    expect(note).toHaveAttribute('role', 'status')
+    expect(note.textContent).toContain('Those days are unknown, not zero.')
+    expect(screen.getByText(/from 0 observed days/)).toBeInTheDocument()
+  })
+
+  it('shows no such note when the training window was observed', async () => {
+    renderPage()
+    await screen.findByText('Booking demand is increasing')
+
+    expect(await screen.findByText(/from 90 observed days/)).toBeInTheDocument()
+    expect(screen.queryByText(/no observation period has been declared/)).not.toBeInTheDocument()
+  })
+
+  it('displays no forecast value it was not given', async () => {
+    const user = userEvent.setup()
+    fetchStub.on('GET', '/forecast/occupancy', { body: unobservedForecast() })
+    renderPage()
+    await screen.findByText(/no observation period has been declared/)
+
+    await user.click(screen.getByText('Show occupied room nights values'))
+    const table = screen.getByRole('table', { name: /Occupied room nights by day/ })
+    expect(within(table).getAllByText('No prediction')).toHaveLength(3)
+    // The on-the-books facts are still there; no prediction is, not even a zero.
+    expect(table.textContent).not.toContain('0.0000')
+    const chart = screen.getByRole('img', { name: 'Occupied room nights forecast' })
+    expect(chart).toHaveAccessibleDescription(/3 of 3 days have no prediction/)
+  })
+
+  it('renders an observed zero as zero, not as no prediction', async () => {
+    const user = userEvent.setup()
+    const base = occupancyForecast()
+    const zero = {
+      ...base.points[0]!,
+      predicted_room_nights: '0.0000',
+      predicted_occupancy_rate: '0.0000',
+      interval_lower: '0.0000',
+      interval_upper: '0.0000',
+    }
+    fetchStub.on('GET', '/forecast/occupancy', {
+      body: occupancyForecast({ points: [zero, ...base.points.slice(1)] }),
+    })
+    renderPage()
+    await screen.findByText('Booking demand is increasing')
+
+    await user.click(screen.getByText('Show occupied room nights values'))
+    const table = screen.getByRole('table', { name: /Occupied room nights by day/ })
+    const row = within(table).getByRole('rowheader', { name: '13 Sept' }).closest('tr')!
+    expect(within(row).getAllByText('0.0000').length).toBeGreaterThan(0)
+    expect(within(row).queryByText('No prediction')).not.toBeInTheDocument()
+  })
+
+  it('tells revenue that is unknown apart from a currency never traded', async () => {
+    const user = userEvent.setup()
+    const base = revenueForecast()
+    fetchStub.on('GET', '/forecast/revenue', {
+      body: revenueForecast({
+        currencies: [],
+        is_multi_currency: false,
+        training_window: { ...base.training_window, observations: 0 },
+      }),
+    })
+    renderPage()
+    await screen.findByText('Booking demand is increasing')
+    await user.click(screen.getByRole('tab', { name: 'Revenue' }))
+
+    expect(
+      await screen.findByText('No prediction — no observation period has been declared'),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/room revenue on those days is unknown rather than zero/)).toBeInTheDocument()
+    expect(screen.queryByText('No revenue history to forecast from')).not.toBeInTheDocument()
+  })
+
+  it('names a stay-date metric with no observed day as unknown, not as a short window', async () => {
+    fetchStub.on('GET', '/intelligence/anomalies', {
+      body: anomalyReport({
+        anomalies: [],
+        metrics_not_assessed: [
+          { metric: 'bookings_created', reason: 'no_variation', observations: 90 },
+          { metric: 'occupied_room_nights', reason: 'too_few_observations', observations: 0 },
+          { metric: 'room_revenue[EUR]', reason: 'too_few_observations', observations: 0 },
+        ],
+      }),
+    })
+    renderPage()
+
+    const region = await screen.findByRole('region', { name: 'Anomalies' })
+    await within(region).findByText('Anomalies could not be assessed in this window')
+    expect(
+      within(region).getAllByText(/no day in the window lies inside a declared observation period/),
+    ).toHaveLength(2)
+    expect(within(region).queryByText(/\(0 days observed\)/)).not.toBeInTheDocument()
+    // The booking-intake metric keeps its own reason, with its calendar-day count.
+    expect(within(region).getByText(/no usual spread to judge a day against \(90 days/)).toBeInTheDocument()
+  })
+})
+
 /* --- trend, anomalies, findings ------------------------------------------------------------- */
 
 describe('the demand trend', () => {

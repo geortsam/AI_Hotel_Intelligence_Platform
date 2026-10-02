@@ -74,6 +74,15 @@ metric values.
 
 The three top-level counts partition the candidate set exactly, so the denominators add up.
 
+**Not the serving rule for observation.** `skipped` is decided by recorded occupancy, and this
+protocol does not read `demand_observation_periods` (migration 0016). Model serving and the
+intelligence forecasts do: for them a declared date with no occupied nights is an observed **0**,
+and a date outside every declared period is unknown however many nights were recorded. So the two
+disagree on exactly those dates — accuracy skips the observed zero and scores the unobserved
+recorded night. `tests/integration/test_forecast_accuracy_api.py` pins the current behaviour.
+Aligning them would change `SKIP_SEMANTICS`, which the protocol checksum covers, so it needs a new
+protocol version; it is an open decision, not done.
+
 ---
 
 ## 4. Why the 28-day lag is an operational assumption

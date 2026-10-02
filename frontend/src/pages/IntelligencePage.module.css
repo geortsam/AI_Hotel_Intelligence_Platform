@@ -397,7 +397,8 @@
   font-family: var(--font-mono);
 }
 
-.currencyNote {
+.currencyNote,
+.observationNote {
   margin: 0 0 var(--space-2);
   padding: var(--space-3);
   background: var(--color-surface-raised, var(--color-surface));

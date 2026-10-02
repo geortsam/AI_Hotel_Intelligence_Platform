@@ -187,6 +187,39 @@ def test_each_hotel_sees_only_its_own_data(world: World) -> None:
     )
 
 
+def test_an_unobserved_stay_date_history_raises_no_occupancy_or_revenue_signal(
+    world: World,
+) -> None:
+    """Issue 2. With its declared observation period withdrawn, hotel A's stay dates are
+    unknown: no upcoming peak is forecast and no occupancy or revenue day is flagged. Booking
+    intake -- bookings counted by the day they were taken -- is not governed by that
+    declaration, so its signals are listed exactly as before."""
+    before = world.get("viewer_a", world.a).json()
+    world.session.execute(
+        sa.text("DELETE FROM demand_observation_periods WHERE hotel_id = :hotel"),
+        {"hotel": world.a.id},
+    )
+    world.session.commit()
+    after = world.get("viewer_a", world.a).json()
+
+    assert peaks(before), "the declared hotel forecast no peak, so this proves nothing"
+    assert peaks(after) == []
+    assert [
+        i
+        for i in after["items"]
+        if i["kind"] == "observed_anomaly" and i["measure"] != "bookings_created"
+    ] == []
+
+    def intake(body: dict[str, Any]) -> list[dict[str, Any]]:
+        return [
+            {k: v for k, v in i.items() if k != "rank"}
+            for i in body["items"]
+            if i["measure"] == "bookings_created"
+        ]
+
+    assert intake(after) == intake(before)
+
+
 # ======================================================================================
 # Authorization
 # ======================================================================================

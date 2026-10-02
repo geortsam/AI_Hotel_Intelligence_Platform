@@ -319,6 +319,60 @@ def test_every_trend_figure_is_the_trend_responses_own_value() -> None:
     assert {f.source for f in item.figures} == {"IntelligenceService.demand_trend"}
 
 
+def test_the_trend_item_is_booking_intake_not_stay_date_demand() -> None:
+    """Issue 2. The trend counts bookings TAKEN per day -- booking intake through the platform --
+    and is not governed by declared stay-date observation. Every place a reader or the copilot
+    looks says so: the measure, the figure units, the sentences and the link."""
+    [item] = [i for i in priorities().items if i.kind == "demand_trend"]
+
+    assert item.measure == "bookings_created"
+    assert {f.unit for f in item.figures} == {"bookings_created", "ratio"}
+    assert item.observation.startswith("Bookings taken per day")
+    assert "bookings taken" in item.limitation
+    assert item.look_at.view == "demand_trend"
+    sentences = " ".join([item.observation, item.comparison or "", item.limitation]).lower()
+    for stay_date_word in ("occupan", "room night", "stay", "revenue"):
+        assert stay_date_word not in sentences, stay_date_word
+
+
+def test_no_stay_date_forecast_means_no_peak_while_intake_signals_remain() -> None:
+    """With no observed stay date every forecast point is null: no upcoming peak is invented.
+    A booking-intake anomaly and the intake trend are still listed, as what they are."""
+    response = priorities(
+        points=fourteen([None] * 14), anomalies=[anomaly(3, "4.1", metric="bookings_created")]
+    )
+
+    assert "upcoming_peak_day" not in [i.kind for i in response.items]
+    assert [(i.kind, i.measure) for i in response.items] == [
+        ("observed_anomaly", "bookings_created"),
+        ("demand_trend", "bookings_created"),
+    ]
+
+
+def test_the_copilot_tool_keeps_the_trend_attributed_to_booking_intake() -> None:
+    service, _, _ = build()
+    context = ToolContext(
+        hotel_public_id=HOTEL,
+        services=ToolServices(
+            analytics=cast(Any, None),
+            demand_prediction=cast(Any, None),
+            forecast_performance=cast(Any, None),
+            knowledge=cast(Any, None),
+            insight=service,
+        ),
+    )
+    output = priorities_tool.run(
+        context, priorities_tool.HotelPrioritiesArguments(date_from=WINDOW[0], date_to=WINDOW[1])
+    )
+
+    [trend] = [i for i in output.items if i.kind == "demand_trend"]
+    [served] = [i for i in service.priorities(HOTEL, *WINDOW).items if i.kind == "demand_trend"]
+    assert trend == served
+    assert trend.measure == "bookings_created"
+    # The window the copilot is told about is the calendar window, not observed stay dates.
+    assert output.window.observations == output.window.days
+
+
 NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
 
 

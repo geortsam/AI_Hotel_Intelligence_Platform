@@ -34,6 +34,15 @@ every intelligence endpoint uses — over the **90** days ending at the window's
 not the learned demand model. The 3, 14 and 90 come from the `insight_ranking_v1` protocol, so
 what is served is what is measured.
 
+**Two observation axes** ([ml-design.md](ml-design.md) §2). `upcoming_peak_day` and the
+occupancy and room-revenue anomalies come from stay-date series, so a stay date outside every
+declared observation period cannot produce one: a hotel that has declared nothing over the
+training window gets no peak day, because its forecast has no value to rank. `demand_trend` and a
+`bookings_created` anomaly are **booking intake** — bookings counted by the day they were taken
+through the platform — which the declared periods do not govern. The trend item says so in its
+measure (`bookings_created`) and its sentences ("Bookings taken per day"); it is not a statement
+about occupancy demand.
+
 **Order:** kinds in the table's order; within a kind, its own measure descending, then date. The
 same data always yields the same list, and `rank` is contiguous from 1.
 

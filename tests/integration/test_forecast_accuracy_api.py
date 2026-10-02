@@ -57,6 +57,7 @@ from tests.integration.conftest import (
     make_hotel,
     make_room,
     make_room_type,
+    observe,
     price_nights,
     requires_postgres,
 )
@@ -548,6 +549,47 @@ def test_a_cancelled_allocation_is_not_realised_demand(
     assert segment.observations == 0
     assert segment.skipped == 1
     assert segment.metrics.mae is None
+
+
+def test_accuracy_does_not_read_declared_observation_periods(
+    session: Session, hotel: Hotel, room: Room
+) -> None:
+    """Issue 2 regression: the frozen ``accuracy_v1`` protocol has its own ground-truth
+    rule and does not consult ``demand_observation_periods``. A target date with no recorded
+    occupied nights is SKIPPED even when a declared period makes it an observed zero, and a date
+    with recorded nights is SCORED though no period covers it. Serving and the intelligence
+    forecasts read those two dates the other way round; aligning accuracy with them would change
+    ``SKIP_SEMANTICS``, which the protocol checksum covers, so it needs a new protocol version
+    and is not done here."""
+    observed_empty = SETTLED
+    unobserved_recorded = SETTLED - dt.timedelta(days=1)
+    observe(session, hotel, observed_empty, observed_empty)
+    session.commit()
+    occupy(session, hotel, room, unobserved_recorded)
+    for target, digest in ((observed_empty, "observed-zero"), (unobserved_recorded, "unobserved")):
+        record_prediction(
+            session,
+            hotel,
+            target_date=target,
+            predicted=3.0,
+            generated_at=moment(12),
+            feature_digest=digest,
+        )
+
+    segment = (
+        evaluate(
+            build_service(session),
+            hotel,
+            window_from=unobserved_recorded,
+            window_to=observed_empty,
+        )
+        .by_model_version[0]
+        .within_calibration
+    )
+
+    assert segment.skipped == 1  # the observed zero: not scored
+    assert segment.observations == 1  # the unobserved, recorded night: scored
+    assert segment.metrics.mae == pytest.approx(2.0)
 
 
 # ======================================================================================

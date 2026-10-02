@@ -172,7 +172,14 @@ class ObservationWindow(BaseModel):
     date_from: dt.date
     date_to: dt.date
     days: int
-    observations: int
+    #: The window's calendar days -- the values the booking-intake series (bookings created,
+    #: one per day) has. NOT the observed stay dates: the occupancy and room-revenue series hold
+    #: only days inside a declared observation period, and a stay-date metric that could not be
+    #: judged reports its own observed count in ``metrics_not_assessed``.
+    observations: int = Field(
+        description="Calendar days in the window: one value per day of the booking-intake "
+        "series. Not a count of observed stay dates."
+    )
 
 
 class DemandTrendResponse(BaseModel):
@@ -223,7 +230,9 @@ class UnassessedMetric(BaseModel):
 
     metric: str
     reason: AnomalyUnassessedReasonLiteral
-    #: The days the metric had in the window, so ``too_few_observations`` can be checked.
+    #: The days the metric had in the window, so ``too_few_observations`` can be checked. For a
+    #: stay-date metric (occupancy, room revenue) these are OBSERVED days -- inside a declared
+    #: observation period -- so 0 means none of its dates was observed, not that it was zero.
     observations: int
 
 
