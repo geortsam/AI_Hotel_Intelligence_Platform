@@ -170,7 +170,7 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
         run: |
           set -euo pipefail
-          expected='0015_copilot_conversations'
+          expected='0016_demand_observation_periods'
 
           echo "--- declared head ---"
           heads="$(python -m alembic heads 2>&1)"
@@ -619,8 +619,8 @@ jobs:
 
             revisions=$(ls /app/database/migrations/versions/*.py | wc -l)
             echo "  revisions present: $revisions"
-            if [ "$revisions" -ne 15 ]; then
-              echo "::error::expected 15 revisions, found $revisions"
+            if [ "$revisions" -ne 16 ]; then
+              echo "::error::expected 16 revisions, found $revisions"
               exit 1
             fi
 
@@ -981,9 +981,9 @@ jobs:
           echo "--- alembic_version, read from PostgreSQL ---"
           revision="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  $revision"
-          [ "$revision" = "0015_copilot_conversations" ] || {
-            echo "::error::expected 0015_copilot_conversations, got $revision"; exit 1; }
-          echo "  OK   schema is at 0015_copilot_conversations"
+          [ "$revision" = "0016_demand_observation_periods" ] || {
+            echo "::error::expected 0016_demand_observation_periods, got $revision"; exit 1; }
+          echo "  OK   schema is at 0016_demand_observation_periods"
 
           tables="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  public tables created: $tables"
@@ -1469,7 +1469,7 @@ jobs:
 
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  after : $after"
-          [ "$after" = "0015_copilot_conversations" ] || {
+          [ "$after" = "0016_demand_observation_periods" ] || {
             echo "::error::revision moved to $after"; exit 1; }
           [ "$before" = "$after" ] || { echo "::error::revision changed"; exit 1; }
           echo "  OK   upgrade head is idempotent and the schema is unchanged"
@@ -1494,7 +1494,7 @@ jobs:
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  revision after restart: $revision"
           echo "  tables after restart  : $after"
-          [ "$revision" = "0015_copilot_conversations" ] || {
+          [ "$revision" = "0016_demand_observation_periods" ] || {
             echo "::error::schema did not survive the restart"; exit 1; }
           [ "$rows" = "$after" ] || { echo "::error::table count changed across restart"; exit 1; }
           echo "  OK   the named volume preserved the schema across stop/start"
@@ -2174,13 +2174,13 @@ jobs:
           # The diff above is the real proof. These restate the few facts that must hold
           # absolutely, so a failure names what was wrong rather than only that something was.
           revision="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc 'SELECT version_num FROM alembic_version')"
-          [ "$revision" = "0015_copilot_conversations" ] || {
+          [ "$revision" = "0016_demand_observation_periods" ] || {
             echo "::error::restored revision is $revision"; exit 1; }
-          echo "  OK   alembic_version is 0015_copilot_conversations -- no upgrade or downgrade happened"
+          echo "  OK   alembic_version is 0016_demand_observation_periods -- no upgrade or downgrade happened"
 
           tables="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")"
-          [ "$tables" -eq 28 ] || { echo "::error::restored database has $tables base tables, expected 28"; exit 1; }
-          echo "  OK   28 base tables (27 application tables + alembic_version)"
+          [ "$tables" -eq 29 ] || { echo "::error::restored database has $tables base tables, expected 29"; exit 1; }
+          echo "  OK   29 base tables (28 application tables + alembic_version)"
 
           membership="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc \
             "SELECT u.email || '/' || h.slug || '/' || uh.role FROM user_hotels uh
@@ -2468,10 +2468,11 @@ jobs:
           # The history is the minimum the model requires and no more: occupancy on the three
           # days its lags read -- target-7, target-14 and target-28 -- created through the real
           # booking endpoint, one room for one night each. Everything else about those weeks is
-          # deliberately empty, which is also what makes the 422 case below meaningful.
+          # deliberately empty -- declared observed, so a real zero -- and the hotel in the 422
+          # case below has no bookings and no declaration at all.
           base="https://127.0.0.1:${HTTPS_PORT}"
           CA="$CERT_DIR/fullchain.pem"
-          TARGET=2026-12-01
+          TARGET=2026-08-31
 
           api() { curl -sS --cacert "$CA" --max-time 20 "$@"; }
           json() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$@"; }
@@ -2503,7 +2504,7 @@ jobs:
             -H 'Content-Type: application/json' -d '{"first_name":"Ada","last_name":"Lovelace"}' > /dev/null
           guest="$(json "$RUNNER_TEMP/ml-guest.json" public_id)"
 
-          for night in 2026-11-03 2026-11-17 2026-11-24; do
+          for night in 2026-08-03 2026-08-17 2026-08-24; do
             out="$(python3 -c 'import datetime,sys; print(datetime.date.fromisoformat(sys.argv[1]) + datetime.timedelta(days=1))' "$night")"
             code="$(api -o "$RUNNER_TEMP/ml-booking.json" -w '%{http_code}' \
               -X POST "$base/api/v1/hotels/$hotel/bookings" -H "$auth" \
@@ -2512,6 +2513,12 @@ jobs:
             echo "  booking for $night -> $code"
             [ "$code" = "201" ] || { echo "::error::booking for $night returned $code"; cat "$RUNNER_TEMP/ml-booking.json"; exit 1; }
           done
+
+          # Migration 0016: a date is observed only inside a declared span, so the operator
+          # command declares the three weeks the lags read -- the nights between the bookings
+          # become observed zeros. The empty hotel in check 7 declares nothing: unknown, so 422.
+          # Past dates on purpose: a span must end before the hotel's today.
+          dc exec -T api python -m app.jobs.demand_observation declare             --hotel "$hotel" --from 2026-08-03 --to 2026-08-24
 
           echo
           echo "--- 1. an authenticated member gets a real prediction ---"
@@ -2529,9 +2536,9 @@ jobs:
           print("  body:", json.dumps(body, indent=2)[:700])
           assert isinstance(body["predicted_room_nights"], float), body
           assert body["forecast_horizon_days"] == 7, body
-          assert body["target_date"] == "2026-12-01", body
-          assert body["cutoff_date"] == "2026-11-24", body
-          assert body["prediction_cutoff"] == "2026-11-25T00:00:00Z", body
+          assert body["target_date"] == "2026-08-31", body
+          assert body["cutoff_date"] == "2026-08-24", body
+          assert body["prediction_cutoff"] == "2026-08-25T00:00:00Z", body
           assert body["model"]["model_version"] == "demand_baseline_v1", body
           assert body["model"]["feature_version"] == "v1", body
           assert body["model"]["dataset_version"] == "v1", body
@@ -2647,7 +2654,7 @@ jobs:
           # stages only join up if the value that came out of /demand-forecast is the value
           # /demand-predictions later discloses, so that is what this asserts -- equality
           # against $PREDICTED, not merely a 200 with some number in it.
-          read_url="$base/api/v1/hotels/$hotel/ml/demand-predictions?date_from=2026-11-01&date_to=2026-12-31"
+          read_url="$base/api/v1/hotels/$hotel/ml/demand-predictions?date_from=2026-08-01&date_to=2026-09-30"
           code="$(api -o "$RUNNER_TEMP/ml-read.json" -w '%{http_code}' -H "$auth" "$read_url")"
           echo "  GET .../ml/demand-predictions -> $code"
           [ "$code" = "200" ] || { echo "::error::the read endpoint returned $code"; cat "$RUNNER_TEMP/ml-read.json"; exit 1; }
@@ -2660,7 +2667,7 @@ jobs:
           assert body["page"] == 1 and body["page_size"] == 20, body
           assert body["total"] >= 1, body
 
-          rows = [r for r in body["items"] if r["target_date"] == "2026-12-01"]
+          rows = [r for r in body["items"] if r["target_date"] == "2026-08-31"]
           assert len(rows) == 1, f"expected exactly one row for the served target, got {len(rows)}"
           row = rows[0]
 
@@ -2673,7 +2680,7 @@ jobs:
 
           # The same number, to the bit. A near-miss here would mean the row is not this request's.
           assert row["predicted_room_nights"] == served, (row["predicted_room_nights"], served)
-          assert row["prediction_cutoff"] == "2026-11-25T00:00:00Z", row
+          assert row["prediction_cutoff"] == "2026-08-25T00:00:00Z", row
           assert row["model_version"] == "demand_baseline_v1", row
           assert row["forecast_horizon_days"] == 7, row
           uuid_len = len(row["public_id"])
@@ -2695,12 +2702,12 @@ jobs:
           [ "$code" = "401" ] || { echo "::error::expected 401, got $code"; exit 1; }
 
           code="$(api -o "$RUNNER_TEMP/ml-read-404.json" -w '%{http_code}' -H "$auth" \
-            "$base/api/v1/hotels/11111111-2222-3333-4444-555555555555/ml/demand-predictions?date_from=2026-11-01&date_to=2026-12-31")"
+            "$base/api/v1/hotels/11111111-2222-3333-4444-555555555555/ml/demand-predictions?date_from=2026-08-01&date_to=2026-09-30")"
           echo "  unknown hotel                 -> $code"
           [ "$code" = "404" ] || { echo "::error::expected 404, got $code"; exit 1; }
 
           code="$(api -o /dev/null -w '%{http_code}' -H "$auth" \
-            "$base/api/v1/hotels/$hotel/ml/demand-predictions?date_from=2026-12-31&date_to=2026-11-01")"
+            "$base/api/v1/hotels/$hotel/ml/demand-predictions?date_from=2026-09-30&date_to=2026-08-01")"
           echo "  date_from after date_to       -> $code"
           [ "$code" = "422" ] || { echo "::error::expected 422, got $code"; exit 1; }
 
@@ -2712,7 +2719,7 @@ jobs:
           # the serving route is checked for this above, and the read route must not be the
           # weaker of the two.
           code="$(api -o "$RUNNER_TEMP/ml-read-403.json" -w '%{http_code}' -H "Authorization: Bearer $stranger" \
-            "$base/api/v1/hotels/$hotel/ml/demand-predictions?date_from=2026-11-01&date_to=2026-12-31")"
+            "$base/api/v1/hotels/$hotel/ml/demand-predictions?date_from=2026-08-01&date_to=2026-09-30")"
           echo "  a non-member                  -> $code"
           [ "$code" = "404" ] || { echo "::error::expected 404, got $code"; exit 1; }
           cmp -s "$RUNNER_TEMP/ml-read-404.json" "$RUNNER_TEMP/ml-read-403.json" || {
@@ -2734,11 +2741,11 @@ jobs:
           from app.ml.artifact_store import approved_model, predict_room_nights
           from app.ml.serving import build_feature_values
 
-          target = dt.date(2026, 12, 1)
+          target = dt.date(2026, 8, 31)
           history = {
-              dt.date(2026, 11, 24): 1,
-              dt.date(2026, 11, 17): 1,
-              dt.date(2026, 11, 3): 1,
+              dt.date(2026, 8, 24): 1,
+              dt.date(2026, 8, 17): 1,
+              dt.date(2026, 8, 3): 1,
           }
           features = build_feature_values(history, target)
           print("  features:", features)
@@ -2802,7 +2809,7 @@ jobs:
           hotel = [h for h in hotels['items'] if h['slug'] == 'ml-probe-hotel'][0]['public_id']
           seen = set()
           for _ in range(6):
-              status, body = call('/api/v1/hotels/' + hotel + '/ml/demand-forecast?target_date=2026-12-01', auth=token)
+              status, body = call('/api/v1/hotels/' + hotel + '/ml/demand-forecast?target_date=2026-08-31', auth=token)
               assert status == 200, (status, body)
               seen.add(json.dumps(body, sort_keys=True))
           assert len(seen) == 1, seen
@@ -2887,7 +2894,7 @@ jobs:
           status, hotels, _ = call('/api/v1/hotels', auth=token)
           hotel = [h for h in hotels['items'] if h['slug'] == 'ml-probe-hotel'][0]['public_id']
 
-          status, body, headers = call('/api/v1/hotels/' + hotel + '/ml/demand-forecast?target_date=2026-12-01', auth=token)
+          status, body, headers = call('/api/v1/hotels/' + hotel + '/ml/demand-forecast?target_date=2026-08-31', auth=token)
           print('  corrupted artifact ->', status, json.dumps(body))
           assert status == 503, (status, body)
           assert body['error']['code'] == 'MODEL_UNAVAILABLE', body

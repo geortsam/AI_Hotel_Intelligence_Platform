@@ -55,6 +55,15 @@ lead time drawn from a realistic mix (walk-ins, last-minute, weeks and months ah
 future is on the books the way a real one is: fuller near the reference date, thinner further
 out. ``created_at`` is set equal to ``booked_at``, as for a booking entered when it was taken.
 
+## The declared observation period
+
+Each hotel gets one ``demand_observation_periods`` row: the span whose complete booking record
+the seed has written, which is what lets the demand model and the forecasts read a quiet day as
+a zero. It is **not** the whole window. It starts ``longest stay - 1`` days after the window
+opens, because a room's walk begins up to a week earlier and a stay begun before the window is
+not written -- its nights inside the window are missing, so those first days are incomplete --
+and it ends the day before the reference date, whose own night is still being booked at noon.
+
 ## Safety
 
 * ``--database-url`` is required and is never read from the environment, so no ambient
@@ -101,6 +110,7 @@ from app.models import (  # noqa: E402
     Booking,
     BookingRoom,
     BookingRoomNight,
+    DemandObservationPeriod,
     Expense,
     ExpenseCategory,
     Guest,
@@ -632,6 +642,18 @@ class _Stay:
     check_out: dt.date
     lead: int
     booked_at: dt.datetime
+
+
+def observation_period(config: SeedConfig) -> tuple[dt.date, dt.date]:
+    """The span, both ends inclusive, whose complete booking record the seed writes.
+
+    From ``longest stay - 1`` days into the window -- a stay begun before the window is not
+    written, and the longest one reaches that far in -- to the day before the reference date,
+    the last night that is over by the as-of moment.
+    """
+    start = config.reference_date - dt.timedelta(days=config.history_days)
+    longest = max(nights for nights, _weight in LENGTH_OF_STAY)
+    return start + dt.timedelta(days=longest - 1), config.reference_date - dt.timedelta(days=1)
 
 
 def _simulate_stays(config: SeedConfig) -> list[_Stay]:
@@ -1322,6 +1344,9 @@ def logical_rows(plan: DemoPlan, owner_email: str | None = None) -> dict[str, li
         ),
         "users": _rows([(email, "Demo Owner", True)]),
         "user_hotels": _rows([(email, h.spec.slug, HotelRole.OWNER.value) for h in plan.hotels]),
+        "demand_observation_periods": _rows(
+            [(h.spec.slug, *observation_period(plan.config)) for h in plan.hotels]
+        ),
     }
 
 
@@ -1369,6 +1394,8 @@ READBACK: dict[str, str] = {
     "users": "SELECT email, full_name, is_active FROM users",
     "user_hotels": "SELECT u.email, h.slug, m.role FROM user_hotels m"
     " JOIN users u ON u.id = m.user_id JOIN hotels h ON h.id = m.hotel_id",
+    "demand_observation_periods": "SELECT h.slug, p.observed_from, p.observed_to"
+    " FROM demand_observation_periods p JOIN hotels h ON h.id = p.hotel_id",
 }
 
 
@@ -1709,6 +1736,18 @@ def write_plan(session: Session, plan: DemoPlan, password_hash: str) -> None:
         ],
     )
 
+    # Last, and only because everything it vouches for is now written.
+    observed_from, observed_to = observation_period(plan.config)
+    _flush(
+        session,
+        [
+            DemandObservationPeriod(
+                hotel_id=hotel.id, observed_from=observed_from, observed_to=observed_to
+            )
+            for hotel in hotels.values()
+        ],
+    )
+
 
 def _noon(day: dt.date, slug: str) -> dt.datetime:
     return local(day, 12, 0, ZoneInfo(_hotel(slug).timezone))
@@ -1793,6 +1832,9 @@ def summary(plan: DemoPlan) -> list[str]:
         f"seed           : {plan.config.seed}",
         f"stays from     : {min(b.check_in for b in plan.bookings).isoformat()}"
         f"  to {max(b.check_out for b in plan.bookings).isoformat()}",
+        "observed       : {} to {} (declared, both inclusive)".format(
+            *(day.isoformat() for day in observation_period(plan.config))
+        ),
     ]
     for status in BookingStatus:
         count = sum(1 for b in plan.bookings if b.status == status.value)

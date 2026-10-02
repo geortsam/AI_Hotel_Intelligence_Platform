@@ -53,6 +53,19 @@ possibly have produced a night on it lies inside the source window:
 
 Dates outside that are dropped as *targets*, with the count reported, rather than being kept
 and quietly believed.
+
+## Observation: what makes a covered date with no stays a zero
+
+The coverage window is arithmetic; the evidence is the publisher's. The source is described as
+the hotels' property-management-system extraction of every booking due to arrive in its window
+-- arrivals, cancellations and no-shows alike -- with only identifying fields removed
+(:data:`SOURCE_SCOPE`). So every booking that could have produced a night on a covered date is in
+the file, and a covered date with no occupied night had none: :func:`build_histories` declares
+each hotel's coverage window as its :class:`~app.ml.dataset.ObservationPeriod`, and the date is an
+observed zero rather than a gap. A date outside the window stays unknown. The pipeline treats its
+input as that complete extraction; the pinned file is (its digest is checked before a committed
+build), and a sample of it -- the test excerpt -- is not, so the excerpt's zero days are artifacts
+of sampling and are never read as hotel history.
 """
 
 from __future__ import annotations
@@ -76,11 +89,13 @@ from app.ml.dataset import (
     DatasetReport,
     DemandRow,
     HotelHistory,
+    ObservationPeriod,
     TemporalSplit,
     assert_no_feature_is_known_only_after_prediction,
     assert_split_is_chronological,
     build_feature_specs,
     build_rows,
+    observed_demand,
     split_chronologically,
     validate_rows,
 )
@@ -113,6 +128,14 @@ SOURCE_REDISTRIBUTION = (
 #: SHA-256 of the file :data:`SOURCE_URL` serves. Checked on every run: a source that changed
 #: is a different dataset, and it should stop the pipeline rather than flow into a manifest.
 SOURCE_SHA256 = "7c2ae42a7353905ea136e5c2287f17c92c5435826598bfbb8491c6f0c7b1fc06"
+
+#: What the publisher says the file contains -- the evidence that a covered date is OBSERVED.
+#: Paraphrased from the article's description of the data (Antonio, de Almeida & Nunes 2019).
+SOURCE_SCOPE = (
+    "every booking due to arrive in the file's arrival window, including bookings that "
+    "arrived and bookings that were cancelled, extracted from the hotels' property-management "
+    "databases with only identifying fields removed"
+)
 SOURCE_BYTES = 16_855_599
 SOURCE_ROWS = 119_390
 
@@ -516,11 +539,10 @@ def build_histories(
     the whole of the fix: Stage 6.1 already treats an absent value as missing rather than zero,
     so the feature reports as unavailable instead of quietly reading as "no rooms".
 
-    ``demand_by_date`` holds only the covered dates the source has occupied nights for. A
-    covered date without any stays absent -- ``None`` to every lag and window that reaches it --
-    because the coverage window bounds truncation, not observation: it is computed from the
-    bookings themselves, and nothing in the source records that a date without them was
-    observed (docs/ml-training-data.md §7).
+    ``demand_by_date`` holds every covered date, ``0`` included: each hotel's coverage window is
+    declared its observation period, on the evidence of :data:`SOURCE_SCOPE` (see the module
+    docstring), so a covered date with no occupied night is an observed zero. A date outside the
+    window is absent -- ``None`` to every lag and window that reaches it.
 
     ``on_books_by_date`` holds a value for every covered target date, ``0`` included. It is
     counted over the same booking records as that date's target, so a target with nothing on the
@@ -535,8 +557,9 @@ def build_histories(
     for hotel_key in sorted(demand):
         first, last = windows[hotel_key]
         hotel_demand = demand[hotel_key]
-        covered = {day: count for day, count in hotel_demand.items() if first <= day <= last}
-        dropped += len(hotel_demand) - len(covered)
+        observation = ObservationPeriod(first, last)
+        covered = observed_demand(hotel_demand, (observation,), first, last)
+        dropped += sum(1 for day in hotel_demand if not observation.includes(day))
         hotel_on_books = on_books.get(hotel_key, {})
         histories.append(
             HotelHistory(

@@ -38,6 +38,7 @@ from tests.integration.conftest import (
     make_hotel,
     make_room,
     make_room_type,
+    observe,
     price_nights,
     register_and_login,
 )
@@ -64,7 +65,8 @@ def occupy(session: Session, hotel: Hotel, room: Room, night: dt.date) -> None:
 
 
 def seed(session: Session, slug: str, rooms: int, busy_weekday: int) -> Hotel:
-    """Every `busy_weekday` from March to May fully occupied; every other day empty."""
+    """Every `busy_weekday` from March to May fully occupied; every other day empty -- an
+    observed zero, because the whole span is declared."""
     hotel = make_hotel(session, slug=slug)
     room_type = make_room_type(session, hotel)
     created = [make_room(session, hotel, room_type, number=f"{101 + n}") for n in range(rooms)]
@@ -74,6 +76,7 @@ def seed(session: Session, slug: str, rooms: int, busy_weekday: int) -> Hotel:
             for room in created:
                 occupy(session, hotel, room, day)
         day += dt.timedelta(days=1)
+    observe(session, hotel, dt.date(2026, 3, 1), dt.date(2026, 5, 31))
     session.commit()
     return hotel
 

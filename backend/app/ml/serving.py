@@ -252,10 +252,11 @@ def build_feature_values(
     that tuple before it is returned.
 
     Raises :class:`InsufficientFeatureHistoryError` when any lag day is absent from
-    *demand_by_date*. That is not a defensive nicety: the three lags reach 7, 14 and 28 days
-    back, so a hotel with
-    less than four weeks of recorded occupancy before the cutoff cannot be scored by this
-    model, and saying so is more useful than a number computed from a filled-in zero.
+    *demand_by_date* -- which holds observed days only, an observed zero included (see
+    :func:`~app.ml.dataset.observed_demand`). That is not a defensive nicety: the three lags
+    reach 7, 14 and 28 days back, so a hotel whose demand is not observed on those days cannot
+    be scored by this model, and saying so is more useful than a number computed from a
+    filled-in zero.
     """
     calendar = calendar_features(target_date)
     lags = lag_features(
@@ -265,7 +266,7 @@ def build_feature_values(
     missing = sorted(name for name, value in lags.items() if value is None)
     if missing:
         raise InsufficientFeatureHistoryError(
-            f"{len(missing)} of {len(lags)} demand lags have no recorded value at or before "
+            f"{len(missing)} of {len(lags)} demand lags have no observed value at or before "
             f"the cutoff for {target_date.isoformat()}"
         )
 

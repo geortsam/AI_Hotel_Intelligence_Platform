@@ -7,6 +7,10 @@ The two properties that matter most here cannot be checked without a database:
   on-the-books figure beside it moves, proving the test really did write something.
 * **Tenant isolation.** Two hotels are given deliberately different histories and every
   forecast, trend, anomaly and insight is checked against the right one.
+* **Observation** (migration 0016). The stay-dated series -- occupancy and room revenue -- hold
+  the hotel's declared observed days and no others: inside a span a day without bookings is a
+  0, outside every span a day is left out whatever was recorded for it. Every hotel built here
+  declares :data:`OBSERVED` unless a test says otherwise.
 
 The series are built with real bookings through the real API, so the numbers the models see
 are the numbers Stage 3B.10 would report for the same dates.
@@ -30,6 +34,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.models import DailyHotelMetric
 from tests.integration.conftest import (
     authenticated_client,
+    declare_observation_for,
     requires_postgres,
     seed_revenue_category,
 )
@@ -52,6 +57,9 @@ FORECAST = {
     "date_to": str(HORIZON_END),
     "training_days": HISTORY_DAYS,
 }
+#: The span every hotel here declares observed by default: from two months before the history
+#: through the horizon, so no existing scenario's dates fall outside it.
+OBSERVED = (HISTORY_START - dt.timedelta(days=60), HORIZON_END)
 
 
 def hotel_payload(slug: str) -> dict[str, object]:
@@ -89,8 +97,17 @@ def url(hotel: str, report: str) -> str:
 # --- builders ------------------------------------------------------------------------------------
 
 
-def make_hotel(api: TestClient, slug: str = "hotel-a", *, rooms: int = 4) -> str:
+def make_hotel(
+    api: TestClient,
+    slug: str = "hotel-a",
+    *,
+    rooms: int = 4,
+    observed: list[tuple[dt.date, dt.date]] | None = None,
+) -> str:
+    """A hotel with *rooms* rooms and its *observed* spans declared ([OBSERVED] by default)."""
     hotel = str(api.post("/api/v1/hotels", json=hotel_payload(slug)).json()["public_id"])
+    for observed_from, observed_to in [OBSERVED] if observed is None else observed:
+        declare_observation_for(api, hotel, observed_from, observed_to)
     api.post(
         f"/api/v1/hotels/{hotel}/room-types",
         json={
@@ -549,12 +566,133 @@ def test_a_hotel_with_no_stays_forecasts_no_currencies(api: TestClient) -> None:
     assert body["is_multi_currency"] is False
 
 
+# --- observation ----------------------------------------------------------------------------------
+
+
+def training_window(body: dict[str, object]) -> dict[str, object]:
+    window = body["training_window"]
+    assert isinstance(window, dict)
+    return window
+
+
+def test_a_hotel_that_declares_nothing_has_nothing_to_forecast_from(api: TestClient) -> None:
+    """Four weeks of bookings, no declared span: no day of them is known to be complete, so
+    neither series has an observation and nothing is forecast -- rather than a forecast built
+    from whatever happened to be recorded."""
+    hotel = make_hotel(api, "undeclared", rooms=4, observed=[])
+    fill_history(api, hotel, make_guest(api, hotel))
+
+    occupancy = api.get(url(hotel, "forecast/occupancy"), params=FORECAST).json()
+    revenue = api.get(url(hotel, "forecast/revenue"), params=FORECAST).json()
+
+    assert training_window(occupancy)["observations"] == 0
+    assert {point["method"] for point in occupancy["points"]} == {"insufficient_data"}
+    assert all(point["predicted_room_nights"] is None for point in occupancy["points"])
+    assert revenue["currencies"] == []
+    assert training_window(revenue)["observations"] == 0
+
+
+def test_an_observed_day_without_bookings_is_a_zero_in_the_series(api: TestClient) -> None:
+    """Bookings on the first fourteen days only, all twenty-eight declared. The empty fortnight
+    is fourteen observed zeros: each weekday's median of two 2s and two 0s is 1."""
+    hotel = make_hotel(api, "observed-zero", rooms=4)
+    fill_history(api, hotel, make_guest(api, hotel), days=14)
+
+    body = api.get(url(hotel, "forecast/occupancy"), params=FORECAST).json()
+
+    assert training_window(body)["observations"] == HISTORY_DAYS
+    assert {Decimal(point["predicted_room_nights"]) for point in body["points"]} == {1}
+
+
+def test_an_unobserved_day_is_left_out_whatever_was_recorded_for_it(api: TestClient) -> None:
+    """Two rooms a night for four weeks, two more on the second fortnight -- which is not
+    declared. Only the first fortnight is read: the forecast is 2, not a mix with 4."""
+    second_half = HISTORY_START + dt.timedelta(days=14)
+    hotel = make_hotel(
+        api,
+        "partly-observed",
+        rooms=4,
+        observed=[(HISTORY_START, second_half - dt.timedelta(days=1))],
+    )
+    guest = make_guest(api, hotel)
+    fill_history(api, hotel, guest)
+    for offset in range(14):
+        for room in ("103", "104"):
+            stay(api, hotel, guest, room=room, night=second_half + dt.timedelta(days=offset))
+
+    body = api.get(url(hotel, "forecast/occupancy"), params=FORECAST).json()
+
+    assert training_window(body)["observations"] == 14
+    assert {Decimal(point["predicted_room_nights"]) for point in body["points"]} == {2}
+
+
+def test_a_currency_earned_only_on_unobserved_days_is_not_forecast(api: TestClient) -> None:
+    """USD was taken once, on a day outside the declared span. Unknown, not a currency with a
+    history: it is absent, and EUR is forecast from the observed days alone."""
+    unobserved = HISTORY_START + dt.timedelta(days=20)
+    hotel = make_hotel(
+        api,
+        "currency-unobserved",
+        rooms=4,
+        observed=[
+            (HISTORY_START, unobserved - dt.timedelta(days=1)),
+            (unobserved + dt.timedelta(days=1), HORIZON_END),
+        ],
+    )
+    guest = make_guest(api, hotel)
+    fill_history(api, hotel, guest)
+    stay(api, hotel, guest, room="104", night=unobserved, rate="90.00", currency="USD")
+
+    body = api.get(url(hotel, "forecast/revenue"), params=FORECAST).json()
+
+    assert [c["currency"] for c in body["currencies"]] == ["EUR"]
+    assert training_window(body)["observations"] == HISTORY_DAYS - 1
+
+
+@pytest.mark.parametrize(
+    ("observed_from", "observed_to", "observations"),
+    [
+        (HISTORY_START, HORIZON_START - dt.timedelta(days=1), HISTORY_DAYS),
+        (HISTORY_START + dt.timedelta(days=1), HORIZON_START - dt.timedelta(days=1), 27),
+        (HISTORY_START, HORIZON_START - dt.timedelta(days=2), 27),
+        (HISTORY_START - dt.timedelta(days=1), HORIZON_START, HISTORY_DAYS),
+        (HISTORY_START, HISTORY_START, 1),
+    ],
+)
+def test_both_ends_of_a_declared_span_are_inclusive(
+    api: TestClient, observed_from: dt.date, observed_to: dt.date, observations: int
+) -> None:
+    """The span's first and last days are observed; the day either side is not; a span wider
+    than the training window is clipped to it."""
+    hotel = make_hotel(api, "bounds", rooms=2, observed=[(observed_from, observed_to)])
+
+    body = api.get(url(hotel, "forecast/occupancy"), params=FORECAST).json()
+
+    assert training_window(body)["observations"] == observations
+
+
+def test_several_spans_count_every_observed_day_once(api: TestClient) -> None:
+    hotel = make_hotel(
+        api,
+        "two-spans",
+        rooms=2,
+        observed=[
+            (HISTORY_START, HISTORY_START + dt.timedelta(days=9)),
+            (HISTORY_START + dt.timedelta(days=15), HISTORY_START + dt.timedelta(days=24)),
+        ],
+    )
+
+    body = api.get(url(hotel, "forecast/occupancy"), params=FORECAST).json()
+
+    assert training_window(body)["observations"] == 20
+
+
 # --- insufficient data ----------------------------------------------------------------------------
 
 
 def test_a_hotel_with_no_history_still_answers_with_a_shape(api: TestClient) -> None:
-    """A densified series of real zeros is not insufficient data -- the hotel genuinely had
-    no bookings -- so the forecast is zero rather than absent."""
+    """An observed series of real zeros is not insufficient data -- the hotel declared its
+    record complete and genuinely had no bookings -- so the forecast is zero, not absent."""
     hotel = make_hotel(api, "no-history", rooms=2)
 
     body = api.get(url(hotel, "forecast/occupancy"), params=FORECAST).json()

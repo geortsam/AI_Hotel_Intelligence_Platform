@@ -298,24 +298,24 @@ class ModelUnavailableError(AppError):
 
 
 class InsufficientHistoryError(AppError):
-    """Too little recorded history to compute the model's features (Stage 6.6).
+    """Too little observed history to compute the model's features (Stage 6.6).
 
     422 rather than 404 or 503: the hotel exists, the server is healthy, and the request is
     understood -- it simply cannot be satisfied for this date, and a different date may well
     work. That makes it the caller's to act on, which is what puts it in the 4xx class.
 
-    **No number is invented to fill the gap.** The alternative to this error is a prediction
-    computed from a fabricated zero, and zero is a real demand value here: a hotel that sold
-    nothing is not a hotel with no record. The training dataset dropped incomplete rows rather
-    than imputing them, so imputing at serving time would score a row of a kind the model was
-    never fitted on.
+    **No number is invented to fill the gap.** A lag day the hotel has not declared observed
+    (``demand_observation_periods``) has an unknown demand, whatever was recorded for it, and the
+    alternative to this error is a prediction computed from a fabricated value. Zero is a real
+    demand value here -- the value of an observed day with nothing occupied, which is scored --
+    and a hotel that sold nothing is not a hotel with no record.
 
     The message names no feature, no table, no query and no row count.
     """
 
     status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     code = "INSUFFICIENT_HISTORY"
-    message = "There is not enough recorded demand history to forecast this date."
+    message = "There is not enough observed demand history to forecast this date."
 
 
 def internal_fault(error: Exception) -> InternalFaultError:

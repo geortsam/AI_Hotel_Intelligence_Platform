@@ -42,9 +42,10 @@ export interface DemandForecastPanelProps {
  *
  * ## A refusal is an answer
  *
- * `422 INSUFFICIENT_HISTORY` is the model declining because the days its lag features read hold
- * no occupancy — which is the serving stage working exactly as designed, and is what a new
- * property will see. It renders as an explanation, not as a fault, and never as a zero.
+ * `422 INSUFFICIENT_HISTORY` is the model declining because a day its lag features read is not
+ * observed — outside every period the hotel has declared its booking record complete for — which
+ * is the serving stage working exactly as designed, and is what a new property will see. It
+ * renders as an explanation, not as a fault, and never as a zero.
  *
  * ## An estimate above the hotel's capacity is not an occupancy
  *
@@ -73,7 +74,7 @@ export function DemandForecastPanel({ outcome, isLoading }: DemandForecastPanelP
         <p className={styles.unavailableDetail}>{outcome.detail}</p>
         <p className={styles.note}>
           {outcome.code === 'INSUFFICIENT_HISTORY'
-            ? 'The model reads recorded occupancy from three earlier dates. Where those days hold no rows it declines rather than guessing.'
+            ? 'The model reads occupancy from three earlier dates, and only from dates whose complete booking record has been declared. Where one of them has not, it declines rather than guessing.'
             : 'The model did not answer. Nothing is estimated in its place.'}
         </p>
       </div>

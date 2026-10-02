@@ -328,7 +328,7 @@ export function IntelligencePage() {
                     icon={Radar}
                     tone="status"
                     title="No revenue history to forecast from"
-                    detail="This property has no recorded room revenue in the training window, so no currency could be forecast. A currency the hotel has never traded in is absent rather than predicted at zero."
+                    detail="This property has no room revenue on an observed day of the training window, so no currency could be forecast. A day counts only inside a period the hotel has declared its booking record complete for, and a currency the hotel has never traded in is absent rather than predicted at zero."
                   />
                 ) : (
                   <>

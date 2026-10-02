@@ -14,6 +14,9 @@ file covers, and none of it could be checked honestly against SQLite:
   must be identical, while a query proves the writes really happened.
 * **Feature acquisition.** One grouped query for a 22-day window, counted at the driver, not
   twenty-two.
+* **Observation** (migration 0016). A lag day inside a declared span with no occupied nights is
+  an observed zero and is scored; a lag day outside every span is unknown and refused. Both
+  ends of a span are inclusive, and one day short at either end is a refusal.
 
 **All data here is test fixture data**, created in the disposable database this suite is given
 and truncated with it. The Stage 5.17 guard refuses an unsafe target before a statement runs.
@@ -43,12 +46,14 @@ from tests.integration.conftest import (
     allocate_room,
     authenticated_client,
     create_test_app,
+    declare_observation,
     grant_membership,
     make_booking,
     make_guest,
     make_hotel,
     make_room,
     make_room_type,
+    observe,
     price_nights,
     requires_postgres,
 )
@@ -129,14 +134,22 @@ def occupy(
     price_nights(session, allocation, ["100.00"] * nights)
 
 
+#: The span every seeded hotel declares unless a test says otherwise: complete from the first
+#: night through the target itself, so the horizon is observed too and the leakage test below
+#: proves the cutoff -- not a missing declaration -- keeps those nights out.
+OBSERVED = (FIRST_NIGHT, TARGET)
+
+
 def seed_hotel(
     session: Session,
     *,
     slug: str,
     rooms: int,
     spans: list[tuple[dt.date, int]] | None = None,
+    observed: list[tuple[dt.date, dt.date]] | None = None,
 ) -> Hotel:
-    """A hotel with *rooms* rooms occupied across every span, committed.
+    """A hotel with *rooms* rooms occupied across every span, its *observed* spans declared,
+    committed.
 
     Committed rather than flushed: the API under test reads through its own session, and a
     write that is only flushed is invisible to it.
@@ -147,6 +160,8 @@ def seed_hotel(
         room = make_room(session, hotel, room_type, number=f"{101 + index}")
         for first, nights in spans or [(FIRST_NIGHT, NIGHTS)]:
             occupy(session, hotel, room, first=first, nights=nights)
+    for observed_from, observed_to in [OBSERVED] if observed is None else observed:
+        observe(session, hotel, observed_from, observed_to)
     session.commit()
     return hotel
 
@@ -342,7 +357,8 @@ def test_a_hotel_with_no_history_is_refused_while_its_neighbour_has_plenty(
     engine: Engine, session: Session
 ) -> None:
     """The sharpest isolation test available: the two hotels share the tables and the dates,
-    and one of them must still be unanswerable."""
+    and one of them must still be unanswerable. The empty hotel declares nothing, so none of its
+    dates is observed -- and its neighbour's declaration is not borrowed either."""
     seed_hotel(session, slug="ml-neighbour", rooms=BUSY_ROOMS)
     empty = make_hotel(session, slug="ml-empty")
     make_room_type(session, empty)
@@ -516,36 +532,129 @@ def test_feature_acquisition_is_one_query_for_the_whole_window(
 
     night_queries = [text for text in statements if "booking_room_nights" in text]
     assert len(night_queries) == 1, night_queries
-    assert len(statements) <= 6, statements
+    # Migration 0016: the declared spans are one more statement, once per request.
+    span_queries = [text for text in statements if "demand_observation_periods" in text]
+    assert len(span_queries) == 1, span_queries
+    assert len(statements) <= 7, statements
 
 
-def test_a_gap_in_the_history_is_refused_rather_than_filled(
+GAP_DAY = TARGET - dt.timedelta(days=14)
+#: Occupied on every night of the window except GAP_DAY, the fourteen-day lag.
+GAPPED_SPANS = [
+    (FIRST_NIGHT, (GAP_DAY - FIRST_NIGHT).days),
+    (GAP_DAY + dt.timedelta(days=1), (LAST_NIGHT - GAP_DAY).days),
+]
+
+
+def nights_on(session: Session, hotel: Hotel, day: dt.date) -> int:
+    return int(
+        session.execute(
+            sa.text(
+                "SELECT count(*) FROM booking_room_nights "
+                "WHERE hotel_id = :hotel AND stay_date = :day"
+            ),
+            {"hotel": hotel.id, "day": day},
+        ).scalar_one()
+    )
+
+
+def test_an_unobserved_day_in_the_history_is_refused_rather_than_filled(
     engine: Engine, session: Session
 ) -> None:
-    """The lag at fourteen days is missing; nothing invents a value for it."""
-    gap_day = TARGET - dt.timedelta(days=14)
+    """The fourteen-day lag has no nights AND is left out of the declared spans: unknown, so the
+    request is refused and nothing invents a value for it."""
     hotel = seed_hotel(
         session,
         slug="ml-gap",
         rooms=QUIET_ROOMS,
-        spans=[
-            (FIRST_NIGHT, (gap_day - FIRST_NIGHT).days),
-            (gap_day + dt.timedelta(days=1), (LAST_NIGHT - gap_day).days),
+        spans=GAPPED_SPANS,
+        observed=[
+            (FIRST_NIGHT, GAP_DAY - dt.timedelta(days=1)),
+            (GAP_DAY + dt.timedelta(days=1), TARGET),
         ],
     )
     client = member_client(engine, hotel, email=SUITE_EMAIL)
 
-    absent = session.execute(
-        sa.text(
-            "SELECT count(*) FROM booking_room_nights WHERE hotel_id = :hotel AND stay_date = :day"
-        ),
-        {"hotel": hotel.id, "day": gap_day},
-    ).scalar_one()
     response = client.get(url(hotel), params=params())
 
-    assert absent == 0, "the gap was not created, so this proves nothing"
+    assert nights_on(session, hotel, GAP_DAY) == 0, "the gap was not created"
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "INSUFFICIENT_HISTORY"
+
+
+def test_an_observed_day_without_occupied_nights_is_scored_as_zero(
+    engine: Engine, session: Session
+) -> None:
+    """The same bookings, the empty day declared observed: the lag is a real 0, and the number
+    is exactly what the model returns for that history with a 0 in it."""
+    hotel = seed_hotel(session, slug="ml-zero", rooms=QUIET_ROOMS, spans=GAPPED_SPANS)
+    client = member_client(engine, hotel, email=SUITE_EMAIL)
+
+    response = client.get(url(hotel), params=params())
+
+    assert nights_on(session, hotel, GAP_DAY) == 0, "the gap was not created"
+    assert response.status_code == 200, response.text
+    history = {TARGET - dt.timedelta(days=offset): QUIET_ROOMS for offset in range(7, 7 + NIGHTS)}
+    history[GAP_DAY] = 0
+    features = build_feature_values(history, TARGET)
+    assert features["demand_lag_14"] == 0
+    assert response.json()["predicted_room_nights"] == artifact_store.predict_room_nights(
+        artifact_store.approved_model(),
+        hotel_public_id=uuid.uuid4(),
+        target_date=TARGET,
+        features=features,
+    )
+
+
+def test_a_hotel_with_no_bookings_but_a_declared_span_is_forecast_from_zeros(
+    engine: Engine, session: Session
+) -> None:
+    """Observed and empty is a history -- of zeros -- not an absence of one."""
+    hotel = seed_hotel(session, slug="ml-observed-empty", rooms=0)
+    client = member_client(engine, hotel, email=SUITE_EMAIL)
+
+    response = client.get(url(hotel), params=params())
+
+    assert response.status_code == 200, response.text
+    zeros = {TARGET - dt.timedelta(days=offset): 0 for offset in range(7, 7 + NIGHTS)}
+    assert response.json()["predicted_room_nights"] == artifact_store.predict_room_nights(
+        artifact_store.approved_model(),
+        hotel_public_id=uuid.uuid4(),
+        target_date=TARGET,
+        features=build_feature_values(zeros, TARGET),
+    )
+
+
+@pytest.mark.parametrize(
+    ("observed_from_offset", "observed_to_offset", "status"),
+    [
+        (28, 7, 200),  # exactly the three lag days' reach: both ends inclusive
+        (27, 7, 422),  # one day short at the start: the 28-day lag is unknown
+        (28, 8, 422),  # one day short at the end: the 7-day lag is unknown
+    ],
+)
+def test_both_ends_of_the_declared_span_are_inclusive(
+    engine: Engine,
+    session: Session,
+    observed_from_offset: int,
+    observed_to_offset: int,
+    status: int,
+) -> None:
+    hotel = seed_hotel(session, slug="ml-bounds", rooms=QUIET_ROOMS, observed=[])
+    declare_observation(
+        engine,
+        str(hotel.public_id),
+        TARGET - dt.timedelta(days=observed_from_offset),
+        TARGET - dt.timedelta(days=observed_to_offset),
+    )
+    assert sorted(APPROVED_MODEL.lag_days) == [7, 14, 28]
+    client = member_client(engine, hotel, email=SUITE_EMAIL)
+
+    response = client.get(url(hotel), params=params())
+
+    assert response.status_code == status, response.text
+    if status == 422:
+        assert response.json()["error"]["code"] == "INSUFFICIENT_HISTORY"
 
 
 # --- the request contract -------------------------------------------------------------------------

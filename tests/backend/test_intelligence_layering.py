@@ -731,7 +731,7 @@ def _service() -> IntelligenceService:
             return None
 
     scope = HotelScopeResolver(_NoHotels(), _NoRoomTypes(), AllowAllPolicy())  # type: ignore[arg-type]
-    return IntelligenceService(object(), scope)  # type: ignore[arg-type]
+    return IntelligenceService(object(), scope, object())  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(

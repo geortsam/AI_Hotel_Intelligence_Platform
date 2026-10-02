@@ -34,6 +34,7 @@ from app.models import (
     Booking,
     BookingRoom,
     BookingRoomNight,
+    DemandObservationPeriod,
     Guest,
     Hotel,
     Room,
@@ -151,7 +152,10 @@ def session(engine: Engine) -> Iterator[Session]:
                 # Stage 7.9. The knowledge tables carry row-level guard triggers too, which
                 # TRUNCATE does not fire. Chunks first only for readability.
                 # Stage 7.11. Conversation turns, then conversations.
+                # Issue 1 (0016). The declared observation spans reference hotels; named
+                # rather than left to CASCADE, like demand_predictions.
                 "TRUNCATE copilot_messages, copilot_conversations, "
+                "demand_observation_periods, "
                 "hotel_document_chunks, hotel_documents, "
                 "llm_invocations, demand_predictions, "
                 "booking_room_nights, booking_rooms, payments, reviews, revenue, "
@@ -197,6 +201,21 @@ def make_hotel(session: Session, *, slug: str | None = None, currency: str = "EU
     session.add(hotel)
     session.flush()
     return hotel
+
+
+def observe(session: Session, hotel: Hotel, observed_from: dt.date, observed_to: dt.date) -> None:
+    """Declare one observation span for *hotel*, both ends inclusive (migration 0016).
+
+    Inside it a date with no occupied nights is an observed zero; outside every span a date's
+    demand is unknown. Written straight to the table: the operator job's own rules are tested
+    against the service, and a fixture should not need a clock to describe the past.
+    """
+    session.add(
+        DemandObservationPeriod(
+            hotel_id=hotel.id, observed_from=observed_from, observed_to=observed_to
+        )
+    )
+    session.flush()
 
 
 def make_room_type(session: Session, hotel: Hotel, *, code: str = "DBL") -> RoomType:
@@ -370,6 +389,9 @@ def create_test_app(engine: Engine, **settings: Any) -> Any:
             session.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    # Kept for fixtures that must write what no endpoint writes, such as a declared
+    # observation span (see `declare_observation_for`).
+    app.state.test_engine = engine
     return app
 
 
@@ -407,6 +429,34 @@ def grant_membership(engine: Engine, email: str, hotel_public_id: str, role: str
             {"role": role, "email": email.lower(), "hotel": hotel_public_id},
         )
         session.commit()
+
+
+def declare_observation(
+    engine: Engine, hotel_public_id: str, observed_from: dt.date, observed_to: dt.date
+) -> None:
+    """:func:`observe` for suites that hold an engine and a hotel's public id."""
+    with sessionmaker(bind=engine, future=True)() as session:
+        session.execute(
+            sa.text(
+                "INSERT INTO demand_observation_periods (hotel_id, observed_from, observed_to) "
+                "SELECT id, :observed_from, :observed_to FROM hotels "
+                "WHERE public_id = CAST(:hotel AS uuid)"
+            ),
+            {
+                "hotel": str(hotel_public_id),
+                "observed_from": observed_from,
+                "observed_to": observed_to,
+            },
+        )
+        session.commit()
+
+
+def declare_observation_for(
+    client: TestClient, hotel_public_id: str, observed_from: dt.date, observed_to: dt.date
+) -> None:
+    """:func:`declare_observation` through the engine of the app *client* talks to."""
+    engine = client.app.state.test_engine  # type: ignore[attr-defined]
+    declare_observation(engine, hotel_public_id, observed_from, observed_to)
 
 
 def revoke_membership(engine: Engine, email: str, hotel_public_id: str) -> None:

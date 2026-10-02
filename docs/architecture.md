@@ -183,8 +183,13 @@ added the fifth, `0014_hotel_documents`: `hotel_documents` (one immutable row pe
 `hotel_document_chunks` (append-only, GIN-indexed for full-text search), plus the three
 `document.*` audit actions. Stage 7.11 added the sixth, `0015_copilot_conversations`:
 `copilot_conversations` and `copilot_messages`, one caller's multi-turn memory at one hotel,
-retention-bound and deleted with their turns. Head `0015` across 15 linear revisions, 27
-application tables. Four of V2's tables reference `hotels` with `RESTRICT`, so — as V1's
+retention-bound and deleted with their turns. Issue 1 added the seventh,
+`0016_demand_observation_periods`: one table of declared observation spans -- per hotel, closed
+dates, no two sharing a date -- the only evidence the platform accepts that a date's demand is
+known. Inside a span a date with no occupied nights is a zero; outside every span it is unknown,
+to the demand model, its dataset and the intelligence forecasts alike. Spans are declared by an
+operator with `python -m app.jobs.demand_observation` (no route), and go with their hotel (`CASCADE`). Head `0016` across
+16 linear revisions, 28 application tables. Four of V2's tables reference `hotels` with `RESTRICT`, so — as V1's
 append-only audit trail already did — they can make a hotel undeletable: `DELETE /hotels/{id}`
 still answers 409 rather than cascading. See [v2-architecture.md](v2-architecture.md) §10. See [knowledge-documents.md](knowledge-documents.md) and
 [copilot-conversations.md](copilot-conversations.md).

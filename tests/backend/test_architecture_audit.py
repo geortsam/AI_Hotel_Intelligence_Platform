@@ -309,13 +309,20 @@ def test_intelligence_defines_no_analytics_metric_of_its_own() -> None:
     assert "OCCUPANCY_STATUSES" not in names
 
 
-def test_intelligence_reaches_the_database_only_through_the_analytics_repository() -> None:
+def test_intelligence_reads_its_metrics_only_through_the_analytics_repository() -> None:
+    """Occupancy, room revenue and booking counts keep one definition: the analytics one.
+
+    The one other repository it reads defines no metric. ``demand_observation`` holds the spans a
+    hotel's complete booking record is declared for (migration 0016) -- which stay dates are
+    observed -- and the demand model reads the same repository, so a forecast and the model are
+    never told different things about it. Still an exact set: a third repository fails here.
+    """
     from app.services import intelligence
 
     imported = imported_modules(intelligence)
     repositories = {name for name in imported if name.startswith("app.repositories")}
 
-    assert repositories == {"app.repositories.analytics"}
+    assert repositories == {"app.repositories.analytics", "app.repositories.demand_observation"}
 
 
 def test_there_is_no_intelligence_repository() -> None:

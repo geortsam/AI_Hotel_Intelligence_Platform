@@ -48,6 +48,7 @@ from tests.integration.conftest import (
     make_hotel,
     make_room,
     make_room_type,
+    observe,
     price_nights,
     requires_postgres,
 )
@@ -93,13 +94,16 @@ def occupy(session: Session, hotel: Hotel, room: Room, night: dt.date) -> None:
 
 
 def seed_hotel(session: Session, *, slug: str, rooms_per_lag: int = 1) -> Hotel:
-    """A hotel with occupancy on exactly the three days the model's lags read."""
+    """A hotel with occupancy on exactly the three days the model's lags read, each of them
+    declared observed on its own."""
     hotel = make_hotel(session, slug=slug)
     room_type = make_room_type(session, hotel)
     for index in range(rooms_per_lag):
         room = make_room(session, hotel, room_type, number=f"{101 + index}")
         for lag in LAG_DAYS:
             occupy(session, hotel, room, TARGET - dt.timedelta(days=lag))
+    for lag in LAG_DAYS:
+        observe(session, hotel, TARGET - dt.timedelta(days=lag), TARGET - dt.timedelta(days=lag))
     session.commit()
     return hotel
 
@@ -533,4 +537,4 @@ def test_the_table_exists_with_its_identity_constraint(session: Session) -> None
 def test_the_head_is_the_stage_68_revision(session: Session) -> None:
     revision = session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
 
-    assert revision == "0015_copilot_conversations"
+    assert revision == "0016_demand_observation_periods"

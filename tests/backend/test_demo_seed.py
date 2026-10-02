@@ -45,7 +45,9 @@ SOURCE = Path(seed_demo.__file__).read_text(encoding="utf-8")
 #: The default demo, pinned. Built on Python 3.14 (Windows) and checked again by CI on Python
 #: 3.12 (Linux): the same number on both is the cross-version, cross-platform determinism claim.
 #: A deliberate change to the generator changes this, and the change should be reviewed as one.
-DEFAULT_FINGERPRINT = "9f4c439a0eded7e4b5e4bc742b61388d5aaa6a08a909d6743c9306af2539c56d"
+#: Last moved by migration 0016: the seed now declares each hotel's observation period, a new
+#: logical table in the fingerprint; every pre-existing row is unchanged.
+DEFAULT_FINGERPRINT = "3f4e069df0aa60df2050121cfd92b29a470f1b0b76b805193bf84279c7db6f1d"
 
 
 @pytest.fixture(scope="module")
@@ -192,6 +194,33 @@ def test_stays_span_history_the_present_and_the_future_for_every_hotel(
             b for b in bookings if reference - dt.timedelta(days=6) <= b.check_in <= reference
         ]
         assert len(recent) >= 5, spec.slug
+
+
+def test_the_declared_observation_period_covers_only_dates_whose_record_is_complete(
+    plan: DemoPlan,
+) -> None:
+    """Every night inside the declared span comes from a stay the seed wrote in full.
+
+    The seed writes no stay begun before its window, so the earliest night it can vouch for is the
+    first one no such stay could reach; and the span ends on the last night over by the as-of
+    moment. One night earlier at the front, or the reference date at the back, would declare a
+    date whose record is not complete.
+    """
+    config = plan.config
+    earliest = REFERENCE - dt.timedelta(days=config.history_days)
+    longest = max(nights for nights, _weight in seed_demo.LENGTH_OF_STAY)
+
+    observed_from, observed_to = seed_demo.observation_period(config)
+
+    assert observed_from == earliest + dt.timedelta(days=longest - 1)
+    assert observed_to == REFERENCE - dt.timedelta(days=1)
+    assert all(b.check_in >= earliest for b in plan.bookings)
+    assert max((b.check_out - b.check_in).days for b in plan.bookings) <= longest
+    # A stay begun the day before the window, at the longest length, would end its last night
+    # the day before the span starts.
+    assert earliest - dt.timedelta(days=1) + dt.timedelta(days=longest - 1) < observed_from
+    rows = logical_rows(plan)["demand_observation_periods"]
+    assert len(rows) == len(HOTELS)
 
 
 def test_every_status_matches_where_the_stay_sits_relative_to_the_reference_date(

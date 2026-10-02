@@ -47,6 +47,14 @@ not allowed to have seen, so there is no later step that could forget to exclude
 No booking, revenue, payment or review information from on or after the target date is read at
 all -- the single query counts realised room nights inside the window and nothing else.
 
+## Observation
+
+A lag is read only from an OBSERVED date: one inside a span declared for the hotel in
+``demand_observation_periods``. There, a date with no occupied nights is an observed zero and is
+scored as one; outside every span a date's demand is unknown -- whatever was recorded for it --
+and a lag on it is missing, which refuses the request with ``422 INSUFFICIENT_HISTORY``. A hotel
+with no declared span is refused for every date. No value is ever invented for an unknown day.
+
 ## Errors
 
 Every refusal below is one of the project's existing :class:`~app.core.errors.AppError` types.
@@ -92,6 +100,7 @@ from app.core.errors import (
 )
 from app.core.request_id import current_request_id
 from app.ml.artifact_store import ServedModel, approved_model, predict_room_nights
+from app.ml.dataset import ObservationPeriod, observed_demand
 from app.ml.serving import (
     APPROVED_MODEL,
     METHODOLOGY,
@@ -107,6 +116,7 @@ from app.ml.serving import (
 )
 from app.models.hotel import Hotel
 from app.repositories.analytics import AnalyticsRepository
+from app.repositories.demand_observation import DemandObservationRepository
 from app.repositories.ml_demand import MlDemandRepository
 from app.repositories.ml_prediction import MlPredictionRepository
 from app.schemas.ml_serving import DemandModelMetadata, DemandPredictionResponse
@@ -144,6 +154,7 @@ class DemandPredictionService:
         predictions: MlPredictionRepository,
         scope: HotelScopeResolver,
         rooms: AnalyticsRepository,
+        observation: DemandObservationRepository,
     ) -> None:
         # The session is held because this service owns a unit of work, exactly as every other
         # writing service does. The repositories hold it too, for their queries; none of them
@@ -156,6 +167,8 @@ class DemandPredictionService:
         # layers already use, taken from them rather than re-counted here so the three cannot
         # disagree about how many rooms a hotel has.
         self._rooms = rooms
+        # The declared spans: the only evidence that a date with no occupied nights was a zero.
+        self._observation = observation
 
     def forecast_demand(
         self,
@@ -212,7 +225,11 @@ class DemandPredictionService:
         # One grouped query, for one hotel, bounded at the cutoff. Not one per lag: three
         # single-date lookups would be three round trips for a range 22 days wide, and the
         # pattern that starts as three is the pattern that becomes N.
-        demand = self._repository.demand_by_date(hotel.id, window.date_from, window.date_to)
+        recorded = self._repository.demand_by_date(hotel.id, window.date_from, window.date_to)
+        # Then only the observed dates of that window survive: recorded nights or an observed
+        # zero inside a declared span, nothing at all outside one.
+        periods = [ObservationPeriod(a, b) for a, b in self._observation.periods(hotel.id)]
+        demand = observed_demand(recorded, periods, window.date_from, window.date_to)
 
         try:
             features = build_feature_values(demand, target_date, model=model)

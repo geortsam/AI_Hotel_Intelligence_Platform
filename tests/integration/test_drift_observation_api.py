@@ -559,9 +559,17 @@ def test_two_observations_of_the_same_windows_are_bit_identical(
     )
 
 
+#: The one table whose name matches the pattern below and is NOT a drift result. Migration 0016
+#: (Issue 1) created it to record which dates of a hotel's DEMAND are observed -- spans an
+#: operator declares, read by the dataset, serving and intelligence extractors. Stage 6.10 never
+#: reads or writes it, and it holds no accuracy or distribution figure. It is excluded by its exact
+#: name, so any other table matching the pattern -- a drift result table above all -- still fails.
+DECLARED_DEMAND_OBSERVATION_TABLE = "demand_observation_periods"
+
+
 def test_no_accuracy_or_distribution_table_was_created(session: Session) -> None:
     """Compute-and-return only: there is nowhere for a result to have been written."""
-    tables = list(
+    tables = set(
         session.execute(
             sa.text(
                 "SELECT table_name FROM information_schema.tables WHERE table_schema='public' "
@@ -571,13 +579,15 @@ def test_no_accuracy_or_distribution_table_was_created(session: Session) -> None
         ).scalars()
     )
 
-    assert tables == []
+    # The exclusion names a table that exists, so it cannot quietly cover a typo.
+    assert DECLARED_DEMAND_OBSERVATION_TABLE in tables
+    assert tables - {DECLARED_DEMAND_OBSERVATION_TABLE} == set()
 
 
 def test_the_alembic_head_is_still_the_stage_68_revision(session: Session) -> None:
     revision = session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
 
-    assert revision == "0015_copilot_conversations"
+    assert revision == "0016_demand_observation_periods"
 
 
 # ======================================================================================

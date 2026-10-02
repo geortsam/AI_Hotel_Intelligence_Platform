@@ -69,6 +69,10 @@ APPROVED_TABLES = {
     # question and the answer as served. Owner-scoped, retention-bound, deleted with their turns.
     "copilot_conversations",
     "copilot_messages",
+    # Migration 0016. The spans an operator has declared a hotel's complete booking record held
+    # for -- the only evidence that a date with no occupied nights is a zero. Hotel-scoped,
+    # declared or withdrawn, never edited, and reachable through no endpoint.
+    "demand_observation_periods",
 }
 
 

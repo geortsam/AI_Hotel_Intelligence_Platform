@@ -168,25 +168,3 @@ class MlDemandRepository:
             counts[day] = sum(1 for moment in created if moment < cutoff)
             day += dt.timedelta(days=1)
         return counts
-
-    # --- bounds ----------------------------------------------------------------------------------
-
-    def first_and_last_stay_date(self, hotel_id: int) -> tuple[dt.date, dt.date] | None:
-        """The extent of this hotel's occupied history, or None when it has none.
-
-        Used to bound extraction instead of guessing a range, so a hotel with two months of data
-        is not scanned across two years of empty dates.
-        """
-        first, last = self._session.execute(
-            select(func.min(BookingRoomNight.stay_date), func.max(BookingRoomNight.stay_date))
-            .join(BookingRoom, BookingRoom.id == BookingRoomNight.booking_room_id)
-            .where(
-                and_(
-                    BookingRoomNight.hotel_id == hotel_id,
-                    BookingRoom.booking_status.in_(OCCUPANCY_STATUSES),
-                )
-            )
-        ).one()
-        if first is None or last is None:
-            return None
-        return first, last

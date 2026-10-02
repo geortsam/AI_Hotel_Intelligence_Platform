@@ -307,19 +307,35 @@ def test_rows_are_ordered_identically_whatever_order_the_source_listed_hotels_in
 
 
 def test_a_gap_in_the_source_stays_a_gap_and_is_not_filled_with_zero() -> None:
-    """Nothing in the source says an unsold day and an unobserved day are the same thing."""
+    """The raw series reports what was recorded and nothing else. Whether an empty day is a zero
+    is decided by the declared observation period, in ``build_histories`` -- never here."""
     rows = spread(20) + spread(20, start=BASE + dt.timedelta(days=30))
     series = demand_by_date(parse(rows).bookings)["city_hotel"]
     assert BASE + dt.timedelta(days=25) not in series
     assert len(series) == 40
 
 
-def test_a_lag_reaching_across_a_gap_is_missing_rather_than_zero() -> None:
+def test_a_gap_inside_the_coverage_window_is_an_observed_zero() -> None:
+    """The source holds every booking due to arrive in its window (SOURCE_SCOPE), so a covered day
+    with no stay had no occupied night: a target of 0, and a 0 to every lag and window on it."""
     rows = spread(40) + spread(40, start=BASE + dt.timedelta(days=60))
     dataset = build_offline_dataset(parse(rows), train_fraction=0.5, validation_fraction=0.25)
-    after_gap = next(r for r in dataset.rows if r.target_date == BASE + dt.timedelta(days=60))
-    assert after_gap.features["demand_lag_1"] is None
-    assert after_gap.features["demand_rolling_mean_7"] is None
+    by_date = {r.target_date: r for r in dataset.rows}
+
+    assert by_date[BASE + dt.timedelta(days=50)].target_room_nights == 0
+    after_gap = by_date[BASE + dt.timedelta(days=60)]
+    assert after_gap.features["demand_lag_1"] == 0
+    assert after_gap.features["demand_rolling_mean_7"] == 0.0
+
+
+def test_a_lag_reaching_outside_the_coverage_window_is_missing_rather_than_zero() -> None:
+    """Before the window nothing is declared observed, so its days are unknown, not empty."""
+    dataset = build_offline_dataset(parse(spread(40)))
+    first = dataset.rows[0]
+
+    assert first.target_date == BASE
+    assert first.features["demand_lag_1"] is None
+    assert first.features["demand_rolling_mean_7"] is None
 
 
 def test_the_real_excerpt_has_no_missing_date_inside_a_coverage_window() -> None:

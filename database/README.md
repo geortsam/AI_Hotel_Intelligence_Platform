@@ -12,10 +12,10 @@ database *as a database*, kept separate from the application code that queries i
 
 ## Current state
 
-**Fifteen migrations, head `0015_copilot_conversations`,** applied by `alembic upgrade
-head`. They build **27 tables** and the `historical_room_overlaps` view; with Alembic's own
-`alembic_version`, a migrated database reports 29 entries in `information_schema.tables`. Every
-one of the 27 is ORM-mapped -- `tests/backend/test_model_metadata.py` pins the list, so a table
+**Sixteen migrations, head `0016_demand_observation_periods`,** applied by `alembic upgrade
+head`. They build **28 tables** and the `historical_room_overlaps` view; with Alembic's own
+`alembic_version`, a migrated database reports 30 entries in `information_schema.tables`. Every
+one of the 28 is ORM-mapped -- `tests/backend/test_model_metadata.py` pins the list, so a table
 that exists in one place and not the other fails the suite. The models live in
 `backend/app/models/`; this directory
 holds the migration history and the raw SQL that is not expressible through the ORM -- the
@@ -29,7 +29,7 @@ canonical SHA-256 over every revision file with line endings normalised to LF, s
 cannot be edited unnoticed on any platform:
 
 ```
-0dc2f8b156e87d65827bd8a2d5802e53a3e91625ff3bd449b9d97e1ddc335895
+5c20fc157cc78112a484b95fd751b22dbfc9f3913e2dc41c902e1d92c2e383a5
 ```
 
 Editing any shipped revision changes that digest and fails
@@ -114,6 +114,27 @@ read again on a fresh connection, and that reading is the fingerprint reported.
 - **No trend, season or anomaly** is injected.
 - **Outside the fingerprint:** the owner's password hash (salted) and the account's timestamps
   (the real `now()`).
+
+### The declared observation period
+
+Each hotel also gets one `demand_observation_periods` row (migration 0016): the span whose complete
+booking record the seed wrote -- from the longest stay's length into the window (a stay begun
+before the window is not written, and the longest one reaches that far in) to the day before the
+reference date. Only inside it is a night with no stays a zero; the demand model, its dataset and
+the intelligence forecasts read every other date as unknown. The dry run prints the span.
+
+A demo database seeded **before** migration 0016 has no span, so after `alembic upgrade head` the
+demand model answers `422 INSUFFICIENT_HISTORY` and the stay-dated forecasts report too little
+history until one is declared. Reseed into a new database, or declare the span the seed would
+have written for its reference date (`R` below), for each hotel:
+
+```bash
+python -m app.jobs.demand_observation declare --hotel <hotel public id> --from <R - 359 days> --to <R - 1 day>
+```
+
+with the default `--history-days 365` (in general `--from` is `R - history_days + 6 days`). The
+command refuses a span that reaches the hotel's today, a reversed span, and one that shares a
+date with a span already declared.
 
 ### Resetting safely
 

@@ -209,11 +209,20 @@ All 793 calendar days between the first and last arrival contain at least one ar
 date in each hotel's raw night range is present, and every date inside each coverage window is
 present. No date had to be interpreted, so no date was filled with zero.
 
-The policy stands anyway, because the pipeline is not only run against this file: **a gap stays
-a gap.** Zero is a real demand value — a hotel that sold nothing and a hotel that was not
-observed are different facts, and nothing in the source documentation says an absent date means
-an empty hotel. A lag or rolling window reaching across a gap comes back `None`, never `0`, and
-a test holds that.
+The policy is the platform's (see [ml-dataset-design.md](ml-dataset-design.md) §8): a date is
+observed only inside a declared observation period, where an absent date is a real **0**, and is
+unknown everywhere else. Zero is a real demand value — a hotel that sold nothing and a hotel that
+was not observed are different facts — so the declaration has to rest on evidence. Here the
+evidence is the publisher's: the source is described as the hotels' property-management-system
+extraction of every booking due to arrive in its window, arrived and cancelled alike, with only
+identifying fields removed (Antonio et al., 2019). Every booking that could produce a night on a
+covered date is therefore in the file, so `build_histories` declares each hotel's coverage window
+(§6) as its observation period: a covered date with no occupied night would be a 0, and a date
+outside the window stays unknown — a lag or rolling window reaching it comes back `None`, never
+`0`, and tests hold both. On this file the rule changes nothing — no covered date is empty, and
+all four committed datasets rebuild byte-identically. On the 300-row test excerpt, which is a
+sample and not the complete extraction, covered dates without a sampled stay do read 0: an
+artifact of sampling, never read as hotel history.
 
 On-the-books is not a gap of this kind. For a covered target date it is counted over the same
 bookings as the target, so a date with nothing on the books at its cutoff is written as `0`, an

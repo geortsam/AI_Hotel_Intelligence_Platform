@@ -1,14 +1,15 @@
 # Database implementation — Stage 2B
 
 > **Stage snapshot, not a current-state document.** This records how the Stage 2A schema was
-> built, and is not maintained since. Fourteen migrations have been added after its
+> built, and is not maintained since. Fifteen migrations have been added after its
 > `0001_initial_schema`: V1's `0002`–`0009` (payment public ids, users, memberships, platform
 > admins, password-change timestamps, audit events, the audit archive, the booking-deleted audit
 > action); `0010`–`0011` for served demand predictions (Stages 6.8, 6.11); and V2's `0012`–`0015`
 > — `0012_audit_tool_invoked` (Stage 7.6, widens two audit CHECKs and creates nothing),
 > `0013_llm_invocations` (7.7, one append-only table), `0014_hotel_documents` (7.9, the two
 > knowledge-document tables) and `0015_copilot_conversations` (7.11, the two conversation
-> tables). The head is `0015` across 15 linear revisions. In particular, §9's environment notes describe the machine as it
+> tables); and `0016_demand_observation_periods` (Issue 1, the declared observation spans). The
+> head is `0016` across 16 linear revisions. In particular, §9's environment notes describe the machine as it
 > was at Stage 2B, not as it is. See [architecture.md](architecture.md) and
 > [../database/README.md](../database/README.md).
 

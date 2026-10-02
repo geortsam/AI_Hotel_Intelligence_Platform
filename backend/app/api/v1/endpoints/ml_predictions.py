@@ -81,8 +81,9 @@ RESPONSES: dict[int | str, dict[str, Any]] = {
         "model": ErrorResponse,
         "description": (
             f"The horizon is not {SERVED_HORIZON_DAYS} days, the target date is not a date, "
-            "or the hotel has too little recorded demand history to compute the model's "
-            "features for this date. No value is invented to fill a gap."
+            "or the hotel has too little observed demand history to compute the model's "
+            "features for this date: a lag day outside the hotel's declared observation "
+            "periods is unknown, and no value is invented to fill it."
         ),
     },
     status.HTTP_503_SERVICE_UNAVAILABLE: {

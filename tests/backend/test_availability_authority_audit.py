@@ -62,10 +62,29 @@ def test_only_one_module_expresses_a_date_overlap() -> None:
     ``models/booking.py`` declares the exclusion constraint -- the write-side authority.
     ``repositories/room.py`` mirrors it for the read side. A THIRD would be a third opinion
     about what "overlapping" means, and the first disagreement sells a room twice.
+
+    ``models/demand_observation.py`` (migration 0016) is the one other range in the
+    application, and it is not about rooms: two declared observation spans of a hotel may not
+    share a date, closed at both ends. It is pinned here so that it stays the only other one,
+    and checked below never to name a stay date.
     """
     users = {name for name, source in sources().items() if "daterange" in source}
 
-    assert users == {"models/booking.py", "repositories/room.py"}
+    assert users == {
+        "models/booking.py",
+        "repositories/room.py",
+        "models/demand_observation.py",
+    }
+
+
+def test_the_observation_range_is_not_a_stay_overlap() -> None:
+    """The observation spans' exclusion constraint compares declared dates, never stay dates."""
+    source = sources()["models/demand_observation.py"]
+
+    assert "daterange(observed_from, observed_to, '[]')" in source
+    assert "check_in" not in source
+    assert "check_out" not in source
+    assert "stay_date" not in source
 
 
 def test_the_overlap_uses_the_half_open_bound() -> None:

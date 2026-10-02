@@ -27,6 +27,7 @@ from app.models.booking import Booking
 from app.models.guest import Guest
 from app.models.hotel import Hotel
 from app.models.room import Room
+from app.repositories.demand_observation import DemandObservationRepository
 from app.repositories.ml_demand import MlDemandRepository
 from app.services.ml_dataset import MlDatasetService
 from tests.integration.conftest import (
@@ -36,6 +37,7 @@ from tests.integration.conftest import (
     make_hotel,
     make_room,
     make_room_type,
+    observe,
     price_nights,
     requires_postgres,
 )
@@ -82,9 +84,18 @@ def build_stay(
     return booking
 
 
+def dataset_service(session: Session) -> MlDatasetService:
+    return MlDatasetService(MlDemandRepository(session), DemandObservationRepository(session))
+
+
+def days(start: dt.date, count: int) -> tuple[dt.date, dt.date]:
+    """The span of *count* days from *start*, both ends inclusive."""
+    return start, start + dt.timedelta(days=count - 1)
+
+
 @pytest.fixture
 def pipeline(session: Session) -> MlDatasetService:
-    return MlDatasetService(MlDemandRepository(session))
+    return dataset_service(session)
 
 
 # --- the target, against real rows --------------------------------------------------------------
@@ -327,6 +338,8 @@ def test_one_hotels_bookings_never_reach_another_hotels_dataset(session: Session
                 booked_at=utc(ANCHOR - dt.timedelta(days=15)),
             )
 
+    observe(session, quiet, *days(ANCHOR, 2))
+    observe(session, busy, *days(ANCHOR, 2))
     repository = MlDemandRepository(session)
     quiet_demand = repository.demand_by_date(quiet.id, ANCHOR, ANCHOR + dt.timedelta(days=2))
     busy_demand = repository.demand_by_date(busy.id, ANCHOR, ANCHOR + dt.timedelta(days=2))
@@ -334,7 +347,7 @@ def test_one_hotels_bookings_never_reach_another_hotels_dataset(session: Session
     assert quiet_demand[ANCHOR] == 1
     assert busy_demand[ANCHOR] == 4
 
-    service = MlDatasetService(repository)
+    service = dataset_service(session)
     quiet_dataset = service.build_for_hotel(quiet.id, quiet.public_id)
     assert quiet_dataset.hotel_public_ids == (quiet.public_id,)
     assert all(row.target_room_nights == 1 for row in quiet_dataset.rows)
@@ -357,8 +370,9 @@ def test_a_multi_hotel_build_keeps_each_hotels_rows_separate(session: Session) -
             nights=nights,
             booked_at=utc(ANCHOR - dt.timedelta(days=15)),
         )
+        observe(session, hotel, *days(ANCHOR, nights))
 
-    service = MlDatasetService(MlDemandRepository(session))
+    service = dataset_service(session)
     dataset = service.build_for_hotels([(first.id, first.public_id), (second.id, second.public_id)])
 
     by_hotel: dict[object, list[dt.date]] = {}
@@ -371,12 +385,28 @@ def test_a_multi_hotel_build_keeps_each_hotels_rows_separate(session: Session) -
 # --- pipeline behaviour ---------------------------------------------------------------------------
 
 
-def test_a_hotel_with_no_occupied_nights_fails_explicitly(session: Session) -> None:
-    """An empty dataset would be carried on with. An exception is not."""
+def test_a_hotel_with_no_declared_observation_fails_explicitly(session: Session) -> None:
+    """Bookings alone prove nothing about the days without them. With no declared span no date
+    is observed, and an exception says so rather than an empty or zero-filled dataset."""
     hotel = make_hotel(session, slug="ml-empty")
-    service = MlDatasetService(MlDemandRepository(session))
-    with pytest.raises(InsufficientDataError, match="no occupied room nights"):
-        service.build_for_hotel(hotel.id, hotel.public_id)
+    room_type = make_room_type(session, hotel)
+    guest = make_guest(session, hotel)
+    room = make_room(session, hotel, room_type, number="940")
+    build_stay(session, hotel, room, guest, check_in=ANCHOR, nights=3, booked_at=utc(ANCHOR, 1))
+    with pytest.raises(InsufficientDataError, match="no declared observation period"):
+        dataset_service(session).build_for_hotel(hotel.id, hotel.public_id)
+
+
+def test_a_requested_range_outside_every_declared_span_fails_explicitly(
+    session: Session,
+) -> None:
+    hotel = make_hotel(session, slug="ml-outside")
+    observe(session, hotel, *days(ANCHOR, 5))
+    later = ANCHOR + dt.timedelta(days=10)
+    with pytest.raises(InsufficientDataError, match="no observed date"):
+        dataset_service(session).build_for_hotel(
+            hotel.id, hotel.public_id, date_from=later, date_to=later + dt.timedelta(days=3)
+        )
 
 
 def test_the_pipeline_is_deterministic_across_repeated_builds(session: Session) -> None:
@@ -393,8 +423,9 @@ def test_the_pipeline_is_deterministic_across_repeated_builds(session: Session) 
         nights=10,
         booked_at=utc(ANCHOR - dt.timedelta(days=40)),
     )
+    observe(session, hotel, *days(ANCHOR, 10))
 
-    service = MlDatasetService(MlDemandRepository(session))
+    service = dataset_service(session)
     first = service.build_for_hotel(hotel.id, hotel.public_id)
     second = service.build_for_hotel(hotel.id, hotel.public_id)
 
@@ -419,10 +450,9 @@ def test_the_dataset_carries_its_contract_and_no_internal_identifier(session: Se
         nights=4,
         booked_at=utc(ANCHOR - dt.timedelta(days=40)),
     )
+    observe(session, hotel, *days(ANCHOR, 4))
 
-    dataset = MlDatasetService(MlDemandRepository(session)).build_for_hotel(
-        hotel.id, hotel.public_id
-    )
+    dataset = dataset_service(session).build_for_hotel(hotel.id, hotel.public_id)
     assert set(dataset.rows[0].features) == set(dataset.feature_names)
     for row in dataset.rows:
         # Structural, not a substring search: the internal key is a small integer, and small
@@ -451,8 +481,9 @@ def test_lags_reach_back_before_the_first_target_date(session: Session) -> None:
         nights=45,
         booked_at=utc(start - dt.timedelta(days=60)),
     )
+    observe(session, hotel, *days(start, 45))
 
-    service = MlDatasetService(MlDemandRepository(session))
+    service = dataset_service(session)
     dataset = service.build_for_hotel(
         hotel.id, hotel.public_id, date_from=ANCHOR, date_to=ANCHOR + dt.timedelta(days=3)
     )
@@ -474,26 +505,63 @@ def test_an_observed_date_with_nothing_on_the_books_at_the_cutoff_reads_zero(
     guest = make_guest(session, hotel)
     room = make_room(session, hotel, room_type, number="990")
     build_stay(session, hotel, room, guest, check_in=ANCHOR, nights=1, booked_at=utc(ANCHOR, 9))
+    observe(session, hotel, ANCHOR, ANCHOR)
 
     [row] = pipeline.build_for_hotel(hotel.id, hotel.public_id).rows
     assert (row.target_date, row.target_room_nights) == (ANCHOR, 1)
     assert row.features["on_books_room_nights_at_cutoff"] == 0
 
 
-def test_a_day_without_occupied_nights_is_not_a_target_and_reads_as_missing(
-    session: Session, pipeline: MlDatasetService
-) -> None:
-    """Nothing records that the hotel's bookings for an empty day were captured, so the day is
-    unobserved: no row for it, and every lag or window reaching it is None, never 0."""
-    hotel = make_hotel(session, slug="ml-gap-day")
+def gapped_hotel(session: Session, slug: str) -> tuple[Hotel, dt.date]:
+    """Ten occupied nights, one day with none, ten more. Returns the hotel and the empty day."""
+    hotel = make_hotel(session, slug=slug)
     room_type = make_room_type(session, hotel)
     guest = make_guest(session, hotel)
     room = make_room(session, hotel, room_type, number="995")
     booked = utc(ANCHOR - dt.timedelta(days=60))
     gap = ANCHOR + dt.timedelta(days=10)
-    after_gap = gap + dt.timedelta(days=1)
     build_stay(session, hotel, room, guest, check_in=ANCHOR, nights=10, booked_at=booked)
-    build_stay(session, hotel, room, guest, check_in=after_gap, nights=10, booked_at=booked)
+    build_stay(
+        session,
+        hotel,
+        room,
+        guest,
+        check_in=gap + dt.timedelta(days=1),
+        nights=10,
+        booked_at=booked,
+    )
+    return hotel, gap
+
+
+def test_an_observed_day_without_occupied_nights_is_a_zero_target_and_a_zero_lag(
+    session: Session, pipeline: MlDatasetService
+) -> None:
+    """The empty day lies inside a declared span, so its record is complete: demand 0, a row
+    of its own, and every lag or window reaching it reads 0 -- never None."""
+    hotel, gap = gapped_hotel(session, "ml-observed-zero")
+    observe(session, hotel, *days(ANCHOR, 21))
+    after_gap = gap + dt.timedelta(days=1)
+
+    rows = {r.target_date: r for r in pipeline.build_for_hotel(hotel.id, hotel.public_id).rows}
+    assert rows[gap].target_room_nights == 0
+    assert rows[gap].features["on_books_room_nights_at_cutoff"] == 0
+    after = rows[after_gap]
+    assert after.target_room_nights == 1
+    assert after.features["demand_lag_1"] == 0
+    # ANCHOR+4 .. the empty day: six occupied nights and the observed zero.
+    assert after.features["demand_rolling_mean_7"] == pytest.approx(6 / 7)
+    assert len(rows) == 21
+
+
+def test_an_unobserved_day_is_not_a_target_and_reads_as_missing(
+    session: Session, pipeline: MlDatasetService
+) -> None:
+    """The same bookings with the empty day left out of the declared spans: no row for it, and
+    every lag or window reaching it is None, never 0."""
+    hotel, gap = gapped_hotel(session, "ml-gap-day")
+    after_gap = gap + dt.timedelta(days=1)
+    observe(session, hotel, *days(ANCHOR, 10))
+    observe(session, hotel, *days(after_gap, 10))
 
     rows = {r.target_date: r for r in pipeline.build_for_hotel(hotel.id, hotel.public_id).rows}
     assert gap not in rows
@@ -501,6 +569,35 @@ def test_a_day_without_occupied_nights_is_not_a_target_and_reads_as_missing(
     assert after.features["demand_lag_1"] is None
     assert after.features["demand_rolling_mean_7"] is None
     assert rows[gap - dt.timedelta(days=1)].features["demand_lag_1"] == 1
+    assert len(rows) == 20
+
+
+def test_both_ends_of_a_declared_span_are_inclusive_and_nothing_beyond_them_is_read(
+    session: Session, pipeline: MlDatasetService
+) -> None:
+    """Stays run three days either side of the span. The span's first and last days are
+    targets; the occupied days just outside are neither targets nor lag values."""
+    hotel = make_hotel(session, slug="ml-bounds")
+    room_type = make_room_type(session, hotel)
+    guest = make_guest(session, hotel)
+    room = make_room(session, hotel, room_type, number="996")
+    build_stay(
+        session,
+        hotel,
+        room,
+        guest,
+        check_in=ANCHOR - dt.timedelta(days=3),
+        nights=11,
+        booked_at=utc(ANCHOR - dt.timedelta(days=60)),
+    )
+    first, last = days(ANCHOR, 5)
+    observe(session, hotel, first, last)
+
+    rows = {r.target_date: r for r in pipeline.build_for_hotel(hotel.id, hotel.public_id).rows}
+    assert sorted(rows) == [ANCHOR + dt.timedelta(days=n) for n in range(5)]
+    assert rows[first].target_room_nights == rows[last].target_room_nights == 1
+    assert rows[first].features["demand_lag_1"] is None, "the day before the span was read"
+    assert rows[first + dt.timedelta(days=1)].features["demand_lag_1"] == 1
 
 
 def test_the_report_describes_what_was_built(session: Session) -> None:
@@ -517,8 +614,9 @@ def test_the_report_describes_what_was_built(session: Session) -> None:
         nights=12,
         booked_at=utc(ANCHOR - dt.timedelta(days=40)),
     )
+    observe(session, hotel, *days(ANCHOR, 12))
 
-    service = MlDatasetService(MlDemandRepository(session))
+    service = dataset_service(session)
     dataset = service.build_for_hotel(hotel.id, hotel.public_id)
     report = service.report(dataset)
     assert report.rows == 12

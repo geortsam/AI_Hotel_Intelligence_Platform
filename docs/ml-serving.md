@@ -211,19 +211,25 @@ features it is scored with quietly stop being the same thing.
 `MlDemandRepository.demand_by_date` answers the whole 22-day window in one grouped scan, for one
 hotel, filtered by the same `OCCUPANCY_STATUSES` the analytics layer uses. An integration test
 counts statements at the driver during a real request and requires exactly one to touch
-`booking_room_nights`.
+`booking_room_nights` -- and exactly one to read the hotel's declared observation spans.
 
-### A missing day is missing, not zero
+### An unobserved day is unknown; an observed empty day is zero
 
-If any of the three lag days has no recorded occupancy, the request is refused with
-`422 INSUFFICIENT_HISTORY`. **No value is invented.** Zero is a real demand value here — a hotel
-that sold nothing is not a hotel with no record — and the training dataset dropped rows with an
-absent lag rather than imputing them, so imputing at serving time would score a row of a kind
-the model was never fitted on.
+A lag day is known only inside one of the hotel's **declared observation periods**
+(`demand_observation_periods`, migration 0016; the rule is
+[ml-dataset-design.md](ml-dataset-design.md) §8). Inside one, a day with no occupied nights is a
+real **0** and is scored. If any of the three lag days lies outside every declared period, the
+request is refused with `422 INSUFFICIENT_HISTORY` -- however many nights were recorded for it,
+because recorded rows cannot show they are all the rows there were. **No value is invented.**
+Zero is a real demand value here — a hotel that sold nothing is not a hotel with no record — and
+the training dataset dropped rows with an absent lag rather than imputing them, so imputing at
+serving time would score a row of a kind the model was never fitted on.
 
-The practical requirement is therefore: **occupancy recorded on each of *T*−7, *T*−14 and
-*T*−28.** A hotel with a gap on one of those three days cannot be forecast for that target date,
-and a different target date may well work.
+The practical requirement is therefore: **each of *T*−7, *T*−14 and *T*−28 inside a declared
+period.** A hotel that has declared nothing cannot be forecast at all; an operator declares a
+span with `python -m app.jobs.demand_observation declare --hotel <id> --from <date> --to <date>`,
+ending before the hotel's today. A target date whose lags miss the declared spans cannot be
+forecast, and a different target date may well work.
 
 ---
 
@@ -343,7 +349,7 @@ these numbers matters.
 | Hotel unknown, or caller is not a member | 404 | `NOT_FOUND` |
 | `horizon_days` present but not 7 | 422 | `VALIDATION_ERROR` |
 | `horizon_days` outside 1–90, or `target_date` not a date, or absent | 422 | FastAPI request validation |
-| A lag day has no recorded occupancy | 422 | `INSUFFICIENT_HISTORY` |
+| A lag day is outside the hotel's declared observation periods | 422 | `INSUFFICIENT_HISTORY` |
 | ML runtime absent, artifact absent, or artifact refused | 503 | `MODEL_UNAVAILABLE` |
 | The verified estimator fails to produce a prediction | 500 | `INTERNAL_ERROR` |
 

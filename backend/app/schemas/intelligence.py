@@ -77,8 +77,9 @@ class TrainingWindow(BaseModel):
     date_from: dt.date
     date_to: dt.date
     days: int
-    #: Observations actually available. Equal to ``days`` -- the series is densified, because
-    #: a day with no bookings is a real zero rather than a missing reading.
+    #: Observations actually available: the window's days inside the hotel's declared
+    #: observation periods. Each of those is in the series -- a day with no bookings there is a
+    #: real zero -- and a day outside every period is left out, so this is at most ``days``.
     observations: int
 
 

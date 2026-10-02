@@ -35,8 +35,8 @@ import type { DemandPredictionResponse } from '@/types/ml'
  * ## The forecast is allowed to fail on its own
  *
  * `Promise.allSettled`, not `Promise.all`. Four of the five requests are the report; the fifth
- * is an extra. A hotel with no occupancy on the days the model's lag features read gets a
- * `422 INSUFFICIENT_HISTORY` — which is the serving stage working as designed, not a fault —
+ * is an extra. A hotel whose lag days are not observed (not inside a declared observation
+ * period) gets a `422 INSUFFICIENT_HISTORY` — the serving stage working as designed, not a fault —
  * and the whole page must not collapse because a new property cannot be forecast yet. The
  * forecast's outcome is therefore carried separately, as one of three states, and the report
  * renders with or without it.

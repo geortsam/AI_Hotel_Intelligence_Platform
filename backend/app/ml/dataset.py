@@ -153,8 +153,8 @@ def build_feature_specs(
             FeatureSpec(
                 f"demand_lag_{lag}",
                 at,
-                f"Realised demand on target_date - {lag} days. None when that day is "
-                "outside the extracted history.",
+                f"Realised demand on target_date - {lag} days: 0 when that day is observed "
+                "and nothing was occupied, None when that day is not observed.",
             )
         )
     for window in rolling_windows:
@@ -162,8 +162,8 @@ def build_feature_specs(
             FeatureSpec(
                 f"demand_rolling_mean_{window}",
                 at,
-                f"Mean realised demand over the {window} days ending at cutoff_date. "
-                "None unless every day in the window is present.",
+                f"Mean realised demand over the {window} days ending at cutoff_date, observed "
+                "zeros included. None unless every day in the window is observed.",
             )
         )
     specs.append(
@@ -224,12 +224,77 @@ class HotelHistory:
 
     Keyed by date rather than listed, because every lookup here is by date and a list would
     invite a linear scan per feature per row.
+
+    **A key is evidence; a missing key is its absence.** ``demand_by_date`` holds a value for
+    exactly the OBSERVED dates -- 0 included -- and nothing for any other date: an extractor
+    builds it with :func:`observed_demand`, so a date outside every declared
+    :class:`ObservationPeriod` is absent however many rows were recorded for it.
+    ``on_books_by_date`` holds a value for every target date, 0 included, because on-the-books
+    is counted over the same booking records as the target it belongs to.
     """
 
     hotel_public_id: uuid.UUID
     demand_by_date: Mapping[dt.date, int]
     on_books_by_date: Mapping[dt.date, int]
     rooms_existing_by_date: Mapping[dt.date, int]
+
+
+@dataclass(frozen=True, slots=True)
+class ObservationPeriod:
+    """A span of dates, both ends inclusive, whose complete booking record is held.
+
+    The only evidence of observation this contract accepts. Recorded rows cannot supply it -- a
+    date with three occupied nights recorded may have had ten -- and their absence cannot either,
+    since an unsold day and an unrecorded one leave the same nothing behind. So a period is
+    DECLARED: by an operator for a live hotel (``demand_observation_periods``), by the source's
+    publisher for an offline one. Inside it, a date with no occupied nights has a demand of 0;
+    outside every period a date's demand is unknown, whatever was recorded for it.
+    """
+
+    observed_from: dt.date
+    observed_to: dt.date
+
+    def __post_init__(self) -> None:
+        if self.observed_to < self.observed_from:
+            raise DatasetContractError(
+                f"an observation period cannot end ({self.observed_to}) before it starts "
+                f"({self.observed_from})"
+            )
+
+    def includes(self, day: dt.date) -> bool:
+        """Both ends inclusive: the first and the last declared date are observed."""
+        return self.observed_from <= day <= self.observed_to
+
+
+def observed_days(
+    periods: Iterable[ObservationPeriod], date_from: dt.date, date_to: dt.date
+) -> tuple[dt.date, ...]:
+    """Every date in ``[date_from, date_to]`` that some period declares observed, ascending."""
+    days: set[dt.date] = set()
+    for period in periods:
+        day = max(period.observed_from, date_from)
+        last = min(period.observed_to, date_to)
+        while day <= last:
+            days.add(day)
+            day += dt.timedelta(days=1)
+    return tuple(sorted(days))
+
+
+def observed_demand(
+    recorded: Mapping[dt.date, int],
+    periods: Iterable[ObservationPeriod],
+    date_from: dt.date,
+    date_to: dt.date,
+) -> dict[dt.date, int]:
+    """Demand on every observed date in ``[date_from, date_to]``: what was recorded, or 0.
+
+    The one place an extractor's sparse counts become the contract's evidence-bearing series.
+    A date inside a period that recorded nothing is 0, because the period says nothing was
+    missed. A date outside every period is absent from the result even when rows were recorded
+    for it -- they cannot show they are all the rows there were -- so every lag and window that
+    reaches it is ``None``.
+    """
+    return {day: recorded.get(day, 0) for day in observed_days(periods, date_from, date_to)}
 
 
 # --- the rows the pipeline produces --------------------------------------------------------
@@ -391,9 +456,9 @@ def lag_features(
     A lag shorter than the horizon is a contract error, not a missing value: it would mean the
     configuration itself asks for a day the forecaster cannot have seen.
 
-    A lag that simply falls outside the extracted history is ``None``. It is NOT zero -- zero is
-    a real demand value here, and a hotel with no history would otherwise look like a hotel that
-    sold nothing.
+    A lag on a day that is not observed is ``None``. It is NOT zero -- zero is a real demand
+    value here, the value of an observed day with nothing occupied, and a hotel whose record is
+    unknown would otherwise look like a hotel that sold nothing.
     """
     out: dict[str, int | None] = {}
     for lag in lag_days:
@@ -414,9 +479,10 @@ def rolling_mean_features(
 ) -> dict[str, float | None]:
     """Mean realised demand over whole windows ending at ``cutoff_date``.
 
-    All-or-nothing on purpose: a mean over a partially present window silently changes meaning
+    All-or-nothing on purpose: a mean over a partially observed window silently changes meaning
     with the amount of history available, which is the kind of feature that looks fine in
-    training and drifts in production. Absent history stays absent.
+    training and drifts in production. An observed zero takes part like any other day; a day
+    that is not observed makes the whole window ``None``.
     """
     end = cutoff_date_for(target_date, horizon_days)
     out: dict[str, float | None] = {}

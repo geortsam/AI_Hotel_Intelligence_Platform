@@ -36,6 +36,7 @@ from app.repositories.analytics import AnalyticsRepository
 from app.repositories.audit import AuditRepository
 from app.repositories.booking import BookingRepository
 from app.repositories.copilot_conversation import CopilotConversationRepository
+from app.repositories.demand_observation import DemandObservationRepository
 from app.repositories.finance import (
     ExpenseCategoryRepository,
     ExpenseRepository,
@@ -411,9 +412,11 @@ def get_intelligence_service(db: DbSession, scope: ScopeResolverDep) -> Intellig
 
     It is handed the ANALYTICS repository, not one of its own. Occupancy, room revenue and
     booking counts keep exactly one definition in this codebase; a forecasting layer with its
-    own copy would drift from the dashboard within a release.
+    own copy would drift from the dashboard within a release. The declared observation spans
+    come from the one repository that owns them, which the demand model reads too: a forecast
+    and the model are never told different things about which days were observed.
     """
-    return IntelligenceService(AnalyticsRepository(db), scope)
+    return IntelligenceService(AnalyticsRepository(db), scope, DemandObservationRepository(db))
 
 
 IntelligenceServiceDep = Annotated[IntelligenceService, Depends(get_intelligence_service)]
@@ -444,7 +447,12 @@ def get_demand_prediction_service(
     operation is.
     """
     return DemandPredictionService(
-        db, MlDemandRepository(db), MlPredictionRepository(db), scope, AnalyticsRepository(db)
+        db,
+        MlDemandRepository(db),
+        MlPredictionRepository(db),
+        scope,
+        AnalyticsRepository(db),
+        DemandObservationRepository(db),
     )
 
 

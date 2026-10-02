@@ -285,8 +285,12 @@ fixture level only: the committed 300-row verbatim excerpt of the source, the th
 real pipeline builds from it, and every refusal and report above. On that sample some target
 dates had nothing on the books at their cutoff; the pipeline writes those as 0 — an observed
 target date's on-the-books is counted over the same bookings as its target — and the tests pin
-that the audit agrees with every row. (The full source has no such date.) **None of it is the
-raw-source verification.**
+that the audit agrees with every row. (The full source has no such date.) Since migration 0016
+the pipeline declares each hotel's coverage window observed, on the publisher's statement that
+the source is the complete extraction ([ml-training-data.md](ml-training-data.md) §7), so a
+covered date of the sample with no sampled stay is a row with target 0 -- an artifact of
+sampling, since the excerpt is not the complete extraction -- and the audit agrees with those
+rows too. **None of it is the raw-source verification.**
 
 ## 10. Tests
 

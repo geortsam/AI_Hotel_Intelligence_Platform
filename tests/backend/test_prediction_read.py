@@ -657,8 +657,9 @@ def test_the_migration_chain_is_eleven_revisions() -> None:
 
     # Stage 7.9 added 0014 (`hotel_documents`, `hotel_document_chunks`).
     # Stage 7.11 added 0015 (`copilot_conversations`, `copilot_messages`).
-    assert len(revisions) == 15
-    assert revisions[-1] == "20260927_0015_copilot_conversations.py"
+    # Issue 1 added 0016 (`demand_observation_periods`).
+    assert len(revisions) == 16
+    assert revisions[-1] == "20261002_0016_demand_observation_periods.py"
 
 
 # ======================================================================================

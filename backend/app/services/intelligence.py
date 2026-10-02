@@ -25,6 +25,7 @@ import decimal
 import uuid
 
 from app.core.errors import ValidationError
+from app.ml.dataset import ObservationPeriod, observed_days
 from app.ml.timeseries import (
     ANOMALY_THRESHOLD,
     CONFIDENCE_LEVEL,
@@ -43,6 +44,7 @@ from app.ml.timeseries import (
 )
 from app.models.hotel import Hotel
 from app.repositories.analytics import AnalyticsRepository, RoomRevenueRow
+from app.repositories.demand_observation import DemandObservationRepository
 from app.schemas.intelligence import (
     MAX_HORIZON_DAYS,
     MAX_OBSERVATION_DAYS,
@@ -108,11 +110,19 @@ def _quantise(value: decimal.Decimal | None, places: decimal.Decimal) -> decimal
 class IntelligenceService:
     """Forecasting, trend detection, anomaly detection and insight assembly for one hotel."""
 
-    def __init__(self, repository: AnalyticsRepository, scope: HotelScopeResolver) -> None:
+    def __init__(
+        self,
+        repository: AnalyticsRepository,
+        scope: HotelScopeResolver,
+        observation: DemandObservationRepository,
+    ) -> None:
         # The ANALYTICS repository, not one of its own: the metric definitions are shared.
         # No session, because nothing here writes.
         self._repository = repository
         self._scope = scope
+        # The declared spans that say which stay dates are observed -- the same evidence the
+        # demand model reads, so a forecast and a model are never told different things.
+        self._observation = observation
 
     # --- forecasts ----------------------------------------------------------------------
 
@@ -128,6 +138,7 @@ class IntelligenceService:
         horizon, window = self._windows(date_from, date_to, training_days)
 
         observations = self._occupancy_observations(hotel.id, window)
+        window = self._observed(window, len(observations))
         horizon_days = self._days(horizon.date_from, horizon.date_to)
         predictions = forecast_series(observations, horizon_days)
 
@@ -168,23 +179,16 @@ class IntelligenceService:
         horizon, window = self._windows(date_from, date_to, training_days)
         horizon_days = self._days(horizon.date_from, horizon.date_to)
 
-        history = self._repository.room_revenue_by_day(hotel.id, window.date_from, window.date_to)
         booked = self._repository.room_revenue_by_day(hotel.id, horizon.date_from, horizon.date_to)
-        training_days_list = self._days(window.date_from, window.date_to)
-
-        # Only currencies with actual history are forecast. Inventing a zero series for a
-        # currency the hotel has never traded in would manufacture training data.
-        currencies = sorted({row.currency for rows in history.values() for row in rows})
+        # Only currencies with actual history ON OBSERVED DAYS are forecast. Inventing a zero
+        # series for a currency the hotel has never traded in would manufacture training data.
+        series = self._revenue_observations(hotel.id, window)
+        currencies = sorted(series)
+        window = self._observed(window, len(self._observed_days(hotel.id, window)))
 
         forecasts = []
         for currency in currencies:
-            observations = [
-                Observation(
-                    date=day,
-                    value=self._currency_amount(history.get(day, []), currency),
-                )
-                for day in training_days_list
-            ]
+            observations = series[currency]
             predictions = forecast_series(observations, horizon_days)
             forecasts.append(
                 CurrencyForecast(
@@ -377,14 +381,32 @@ class IntelligenceService:
 
     # --- series assembly ----------------------------------------------------------------
 
+    def _observed_days(
+        self, hotel_id: int, window: TrainingWindow | ObservationWindow
+    ) -> tuple[dt.date, ...]:
+        """The window's stay dates that the hotel has declared observed, ascending."""
+        periods = [ObservationPeriod(a, b) for a, b in self._observation.periods(hotel_id)]
+        return observed_days(periods, window.date_from, window.date_to)
+
+    @staticmethod
+    def _observed(window: TrainingWindow, observed: int) -> TrainingWindow:
+        """The training window, reporting how many of its days were observed."""
+        return TrainingWindow(
+            date_from=window.date_from,
+            date_to=window.date_to,
+            days=window.days,
+            observations=observed,
+        )
+
     def _occupancy_observations(
         self, hotel_id: int, window: TrainingWindow | ObservationWindow
     ) -> list[Observation]:
-        """A DENSE daily series of occupied room nights.
+        """Occupied room nights for every OBSERVED day of the window, and for no other day.
 
-        Densified on purpose: a day with no bookings is a real zero, not a missing reading,
-        and dropping it would make a quiet week look like a short one and bias every median
-        upwards.
+        Inside a declared observation period a day with no bookings is a real zero, not a
+        missing reading, and dropping it would make a quiet week look like a short one and bias
+        every median upwards. Outside every period a day is unknown -- whatever was recorded for
+        it -- so it is left out rather than counted: the series is shorter, never invented.
         """
         counts = self._repository.occupied_nights_by_day(hotel_id, window.date_from, window.date_to)
         return [
@@ -392,7 +414,7 @@ class IntelligenceService:
                 date=day,
                 value=decimal.Decimal(counts[day].occupied if day in counts else 0),
             )
-            for day in self._days(window.date_from, window.date_to)
+            for day in self._observed_days(hotel_id, window)
         ]
 
     def _booking_observations(
@@ -409,10 +431,11 @@ class IntelligenceService:
     def _revenue_observations(
         self, hotel_id: int, window: TrainingWindow | ObservationWindow
     ) -> dict[str, list[Observation]]:
-        """One dense series per currency that has any history in the window."""
+        """One series per currency with history on an observed day: every observed day of the
+        window, a real zero where nothing was earned, and no unobserved day at all."""
         history = self._repository.room_revenue_by_day(hotel_id, window.date_from, window.date_to)
-        currencies = sorted({row.currency for rows in history.values() for row in rows})
-        days = self._days(window.date_from, window.date_to)
+        days = self._observed_days(hotel_id, window)
+        currencies = sorted({row.currency for day in days for row in history.get(day, [])})
         return {
             currency: [
                 Observation(date=day, value=self._currency_amount(history.get(day, []), currency))

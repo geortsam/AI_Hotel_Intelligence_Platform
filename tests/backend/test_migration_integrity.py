@@ -62,10 +62,11 @@ EXPECTED_FILENAMES = (
     "20260925_0013_llm_invocations.py",
     "20260926_0014_hotel_documents.py",
     "20260927_0015_copilot_conversations.py",
+    "20261002_0016_demand_observation_periods.py",
 )
 
 #: sha256 of the canonicalised concatenation described in this module's docstring. Derived
-#: from the fifteen files above; not a value chosen to make anything pass.
+#: from the sixteen files above; not a value chosen to make anything pass.
 #:
 #: Moved four times. `0dc2f8b1...` over nine files was the value before Stage 6.8 added
 #: `demand_predictions`; `35162fde...` over ten was the value before Stage 6.11 added
@@ -76,12 +77,13 @@ EXPECTED_FILENAMES = (
 #: likewise still reproduced by the first twelve; and `2bf0ffb1...` over thirteen was the value
 #: before Stage 7.9 added 0014 (`hotel_documents`), still reproduced by the first thirteen; and
 #: `bb93f2b5...` over fourteen was the value before Stage 7.11 added 0015
-#: (`copilot_conversations`), still reproduced by the first fourteen. All six are recorded rather
-#: than discarded, because "the digest changed" should always be answerable with "yes, in that
-#: commit, for that migration".
-CANONICAL_SHA256 = "31b7886cb805554c57f2fc92458c07ed92b82fea6f29bb854429132b244bf54b"
+#: (`copilot_conversations`), still reproduced by the first fourteen; and `31b7886c...` over fifteen
+#: was the value before 0016 added `demand_observation_periods`, still reproduced by the first
+#: fifteen. All seven are recorded rather than discarded, because "the digest changed" should
+#: always be answerable with "yes, in that commit, for that migration".
+CANONICAL_SHA256 = "5c20fc157cc78112a484b95fd751b22dbfc9f3913e2dc41c902e1d92c2e383a5"
 
-EXPECTED_HEAD = "0015_copilot_conversations"
+EXPECTED_HEAD = "0016_demand_observation_periods"
 EXPECTED_ROOT = "0001_initial_schema"
 
 REVISION = re.compile(r'^revision: str = "([^"]+)"', re.MULTILINE)
@@ -151,6 +153,16 @@ def test_stage_7_11_left_every_earlier_migration_untouched() -> None:
     earlier = [path.read_bytes() for path in migration_files()[:14]]
 
     assert digest_of(earlier) == "bb93f2b53bc86f50dffc6ead5a278f3d2f98d2ffc8dee5a926efe22ef7df3bc6"
+
+
+def test_declared_observation_left_every_earlier_migration_untouched() -> None:
+    """Adding 0016 moved the digest only because 0016 was added: 0001-0015 are byte-identical.
+
+    0016 creates one table and alters none, so nothing earlier had any reason to change.
+    """
+    earlier = [path.read_bytes() for path in migration_files()[:15]]
+
+    assert digest_of(earlier) == "31b7886cb805554c57f2fc92458c07ed92b82fea6f29bb854429132b244bf54b"
 
 
 def test_the_digest_does_not_depend_on_how_git_checked_the_files_out() -> None:

@@ -812,7 +812,7 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     """
     chain = revisions()
 
-    assert len(chain) == 15
+    assert len(chain) == 16
     roots = [rev for rev, down in chain.items() if down is None]
     heads = [rev for rev in chain if rev not in set(chain.values())]
 
@@ -826,7 +826,9 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     # widens the two vocabulary CHECKs exactly as 0012 did.
     # Stage 7.11 added 0015, which creates the two conversation tables and touches no audit
     # table: conversation lifecycle is not audited.
-    assert heads == ["0015_copilot_conversations"]
+    # Issue 1 added 0016, which creates `demand_observation_periods` and touches no audit table:
+    # a declaration is an operator's act with no actor, like the purge and the archival.
+    assert heads == ["0016_demand_observation_periods"]
     assert chain["0007_audit_events"] == "0006_users_password_changed_at"
     assert chain["0008_audit_retention_archive"] == "0007_audit_events"
     assert chain["0009_audit_booking_deleted"] == "0008_audit_retention_archive"
@@ -834,9 +836,10 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     assert chain["0013_llm_invocations"] == "0012_audit_tool_invoked"
     assert chain["0014_hotel_documents"] == "0013_llm_invocations"
     assert chain["0015_copilot_conversations"] == "0014_hotel_documents"
+    assert chain["0016_demand_observation_periods"] == "0015_copilot_conversations"
     # Every other revision is somebody's parent exactly once: no fork.
     parents = [down for down in chain.values() if down is not None]
-    assert len(parents) == len(set(parents)) == 14
+    assert len(parents) == len(set(parents)) == 15
 
 
 def test_the_audit_table_is_created_by_exactly_one_migration() -> None:

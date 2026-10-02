@@ -46,11 +46,15 @@ from app.ml.dataset import (
     DemandRow,
     HotelHistory,
     InsufficientDataError,
+    ObservationPeriod,
     assert_no_feature_is_known_only_after_prediction,
     build_feature_specs,
     build_rows,
+    observed_days,
+    observed_demand,
     validate_rows,
 )
+from app.repositories.demand_observation import DemandObservationRepository
 from app.repositories.ml_demand import MlDemandRepository
 
 #: The longest history any default feature reaches back for. Extraction starts this far before
@@ -62,8 +66,12 @@ DEFAULT_LOOKBACK_DAYS = max((*DEFAULT_LAG_DAYS, *DEFAULT_ROLLING_WINDOWS))
 class MlDatasetService:
     """Builds demand datasets from the operational tables. Writes nothing."""
 
-    def __init__(self, repository: MlDemandRepository) -> None:
+    def __init__(
+        self, repository: MlDemandRepository, observation: DemandObservationRepository
+    ) -> None:
         self._repository = repository
+        # The declared spans: the only evidence of which dates of a hotel's demand are known.
+        self._observation = observation
 
     # --- one hotel ----------------------------------------------------------------------------
 
@@ -84,32 +92,37 @@ class MlDatasetService:
         the window of rows produced. Without that, the first 28 days of every dataset would
         arrive with their lags empty for no reason other than where the query started.
 
-        **Which dates are observed.** A target date is one with recorded occupied nights; a
-        date without any is absent from ``demand_by_date`` and its lags read ``None``, because
-        nothing here records that the hotel's bookings for it were captured. On-the-books is
-        different: it is counted over the same booking records as the target date it belongs
-        to, so for an observed target the query finding nothing means nothing was on the books
-        at the cutoff -- a ``0``, written explicitly rather than left for an absent key to turn
-        into ``None``. It is written for target dates only.
+        **Which dates are observed.** Exactly the dates inside the hotel's declared observation
+        periods (``demand_observation_periods``). Every one of them is a target, 0 included when
+        nothing was occupied; a date outside every period is absent from ``demand_by_date`` --
+        however many nights were recorded for it -- so its lags and windows read ``None``. A
+        hotel with no declared period has no observed date and no dataset. On-the-books is
+        counted over the same booking records as the target date it belongs to, so for a target
+        the query finding nothing means nothing was on the books at the cutoff -- a ``0``,
+        written explicitly rather than left for an absent key to turn into ``None``. It is
+        written for target dates only.
         """
-        bounds = self._repository.first_and_last_stay_date(hotel_id)
-        if bounds is None:
+        periods = [ObservationPeriod(a, b) for a, b in self._observation.periods(hotel_id)]
+        if not periods:
             raise InsufficientDataError(
-                f"hotel {hotel_public_id} has no occupied room nights: there is nothing to "
-                "build a demand dataset from"
+                f"hotel {hotel_public_id} has no declared observation period: no date of its "
+                "demand is known to be complete, so there is nothing to build a dataset from"
             )
-        first_seen, last_seen = bounds
-        target_from = max(first_seen, date_from) if date_from else first_seen
-        target_to = min(last_seen, date_to) if date_to else last_seen
-        if target_from > target_to:
+        first_observed = min(period.observed_from for period in periods)
+        last_observed = max(period.observed_to for period in periods)
+        span_from = max(first_observed, date_from) if date_from else first_observed
+        span_to = min(last_observed, date_to) if date_to else last_observed
+        targets = observed_days(periods, span_from, span_to)
+        if not targets:
             raise InsufficientDataError(
-                f"hotel {hotel_public_id} has no occupied room nights between "
-                f"{date_from} and {date_to}"
+                f"hotel {hotel_public_id} has no observed date between {date_from} and {date_to}"
             )
+        target_from, target_to = targets[0], targets[-1]
 
         extract_from = target_from - dt.timedelta(days=lookback_days + horizon_days)
 
-        demand = self._repository.demand_by_date(hotel_id, extract_from, target_to)
+        recorded = self._repository.demand_by_date(hotel_id, extract_from, target_to)
+        demand = observed_demand(recorded, periods, extract_from, target_to)
         on_books = self._repository.on_books_room_nights_by_date(
             hotel_id, target_from, target_to, horizon_days
         )
@@ -117,7 +130,6 @@ class MlDatasetService:
             hotel_id, target_from, target_to, horizon_days
         )
 
-        targets = tuple(day for day in sorted(demand) if target_from <= day <= target_to)
         history = HotelHistory(
             hotel_public_id=hotel_public_id,
             demand_by_date=demand,

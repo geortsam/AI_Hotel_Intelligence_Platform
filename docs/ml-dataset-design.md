@@ -192,26 +192,32 @@ history must not look like a hotel that sold nothing. A rolling mean over a part
 window is `None`, not an average of what happens to be there — a partial mean changes meaning
 with the amount of history available, which looks fine in training and drifts in production.
 
-**What makes a day observed.** The extract carries two different facts, and neither may stand in
-for the other:
+**What makes a day observed.** A declaration, and nothing else. Booking rows cannot prove it — a
+date with three recorded nights may have had ten, and an unsold date and an unrecorded one leave
+the same nothing behind — and neither can `hotels.created_at`, `rooms.created_at`, the database
+date or the span of the bookings themselves (back-dated imports are expected — see the next
+paragraph). So the evidence is explicit: `demand_observation_periods` (migration 0016) holds, per
+hotel, closed spans of dates — both ends inclusive, no two sharing a date — whose complete booking
+record is in the database. `app.ml.dataset.ObservationPeriod` is the one definition, and
+`observed_demand` the one place a sparse extract becomes the series:
 
-| Date | What the extract can prove | Value |
-|---|---|---|
-| has recorded occupied nights | observed: its booking record is the one the target is counted from | the count |
-| has none | nothing: no column records that the hotel's bookings for it were captured | absent — no row, and `None` to every lag and window that reaches it |
+| Date | Value | As a target | To a lag or window |
+|---|---|---|---|
+| inside a declared span, occupied nights recorded | the count | a row | the count |
+| inside a declared span, none recorded | **`0`** — an observed zero | a row, target 0 | `0`; a window averages it |
+| outside every declared span | unknown, **whatever was recorded** | no row | `None`; a window reaching it is `None` |
+
+A hotel with no declared span has no observed date: the dataset build raises
+`InsufficientDataError`, the served model answers `422 INSUFFICIENT_HISTORY`, and the stay-dated
+intelligence forecasts report too little history. An operator declares spans with
+`python -m app.jobs.demand_observation declare --hotel <id> --from <date> --to <date>` (also `list` and
+`withdraw`); a span must end before the hotel's own today, because a day that has not ended
+cannot have a complete record. Spans are closed rather than open-ended, so a declaration that is
+not renewed fails safe — later days read as unknown, never as zero.
 
 On-the-books belongs to an observed target date and is counted over the same booking records as
 its target, so "nothing was on the books at the cutoff" is written as **`0`** — an observed zero,
 not a missing value. It is written for target dates only.
-
-The consequence is stated rather than hidden: **an observed zero-demand day cannot be told apart
-from an unrecorded one**, so no target is ever 0 today. `hotels.created_at` and
-`rooms.created_at` record when rows entered the database, not when the hotel's booking record
-became complete (back-dated imports are expected — see the next paragraph), and
-`daily_hotel_metrics`, the per-day snapshot that could record it, is empty. Representing a
-zero-demand day needs an explicit observation record — for example a declared period for which
-this database holds the hotel's complete bookings — and that is an open decision, not something
-this pipeline infers.
 
 Demand above known capacity is *reported rather than dropped* because the schema legitimately
 permits it: a room sold on a date before that room's row was created. Dropping those rows would

@@ -42,7 +42,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
 > **6866 backend tests and 1263 frontend tests pass in CI.** Schema head is
-> `0015_copilot_conversations` across 15 linear migrations.
+> `0016_demand_observation_periods` across 16 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
 > baseline — seasonal-naive day-of-week median forecasting, MAD-based intervals and anomaly
@@ -228,7 +228,7 @@ flowchart LR
         S["<b>React SPA</b><br/>static bundle<br/>route-level code splitting"]
         A["<b>FastAPI</b><br/>api → services → repositories"]
         M["<b>demand_baseline_v1</b><br/>artifact, verified before load<br/>loaded once per process"]
-        D[("<b>PostgreSQL 18.6</b><br/>27 application tables<br/>constraints carry the rules")]
+        D[("<b>PostgreSQL 18.6</b><br/>28 application tables<br/>constraints carry the rules")]
     end
 
     B -- "HTTPS" --> N
@@ -322,7 +322,7 @@ Full detail, including the rules later stages must follow:
 | Validation | Pydantic v2, pydantic-settings | Request/response schemas, environment config |
 | ORM | SQLAlchemy 2.0 | Data mapping across 15 model modules |
 | Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
-| Migrations | Alembic | 15 linear revisions, head `0015_copilot_conversations` |
+| Migrations | Alembic | 16 linear revisions, head `0016_demand_observation_periods` |
 | Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
 | Frontend | React 18, TypeScript 5.7, Vite 6 | Dashboard SPA, route-level code splitting |
 | Intelligence (V1) | Python standard library | Deterministic statistical baseline — no NumPy or pandas on its path |

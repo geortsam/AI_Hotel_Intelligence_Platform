@@ -62,6 +62,10 @@ def history(level: int = 40) -> dict[dt.date, int]:
     return {TARGET - dt.timedelta(days=offset): level for offset in range(7, 29)}
 
 
+#: The span a declared observation period must cover for TARGET's lags to be observed.
+OBSERVED_WINDOW = (TARGET - dt.timedelta(days=28), TARGET - dt.timedelta(days=7))
+
+
 # --- the feature digest ---------------------------------------------------------------------
 
 
@@ -337,6 +341,16 @@ class FakeRooms:
         return self.count
 
 
+class FakeObservation:
+    """The declared observation spans the service reads. By default the whole feature window."""
+
+    def __init__(self, spans: tuple[tuple[dt.date, dt.date], ...] | None = None) -> None:
+        self.spans = list(spans) if spans is not None else [OBSERVED_WINDOW]
+
+    def periods(self, hotel_id: int) -> list[tuple[dt.date, dt.date]]:
+        return self.spans
+
+
 class FakeScope:
     def __init__(self, hotel: FakeHotel) -> None:
         self._hotel = hotel
@@ -368,6 +382,7 @@ def build_service(
         recorder,  # type: ignore[arg-type]
         FakeScope(FakeHotel(id=7, public_id=uuid.uuid4())),  # type: ignore[arg-type]
         FakeRooms(rooms),  # type: ignore[arg-type]
+        FakeObservation(() if level is None else None),  # type: ignore[arg-type]
     )
     return service, session, recorder
 
@@ -546,6 +561,7 @@ def test_the_event_names_nothing_a_hotel_owns(
         FakePredictions(),  # type: ignore[arg-type]
         FakeScope(hotel),  # type: ignore[arg-type]
         FakeRooms(1000),  # type: ignore[arg-type]
+        FakeObservation(),  # type: ignore[arg-type]
     )
 
     response = service.forecast_demand(uuid.uuid4(), TARGET, 7)
@@ -657,6 +673,7 @@ def with_rooms(rooms: int) -> tuple[DemandPredictionService, FakePredictions, Fa
         recorder,  # type: ignore[arg-type]
         FakeScope(FakeHotel(id=7, public_id=uuid.uuid4())),  # type: ignore[arg-type]
         counter,  # type: ignore[arg-type]
+        FakeObservation(),  # type: ignore[arg-type]
     )
     return service, recorder, counter
 
@@ -738,6 +755,7 @@ def test_a_refusal_reads_no_capacity_and_reports_none(artifact: ArtifactLocation
         FakePredictions(),  # type: ignore[arg-type]
         FakeScope(FakeHotel(id=7, public_id=uuid.uuid4())),  # type: ignore[arg-type]
         counter,  # type: ignore[arg-type]
+        FakeObservation(()),  # type: ignore[arg-type]
     )
 
     with pytest.raises(InsufficientHistoryError):

@@ -27,9 +27,10 @@ import type {
  * Three of the four documented responses are things a working system says routinely, and the
  * caller is expected to render each differently:
  *
- * * `422 INSUFFICIENT_HISTORY` — the hotel has not recorded occupancy on the days the model's
- *   lag features read. Common for a new property, and **not an error**: the model declines
- *   rather than guessing, which is the behaviour the serving stage was built to have.
+ * * `422 INSUFFICIENT_HISTORY` — a day the model's lag features read is not observed: it lies
+ *   outside every period the hotel has declared its booking record complete for. Common for a
+ *   new property, and **not an error**: the model declines rather than guessing, which is the
+ *   behaviour the serving stage was built to have.
  * * `503 MODEL_UNAVAILABLE` — no verified artifact in this runtime.
  * * `422` for an unsupported `horizon_days` — the served model forecasts one horizon.
  *
