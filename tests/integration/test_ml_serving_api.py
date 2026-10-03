@@ -609,20 +609,34 @@ def test_an_observed_day_without_occupied_nights_is_scored_as_zero(
 def test_a_hotel_with_no_bookings_but_a_declared_span_is_forecast_from_zeros(
     engine: Engine, session: Session
 ) -> None:
-    """Observed and empty is a history -- of zeros -- not an absence of one."""
+    """Observed and empty is a history -- of zeros -- not an absence of one.
+
+    The model never saw a zero lag in training, so the number is the documented small-hotel
+    value (docs/ml-serving.md section 9): returned unaltered, and flagged by the existing capacity
+    report because it exceeds what the hotel can hold."""
     hotel = seed_hotel(session, slug="ml-observed-empty", rooms=0)
     client = member_client(engine, hotel, email=SUITE_EMAIL)
 
     response = client.get(url(hotel), params=params())
 
     assert response.status_code == 200, response.text
-    zeros = {TARGET - dt.timedelta(days=offset): 0 for offset in range(7, 7 + NIGHTS)}
-    assert response.json()["predicted_room_nights"] == artifact_store.predict_room_nights(
-        artifact_store.approved_model(),
-        hotel_public_id=uuid.uuid4(),
-        target_date=TARGET,
-        features=build_feature_values(zeros, TARGET),
-    )
+    body = response.json()
+
+    def model_output(level: int) -> float:
+        flat = {TARGET - dt.timedelta(days=offset): level for offset in range(7, 7 + NIGHTS)}
+        return artifact_store.predict_room_nights(
+            artifact_store.approved_model(),
+            hotel_public_id=uuid.uuid4(),
+            target_date=TARGET,
+            features=build_feature_values(flat, TARGET),
+        )
+
+    assert body["predicted_room_nights"] == model_output(0)
+    # The below-calibration bin: zero scores exactly what five room nights a night does.
+    assert body["predicted_room_nights"] == model_output(5)
+    assert body["predicted_room_nights"] > 0
+    assert body["available_room_nights"] == 0
+    assert body["exceeds_capacity"] is True
 
 
 @pytest.mark.parametrize(

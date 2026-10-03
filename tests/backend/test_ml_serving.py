@@ -470,7 +470,9 @@ def test_the_model_cannot_tell_small_hotels_apart(served: ServedModel) -> None:
     ``HistGradientBoostingRegressor`` bins its inputs from the training data, and this model was
     fitted on two hotels whose daily demand runs to the hundreds. Every flat history from one
     room night a night to forty therefore lands in the same bin and scores identically -- around
-    166 room nights, for a hotel that sells five.
+    166 room nights, for a hotel that sells five. An observed history of ZERO -- scored since
+    migration 0016, and never seen in training -- lands in that bin too: a hotel that sold nothing
+    gets the same number.
 
     This is not a defect in the serving path, which faithfully returns what the model computes.
     It is the reason ``docs/ml-serving.md`` §9 says the model is not calibrated for a property
@@ -484,7 +486,7 @@ def test_the_model_cannot_tell_small_hotels_apart(served: ServedModel) -> None:
             target_date=TARGET,
             features=build_feature_values(history(value=level), TARGET),
         )
-        for level in (1, 5, 10, 40)
+        for level in (0, 1, 5, 10, 40)
     }
 
     assert len(values) == 1, "the artifact now distinguishes small hotels; update the docs"

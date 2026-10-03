@@ -225,6 +225,8 @@ Zero is a real demand value here — a hotel that sold nothing is not a hotel wi
 the training dataset dropped rows with an absent lag rather than imputing them, so imputing at
 serving time would score a row of a kind the model was never fitted on.
 
+An observed zero is scored by a model that never saw one in training: see §9, item 2.
+
 The practical requirement is therefore: **each of *T*−7, *T*−14 and *T*−28 inside a declared
 period.** A hotel that has declared nothing cannot be forecast at all; an operator declares a
 span with `python -m app.jobs.demand_observation declare --hotel <id> --from <date> --to <date>`,
@@ -392,6 +394,16 @@ Stated plainly, because the endpoint's existence is not a claim that the number 
    measured against this artifact: a flat history of **1, 3, 5, 10 or 40 room nights a night all
    produce the same prediction, ≈ 165.83 room nights**. They fall below the lowest bin edge the
    model learned. A history of 60 a night scores ≈ 133.29.
+
+   **Zero is in that bin too.** Since migration 0016 an observed empty day is a lag of `0` and is
+   scored (§5) — and no committed training row has a zero lag. So a hotel whose lag days were
+   all observed with nothing sold gets the same prediction as one selling one to forty room
+   nights a night: about 166 room nights. That is this limitation, not a data error. The number
+   is returned unaltered; `exceeds_capacity` flags it whenever it is above the hotel's active
+   rooms; and a stored prediction whose lags are all forty or less, zero included, is reported
+   in the `below_calibration` segment of the accuracy and drift measurements. Both
+   `test_the_model_cannot_tell_small_hotels_apart` and
+   `test_a_hotel_with_no_bookings_but_a_declared_span_is_forecast_from_zeros` pin it.
 
    So for a property of a different scale from the two it was fitted on, the number is not
    merely imprecise — it is drawn from a scale the property does not share, and it does not move
