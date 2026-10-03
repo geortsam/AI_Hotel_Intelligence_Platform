@@ -106,7 +106,8 @@ class OccupancyForecastPoint(BaseModel):
     #: invented to fill the gap.
     predicted_room_nights: decimal.Decimal | None
     predicted_occupancy_rate: decimal.Decimal | None
-    #: Robust prediction interval at ``confidence_level``. Null alongside the prediction.
+    #: Robust prediction interval at ``confidence_level``. Null alongside the prediction. Held
+    #: to ``available_room_nights`` like the prediction, so it always contains it.
     interval_lower: decimal.Decimal | None
     interval_upper: decimal.Decimal | None
     confidence_level: decimal.Decimal | None

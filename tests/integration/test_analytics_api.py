@@ -511,6 +511,35 @@ def test_the_occupancy_rate_uses_room_nights_not_bookings(
     assert body["available_room_nights_basis"] == "current_active_rooms"
 
 
+def test_historical_occupancy_keeps_its_current_inventory_basis_and_is_not_capped(
+    api: TestClient, occupancy_hotel: str
+) -> None:
+    """Not the forecast's capacity clamp. Past occupancy divides by the rooms active NOW
+    (analytics-design §3, a documented limitation carried in the payload), so a fully occupied
+    past month reads above 1 once a room is retired. It is reported with its basis, not capped:
+    capping it would hide the basis rather than correct it."""
+    guest = make_guest(api, occupancy_hotel)
+    make_booking(
+        api,
+        occupancy_hotel,
+        guest,
+        room_numbers=["101", "102"],
+        check_in=dt.date(2026, 9, 1),
+        check_out=dt.date(2026, 10, 1),
+    )
+    retired = api.patch(
+        f"/api/v1/hotels/{occupancy_hotel}/room-types/DLX/rooms/102", json={"is_active": False}
+    )
+    assert retired.status_code == 200, retired.text
+
+    body = api.get(analytics(occupancy_hotel, "overview"), params=RANGE).json()["occupancy"]
+
+    assert body["occupied_room_nights"] == 60
+    assert body["available_room_nights"] == 30
+    assert Decimal(body["occupancy_rate"]) == 2
+    assert body["available_room_nights_basis"] == "current_active_rooms"
+
+
 def test_a_hotel_with_no_rooms_has_an_undefined_occupancy_rate(
     api: TestClient, engine: Engine
 ) -> None:

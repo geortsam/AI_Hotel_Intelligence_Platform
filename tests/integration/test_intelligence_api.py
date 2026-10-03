@@ -311,6 +311,17 @@ def test_a_prediction_is_never_published_above_capacity(api: TestClient) -> None
     assert point["available_room_nights"] == 1
     assert Decimal(point["predicted_room_nights"]) == 1
     assert point["capacity_clamped"] is True
+    # D1: the interval is held to the same capacity, so it still contains the prediction --
+    # the raw interval here was [4, 4], wholly above both.
+    assert Decimal(point["interval_lower"]) == Decimal(point["interval_upper"]) == 1
+
+    # D2: the outlook summarises that same forecast, so it cannot exceed capacity either.
+    insights = api.get(url(hotel, "insights"), params={**WINDOW, "horizon_days": 7}).json()
+    outlook = next(i for i in insights["insights"] if i["type"] == "occupancy_outlook")
+    figures = {m["name"]: m["value"] for m in outlook["supporting_metrics"]}
+    assert Decimal(figures["predicted_room_nights"]) == Decimal(figures["available_room_nights"])
+    assert figures["predicted_occupancy_rate"] == "1.0000"
+    assert "100.0%" in outlook["explanation"]
 
 
 def test_a_hotel_with_no_rooms_reports_no_occupancy_rate(api: TestClient) -> None:

@@ -523,20 +523,32 @@ class IntelligenceService:
         """No interval means no confidence to state."""
         return None if prediction.value is None else CONFIDENCE_LEVEL
 
+    @staticmethod
+    def _within_capacity(
+        value: decimal.Decimal | None, capacity: decimal.Decimal
+    ) -> decimal.Decimal | None:
+        """*value* as an occupancy the hotel can hold: never above *capacity*, null kept null.
+
+        The one capacity rule for every occupancy figure this forecast publishes -- the
+        prediction, both interval bounds, and the outlook built from them.
+        """
+        return None if value is None else min(value, capacity)
+
     def _occupancy_point(
         self, prediction: ForecastPoint, rooms: int, on_the_books: int
     ) -> OccupancyForecastPoint:
-        """Render one forecast day, clamping the prediction to physical capacity.
+        """Render one forecast day, clamping it to physical capacity.
 
         ``ck_daily_hotel_metrics_occupied_rooms_within_available`` states the rule the schema
         itself believes: occupied cannot exceed available. A prediction above capacity is
-        therefore corrected rather than published, and the correction is flagged.
+        therefore corrected rather than published, and the correction is flagged. The interval
+        bounds are occupancy figures too, so they are held to the same capacity: no bound claims
+        a night the hotel cannot sell, and the interval always contains the published prediction.
+        ``capacity_clamped`` reports the prediction alone, as before.
         """
         capacity = decimal.Decimal(rooms)
-        value = prediction.value
-        clamped = value is not None and value > capacity
-        if clamped:
-            value = capacity
+        clamped = prediction.value is not None and prediction.value > capacity
+        value = self._within_capacity(prediction.value, capacity)
 
         rate = None
         if value is not None and rooms > 0:
@@ -548,8 +560,12 @@ class IntelligenceService:
             available_room_nights=rooms,
             predicted_room_nights=_quantise(value, RATE_PLACES),
             predicted_occupancy_rate=rate,
-            interval_lower=_quantise(prediction.lower, RATE_PLACES),
-            interval_upper=_quantise(prediction.upper, RATE_PLACES),
+            interval_lower=_quantise(
+                self._within_capacity(prediction.lower, capacity), RATE_PLACES
+            ),
+            interval_upper=_quantise(
+                self._within_capacity(prediction.upper, capacity), RATE_PLACES
+            ),
             confidence_level=self._confidence(prediction),
             method=prediction.method.value,
             observations=prediction.observations,
@@ -750,7 +766,10 @@ class IntelligenceService:
             ]
 
         rooms = self._repository.active_room_count(hotel.id)
-        total = sum((point.value or ZERO) for point in usable)
+        # Each day as the endpoint publishes it -- held to the hotel's capacity -- so the outlook
+        # can never describe more occupied nights than the forecast it summarises.
+        per_day = decimal.Decimal(rooms)
+        total = sum((self._within_capacity(point.value, per_day) or ZERO for point in usable), ZERO)
         capacity = decimal.Decimal(rooms * len(usable))
         rate = _quantise(total / capacity, RATE_PLACES) if capacity > ZERO else None
         seasonal = sum(1 for point in usable if point.method is ForecastMethod.SEASONAL_DOW_MEDIAN)

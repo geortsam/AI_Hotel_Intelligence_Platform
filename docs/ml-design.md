@@ -98,7 +98,13 @@ lie about the evidence.
 
 **Capacity clamp:** a prediction above the hotel's active room count is reduced to it and
 flagged `capacity_clamped: true`. This is not an invented rule — the schema's own
-`ck_daily_hotel_metrics_occupied_rooms_within_available` asserts occupied ≤ available.
+`ck_daily_hotel_metrics_occupied_rooms_within_available` asserts occupied ≤ available. The
+interval bounds are occupancy figures too and are held to the same capacity, so the published
+interval always contains the published prediction and no bound claims a night the hotel cannot
+sell; `capacity_clamped` still reports the prediction alone. The occupancy-outlook finding sums
+the days as published, so its rate never exceeds 100%. This is the statistical **occupancy**
+forecast; the learned **demand** model is the opposite case — its output is unconstrained demand,
+never capped, with `exceeds_capacity` reported beside it ([ml-serving.md](ml-serving.md) §9).
 
 ### Revenue forecast
 
