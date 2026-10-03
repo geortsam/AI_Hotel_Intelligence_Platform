@@ -4,8 +4,8 @@
 > not maintained since. The schema it designs was implemented and has since grown by later
 > migrations (users, memberships, platform admins, audit events, audit archive, served demand
 > predictions, LLM invocations, knowledge documents, copilot conversations, declared demand
-> observation periods); the head is now `0016_demand_observation_periods` over 28 application
-> tables. The "design only" status line below
+> observation periods, the LLM-invocation retention rule); the head is now
+> `0017_llm_invocation_retention` over 28 application tables. The "design only" status line below
 > describes this document at the time it was written, not the repository today.
 
 **Status: design only. No ORM models, no migrations, no SQL has been written.**

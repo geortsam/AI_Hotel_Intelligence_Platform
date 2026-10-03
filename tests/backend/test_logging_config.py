@@ -72,6 +72,9 @@ APP_LOGGERS = [
     "app.services.hotel",
     # Stage 7.9. Document uploads, versions and withdrawals: public ids and counts only.
     "app.services.knowledge",
+    # Issue 4. The accounting-record purge: counts of records, hotels and batches -- never an
+    # identifier, an actor or a request id.
+    "app.services.llm_invocation_retention",
     "app.services.membership",
     "app.services.ml_accuracy",
     "app.services.ml_drift",

@@ -209,6 +209,17 @@ class Settings(BaseSettings):
     # operator (or the deployment's scheduler) runs it. See `app.services.copilot_conversation`.
     copilot_conversation_retention_days: int = Field(default=30, ge=1, le=365)
 
+    # --- Copilot accounting retention (Issue 4) ---------------------------------------------
+    #
+    # An `llm_invocations` record is kept this many days after its `created_at` -- a day is
+    # exactly 24 hours -- and then physically deleted by `python -m app.jobs.purge_llm_invocations`
+    # when an operator (or the deployment's scheduler) runs it. 365 is the period the project
+    # owner approved. The bounds are technical guards, not policy: at least a day, at most ten
+    # years, and never shorter than the conversation retention -- see the validator below. The
+    # database refuses to delete a record younger than the period the purge declares (migration
+    # 0017). See `app.services.llm_invocation_retention`.
+    llm_invocation_retention_days: int = Field(default=365, ge=1, le=3650)
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
@@ -266,6 +277,23 @@ class Settings(BaseSettings):
             raise ValueError(
                 "LLM_ENABLED is true but LLM_API_KEY is not set. Set the key, or set "
                 "LLM_ENABLED=false to run without a provider."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _accounting_outlives_conversations(self) -> Settings:
+        """Refuse an accounting retention shorter than the conversation retention.
+
+        A stored conversation turn names its `llm_invocations` record by `request_id`. Were the
+        record purged first, a live turn would point at an accounting record that no longer
+        exists. Equal periods are allowed.
+        """
+        if self.llm_invocation_retention_days < self.copilot_conversation_retention_days:
+            raise ValueError(
+                "LLM_INVOCATION_RETENTION_DAYS "
+                f"({self.llm_invocation_retention_days}) must be at least "
+                "COPILOT_CONVERSATION_RETENTION_DAYS "
+                f"({self.copilot_conversation_retention_days})."
             )
         return self
 

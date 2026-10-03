@@ -462,8 +462,9 @@ def test_the_migration_chain_is_unchanged() -> None:
     # Stage 6.8 added the tenth, for `demand_predictions`. What this file is responsible for is
     # that the ML work of Stage 6.3 needed no schema change of its own, and it still did not.
     # Issue 1 added 0016 (`demand_observation_periods`), a declaration table, not a model change.
-    assert len(revisions) == 16
-    assert revisions[-1].endswith("0016_demand_observation_periods.py")
+    # Issue 4 added 0017 (the `llm_invocations` retention rule), which no model reads.
+    assert len(revisions) == 17
+    assert revisions[-1].endswith("0017_llm_invocation_retention.py")
 
 
 #: Committed beside the model: four JSON records. `model.pkl` is the Stage 6.5 payload, which is

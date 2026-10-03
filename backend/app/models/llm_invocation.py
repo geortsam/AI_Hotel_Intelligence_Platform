@@ -13,11 +13,15 @@ no API key and no credential of any kind. The table has no column any of them co
 and a test pins the column set. §4.4: free text in an operational record is a data-retention
 liability, and the copilot's answer is returned to the caller -- not kept.
 
-## Append-only, like the audit trail
+## Append-only, like the audit trail -- until it expires
 
 A row describes something that already happened. ``trg_llm_invocations_append_only`` refuses
-UPDATE and DELETE at the database, mirroring ``trg_audit_events_append_only``, and there is no
-``updated_at``: a row that is never updated has no moment of last update.
+UPDATE at the database, mirroring ``trg_audit_events_append_only``, and there is no
+``updated_at``: a row that is never updated has no moment of last update. It refuses DELETE too,
+with one exception since migration 0017 (Issue 4): a transaction that declares the retention
+period may delete rows at least that old. A row is kept ``llm_invocation_retention_days`` (365 by
+default) and then deleted by ``python -m app.jobs.purge_llm_invocations``; see
+``app.services.llm_invocation_retention``.
 
 ## The CHECKs are the data's shape, not the loop's policy
 

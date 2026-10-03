@@ -343,9 +343,12 @@ it is persisted at all (§7), lives in its own tenant-scoped table with its own 
 > returned to the caller and kept nowhere. The table is append-only by trigger (mirroring
 > `audit_events`), `ON DELETE RESTRICT` on both foreign keys, and its CHECK constraints describe
 > the data -- non-negative counts, failures within calls, `complete` agreeing with
-> `stop_reason` -- never the tool loop's operational limits. **Retention is deferred**: the
-> repository's one retention mechanism archives `audit_events`, and no rule for this table exists
-> yet.
+> `stop_reason` -- never the tool loop's operational limits. **Retention** was deferred here and
+> set by Issue 4 (migration `0017_llm_invocation_retention`): a record is kept
+> `llm_invocation_retention_days` (365 by default) and then physically deleted by
+> `python -m app.jobs.purge_llm_invocations`. The trigger now permits a DELETE only of a record
+> older than the period the purge declares, and never an UPDATE. See
+> [copilot-accounting-retention.md](copilot-accounting-retention.md).
 
 ### 4.5 Cost as a security property
 
@@ -934,19 +937,20 @@ vocabularies, and a reversible migration.
 | `hotel_documents` | knowledge | one row per document version | `hotel_id` → `hotels`, RESTRICT | built in Stage 7.9 (0014): `public_id` UUID; versions chained by a unique `supersedes_id`, kept in-hotel by a composite `(supersedes_id, hotel_id)` key; status, language and bounds as CHECKs; a version is immutable and never deleted (trigger) |
 | `hotel_document_chunks` | knowledge | retrievable units with citation identity | via `document_id` → `hotel_documents`, RESTRICT | built in Stage 7.9 (0014): `public_id` UUID; append-only (trigger); `search_vector` with a GIN index; ordinal unique per document |
 | `audit_events` *(existing)* | copilot | audit of every tool call | `hotel_id`, RESTRICT | *Amendment A1:* no `copilot_tool_invocations` table was built. Each tool call is one `tool.invoked` event on the V1 append-only trail (migration 0012 widened its two CHECKs), with `{outcome, error_code, duration_ms, arguments_sha256}`. **No arguments, question, answer or tool output** |
-| `llm_invocations` | copilot | cost and latency observability | `hotel_id`, RESTRICT | built in Stage 7.7 (0013): provider, model, prompt version, token counts, latency, stop reason; append-only (trigger); no column for any text |
+| `llm_invocations` | copilot | cost and latency observability | `hotel_id`, RESTRICT | built in Stage 7.7 (0013): provider, model, prompt version, token counts, latency, stop reason; append-only (trigger) until it expires -- deleted 365 days after it was written (Issue 4, 0017); no column for any text |
 | `copilot_conversations` | multi-turn | session identity | `hotel_id`, RESTRICT | built in Stage 7.11 (0015): owner `actor_user_id`, RESTRICT; 1-20 turns; `next_source_label` |
 | `copilot_messages` | multi-turn | turn content | via `(conversation_id, hotel_id)`, CASCADE | built in Stage 7.11 (0015): one row per turn; immutable; covered by the conversation retention rule |
 
 **Hotel deletion (Amendment A9).** `DELETE /hotels/{id}` is a hard delete that answers **409**
 while any `RESTRICT` key still references the hotel, and cascades nothing — V1's rule, unchanged.
 V2 adds four such references: `demand_predictions`, `llm_invocations`, `hotel_documents` and
-`copilot_conversations`. The application offers no way to delete the first three
-(`llm_invocations` is append-only by trigger, and a document version is never deleted), so a hotel
-that has served a prediction, answered a copilot question or stored a document can no longer be
-deleted — as V1's append-only `audit_events` already made true of any hotel with an audited
-write. It can still be deactivated (`is_active: false`). A conversation reference goes away when
-its owner deletes it, or when it expires and is purged.
+`copilot_conversations`. The application offers no way to delete the first and third (a
+document version is never deleted), so a hotel that has served a prediction or stored a document
+can no longer be deleted — as V1's append-only `audit_events` already made true of any hotel with
+an audited write. It can still be deactivated (`is_active: false`). An `llm_invocations`
+reference goes away when the record expires and is purged (Issue 4, 365 days by default); until
+then a hotel that answered a copilot question cannot be deleted either. A conversation reference
+goes away when its owner deletes it, or when it expires and is purged.
 
 **Not proposed:** an embeddings table. It is specified only in the conditional pgvector stage, and
 only if §9.2's retrieval measurement justifies it. Creating it earlier would be a table built for

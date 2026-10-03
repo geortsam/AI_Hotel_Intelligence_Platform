@@ -249,7 +249,12 @@ was taken. That includes conversations that later expire, or are deleted by thei
 purged from the live database: the retention purge (`python -m app.jobs.purge_conversations`,
 see [../copilot-conversations.md](../copilot-conversations.md) §7) never touches an archive, so
 such text is gone only when the archive holding it is deleted under the retention window you
-decide in §9. Treat the archive with the same care as the database itself:
+decide in §9. The same holds for copilot accounting records (`llm_invocations`): the purge
+(`python -m app.jobs.purge_llm_invocations`, see
+[../copilot-accounting-retention.md](../copilot-accounting-retention.md)) deletes them from the
+live database after their retention period and never from an archive, and a restored archive can
+hold records the next purge run will delete. Treat the archive with the same care as the database
+itself:
 
 - store it where the database's own credentials would be acceptable;
 - never commit one to Git. Nothing in `.gitignore` will save you from `git add -f`;

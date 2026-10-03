@@ -18,6 +18,7 @@ from the original run, its ``note`` says how and why.
 | 7.14 multi-horizon | 10 | 10 | M1 disables both short-lag guards, as its re-run did |
 | F2 purge command | 3 | 3 | PostgreSQL |
 | F16 frontend contract | 12 | 12 | |
+| I4 invocation retention | 14 | 14 | PostgreSQL except M13 and M14 |
 """
 
 from __future__ import annotations
@@ -34,6 +35,10 @@ INSIGHT_SERVICE = "backend/app/services/insight.py"
 HORIZONS = "ml/horizons.py"
 OFFLINE_DEMAND = "ml/pipelines/offline_demand.py"
 FE_COPILOT = "frontend/src/features/copilot/"
+CONFIG = "backend/app/core/config.py"
+INVOCATION_REPOSITORY = "backend/app/repositories/llm_invocation.py"
+INVOCATION_RETENTION = "backend/app/services/llm_invocation_retention.py"
+INVOCATION_MIGRATION = "database/migrations/versions/20261003_0017_llm_invocation_retention.py"
 
 TOOL_BOUNDARY = "tests/backend/test_tool_boundary.py"
 COPILOT_TESTS = "tests/backend/test_copilot.py"
@@ -46,6 +51,8 @@ PRIORITIES = "tests/backend/test_priorities.py"
 MULTI_HORIZON = "tests/ml/test_multi_horizon.py"
 MULTI_HORIZON_REFIT = "tests/ml/test_multi_horizon_integration.py"
 PURGE_JOB = "tests/integration/test_conversation_purge_job.py"
+INVOCATION_PURGE = "tests/integration/test_llm_invocation_purge.py"
+INVOCATION_STATIC = "tests/backend/test_llm_invocation_retention.py"
 CONTRACT = "tests/backend/test_frontend_contract.py"
 ARCH = "src/features/copilot/architecture.node.test.ts"
 SCREEN = "src/features/copilot/copilot.test.tsx"
@@ -896,6 +903,191 @@ STAGE_F2 = [
     ),
 ]
 
+STAGE_I4 = [
+    Mutation(
+        "I4-M1",
+        "I4",
+        "a retention day is counted as an hour",
+        one(
+            INVOCATION_REPOSITORY,
+            "        0, 0, 0, 0, retention_days * 24\n    )",
+            "        0, 0, 0, 0, retention_days\n    )",
+        ),
+        (
+            f"{INVOCATION_PURGE}::test_a_record_one_day_past_the_period_is_deleted_and_one_day_inside_is_kept",
+            f"{INVOCATION_STATIC}::test_a_retention_day_is_counted_as_24_hours_by_the_database",
+        ),
+        needs_database=True,
+    ),
+    Mutation(
+        "I4-M2",
+        "I4",
+        "a record exactly at the cutoff is kept",
+        one(
+            INVOCATION_REPOSITORY,
+            "    return LlmInvocation.created_at <= func.now() - func.make_interval(",
+            "    return LlmInvocation.created_at < func.now() - func.make_interval(",
+        ),
+        (f"{INVOCATION_PURGE}::test_the_boundary_is_exact_and_inclusive",),
+        needs_database=True,
+    ),
+    Mutation(
+        "I4-M3",
+        "I4",
+        "one hotel's batch can delete another hotel's records",
+        (
+            Edit(
+                INVOCATION_REPOSITORY,
+                "            .where(LlmInvocation.hotel_id == hotel_id, _expired(retention_days))",
+                "            .where(_expired(retention_days))",
+            ),
+            Edit(
+                INVOCATION_REPOSITORY,
+                "            delete(LlmInvocation).where(\n"
+                "                LlmInvocation.hotel_id == hotel_id, LlmInvocation.id.in_(batch)\n"
+                "            )",
+                "            delete(LlmInvocation).where(LlmInvocation.id.in_(batch))",
+            ),
+        ),
+        (f"{INVOCATION_PURGE}::test_one_hotels_purge_never_touches_another_hotel",),
+        needs_database=True,
+    ),
+    Mutation(
+        "I4-M4",
+        "I4",
+        "a batch deletes the newest expired records first",
+        one(
+            INVOCATION_REPOSITORY,
+            "            .order_by(LlmInvocation.created_at.asc(), LlmInvocation.id.asc())",
+            "            .order_by(LlmInvocation.created_at.desc(), LlmInvocation.id.asc())",
+        ),
+        (f"{INVOCATION_PURGE}::test_a_batch_deletes_the_oldest_expired_records_first",),
+        needs_database=True,
+    ),
+    Mutation(
+        "I4-M5",
+        "I4",
+        "the declared period disagrees with the rule the repository deletes by",
+        one(
+            INVOCATION_REPOSITORY,
+            "str(retention_days * 24), True)",
+            "str(retention_days * 24 + 1), True)",
+        ),
+        (f"{INVOCATION_PURGE}::test_the_boundary_is_exact_and_inclusive",),
+        needs_database=True,
+    ),
+    Mutation(
+        "I4-M6",
+        "I4",
+        "the purge stops after one batch per hotel",
+        one(
+            INVOCATION_RETENTION,
+            "            if purged < batch_size:\n                break\n",
+            "            break\n",
+        ),
+        (
+            f"{INVOCATION_PURGE}::test_more_than_one_batch_is_processed_to_completion_at_every_hotel",
+        ),
+        needs_database=True,
+    ),
+    Mutation(
+        "I4-M7",
+        "I4",
+        "the purge visits only the first hotel",
+        one(
+            INVOCATION_RETENTION,
+            "    for hotel_id in hotel_ids:\n",
+            "    for hotel_id in hotel_ids[:1]:\n",
+        ),
+        (f"{INVOCATION_PURGE}::test_expired_records_at_every_hotel_and_of_every_user_are_deleted",),
+        needs_database=True,
+    ),
+    Mutation(
+        "I4-M8",
+        "I4",
+        "the retention setting is ignored",
+        one(
+            INVOCATION_RETENTION,
+            "    retention_days = settings.llm_invocation_retention_days\n",
+            "    retention_days = 365\n",
+        ),
+        (f"{INVOCATION_PURGE}::test_the_configured_retention_period_decides_what_is_deleted",),
+        needs_database=True,
+    ),
+    Mutation(
+        "I4-M9",
+        "I4",
+        "batches are committed only at the end, so a failure loses the completed ones",
+        one(
+            INVOCATION_RETENTION,
+            "limit=batch_size)\n                session.commit()\n",
+            "limit=batch_size)\n",
+        ),
+        (
+            f"{INVOCATION_PURGE}::test_a_failed_purge_keeps_every_completed_batch_and_a_retry_finishes",
+        ),
+        needs_database=True,
+    ),
+    Mutation(
+        "I4-M10",
+        "I4",
+        "the database's one-day floor is removed",
+        one(INVOCATION_MIGRATION, "IF retention_hours < 24 THEN", "IF retention_hours < 0 THEN"),
+        (
+            f"{INVOCATION_PURGE}::test_a_declared_period_shorter_than_a_day_is_refused_whatever_the_record",
+        ),
+        needs_database=True,
+    ),
+    Mutation(
+        "I4-M11",
+        "I4",
+        "a declared purge may delete a record inside its period",
+        one(
+            INVOCATION_MIGRATION,
+            "IF OLD.created_at <= now() - make_interval(hours => retention_hours) THEN",
+            "IF OLD.created_at <= now() THEN",
+        ),
+        (f"{INVOCATION_PURGE}::test_a_declared_delete_of_a_record_inside_its_period_is_refused",),
+        needs_database=True,
+    ),
+    Mutation(
+        "I4-M12",
+        "I4",
+        "a declared purge may update a record",
+        one(
+            INVOCATION_MIGRATION,
+            "            IF TG_OP = 'DELETE' THEN",
+            "            IF TG_OP IN ('DELETE', 'UPDATE') THEN",
+        ),
+        (f"{INVOCATION_PURGE}::test_an_update_is_refused_even_inside_a_declared_purge",),
+        needs_database=True,
+    ),
+    Mutation(
+        "I4-M13",
+        "I4",
+        "the accounting retention may be shorter than the conversation retention",
+        one(
+            CONFIG,
+            "retention_days < self.copilot_conversation_retention_days:",
+            "retention_days < 0:",
+        ),
+        (
+            f"{INVOCATION_STATIC}::test_the_retention_may_not_be_shorter_than_the_conversation_retention",
+        ),
+    ),
+    Mutation(
+        "I4-M14",
+        "I4",
+        "the default period is not the approved one",
+        one(
+            CONFIG,
+            "    llm_invocation_retention_days: int = Field(default=365, ge=1, le=3650)",
+            "    llm_invocation_retention_days: int = Field(default=730, ge=1, le=3650)",
+        ),
+        (f"{INVOCATION_STATIC}::test_the_default_retention_is_the_approved_365_days",),
+    ),
+]
+
 LIVE_CONTRACT = f"{CONTRACT}::test_the_frontend_types_are_compatible_with_the_live_backend_schema"
 
 STAGE_F16 = [
@@ -1045,4 +1237,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_14,
     *STAGE_F2,
     *STAGE_F16,
+    *STAGE_I4,
 )

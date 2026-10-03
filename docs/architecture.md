@@ -143,7 +143,7 @@ registration, login and the two health probes — the same five as at V1.
 All seventeen are hotel-scoped and authenticated. Stages 7.13 and 7.14 and the V2 closure changed
 no route: the copilot screen is front-end only, the multi-horizon models are offline, and the
 conversation purge is an operator command (`python -m app.jobs.purge_conversations`), not an
-endpoint.
+endpoint; so is Issue 4's accounting-record purge (`python -m app.jobs.purge_llm_invocations`).
 
 Of the four `/ml` routes, **only the serving route loads the model**: it declares a `503` for an
 unavailable artifact and the other three declare none, because they load none. The copilot's
@@ -188,8 +188,11 @@ retention-bound and deleted with their turns. Issue 1 added the seventh,
 dates, no two sharing a date -- the only evidence the platform accepts that a date's demand is
 known. Inside a span a date with no occupied nights is a zero; outside every span it is unknown,
 to the demand model, its dataset and the intelligence forecasts alike. Spans are declared by an
-operator with `python -m app.jobs.demand_observation` (no route), and go with their hotel (`CASCADE`). Head `0016` across
-16 linear revisions, 28 application tables. Four of V2's tables reference `hotels` with `RESTRICT`, so — as V1's
+operator with `python -m app.jobs.demand_observation` (no route), and go with their hotel (`CASCADE`). Issue 4 added the
+eighth, `0017_llm_invocation_retention`, which creates nothing: it replaces the body of `llm_invocations`'
+trigger function, so a record is kept 365 days and then deleted by the operator's purge
+(`python -m app.jobs.purge_llm_invocations`, no route); UPDATE is still refused. Head `0017` across
+17 linear revisions, 28 application tables. Four of V2's tables reference `hotels` with `RESTRICT`, so — as V1's
 append-only audit trail already did — they can make a hotel undeletable: `DELETE /hotels/{id}`
 still answers 409 rather than cascading. See [v2-architecture.md](v2-architecture.md) §10. See [knowledge-documents.md](knowledge-documents.md) and
 [copilot-conversations.md](copilot-conversations.md).

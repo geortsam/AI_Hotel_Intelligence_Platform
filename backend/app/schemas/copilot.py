@@ -18,7 +18,8 @@ partial answer as a finished one.
 name no tool has is reported as `null`, never as the text the model wrote. No figure appears in
 the response that is not inside `answer`, and no provider name, model name, key, token count or
 tenant identifier appears at all. `invocation_public_id` names the stored `llm_invocations` row,
-so an answer can be quoted in a support request.
+so an answer can be quoted in a support request -- for as long as that row is kept: it is deleted
+`llm_invocation_retention_days` (365 by default) after the request (Issue 4).
 
 ## Citations (Stage 7.10, additive)
 
@@ -135,7 +136,11 @@ class CopilotAnswerResponse(BaseModel):
     prompt_id: str = Field(description="The registered prompt the answer was produced under.")
     prompt_version: str = Field(description="That prompt's version.")
     invocation_public_id: uuid.UUID = Field(
-        description="Identifies the stored accounting record of this request."
+        description=(
+            "Identifies the stored accounting record of this request. The record is kept for "
+            "the deployment's retention period (365 days by default) and then deleted, after "
+            "which this reference identifies nothing."
+        )
     )
     citations: list[CopilotCitation] = Field(
         description=(

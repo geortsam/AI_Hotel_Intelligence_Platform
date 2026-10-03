@@ -52,7 +52,10 @@ rules above; it is not covered by a dedicated test.
 - The composite foreign key makes a turn in another hotel's conversation impossible.
 - Deleting a conversation deletes its turns (ON DELETE CASCADE).
 - `request_id` ties a turn to its `llm_invocations` row and `tool.invoked` events. There is no
-  foreign key to `llm_invocations`, and no existing table was altered.
+  foreign key to `llm_invocations`, and no existing table was altered. That row has its own
+  retention (365 days by default, Issue 4), which the settings refuse to make shorter than this
+  one, so a live turn never names a purged record. See
+  [copilot-accounting-retention.md](copilot-accounting-retention.md).
 
 ## 3. The five operations
 

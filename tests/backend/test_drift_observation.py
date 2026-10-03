@@ -1101,8 +1101,9 @@ def test_the_migration_chain_did_not_move() -> None:
     # Stage 7.9 added 0014 (`hotel_documents`, `hotel_document_chunks`).
     # Stage 7.11 added 0015 (`copilot_conversations`, `copilot_messages`).
     # Issue 1 added 0016 (`demand_observation_periods`).
-    assert len(revisions) == 16
-    assert revisions[-1].endswith("0016_demand_observation_periods.py")
+    # Issue 4 added 0017 (the `llm_invocations` retention rule; no table).
+    assert len(revisions) == 17
+    assert revisions[-1].endswith("0017_llm_invocation_retention.py")
 
 
 def test_the_model_identity_is_untouched() -> None:

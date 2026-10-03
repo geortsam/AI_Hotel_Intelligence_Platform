@@ -42,7 +42,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
 > **6866 backend tests and 1263 frontend tests pass in CI.** Schema head is
-> `0016_demand_observation_periods` across 16 linear migrations.
+> `0017_llm_invocation_retention` across 17 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
 > baseline — seasonal-naive day-of-week median forecasting, MAD-based intervals and anomaly
@@ -322,7 +322,7 @@ Full detail, including the rules later stages must follow:
 | Validation | Pydantic v2, pydantic-settings | Request/response schemas, environment config |
 | ORM | SQLAlchemy 2.0 | Data mapping across 15 model modules |
 | Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
-| Migrations | Alembic | 16 linear revisions, head `0016_demand_observation_periods` |
+| Migrations | Alembic | 17 linear revisions, head `0017_llm_invocation_retention` |
 | Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
 | Frontend | React 18, TypeScript 5.7, Vite 6 | Dashboard SPA, route-level code splitting |
 | Intelligence (V1) | Python standard library | Deterministic statistical baseline — no NumPy or pandas on its path |
@@ -745,6 +745,13 @@ recommended; the application schedules nothing). The model is shown at most 6 ea
 and citations must still come from the current turn's own lookups. Question and answer text is
 stored only there -- never in the audit trail or the accounting record. See
 [docs/copilot-conversations.md](docs/copilot-conversations.md).
+
+**Accounting retention (Issue 4).** Each copilot question's content-free accounting record
+(`llm_invocations`) is kept 365 days (`LLM_INVOCATION_RETENTION_DAYS`) and then physically
+deleted by `python -m app.jobs.purge_llm_invocations`, which an operator should schedule (daily
+is recommended; the application schedules nothing). The database still refuses every UPDATE,
+and every DELETE except of a record older than the period the purge declares. See
+[docs/copilot-accounting-retention.md](docs/copilot-accounting-retention.md).
 
 **The attention list (Stage 7.12).** `…/intelligence/priorities` ranks one hotel's upcoming days by
 the seasonal forecast and lists the busiest three, the strongest anomalies the window saw and a

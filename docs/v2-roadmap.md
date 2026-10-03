@@ -311,7 +311,8 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 > prompt identity, the provider and model the request was routed to, the stop reason, counts,
 > tokens, latency and the request id -- never the question, the answer, the prompt text or any
 > tool output. Append-only by trigger; its CHECKs describe the data, not the loop's limits.
-> Retention is deferred. Head `0012` → **`0013_llm_invocations`**; 23 application tables.
+> Retention is deferred (set later by Issue 4: 365 days, migration `0017`). Head `0012` →
+> **`0013_llm_invocations`**; 23 application tables.
 >
 > **Two corrections to earlier stages, made rather than papered over.** Stage 7.5's
 > `ChatResponse` docstring claimed a test stopped services reading `.provider` / `.model`; none
@@ -339,7 +340,7 @@ Track B   7.5 ──► 7.6 ──► 7.7 ──► 7.8 ──► 7.9 ──► 
 | **Depends on** | **7.5, 7.6** |
 | **Acceptance** | (1) the answer cites which tools ran; (2) tool results are the only source of figures; (3) a question outside the tool set is declined, not guessed; (4) `llm_enabled=false` → clean 503; (5) no prompt, provider name or key in any response or log |
 | **Done when** | CI green with a scripted model; no live provider needed in CI |
-| **Known limitations** | budgets are per worker process; a malformed body from an authorized caller is charged before the 422, because the budget runs as a route dependency; the figure check proves existence, not correct labelling; token counts cover only model calls that returned; no retention rule for `llm_invocations`; the live provider is exercised by no test |
+| **Known limitations** | budgets are per worker process; a malformed body from an authorized caller is charged before the 422, because the budget runs as a route dependency; the figure check proves existence, not correct labelling; token counts cover only model calls that returned; no retention rule for `llm_invocations` (set by Issue 4: 365 days, migration `0017`); the live provider is exercised by no test |
 
 ### Stage 7.8 — Evaluation harness · *done*
 

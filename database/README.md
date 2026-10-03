@@ -12,7 +12,7 @@ database *as a database*, kept separate from the application code that queries i
 
 ## Current state
 
-**Sixteen migrations, head `0016_demand_observation_periods`,** applied by `alembic upgrade
+**Seventeen migrations, head `0017_llm_invocation_retention`,** applied by `alembic upgrade
 head`. They build **28 tables** and the `historical_room_overlaps` view; with Alembic's own
 `alembic_version`, a migrated database reports 30 entries in `information_schema.tables`. Every
 one of the 28 is ORM-mapped -- `tests/backend/test_model_metadata.py` pins the list, so a table
@@ -29,12 +29,15 @@ canonical SHA-256 over every revision file with line endings normalised to LF, s
 cannot be edited unnoticed on any platform:
 
 ```
-5c20fc157cc78112a484b95fd751b22dbfc9f3913e2dc41c902e1d92c2e383a5
+690a0cf9ced1f9e3c4b7a26980789449069b172b217c5a36781a59ccba11ea01
 ```
 
 Editing any shipped revision changes that digest and fails
 `tests/backend/test_migration_integrity.py`. Schema changes are made by adding a revision, never
-by editing one that has already run somewhere.
+by editing one that has already run somewhere. `0017_llm_invocation_retention` is an example:
+it creates no table and replaces the body of the trigger function `0013` created, so that an
+`llm_invocations` record past its retention period can be purged -- see
+[../docs/copilot-accounting-retention.md](../docs/copilot-accounting-retention.md).
 
 `init/` is currently empty. It is mounted read-only into the `db` service and would execute only
 on first cluster creation; nothing is delegated to it today, because migration `0001` creates the

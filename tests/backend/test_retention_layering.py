@@ -241,6 +241,10 @@ def test_the_copied_columns_are_declared_once() -> None:
 #: strength for every other module -- and the conversation policy gets a rule of its own.
 CONVERSATION_POLICY_MODULES = {"api/deps.py", "services/copilot_conversation.py"}
 
+#: Issue 4 added a third: the `llm_invocations` accounting records. Its own setting, read once,
+#: by its own purge; never the audit policy, and never the conversation one.
+INVOCATION_POLICY_MODULES = {"services/llm_invocation_retention.py"}
+
 
 def test_the_policy_is_built_from_settings_and_nowhere_else() -> None:
     """No module may decide retention locally. A second definition is a second answer to "is
@@ -252,7 +256,10 @@ def test_the_policy_is_built_from_settings_and_nowhere_else() -> None:
         and name != "services/retention.py"
         and (
             "audit_retention_days" in source
-            or ("retention_days=" in source and name not in CONVERSATION_POLICY_MODULES)
+            or (
+                "retention_days=" in source
+                and name not in CONVERSATION_POLICY_MODULES | INVOCATION_POLICY_MODULES
+            )
         )
     ]
 
@@ -277,6 +284,23 @@ def test_the_conversation_policy_is_its_own_and_read_in_one_place() -> None:
     assert "copilot_conversation_retention_days" not in sources()["jobs/purge_conversations.py"]
     for name in CONVERSATION_POLICY_MODULES:
         assert "audit_retention_days" not in sources()[name], name
+
+
+def test_the_invocation_policy_is_its_own_and_read_in_one_place() -> None:
+    """Issue 4. `llm_invocation_retention_days` is read only by the purge's entry point, which
+    takes `settings` on the precedent of `purge_expired_conversations`; the operator command
+    passes settings through and never reads the number. The purge never reads the audit or the
+    conversation policy -- a second policy is not a second answer to either of theirs."""
+    readers = sorted(
+        name
+        for name, source in sources().items()
+        if "llm_invocation_retention_days" in source and name != "core/config.py"
+    )
+    assert readers == ["services/llm_invocation_retention.py"]
+    assert "llm_invocation_retention_days" not in sources()["jobs/purge_llm_invocations.py"]
+    for name in INVOCATION_POLICY_MODULES:
+        assert "audit_retention_days" not in sources()[name], name
+        assert "copilot_conversation_retention_days" not in sources()[name], name
 
 
 def test_the_default_retention_is_conservative() -> None:
@@ -474,16 +498,17 @@ def test_the_migration_chain_is_linear_and_ends_at_0008() -> None:
         assert revision and down, path.name
         chain[revision.group(1)] = None if down.group(1) == "None" else down.group(1).strip('"')
 
-    assert len(chain) == 16
+    assert len(chain) == 17
     heads = [rev for rev in chain if rev not in set(chain.values())]
     # Stage 4.5.15 added 0009 and Stage 6.8 added 0010. What this file is responsible for is
     # 0008's own position, which is unchanged; the head moves because the chain grew past it.
-    # Stage 7.6 added 0012; Stage 7.9 added 0014; Stage 7.11 added 0015; Issue 1 added 0016.
-    assert heads == ["0016_demand_observation_periods"]
+    # Stage 7.6 added 0012; Stage 7.9 added 0014; Stage 7.11 added 0015; Issue 1 added 0016;
+    # Issue 4 added 0017, which touches llm_invocations' trigger function and no audit table.
+    assert heads == ["0017_llm_invocation_retention"]
     assert chain["0008_audit_retention_archive"] == "0007_audit_events"
 
     parents = [down for down in chain.values() if down is not None]
-    assert len(parents) == len(set(parents)) == 15
+    assert len(parents) == len(set(parents)) == 16
 
 
 def test_no_earlier_migration_mentions_the_archive() -> None:
