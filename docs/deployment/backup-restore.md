@@ -3,9 +3,10 @@
 ## 1. Purpose
 
 The database is the only thing in this deployment that cannot be rebuilt. The API and the
-frontend are stateless images; the schema is nine Alembic migrations; the rows are not
-recoverable from anything else in the repository. This document is the procedure for making a
-copy of them and for proving the copy works.
+frontend are stateless images; the schema is managed by Alembic and rebuilt from the migrations
+in `database/migrations` — the revision a database is at is checked separately, in §4.1 and §7;
+the rows are not recoverable from anything else in the repository. This document is the
+procedure for making a copy of them and for proving the copy works.
 
 A backup nobody has restored is a belief, not a backup. The procedure below therefore ends with
 a restore, and CI runs both halves on every push — see [§5](#5-what-ci-proves-on-every-push).
@@ -33,7 +34,7 @@ strategy.** Nothing in this repository can undo it. `down` without `-v` keeps th
 
 ## 3. Prerequisites
 
-- The stack is running and `migrate` has completed, so the schema is at `0011_demand_prediction_public_id`.
+- The stack is running and `migrate` has completed, so the schema is at `0017_llm_invocation_retention`.
 - You can reach the database container, e.g. `docker compose ps db` shows it healthy.
 - Somewhere to put the archive that is **not** the same disk as the database volume. A backup
   that dies with the host it protects is not a backup.
@@ -52,7 +53,7 @@ docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
 ```
 
 Confirm the database name is the one you intend and the revision is the one you expect. If the
-revision is not `0011_demand_prediction_public_id`, stop and find out why before backing up.
+revision is not `0017_llm_invocation_retention`, stop and find out why before backing up.
 
 ### 4.2 Take the dump
 
@@ -157,7 +158,7 @@ docker exec pg-restore-rehearsal psql -U postgres -d hotel_restore -tAc \
   "SELECT version_num FROM alembic_version"
 ```
 
-Expect `0011_demand_prediction_public_id` — the same revision as the source, with no upgrade or
+Expect `0017_llm_invocation_retention` — the same revision as the source, with no upgrade or
 downgrade having happened.
 
 ```bash
@@ -166,7 +167,7 @@ docker exec pg-restore-rehearsal psql -U postgres -d hotel_restore -tAc \
     WHERE table_schema='public' AND table_type='BASE TABLE'"
 ```
 
-Expect **23** — the 22 application tables plus `alembic_version`. The
+Expect **29** — the 28 application tables plus `alembic_version`. The
 `historical_room_overlaps` view should also be present.
 
 Then compare facts rather than eyeballing. Run the same query against the source and the

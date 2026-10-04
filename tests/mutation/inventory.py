@@ -21,6 +21,7 @@ from the original run, its ``note`` says how and why.
 | I4 invocation retention | 14 | 14 | PostgreSQL except M13 and M14 |
 | F1 hotel-local booking days | 8 | 8 | PostgreSQL |
 | F2-ADR dashboard ADR caption | 6 | 6 | Vitest; "F2" was already the purge command's stage |
+| M1 runbook schema facts | 8 | 8 | |
 """
 
 from __future__ import annotations
@@ -44,6 +45,8 @@ INVOCATION_MIGRATION = "database/migrations/versions/20261003_0017_llm_invocatio
 ANALYTICS_REPOSITORY = "backend/app/repositories/analytics.py"
 INTELLIGENCE_SERVICE = "backend/app/services/intelligence.py"
 DASHBOARD_PAGE = "frontend/src/pages/DashboardPage.tsx"
+BACKUP_RUNBOOK = "docs/deployment/backup-restore.md"
+BOOTSTRAP_RUNBOOK = "docs/deployment/first-run-bootstrap.md"
 
 TOOL_BOUNDARY = "tests/backend/test_tool_boundary.py"
 COPILOT_TESTS = "tests/backend/test_copilot.py"
@@ -61,6 +64,7 @@ INVOCATION_STATIC = "tests/backend/test_llm_invocation_retention.py"
 BUCKETING = "tests/integration/test_business_day_bucketing.py"
 BUSINESS_DAY_GUARD = "tests/backend/test_business_day_guard.py"
 DASHBOARD_TESTS = "src/features/dashboard/dashboard.test.tsx"
+RUNBOOK_FACTS = "tests/backend/test_runbook_schema_facts.py"
 CONTRACT = "tests/backend/test_frontend_contract.py"
 ARCH = "src/features/copilot/architecture.node.test.ts"
 SCREEN = "src/features/copilot/copilot.test.tsx"
@@ -1330,6 +1334,85 @@ STAGE_F2_ADR = [
     ),
 ]
 
+
+def runbook(name: str, breaks: str, path: str, old: str, new: str, *tests: str) -> Mutation:
+    """A runbook drift mutation (M1): one edit, killed by the runbook schema-facts test."""
+    return Mutation(
+        name, "M1", breaks, one(path, old, new), tuple(f"{RUNBOOK_FACTS}::{t}" for t in tests)
+    )
+
+
+STALE = "`0011_demand_prediction_public_id`"
+CURRENT = "`0017_llm_invocation_retention`"
+REVISIONS_IN_BACKUP = "test_every_revision_a_runbook_quotes_is_the_current_head[backup-restore]"
+
+STAGE_M1 = [
+    runbook(
+        "M1-M1",
+        "the backup stop condition names an old revision again",
+        BACKUP_RUNBOOK,
+        f"revision is not {CURRENT}, stop",
+        f"revision is not {STALE}, stop",
+        REVISIONS_IN_BACKUP,
+    ),
+    runbook(
+        "M1-M2",
+        "the backup prerequisite names an old revision again",
+        BACKUP_RUNBOOK,
+        f"so the schema is at {CURRENT}.",
+        f"so the schema is at {STALE}.",
+        REVISIONS_IN_BACKUP,
+    ),
+    runbook(
+        "M1-M3",
+        "the restore check expects an old revision again",
+        BACKUP_RUNBOOK,
+        f"Expect {CURRENT} —",
+        f"Expect {STALE} —",
+        REVISIONS_IN_BACKUP,
+    ),
+    runbook(
+        "M1-M4",
+        "the restore check forgets alembic_version in its base-table count",
+        BACKUP_RUNBOOK,
+        "Expect **29** — the 28 application tables",
+        "Expect **28** — the 28 application tables",
+        "test_the_restore_check_expects_every_application_table_plus_alembic_version",
+    ),
+    runbook(
+        "M1-M5",
+        "the first-run prerequisite names an old revision again",
+        BOOTSTRAP_RUNBOOK,
+        f"Alembic reports revision **{CURRENT}**",
+        f"Alembic reports revision **{STALE}**",
+        "test_every_revision_a_runbook_quotes_is_the_current_head[first-run-bootstrap]",
+    ),
+    runbook(
+        "M1-M6",
+        "the backup runbook states a migration count again",
+        BACKUP_RUNBOOK,
+        "the schema is managed by Alembic and rebuilt from the migrations",
+        "the schema is seventeen Alembic migrations, rebuilt from the migrations",
+        "test_the_backup_runbook_states_no_migration_count",
+    ),
+    runbook(
+        "M1-M7",
+        "the revision extraction matches nothing, so the runbook check asserts nothing",
+        RUNBOOK_FACTS,
+        'QUOTED_REVISION = re.compile(r"`(\\d{4}_[a-z][a-z0-9_]*)`")',
+        'QUOTED_REVISION = re.compile(r"`(\\d{5}_[a-z][a-z0-9_]*)`")',
+        "test_the_revision_extraction_finds_a_stale_revision",
+    ),
+    runbook(
+        "M1-M8",
+        "the table extraction matches nothing, so the restore count is never compared",
+        RUNBOOK_FACTS,
+        '    r"Expect \\*\\*(\\d+)\\*\\* — the (\\d+) application tables plus `alembic_version`"',
+        '    r"Expected \\*\\*(\\d+)\\*\\* — the (\\d+) application tables plus `alembic_version`"',
+        "test_the_table_extraction_finds_a_stale_count",
+    ),
+]
+
 LIVE_CONTRACT = f"{CONTRACT}::test_the_frontend_types_are_compatible_with_the_live_backend_schema"
 
 STAGE_F16 = [
@@ -1482,4 +1565,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_I4,
     *STAGE_F1,
     *STAGE_F2_ADR,
+    *STAGE_M1,
 )
