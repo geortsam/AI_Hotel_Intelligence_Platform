@@ -1248,4 +1248,7 @@ def test_analytics_does_not_query_per_day(
 
     assert len(body["days"]) == 31
     selects = [s for s in statements if s.lstrip().upper().startswith("SELECT")]
-    assert len(selects) <= 12, f"{len(selects)} SELECTs for 31 days"
+    # A constant bound, far below the 31 a per-day query would need. Issue F1 added two
+    # constant reads: the hotel's stored timezone (one per request) and PostgreSQL's catalogue
+    # of named zones (once per process, so only when no earlier call has cached it).
+    assert len(selects) <= 14, f"{len(selects)} SELECTs for 31 days"

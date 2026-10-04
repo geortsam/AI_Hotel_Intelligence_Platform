@@ -134,7 +134,8 @@ def get_revenue_forecast(
     "/demand-trend",
     response_model=DemandTrendResponse,
     summary="Detect increasing, decreasing or stable booking demand",
-    description="Split-window median comparison over bookings.booked_at. Both halves' "
+    description="Split-window median comparison over bookings.booked_at, counted per day of "
+    "the hotel's own calendar (hotels.timezone). Both halves' "
     "medians and the threshold are returned, so the classification can be recomputed by hand. "
     "no_activity: no booking on any day. sparse_activity: bookings were taken, but both "
     "halves' medians are zero, so no direction can be established.",

@@ -1313,6 +1313,13 @@ when a hotel's day ends, and by any report converting event timestamps to local 
 IANA names are used rather than fixed UTC offsets because they carry daylight-saving rules;
 `+02:00` is wrong for half the year in most of Europe.
 
+> **Implemented for booking and cancellation intake (Issue F1).** The analytics and
+> intelligence series bucket `booked_at` and `cancelled_at` on the hotel-local date in
+> `hotels.timezone`, or in UTC when PostgreSQL does not recognise that value as a named zone;
+> never in the database session's time zone. See
+> [analytics-design.md](analytics-design.md) §2. The schema still accepts any text in this
+> column: validating it on input is a separate, deferred concern.
+
 ---
 
 ## 10. Multi-hotel strategy

@@ -18,6 +18,7 @@ import datetime as dt
 import uuid
 from collections.abc import Iterator
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import pytest
 import sqlalchemy as sa
@@ -43,6 +44,17 @@ STAY_IN = dt.date(2026, 9, 1)
 STAY_OUT = dt.date(2026, 9, 5)
 NIGHTS = [STAY_IN + dt.timedelta(days=n) for n in range(4)]
 RANGE = {"date_from": "2026-09-01", "date_to": "2026-09-30"}
+
+#: Every hotel this suite creates is in Athens (see `hotel_payload`). Booking and cancellation
+#: days are that hotel's calendar days (Issue F1), so a test that derives a day from a returned
+#: instant must convert it to this zone -- never take the date of the offset the database
+#: session happened to serialise it with.
+HOTEL_ZONE = ZoneInfo("Europe/Athens")
+
+
+def hotel_day(instant: str) -> dt.date:
+    """The Athens calendar date of an ISO-8601 instant returned by the API."""
+    return dt.datetime.fromisoformat(instant).astimezone(HOTEL_ZONE).date()
 
 
 def hotel_payload(slug: str) -> dict[str, object]:
@@ -436,7 +448,7 @@ def test_a_cancelled_booking_holds_no_occupancy(api: TestClient, occupancy_hotel
     api.patch(f"/api/v1/hotels/{occupancy_hotel}/bookings/{booking}", json={"status": "cancelled"})
 
     detail = api.get(f"/api/v1/hotels/{occupancy_hotel}/bookings/{booking}").json()
-    cancelled_on = dt.datetime.fromisoformat(detail["cancelled_at"]).date()
+    cancelled_on = hotel_day(detail["cancelled_at"])
     # The premise the assertions below rest on, checked rather than assumed.
     assert not stay_in <= cancelled_on <= stay_out
 
@@ -1341,9 +1353,10 @@ def test_the_two_booking_counts_answer_different_questions(
         check_out=dt.date(2027, 3, 3),
     )
     # Derived from the row's OWN booked_at rather than the wall clock: a run that straddles
-    # midnight would otherwise stamp the booking on one date and query the next.
+    # midnight would otherwise stamp the booking on one date and query the next. Converted to
+    # the hotel's zone, because that is the calendar the creation-dated count uses.
     detail = api.get(f"/api/v1/hotels/{occupancy_hotel}/bookings/{booking}").json()
-    created_on = dt.datetime.fromisoformat(detail["booked_at"]).date()
+    created_on = hotel_day(detail["booked_at"])
 
     stay_window = api.get(
         analytics(occupancy_hotel, "overview"),

@@ -118,7 +118,8 @@ class StayFlowMetrics(BaseModel):
     arrivals: int
     #: bookings.check_out_date within range.
     departures: int
-    #: bookings.cancelled_at::date within range.
+    #: bookings.cancelled_at on a hotel-local date within range (Issue F1: the hotel's
+    #: timezone, never the database session's).
     cancellations: int
 
 
@@ -226,8 +227,8 @@ class OverviewResponse(BaseModel):
     hotel_public_id: uuid.UUID
     range: DateRange
 
-    #: Bookings whose ``booked_at`` falls in the range -- demand as it was *taken*. This is
-    #: the column ``daily_hotel_metrics.bookings_created`` counts.
+    #: Bookings whose ``booked_at`` falls on a hotel-local date in the range -- demand as it
+    #: was *taken*. This is the column ``daily_hotel_metrics.bookings_created`` counts.
     bookings_created: BookingStatusCounts
     #: Bookings whose STAY overlaps the range -- occupancy as it is *served*. Both are given
     #: because neither answers the other's question, and reporting only creation would show

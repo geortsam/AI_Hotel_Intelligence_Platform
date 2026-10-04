@@ -19,6 +19,7 @@ from the original run, its ``note`` says how and why.
 | F2 purge command | 3 | 3 | PostgreSQL |
 | F16 frontend contract | 12 | 12 | |
 | I4 invocation retention | 14 | 14 | PostgreSQL except M13 and M14 |
+| F1 hotel-local booking days | 8 | 8 | PostgreSQL |
 """
 
 from __future__ import annotations
@@ -39,6 +40,8 @@ CONFIG = "backend/app/core/config.py"
 INVOCATION_REPOSITORY = "backend/app/repositories/llm_invocation.py"
 INVOCATION_RETENTION = "backend/app/services/llm_invocation_retention.py"
 INVOCATION_MIGRATION = "database/migrations/versions/20261003_0017_llm_invocation_retention.py"
+ANALYTICS_REPOSITORY = "backend/app/repositories/analytics.py"
+INTELLIGENCE_SERVICE = "backend/app/services/intelligence.py"
 
 TOOL_BOUNDARY = "tests/backend/test_tool_boundary.py"
 COPILOT_TESTS = "tests/backend/test_copilot.py"
@@ -53,6 +56,8 @@ MULTI_HORIZON_REFIT = "tests/ml/test_multi_horizon_integration.py"
 PURGE_JOB = "tests/integration/test_conversation_purge_job.py"
 INVOCATION_PURGE = "tests/integration/test_llm_invocation_purge.py"
 INVOCATION_STATIC = "tests/backend/test_llm_invocation_retention.py"
+BUCKETING = "tests/integration/test_business_day_bucketing.py"
+BUSINESS_DAY_GUARD = "tests/backend/test_business_day_guard.py"
 CONTRACT = "tests/backend/test_frontend_contract.py"
 ARCH = "src/features/copilot/architecture.node.test.ts"
 SCREEN = "src/features/copilot/copilot.test.tsx"
@@ -1088,6 +1093,173 @@ STAGE_I4 = [
     ),
 ]
 
+STAGE_F1 = [
+    Mutation(
+        "F1-M1",
+        "F1",
+        "booking days are bucketed in the session's time zone again",
+        (
+            Edit(
+                ANALYTICS_REPOSITORY,
+                "            _local_day(Booking.booked_at, zone),\n"
+                "            Booking,\n"
+                "            Booking.hotel_id == hotel_id,\n"
+                "            _within_local_days(Booking.booked_at, date_from, date_to, zone),\n",
+                "            func.date(Booking.booked_at),\n"
+                "            Booking,\n"
+                "            Booking.hotel_id == hotel_id,\n"
+                "            func.date(Booking.booked_at) >= date_from,\n"
+                "            func.date(Booking.booked_at) <= date_to,\n",
+            ),
+            Edit(
+                ANALYTICS_REPOSITORY,
+                "                    _within_local_days(Booking.booked_at,"
+                " date_from, date_to, zone),\n",
+                "                    func.date(Booking.booked_at) >= date_from,\n"
+                "                    func.date(Booking.booked_at) <= date_to,\n",
+            ),
+        ),
+        (
+            f"{BUCKETING}::test_athens_bookings_fall_on_the_hotels_own_calendar_day",
+            f"{BUCKETING}::test_a_one_day_range_is_exactly_that_local_day",
+            f"{BUSINESS_DAY_GUARD}::test_no_repository_or_service_buckets_a_booking_instant_in_the_session_zone",
+        ),
+        needs_database=True,
+    ),
+    Mutation(
+        "F1-M2",
+        "F1",
+        "cancellation days are bucketed in the session's time zone again",
+        (
+            Edit(
+                ANALYTICS_REPOSITORY,
+                "            _local_day(Booking.cancelled_at, zone),\n"
+                "            Booking,\n"
+                "            Booking.hotel_id == hotel_id,\n"
+                "            _within_local_days(Booking.cancelled_at, date_from, date_to, zone),\n",
+                "            func.date(Booking.cancelled_at),\n"
+                "            Booking,\n"
+                "            Booking.hotel_id == hotel_id,\n"
+                "            func.date(Booking.cancelled_at) >= date_from,\n"
+                "            func.date(Booking.cancelled_at) <= date_to,\n",
+            ),
+            Edit(
+                ANALYTICS_REPOSITORY,
+                "        return self._count(\n"
+                "            Booking,\n"
+                "            Booking.hotel_id == hotel_id,\n"
+                "            _within_local_days(Booking.cancelled_at, date_from, date_to, zone),\n",
+                "        return self._count(\n"
+                "            Booking,\n"
+                "            Booking.hotel_id == hotel_id,\n"
+                "            func.date(Booking.cancelled_at) >= date_from,\n"
+                "            func.date(Booking.cancelled_at) <= date_to,\n",
+            ),
+        ),
+        (
+            f"{BUCKETING}::test_cancellations_fall_on_the_hotels_own_calendar_day",
+            f"{BUCKETING}::test_a_one_day_range_is_exactly_that_local_day",
+            f"{BUSINESS_DAY_GUARD}::test_no_repository_or_service_buckets_a_booking_instant_in_the_session_zone",
+        ),
+        needs_database=True,
+    ),
+    Mutation(
+        "F1-M3",
+        "F1",
+        "the hotel's timezone is ignored: every hotel is bucketed in UTC",
+        one(
+            ANALYTICS_REPOSITORY,
+            "            return declared\n        return FALLBACK_TIMEZONE\n",
+            "            return FALLBACK_TIMEZONE\n        return FALLBACK_TIMEZONE\n",
+        ),
+        (
+            f"{BUCKETING}::test_athens_bookings_fall_on_the_hotels_own_calendar_day",
+            f"{BUCKETING}::test_the_effective_timezone_is_a_postgresql_named_zone_or_utc",
+        ),
+        needs_database=True,
+    ),
+    Mutation(
+        "F1-M4",
+        "F1",
+        "Athens is read as a fixed UTC+2 offset instead of its IANA zone",
+        one(
+            ANALYTICS_REPOSITORY,
+            "            return declared\n        return FALLBACK_TIMEZONE\n",
+            '            return "Etc/GMT-2" if declared == "Europe/Athens" else declared\n'
+            "        return FALLBACK_TIMEZONE\n",
+        ),
+        (
+            f"{BUCKETING}::test_the_day_clocks_go_forward_is_23_hours_long",
+            f"{BUCKETING}::test_the_day_clocks_go_back_is_25_hours_long",
+        ),
+        needs_database=True,
+        note="Etc/GMT-2 is UTC+2 all year: right in winter, an hour wrong in summer.",
+    ),
+    Mutation(
+        "F1-M5",
+        "F1",
+        "a range's upper bound is inclusive of the next local midnight",
+        one(
+            ANALYTICS_REPOSITORY,
+            "        instant < _local_midnight(date_to + dt.timedelta(days=1), zone),",
+            "        instant <= _local_midnight(date_to + dt.timedelta(days=1), zone),",
+        ),
+        (f"{BUCKETING}::test_a_one_day_range_is_exactly_that_local_day",),
+        needs_database=True,
+    ),
+    Mutation(
+        "F1-M6",
+        "F1",
+        "grouping is hotel-local but the range filter is session-local",
+        one(
+            ANALYTICS_REPOSITORY,
+            "    return and_(\n"
+            "        instant >= _local_midnight(date_from, zone),\n"
+            "        instant < _local_midnight(date_to + dt.timedelta(days=1), zone),\n"
+            "    )",
+            "    return and_(func.date(instant) >= date_from, func.date(instant) <= date_to)",
+        ),
+        (
+            f"{BUCKETING}::test_a_one_day_range_is_exactly_that_local_day",
+            f"{BUCKETING}::test_the_overview_and_the_daily_series_count_the_same_local_days",
+        ),
+        needs_database=True,
+    ),
+    Mutation(
+        "F1-M7",
+        "F1",
+        "the intelligence booking series is not given the hotel's timezone",
+        one(
+            INTELLIGENCE_SERVICE,
+            "            zone=self._repository.business_timezone(hotel_id),",
+            '            zone="UTC",',
+        ),
+        (
+            f"{BUCKETING}::test_the_booking_trend_reads_the_hotels_calendar_days",
+            f"{BUCKETING}::test_a_booking_volume_anomaly_is_dated_on_the_hotels_calendar_day",
+        ),
+        needs_database=True,
+    ),
+    Mutation(
+        "F1-M8",
+        "F1",
+        "an unrecognised timezone is used as it is, and fails",
+        one(
+            ANALYTICS_REPOSITORY,
+            "        if declared in AnalyticsRepository._named_timezones:\n"
+            "            return declared\n"
+            "        return FALLBACK_TIMEZONE\n",
+            "        return declared\n",
+        ),
+        (
+            f"{BUCKETING}::test_an_unrecognised_timezone_buckets_in_utc_and_does_not_fail",
+            f"{BUCKETING}::test_the_effective_timezone_is_a_postgresql_named_zone_or_utc",
+            f"{BUCKETING}::test_the_api_reports_hotel_local_days_whatever_the_server_session_zone",
+        ),
+        needs_database=True,
+    ),
+]
+
 LIVE_CONTRACT = f"{CONTRACT}::test_the_frontend_types_are_compatible_with_the_live_backend_schema"
 
 STAGE_F16 = [
@@ -1238,4 +1410,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_F2,
     *STAGE_F16,
     *STAGE_I4,
+    *STAGE_F1,
 )

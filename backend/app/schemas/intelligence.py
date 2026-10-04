@@ -200,8 +200,9 @@ class DemandTrendResponse(BaseModel):
     model: ModelMetadata
     window: ObservationWindow
 
-    #: Counted by bookings.booked_at -- demand as it was TAKEN, which is what a demand trend
-    #: is about. Stay-dated counts answer a different question.
+    #: Counted by bookings.booked_at, per day of the hotel's own calendar -- demand as it was
+    #: TAKEN, which is what a demand trend is about. Stay-dated counts answer a different
+    #: question.
     metric: str
     direction: TrendDirectionLiteral
     earlier_median: decimal.Decimal | None

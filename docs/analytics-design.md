@@ -63,11 +63,11 @@ API cannot make that assumption (§4), which is a gap the job will have to resol
 
 | Metric | Source | Date column | Notes |
 |---|---|---|---|
-| `bookings_created.*` | `bookings` | `booked_at::date` | Same column `daily_hotel_metrics.bookings_created` counts |
+| `bookings_created.*` | `bookings` | `booked_at`, as a hotel-local date | Same column `daily_hotel_metrics.bookings_created` counts; see below |
 | `bookings_by_stay.*` | `bookings` | stay overlap | `check_in_date <= date_to AND check_out_date > date_from` |
 | `stay_flow.arrivals` | `bookings` | `check_in_date` | |
 | `stay_flow.departures` | `bookings` | `check_out_date` | A departure day is **not** a room night |
-| `stay_flow.cancellations` | `bookings` | `cancelled_at::date` | When the cancellation happened |
+| `stay_flow.cancellations` | `bookings` | `cancelled_at`, as a hotel-local date | When the cancellation happened; see below |
 | `occupied_room_nights` | `booking_room_nights` | `stay_date` | Joined to `booking_rooms` for status |
 | `room_nights_sold` | `booking_room_nights` | `stay_date` | Excludes `is_complimentary` |
 | `room_revenue` | `booking_room_nights.rate` | `stay_date` | Currency from the owning booking |
@@ -75,6 +75,18 @@ API cannot make that assumption (§4), which is a gap the job will have to resol
 | `ledger_room_revenue` | `revenue` | `revenue_date` | Categories where `is_room_revenue = true` |
 | `total_expenses` | `expenses` | `expense_date` | |
 | `reviews.*` | `reviews` | `review_date` | |
+
+**Booking and cancellation days are the hotel's calendar days (Issue F1).** `booked_at` and
+`cancelled_at` are instants (`TIMESTAMPTZ`); every other date column above is already a `DATE`
+in the hotel's terms. An instant `T` belongs to the hotel-local date
+`(T AT TIME ZONE zone)::date`, where `zone` is the hotel's `hotels.timezone` -- the
+authoritative source -- when PostgreSQL recognises it as a named zone (`pg_timezone_names`),
+and `UTC` otherwise; a fixed offset such as `+02` is not a named zone. A range of hotel-local
+dates `[date_from, date_to]` is the instants from local midnight of `date_from` (inclusive) to
+local midnight of `date_to + 1` (exclusive); PostgreSQL's IANA rules make a daylight-saving day
+23 or 25 hours long. The database session's `TimeZone` changes nothing. Rejecting an
+unrecognised timezone when a hotel is created or updated is a separate concern, deliberately
+not done here: such a hotel is read as UTC.
 
 **Both range bounds are inclusive.** A `stay_date` equal to `date_to` counts as a night; a
 booking whose `check_out_date` equals `date_to` contributes a departure and no night, because

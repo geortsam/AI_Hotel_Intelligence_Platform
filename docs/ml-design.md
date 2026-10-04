@@ -52,7 +52,7 @@ Two kinds of series feed this layer, and each answers to its own evidence:
 | Axis | Series | A day is in the series when | A day with nothing on it |
 |---|---|---|---|
 | **Stay date** | occupied room nights, room revenue — the forecasts, their anomaly scans and the occupancy outlook | it lies inside a period declared in `demand_observation_periods` (migration 0016, both ends inclusive) | inside a period: **0**. Outside every period: left out — unknown, never 0 |
-| **Booking intake** | bookings created, by `booked_at` — the demand trend and its anomaly scan | always: every calendar day of the window | **0**: no booking was taken through the platform that day |
+| **Booking intake** | bookings created, by `booked_at` on the hotel's own calendar day — the demand trend and its anomaly scan | always: every calendar day of the window | **0**: no booking was taken through the platform that day |
 
 They are kept apart on purpose. A declared period says the hotel's booking record is complete
 for those **stay dates**; it says nothing about which bookings were **taken** on a day. So it is
@@ -129,7 +129,11 @@ stable      otherwise
 
 Counted by `bookings.booked_at` — demand is about bookings being **taken**. Stay-dated counts
 answer a different question and would call a quiet booking month with a busy stay month
-"increasing".
+"increasing". A day is the hotel's own calendar day: `booked_at` is bucketed in
+`hotels.timezone` (UTC when PostgreSQL does not recognise it), never in the database
+session's time zone; see [analytics-design.md](analytics-design.md) §2 (Issue F1). This
+concerns the intelligence series only: the ML datasets, the served model and the accuracy
+protocols are unchanged.
 
 *Why not a fitted slope:* a least-squares slope is dragged by one outlying day and is harder
 to check by hand. Both medians and the threshold are returned, so the classification is

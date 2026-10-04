@@ -151,12 +151,15 @@ class AnalyticsService:
         net = self._subtract(earned, expenses)
 
         currencies = {bucket.currency for bucket in [*earned, *expenses, *ledger_room_revenue]}
+        zone = self._repository.business_timezone(hotel.id)
 
         return OverviewResponse(
             hotel_public_id=hotel.public_id,
             range=span,
             bookings_created=self._status_counts(
-                self._repository.booking_counts_by_status(hotel.id, span.date_from, span.date_to)
+                self._repository.booking_counts_by_status(
+                    hotel.id, span.date_from, span.date_to, zone=zone
+                )
             ),
             bookings_by_stay=self._status_counts(
                 self._repository.booking_counts_by_stay_overlap(
@@ -167,7 +170,7 @@ class AnalyticsService:
                 arrivals=self._repository.arrival_count(hotel.id, span.date_from, span.date_to),
                 departures=self._repository.departure_count(hotel.id, span.date_from, span.date_to),
                 cancellations=self._repository.cancellation_count(
-                    hotel.id, span.date_from, span.date_to
+                    hotel.id, span.date_from, span.date_to, zone=zone
                 ),
             ),
             occupancy=occupancy,
@@ -201,8 +204,14 @@ class AnalyticsService:
         expenses = self._repository.expenses_by_day(hotel.id, span.date_from, span.date_to)
         arrivals = self._repository.arrivals_by_day(hotel.id, span.date_from, span.date_to)
         departures = self._repository.departures_by_day(hotel.id, span.date_from, span.date_to)
-        created = self._repository.bookings_created_by_day(hotel.id, span.date_from, span.date_to)
-        cancelled = self._repository.cancellations_by_day(hotel.id, span.date_from, span.date_to)
+        # Booking and cancellation instants fall on the hotel's own calendar days (Issue F1).
+        zone = self._repository.business_timezone(hotel.id)
+        created = self._repository.bookings_created_by_day(
+            hotel.id, span.date_from, span.date_to, zone=zone
+        )
+        cancelled = self._repository.cancellations_by_day(
+            hotel.id, span.date_from, span.date_to, zone=zone
+        )
 
         days: list[DailyMetricsRow] = []
         for offset in range(span.days):

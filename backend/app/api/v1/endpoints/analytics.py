@@ -65,7 +65,8 @@ STANDARD_RESPONSES = {**NOT_FOUND_RESPONSE, **INVALID_RANGE_RESPONSE}
     summary="Hotel KPI snapshot for a date range",
     description="Bookings, occupancy, room and ledger revenue, expenses and reviews. Every "
     "monetary figure is bucketed by currency; nothing is converted or summed across "
-    "currencies.",
+    "currencies. Bookings created and cancellations are counted on the hotel's own "
+    "calendar days (hotels.timezone), whatever the database session's time zone.",
     responses=STANDARD_RESPONSES,
 )
 def get_overview(
@@ -83,7 +84,9 @@ def get_overview(
     response_model=DailySeriesResponse,
     summary="Daily time series",
     description="One row per calendar day, ascending, including days with no activity. "
-    "Suitable for charting directly; no presentation formatting is applied.",
+    "Suitable for charting directly; no presentation formatting is applied. "
+    "Bookings created and cancellations are counted on the hotel's own "
+    "calendar days (hotels.timezone), whatever the database session's time zone.",
     responses=STANDARD_RESPONSES,
 )
 def get_daily_series(

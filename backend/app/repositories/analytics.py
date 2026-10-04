@@ -20,6 +20,16 @@ writes to it), so reading it would report zeros for every hotel and writing it f
 would make analytics mutate operational state. Its **generated columns are still the
 authority for the formulas** -- occupancy_rate, adr and revpar below are transcribed from
 them, NULLIF guards included.
+
+**Booking and cancellation days are the hotel's calendar days (Issue F1).** ``booked_at`` and
+``cancelled_at`` are instants (``TIMESTAMPTZ``). Every method that counts them by day takes the
+hotel's business timezone -- from :meth:`AnalyticsRepository.business_timezone` -- and buckets an
+instant ``T`` on ``(T AT TIME ZONE zone)::date``; a range of hotel-local dates ``[date_from,
+date_to]`` is the half-open span of instants ``[local midnight of date_from, local midnight of
+date_to + 1)``. PostgreSQL's IANA rules do the conversion, so a daylight-saving day is 23 or 25
+hours long and the database session's own ``TimeZone`` never changes a count. ``func.date`` on
+either column would resolve in the session's zone instead, which is exactly what this replaces.
+Every other date here (stay, revenue, expense, review) is already a ``DATE`` in hotel terms.
 """
 
 from __future__ import annotations
@@ -27,14 +37,15 @@ from __future__ import annotations
 import datetime as dt
 import decimal
 from collections.abc import Sequence
-from typing import Any, NamedTuple
+from typing import Any, ClassVar, NamedTuple
 
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import Date, DateTime, and_, case, cast, column, func, literal, select, table
 from sqlalchemy.orm import Session
 
 from app.models.booking import Booking, BookingRoom, BookingRoomNight
 from app.models.enums import OCCUPANCY_STATUSES
 from app.models.finance import Expense, ExpenseCategory, Revenue, RevenueCategory
+from app.models.hotel import Hotel
 from app.models.review import Review
 from app.models.room import Room
 
@@ -84,31 +95,78 @@ class SourceStats(NamedTuple):
 
 ZERO = decimal.Decimal("0")
 
+#: The zone used when a hotel's declared timezone is not one PostgreSQL knows by name.
+FALLBACK_TIMEZONE = "UTC"
+
+#: PostgreSQL's catalogue of named timezones (its IANA database), read for validation only.
+_PG_TIMEZONE_NAMES = table("pg_timezone_names", column("name"))
+
+
+def _local_day(instant: Any, zone: str) -> Any:
+    """The hotel-local calendar date of a ``TIMESTAMPTZ`` *instant* in *zone*."""
+    return cast(func.timezone(zone, instant), Date)
+
+
+def _local_midnight(day: dt.date, zone: str) -> Any:
+    """The instant local midnight begins *day* in *zone*, as a ``TIMESTAMPTZ``."""
+    return func.timezone(zone, cast(literal(day, Date), DateTime))
+
+
+def _within_local_days(instant: Any, date_from: dt.date, date_to: dt.date, zone: str) -> Any:
+    """*instant* falls on a hotel-local date in ``[date_from, date_to]``: inclusive lower
+    bound, exclusive upper bound at the local midnight that ends *date_to*."""
+    return and_(
+        instant >= _local_midnight(date_from, zone),
+        instant < _local_midnight(date_to + dt.timedelta(days=1), zone),
+    )
+
 
 class AnalyticsRepository:
     """Aggregate projections over one hotel's operational and ledger data."""
 
+    #: PostgreSQL's named timezones, read once per process: the catalogue is the server's IANA
+    #: database and does not change while it runs, and reading the view costs tens to hundreds
+    #: of milliseconds -- too much to pay on every request.
+    _named_timezones: ClassVar[frozenset[str] | None] = None
+
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    # --- the hotel's business timezone ----------------------------------------------------
+
+    def business_timezone(self, hotel_id: int) -> str:
+        """The zone a hotel's booking and cancellation instants are bucketed in.
+
+        The hotel's stored ``hotels.timezone`` when PostgreSQL knows it as a named timezone in
+        ``pg_timezone_names``, and ``UTC`` otherwise. A fixed offset such as ``+02`` is not a
+        named zone -- PostgreSQL would read its sign inverted -- so it falls back too. Validating
+        hotel input is a separate concern; this only decides how a stored value is read.
+        """
+        declared = self._session.scalar(select(Hotel.timezone).where(Hotel.id == hotel_id))
+        if AnalyticsRepository._named_timezones is None:
+            names = self._session.scalars(select(_PG_TIMEZONE_NAMES.c.name)).all()
+            AnalyticsRepository._named_timezones = frozenset(names)
+        if declared in AnalyticsRepository._named_timezones:
+            return declared
+        return FALLBACK_TIMEZONE
 
     # --- bookings -----------------------------------------------------------------------
 
     def booking_counts_by_status(
-        self, hotel_id: int, date_from: dt.date, date_to: dt.date
+        self, hotel_id: int, date_from: dt.date, date_to: dt.date, *, zone: str
     ) -> dict[str, int]:
         """Bookings CREATED in range, grouped by their current status.
 
-        The date column is ``booked_at``, cast to a date -- the same column
-        ``daily_hotel_metrics.bookings_created`` counts. Grouping happens in the database so
-        no row set crosses the boundary.
+        Created means ``booked_at`` falls on a hotel-local date in the range, in the hotel's
+        business timezone *zone* -- the same instants ``daily_hotel_metrics.bookings_created``
+        is defined over. Grouping happens in the database so no row set crosses the boundary.
         """
         rows = (
             self._session.execute(
                 select(Booking.status, func.count())
                 .where(
                     Booking.hotel_id == hotel_id,
-                    func.date(Booking.booked_at) >= date_from,
-                    func.date(Booking.booked_at) <= date_to,
+                    _within_local_days(Booking.booked_at, date_from, date_to, zone),
                 )
                 .group_by(Booking.status)
             )
@@ -170,8 +228,10 @@ class AnalyticsRepository:
             Booking.check_out_date <= date_to,
         )
 
-    def cancellation_count(self, hotel_id: int, date_from: dt.date, date_to: dt.date) -> int:
-        """Bookings cancelled in range, by ``cancelled_at``.
+    def cancellation_count(
+        self, hotel_id: int, date_from: dt.date, date_to: dt.date, *, zone: str
+    ) -> int:
+        """Bookings cancelled in range: ``cancelled_at`` on a hotel-local date in it, in *zone*.
 
         ``ck_bookings_cancellation_consistent`` makes that column non-null exactly when the
         status is cancelled, so no status filter is needed.
@@ -179,19 +239,18 @@ class AnalyticsRepository:
         return self._count(
             Booking,
             Booking.hotel_id == hotel_id,
-            func.date(Booking.cancelled_at) >= date_from,
-            func.date(Booking.cancelled_at) <= date_to,
+            _within_local_days(Booking.cancelled_at, date_from, date_to, zone),
         )
 
     def bookings_created_by_day(
-        self, hotel_id: int, date_from: dt.date, date_to: dt.date
+        self, hotel_id: int, date_from: dt.date, date_to: dt.date, *, zone: str
     ) -> dict[dt.date, int]:
+        """Bookings taken per hotel-local date of ``booked_at``, in the business timezone."""
         return self._count_by_day(
-            func.date(Booking.booked_at),
+            _local_day(Booking.booked_at, zone),
             Booking,
             Booking.hotel_id == hotel_id,
-            func.date(Booking.booked_at) >= date_from,
-            func.date(Booking.booked_at) <= date_to,
+            _within_local_days(Booking.booked_at, date_from, date_to, zone),
         )
 
     def arrivals_by_day(
@@ -217,14 +276,14 @@ class AnalyticsRepository:
         )
 
     def cancellations_by_day(
-        self, hotel_id: int, date_from: dt.date, date_to: dt.date
+        self, hotel_id: int, date_from: dt.date, date_to: dt.date, *, zone: str
     ) -> dict[dt.date, int]:
+        """Cancellations per hotel-local date of ``cancelled_at``, in the business timezone."""
         return self._count_by_day(
-            func.date(Booking.cancelled_at),
+            _local_day(Booking.cancelled_at, zone),
             Booking,
             Booking.hotel_id == hotel_id,
-            func.date(Booking.cancelled_at) >= date_from,
-            func.date(Booking.cancelled_at) <= date_to,
+            _within_local_days(Booking.cancelled_at, date_from, date_to, zone),
         )
 
     # --- occupancy ----------------------------------------------------------------------

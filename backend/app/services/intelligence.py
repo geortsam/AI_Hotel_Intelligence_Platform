@@ -443,13 +443,19 @@ class IntelligenceService:
     ) -> list[Observation]:
         """Bookings TAKEN per day -- booking intake through this platform, by ``booked_at``.
 
-        Every calendar day of the window is a value, 0 when no booking was taken. This is not a
+        Every calendar day of the window is a value, 0 when no booking was taken. A day is the
+        hotel's own calendar day: ``booked_at`` is bucketed in the hotel's business timezone
+        (``hotels.timezone``, or UTC when PostgreSQL does not know it), never in the database
+        session's (Issue F1). This is not a
         stay-date series and is deliberately NOT filtered by the declared observation periods:
         those say a stay date's booking record is complete, not which bookings were taken on a
         day. Do not use ``demand_observation_periods`` as a proxy for booking-intake observation.
         """
         counts = self._repository.bookings_created_by_day(
-            hotel_id, window.date_from, window.date_to
+            hotel_id,
+            window.date_from,
+            window.date_to,
+            zone=self._repository.business_timezone(hotel_id),
         )
         return [
             Observation(date=day, value=decimal.Decimal(counts.get(day, 0)))

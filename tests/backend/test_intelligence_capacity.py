@@ -57,7 +57,10 @@ class FakeAnalytics:
     def active_room_count(self, hotel_id: int) -> int:
         return self.rooms
 
-    def bookings_created_by_day(self, *args: Any) -> dict[dt.date, int]:
+    def business_timezone(self, hotel_id: int) -> str:
+        return "UTC"
+
+    def bookings_created_by_day(self, *args: Any, **kwargs: Any) -> dict[dt.date, int]:
         return {}
 
     def room_revenue_by_day(self, *args: Any) -> dict[dt.date, list[Any]]:
