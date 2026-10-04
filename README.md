@@ -874,6 +874,6 @@ What remains genuinely missing is operational rather than functional:
   out-of-band database write; see [First run](#first-run). That is by design, not an omission.
 
 The V1 intelligence layer remains a transparent statistical baseline. The trained demand model
-sits beside it — served, but **not scientifically validated**, and with no front-end surface — as
-described under
+sits beside it — served, but **not scientifically validated**, and shown on the Analytics page
+with its limitations — as described under
 [What the intelligence layer is, and is not](#what-the-intelligence-layer-is-and-is-not).

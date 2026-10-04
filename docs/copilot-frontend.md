@@ -143,9 +143,12 @@ as a list.
   up to 30 seconds with one retry, plus lookups). A request cut off this way shows "The answer did
   not arrive" and warns that it may still have been answered and counted. No deployment
   configuration was changed (decision H8).
-- **`LLM_DISABLED` is learned by asking.** No route says in advance whether the copilot is on, and
-  by the dependency order a question to a disabled deployment is still charged to the hourly
-  allowance; the screen stops offering input after the first refusal to avoid repeating that.
+- **`LLM_DISABLED` is known before asking, except when the check fails.** `GET /api/v1/` reports
+  `copilot_enabled`, and the screen keeps the question box disabled while it checks and when the
+  switch is off. Only when that answer cannot be read (`unknown`) is a question offered; a
+  disabled deployment then refuses it with `LLM_DISABLED`, and by the dependency order that
+  question is still charged to the hourly allowance. The screen stops offering input after the
+  first refusal to avoid repeating that.
 - **Stored turns cannot show their lookups** (§5).
 - **The tool-label table can drift** from the backend registry. An unknown name is still shown
   verbatim, so drift degrades a label, not the truthfulness of the list.

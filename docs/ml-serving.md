@@ -448,10 +448,12 @@ Stated plainly, because the endpoint's existence is not a claim that the number 
    [ml-prediction-persistence-design.md](ml-prediction-persistence-design.md),
    [ml-accuracy-measurement.md](ml-accuracy-measurement.md) and
    [ml-drift-observation.md](ml-drift-observation.md).
-7. **No frontend surface.** Nothing in `frontend/` was touched; the endpoint is independently
-   testable and is currently exercised only by tests. *(Stage 6.11 added a second route to this
-   router — `GET .../ml/demand-predictions`, which reads stored predictions and scores nothing.
-   Still no frontend. See [ml-prediction-read-api.md](ml-prediction-read-api.md).)*
+7. **~~No frontend surface.~~ Resolved.** The Analytics page's demand-forecast panel calls
+   `GET .../ml/demand-forecast` and shows the estimate with its limitations, and the
+   forecast-performance section reads `GET .../ml/demand-predictions` -- the second route on
+   this router (Stage 6.11), which reads stored predictions and scores nothing; both go through
+   `frontend/src/services/ml/mlService.ts`. The copilot's `get_demand_forecast` tool calls the
+   same service as the first route. See [ml-prediction-read-api.md](ml-prediction-read-api.md).
 8. **The model is never retrained by the application.** A new artifact is an offline build,
    reviewed, followed by a change to `APPROVED_MODEL`.
 

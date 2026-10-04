@@ -6,7 +6,8 @@ hard-coded literals, so the same image can run in development, test and producti
 Every field has a safe default and nothing is required, so the application still starts with
 no ``.env`` present. The database settings added in Stage 2B follow the same rule: with no
 password configured, :attr:`Settings.sqlalchemy_url` returns ``None`` and the engine is simply
-never built. ``secret_key`` remains declared but unread -- there is no authentication yet.
+never built. ``secret_key`` signs and verifies authentication tokens
+(:func:`app.core.security.require_secret`); production refuses to start without one.
 """
 
 from __future__ import annotations

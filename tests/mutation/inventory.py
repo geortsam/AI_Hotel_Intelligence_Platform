@@ -22,6 +22,7 @@ from the original run, its ``note`` says how and why.
 | F1 hotel-local booking days | 8 | 8 | PostgreSQL |
 | F2-ADR dashboard ADR caption | 6 | 6 | Vitest; "F2" was already the purge command's stage |
 | M1 runbook schema facts | 8 | 8 | |
+| M2 current-state docs | 8 | 8 | |
 """
 
 from __future__ import annotations
@@ -47,6 +48,8 @@ INTELLIGENCE_SERVICE = "backend/app/services/intelligence.py"
 DASHBOARD_PAGE = "frontend/src/pages/DashboardPage.tsx"
 BACKUP_RUNBOOK = "docs/deployment/backup-restore.md"
 BOOTSTRAP_RUNBOOK = "docs/deployment/first-run-bootstrap.md"
+COPILOT_FRONTEND_DOC = "docs/copilot-frontend.md"
+ML_SERVING_DOC = "docs/ml-serving.md"
 
 TOOL_BOUNDARY = "tests/backend/test_tool_boundary.py"
 COPILOT_TESTS = "tests/backend/test_copilot.py"
@@ -65,6 +68,7 @@ BUCKETING = "tests/integration/test_business_day_bucketing.py"
 BUSINESS_DAY_GUARD = "tests/backend/test_business_day_guard.py"
 DASHBOARD_TESTS = "src/features/dashboard/dashboard.test.tsx"
 RUNBOOK_FACTS = "tests/backend/test_runbook_schema_facts.py"
+CURRENT_STATE_DOCS = "tests/backend/test_current_state_docs.py"
 CONTRACT = "tests/backend/test_frontend_contract.py"
 ARCH = "src/features/copilot/architecture.node.test.ts"
 SCREEN = "src/features/copilot/copilot.test.tsx"
@@ -1413,6 +1417,83 @@ STAGE_M1 = [
     ),
 ]
 
+
+def current_state(name: str, breaks: str, path: str, old: str, new: str, test: str) -> Mutation:
+    """A current-state documentation mutation (M2), killed by the stale-claim guard."""
+    return Mutation(name, "M2", breaks, one(path, old, new), (f"{CURRENT_STATE_DOCS}::{test}",))
+
+
+STALE_ABSENT = "test_a_corrected_stale_claim_is_absent"
+
+STAGE_M2 = [
+    current_state(
+        "M2-M1",
+        "the copilot screen doc says again that no route reports the switch",
+        COPILOT_FRONTEND_DOC,
+        "- **`LLM_DISABLED` is known before asking, except when the check fails.**",
+        "- **`LLM_DISABLED` is learned by asking.** No route says in advance whether the copilot is"
+        " on.",
+        STALE_ABSENT,
+    ),
+    current_state(
+        "M2-M2",
+        "the README says again the served model has no front-end surface",
+        "README.md",
+        "and shown on the Analytics page\n",
+        "and with no front-end surface\n",
+        STALE_ABSENT,
+    ),
+    current_state(
+        "M2-M3",
+        "ml-serving says again that the endpoints have no frontend surface",
+        ML_SERVING_DOC,
+        "7. **~~No frontend surface.~~ Resolved.**",
+        "7. **No frontend surface.**",
+        STALE_ABSENT,
+    ),
+    current_state(
+        "M2-M4",
+        "the copilot screen doc no longer names the capability the API reports",
+        COPILOT_FRONTEND_DOC,
+        "`GET /api/v1/` reports\n  `copilot_enabled`,",
+        "`GET /api/v1/` reports\n  the switch,",
+        "test_the_copilot_screen_documents_the_capability_the_api_reports",
+    ),
+    current_state(
+        "M2-M5",
+        "ml-serving no longer names the frontend service that calls both routes",
+        ML_SERVING_DOC,
+        "`frontend/src/services/ml/mlService.ts`. The copilot",
+        "the frontend's ML service. The copilot",
+        "test_the_served_model_s_frontend_callers_are_the_ones_the_frontend_has",
+    ),
+    current_state(
+        "M2-M6",
+        "the matcher no longer ignores line wrapping, so a re-wrapped claim would slip through",
+        CURRENT_STATE_DOCS,
+        '    return re.sub(r"\\s+", " ", text)',
+        "    return text",
+        "test_the_matcher_finds_each_claim_in_its_original_wrapping",
+    ),
+    current_state(
+        "M2-M7",
+        "the frontend cross-check reads a service that does not call the ML routes",
+        CURRENT_STATE_DOCS,
+        '"frontend" / "src" / "services" / "ml" / "mlService.ts"',
+        '"frontend" / "src" / "services" / "analytics" / "analyticsService.ts"',
+        "test_the_served_model_s_frontend_callers_are_the_ones_the_frontend_has",
+    ),
+    current_state(
+        "M2-M8",
+        "the settings docstring says again that the secret is unread",
+        "backend/app/core/config.py",
+        "never built. ``secret_key`` signs and verifies authentication tokens\n",
+        "never built. ``secret_key`` remains declared but unread -- there is no authentication"
+        " yet.\n",
+        STALE_ABSENT,
+    ),
+]
+
 LIVE_CONTRACT = f"{CONTRACT}::test_the_frontend_types_are_compatible_with_the_live_backend_schema"
 
 STAGE_F16 = [
@@ -1566,4 +1647,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_F1,
     *STAGE_F2_ADR,
     *STAGE_M1,
+    *STAGE_M2,
 )
