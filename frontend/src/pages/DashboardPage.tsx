@@ -245,6 +245,41 @@ interface BoardProps {
  * is a different reason, and the tile must not blame the rooms for it. RevPAR is not computed
  * here in either case: the server did not report one, so none is shown.
  */
+/**
+ * The line under the ADR figure (F2).
+ *
+ * `room.adr` is the ADR of ONE room-revenue currency -- the headline one -- divided by that
+ * currency's own sold nights. The API reports a per-currency night count nowhere, only the
+ * hotel's total. So the total is quoted only when exactly one currency earned room revenue,
+ * where it provably equals that currency's nights; with several, the caption names the
+ * currency instead of a number it cannot vouch for. Counted from `room_revenue` alone:
+ * `is_multi_currency` is also true for a currency that appears only in the ledger, which
+ * leaves the room-night count untouched. Never derived as revenue / ADR -- a client-side
+ * figure, and an inexact one after rounding.
+ */
+function adrCaption(overview: OverviewResponse, currency: string): string {
+  if (currenciesIn(overview.room_revenue).length > 1) {
+    return `Average daily rate over ${currency} nights sold`
+  }
+  return `Average daily rate over ${formatCount(overview.occupancy.room_nights_sold)} nights sold`
+}
+
+/**
+ * Why the ADR tile shows a dash (F2b). When the headline currency has no room-revenue bucket
+ * but the hotel did sell room nights, they were sold in another currency: saying "no room
+ * nights were sold" would be false, so the reason names the missing currency instead.
+ */
+function adrUnavailableReason(
+  overview: OverviewResponse,
+  room: RoomRevenueByCurrency | null,
+  currency: string,
+): string {
+  if (room === null && overview.occupancy.room_nights_sold > 0) {
+    return `No room revenue in ${currency} was recorded in this period, so ADR was not reported.`
+  }
+  return 'No room nights were sold in this period, so the average rate is undefined.'
+}
+
 function revparUnavailableReason(
   availableRoomNights: number,
   room: RoomRevenueByCurrency | null,
@@ -354,10 +389,8 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
         <KpiCard
           label="ADR"
           value={room?.adr ? formatMoney(room.adr, currency) : null}
-          caption={`Average daily rate over ${formatCount(
-            overview.occupancy.room_nights_sold,
-          )} nights sold`}
-          unavailableReason="No room nights were sold in this period, so the average rate is undefined."
+          caption={adrCaption(overview, currency)}
+          unavailableReason={adrUnavailableReason(overview, room, currency)}
           delta={computeDelta(room?.adr ?? null, previousRoom?.adr ?? null)}
           deltaLabel={deltaLabel}
         />

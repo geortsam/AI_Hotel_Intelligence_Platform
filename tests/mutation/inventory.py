@@ -20,6 +20,7 @@ from the original run, its ``note`` says how and why.
 | F16 frontend contract | 12 | 12 | |
 | I4 invocation retention | 14 | 14 | PostgreSQL except M13 and M14 |
 | F1 hotel-local booking days | 8 | 8 | PostgreSQL |
+| F2-ADR dashboard ADR caption | 6 | 6 | Vitest; "F2" was already the purge command's stage |
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ INVOCATION_RETENTION = "backend/app/services/llm_invocation_retention.py"
 INVOCATION_MIGRATION = "database/migrations/versions/20261003_0017_llm_invocation_retention.py"
 ANALYTICS_REPOSITORY = "backend/app/repositories/analytics.py"
 INTELLIGENCE_SERVICE = "backend/app/services/intelligence.py"
+DASHBOARD_PAGE = "frontend/src/pages/DashboardPage.tsx"
 
 TOOL_BOUNDARY = "tests/backend/test_tool_boundary.py"
 COPILOT_TESTS = "tests/backend/test_copilot.py"
@@ -58,6 +60,7 @@ INVOCATION_PURGE = "tests/integration/test_llm_invocation_purge.py"
 INVOCATION_STATIC = "tests/backend/test_llm_invocation_retention.py"
 BUCKETING = "tests/integration/test_business_day_bucketing.py"
 BUSINESS_DAY_GUARD = "tests/backend/test_business_day_guard.py"
+DASHBOARD_TESTS = "src/features/dashboard/dashboard.test.tsx"
 CONTRACT = "tests/backend/test_frontend_contract.py"
 ARCH = "src/features/copilot/architecture.node.test.ts"
 SCREEN = "src/features/copilot/copilot.test.tsx"
@@ -1260,6 +1263,73 @@ STAGE_F1 = [
     ),
 ]
 
+
+def adr(name: str, breaks: str, old: str, new: str, *titles: str) -> Mutation:
+    """A dashboard ADR-caption mutation (F2): one edit to the page, Vitest killers by title."""
+    return Mutation(
+        name,
+        "F2-ADR",
+        breaks,
+        one(DASHBOARD_PAGE, old, new),
+        tuple(f"{DASHBOARD_TESTS}::{title}" for title in titles),
+        runner=Runner.VITEST,
+    )
+
+
+ADR_SEVERAL = "names the currency, not the all-currency count, when several earned room revenue"
+ADR_LEDGER = "keeps the count when the second currency is only in the ledger"
+ADR_MISSING = (
+    "says EUR room revenue is missing, not that no nights were sold, when only USD earned it"
+)
+
+STAGE_F2_ADR = [
+    adr(
+        "F2-ADR-M1",
+        "several room currencies quote the all-currency night count again",
+        "    return `Average daily rate over ${currency} nights sold`",
+        "    return `Average daily rate over ${formatCount(overview.occupancy.room_nights_sold)} "
+        "nights sold`",
+        ADR_SEVERAL,
+    ),
+    adr(
+        "F2-ADR-M2",
+        "several room currencies show the all-currency count beside the currency",
+        "    return `Average daily rate over ${currency} nights sold`",
+        "    return `Average daily rate over ${formatCount(overview.occupancy.room_nights_sold)} "
+        "${currency} nights sold`",
+        ADR_SEVERAL,
+    ),
+    adr(
+        "F2-ADR-M3",
+        "the several-currency caption loses its currency",
+        "    return `Average daily rate over ${currency} nights sold`",
+        "    return `Average daily rate over nights sold`",
+        ADR_SEVERAL,
+    ),
+    adr(
+        "F2-ADR-M4",
+        "a missing headline bucket claims again that no room nights were sold",
+        "    return `No room revenue in ${currency} was recorded in this period, so ADR was not "
+        "reported.`",
+        "    return 'No room nights were sold in this period, so the average rate is undefined.'",
+        ADR_MISSING,
+    ),
+    adr(
+        "F2-ADR-M5",
+        "a currency only in the ledger switches the caption to several-currency wording",
+        "  if (currenciesIn(overview.room_revenue).length > 1) {",
+        "  if (overview.is_multi_currency) {",
+        ADR_LEDGER,
+    ),
+    adr(
+        "F2-ADR-M6",
+        "a missing headline bucket falls through to the generic no-nights reason",
+        "  if (room === null && overview.occupancy.room_nights_sold > 0) {",
+        "  if (room === null && overview.occupancy.room_nights_sold < 0) {",
+        ADR_MISSING,
+    ),
+]
+
 LIVE_CONTRACT = f"{CONTRACT}::test_the_frontend_types_are_compatible_with_the_live_backend_schema"
 
 STAGE_F16 = [
@@ -1411,4 +1481,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_F16,
     *STAGE_I4,
     *STAGE_F1,
+    *STAGE_F2_ADR,
 )

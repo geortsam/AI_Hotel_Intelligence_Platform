@@ -6,6 +6,7 @@ import { HotelContextChip } from '@/components/layout/HotelContext'
 import { describeFailure } from '@/features/dashboard/failures'
 import { todayInZone } from '@/features/dashboard/period'
 import { DashboardPage } from '@/pages/DashboardPage'
+import dashboardPageSource from '@/pages/DashboardPage.tsx?raw'
 import { ApiError } from '@/services/api/ApiError'
 import {
   clearStoredToken,
@@ -106,8 +107,20 @@ const EMPTY_OVERVIEW = {
   reviews: { review_count: 0, published_count: 0, average_rating_normalized: null },
 }
 
+/**
+ * Room revenue in two currencies. Each bucket's ADR is over its own currency's sold nights --
+ * EUR 9,750.00 / 150.00 is 65 nights, USD 4,200.00 / 210.00 is 20 -- so the hotel sold 85 in
+ * all, and `occupancy` says so. (An earlier version kept the single-currency 65 here, which
+ * no backend could send and which hid the F2 caption defect.)
+ */
 const MULTI_CURRENCY_OVERVIEW = {
   ...CURRENT_OVERVIEW,
+  occupancy: {
+    ...CURRENT_OVERVIEW.occupancy,
+    occupied_room_nights: 85,
+    room_nights_sold: 85,
+    occupancy_rate: '0.7589',
+  },
   room_revenue: [
     { currency: 'EUR', room_revenue: '9750.00', adr: '150.00', revpar: '87.05' },
     { currency: 'USD', room_revenue: '4200.00', adr: '210.00', revpar: '37.50' },
@@ -871,6 +884,118 @@ describe('hotel context', () => {
 })
 
 /* --- currency --------------------------------------------------------------------------- */
+
+/* --- the ADR caption names only nights it can vouch for (F2) ---------------------------- */
+
+/**
+ * Room revenue only in USD, at an EUR hotel whose EUR appears in the ledger -- so EUR is the
+ * headline currency, it has no room-revenue bucket, and 20 room nights were still sold.
+ */
+const ROOM_REVENUE_ONLY_IN_ANOTHER_CURRENCY = {
+  ...CURRENT_OVERVIEW,
+  occupancy: {
+    ...CURRENT_OVERVIEW.occupancy,
+    occupied_room_nights: 20,
+    room_nights_sold: 20,
+    occupancy_rate: '0.1786',
+  },
+  room_revenue: [{ currency: 'USD', room_revenue: '4200.00', adr: '210.00', revpar: '37.50' }],
+  is_multi_currency: true,
+}
+
+/** One room-revenue currency; a second currency only in the ledger. */
+const LEDGER_ONLY_SECOND_CURRENCY = {
+  ...CURRENT_OVERVIEW,
+  other_revenue: [
+    { currency: 'EUR', amount: '6223.00' },
+    { currency: 'USD', amount: '900.00' },
+  ],
+  net_operating_result: [
+    { currency: 'EUR', amount: '13753.00' },
+    { currency: 'USD', amount: '900.00' },
+  ],
+  is_multi_currency: true,
+}
+
+/** The ADR tile: its `<dt>` and the `<dd>` and caption that follow it, inside one card. */
+function adrTile(): HTMLElement {
+  return screen.getByText('ADR', { selector: 'dt' }).parentElement as HTMLElement
+}
+
+describe('the ADR caption', () => {
+  beforeEach(() => {
+    stubSession()
+    fetchStub.on('GET', 'analytics/daily', { body: DAILY })
+  })
+
+  it('quotes the sold-night count when one currency earned all the room revenue', async () => {
+    stubOverview(CURRENT_OVERVIEW)
+    mount()
+    await screen.findByText('58.0%')
+
+    expect(within(adrTile()).getByText(/EUR\s*150\.00/)).toBeInTheDocument()
+    expect(within(adrTile()).getByText('Average daily rate over 65 nights sold')).toBeInTheDocument()
+  })
+
+  it('names the currency, not the all-currency count, when several earned room revenue', async () => {
+    stubOverview(MULTI_CURRENCY_OVERVIEW, MULTI_CURRENCY_OVERVIEW)
+    mount()
+    await screen.findByText('Multiple currencies')
+
+    const tile = adrTile()
+    // The figure is the EUR bucket's, unchanged: 9,750.00 over EUR's own 65 nights.
+    expect(within(tile).getByText(/EUR\s*150\.00/)).toBeInTheDocument()
+    expect(within(tile).getByText('Average daily rate over EUR nights sold')).toBeInTheDocument()
+    // 85 is every currency's nights together; the EUR rate was not taken over them.
+    expect(tile.textContent).not.toMatch(/85 nights sold/)
+    expect(tile.textContent).not.toMatch(/\d+ nights sold/)
+  })
+
+  it('keeps the count when the second currency is only in the ledger', async () => {
+    stubOverview(LEDGER_ONLY_SECOND_CURRENCY, LEDGER_ONLY_SECOND_CURRENCY)
+    mount()
+    await screen.findByText('Multiple currencies')
+
+    expect(within(adrTile()).getByText('Average daily rate over 65 nights sold')).toBeInTheDocument()
+  })
+
+  it('says EUR room revenue is missing, not that no nights were sold, when only USD earned it', async () => {
+    stubOverview(ROOM_REVENUE_ONLY_IN_ANOTHER_CURRENCY, ROOM_REVENUE_ONLY_IN_ANOTHER_CURRENCY)
+    mount()
+    await screen.findByText('Multiple currencies')
+
+    const tile = adrTile()
+    expect(within(tile).getByText('—')).toBeInTheDocument()
+    expect(
+      within(tile).getByText(
+        'No room revenue in EUR was recorded in this period, so ADR was not reported.',
+      ),
+    ).toBeInTheDocument()
+    expect(tile.textContent).not.toMatch(/No room nights were sold/)
+    // The USD figure is the USD bucket's, and it is not presented as the EUR rate.
+    expect(within(tile).queryByText(/210\.00/)).not.toBeInTheDocument()
+  })
+
+  it('still says no nights were sold when none were', async () => {
+    stubOverview(EMPTY_OVERVIEW)
+    mount()
+    await screen.findByText(/No activity in the last 7 days/i)
+
+    expect(
+      within(adrTile()).getByText(
+        'No room nights were sold in this period, so the average rate is undefined.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('never manufactures a night count from revenue and ADR', () => {
+    // A per-currency count would be room_revenue / adr: a figure the server never sent, and
+    // an inexact one once both are rounded. The page may not compute it, in any spelling.
+    expect(dashboardPageSource).not.toMatch(/room_revenue\)?\s*\/\s*[\w.(]*adr/)
+    expect(dashboardPageSource).not.toMatch(/adr\)?\s*\/\s*[\w.(]*room_revenue/)
+    expect(dashboardPageSource).toContain('currenciesIn(overview.room_revenue).length > 1')
+  })
+})
 
 describe('multiple currencies', () => {
   beforeEach(() => {
