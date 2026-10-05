@@ -53,6 +53,7 @@ from app.core.errors import (
 from app.models.booking import Booking, BookingRoom, BookingRoomNight
 from app.models.enums import (
     EXTENDABLE_BOOKING_STATUSES,
+    INVENTORY_HOLDING_STATUSES,
     MODIFIABLE_BOOKING_STATUSES,
     TERMINAL_BOOKING_STATUSES,
     AuditAction,
@@ -233,6 +234,7 @@ class BookingService:
         # Rooms are resolved before anything is written, so an unknown room number is a clean
         # 404 rather than a half-built transaction rolled back.
         rooms = self._resolve_rooms(hotel, payload.rooms)
+        self._require_for_sale([rooms[room_input.room_number].id for room_input in payload.rooms])
 
         # Priced before the write, in ONE query for the whole booking however many
         # rooms and nights it has. The quotes are keyed by room id and each holds
@@ -367,6 +369,13 @@ class BookingService:
             # taken only for a status change, so ordinary field edits are unaffected.
             booking = self._repository.lock_for_update(booking)
             self._require_allowed_transition(booking.status, changes["status"])
+            if (
+                changes["status"] in INVENTORY_HOLDING_STATUSES
+                and booking.status != changes["status"]
+            ):
+                # Issue H1. Moving into a status that holds inventory puts every allocated
+                # room on sale, so it is refused on an inactive room as creation would be.
+                self._require_for_sale([allocation.room_id for allocation in booking.booking_rooms])
             if booking.status != changes["status"]:
                 # A PATCH asking for the status the booking already holds is permitted and
                 # is a no-op (see BOOKING_STATUS_TRANSITIONS on idempotence). Recording it
@@ -452,6 +461,7 @@ class BookingService:
         self._require_modifiable(booking.status)
 
         rooms = self._resolve_rooms(hotel, payload.rooms)
+        self._require_for_sale([rooms[room_input.room_number].id for room_input in payload.rooms])
 
         # Computed BEFORE anything is written, while the old stay is still readable. A safe
         # summary of WHAT moved -- not the payload, and not the before-and-after of every
@@ -653,6 +663,8 @@ class BookingService:
         # The rooms the guest is already in. Not re-resolved from a payload, because the
         # payload has no rooms: an extension continues the allocation it found.
         allocations = list(booking.booking_rooms)
+        # Issue H1. The added nights are a new sale of each room, so an inactive one refuses.
+        self._require_for_sale([allocation.room_id for allocation in allocations])
         quotes = self._pricing.quote_rooms(
             hotel.id,
             {
@@ -873,6 +885,29 @@ class BookingService:
             if room_input.room_number not in found:
                 raise NotFoundError(f"Room {room_input.room_number!r} not found for this hotel.")
         return found
+
+    def _require_for_sale(self, room_ids: Sequence[int]) -> None:
+        """Refuse, with 409, a room that is inactive or whose room type is inactive (Issue H1).
+
+        ``is_active`` is what makes a room sellable inventory: availability search never offers
+        an inactive room or a room of an inactive type, and occupancy does not count it as
+        capacity. Every booking write that puts a room on sale asks this, so neither can be
+        sold by naming its number. The first offending room in *room_ids* order is named, as
+        :meth:`_resolve_rooms` names the first missing one.
+
+        The answer is read under ``FOR SHARE`` (``lock_rooms_for_sale``), which is what keeps it
+        true until this transaction commits: a concurrent deactivation waits for it, and then
+        sees the allocation it wrote.
+        """
+        for_sale = self._repository.lock_rooms_for_sale(room_ids)
+        for room_id in room_ids:
+            number, room_active, type_active = for_sale[room_id]
+            if not room_active:
+                raise ConflictError(f"Room {number!r} is inactive and cannot be booked.")
+            if not type_active:
+                raise ConflictError(
+                    f"Room {number!r} belongs to an inactive room type and cannot be booked."
+                )
 
     @staticmethod
     def _changed_stay_fields(

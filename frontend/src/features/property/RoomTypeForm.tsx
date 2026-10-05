@@ -412,7 +412,9 @@ export function RoomTypeForm({
               This room type is bookable
             </label>
             <span className={styles.hint}>
-              An inactive type is excluded from availability. Its rooms keep their records.
+              An inactive type is excluded from availability and cannot be booked. Its rooms
+              keep their records. A type with a confirmed or checked-in stay ending after
+              today stays bookable until those stays are cancelled, moved or checked out.
             </span>
           </div>
         ) : null}

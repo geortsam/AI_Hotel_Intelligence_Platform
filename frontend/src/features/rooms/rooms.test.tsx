@@ -659,6 +659,29 @@ describe('updating a room', () => {
     expect(await screen.findByText('Withdrawn')).toBeInTheDocument()
   })
 
+  it('explains a refused withdrawal by the stays still to come', async () => {
+    const user = await openEdit()
+    fetchStub.on('PATCH', '/rooms/', {
+      status: 409,
+      body: {
+        error: {
+          code: 'CONFLICT',
+          message:
+            "Room '201' cannot be deactivated while it holds a confirmed or checked-in stay ending after today (2026-10-05). Cancel, move or check out those stays first.",
+        },
+      },
+    })
+
+    await user.click(screen.getByRole('checkbox', { name: /in service/ }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText('Nothing was saved')).toBeInTheDocument()
+    expect(
+      within(alert).getByText(/confirmed or checked-in stay ending after today/),
+    ).toBeInTheDocument()
+  })
+
   it('sends one request when saved twice', async () => {
     const user = await openEdit()
     fetchStub.on('PATCH', '/rooms/', { body: room() })
@@ -741,6 +764,9 @@ describe('deleting a room', () => {
     // Scoped: the section's standing note says the same thing before the click, which is
     // deliberate -- the refusal is the expected outcome for any room ever sold.
     expect(within(alert).getByText(/Withdrawing it from service/)).toBeInTheDocument()
+    expect(
+      within(alert).getByText(/once it holds no confirmed or checked-in stay ending after today/),
+    ).toBeInTheDocument()
     // Still on screen, because it still exists.
     expect(screen.getByRole('heading', { level: 1, name: 'Room 201' })).toBeInTheDocument()
   })

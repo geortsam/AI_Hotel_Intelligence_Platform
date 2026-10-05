@@ -196,5 +196,42 @@ class RoomRepository:
         # The row is gone; detach the instance so the identity map cannot serve a ghost.
         self._session.expunge(room)
 
+    def lock_for_update(self, room: Room) -> Room:
+        """Re-read this room under ``FOR NO KEY UPDATE``, refreshing it in place (Issue H1).
+
+        Taken before a deactivation is decided. Every booking write holds ``FOR SHARE`` on the
+        rooms it sells and their types (``BookingRepository.lock_rooms_for_sale``), and the two
+        locks conflict, so a sale and a deactivation serialise. ``NO KEY``: the update changes no
+        key, so the foreign-key checks of unrelated writes (``FOR KEY SHARE``) need not wait.
+        ``populate_existing``, because the instance is already in the identity map.
+        """
+        return self._session.scalars(
+            select(Room)
+            .where(Room.id == room.id)
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        ).one()
+
+    def holds_stay_after(self, room_id: int, day: dt.date) -> bool:
+        """Whether a confirmed or checked-in allocation of this room checks out after *day*.
+
+        Issue H1: such a room cannot be deactivated. A stay that checks out ON *day* has ended
+        by the time it matters, and pending, cancelled, no-show and checked-out allocations hold
+        nothing.
+        """
+        return bool(
+            self._session.scalar(
+                select(
+                    select(BookingRoom.id)
+                    .where(
+                        BookingRoom.room_id == room_id,
+                        BookingRoom.booking_status.in_(INVENTORY_HOLDING_STATUSES),
+                        BookingRoom.check_out_date > day,
+                    )
+                    .exists()
+                )
+            )
+        )
+
 
 __all__ = ["RoomRepository"]

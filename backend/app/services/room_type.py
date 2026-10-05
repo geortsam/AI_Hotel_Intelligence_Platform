@@ -31,6 +31,7 @@ from app.models.room import RoomType
 from app.repositories.room_type import RoomTypeRepository
 from app.schemas.common import Page
 from app.schemas.room_type import RoomTypeCreate, RoomTypeResponse, RoomTypeUpdate
+from app.services.business_day import Clock, hotel_today, utc_now
 from app.services.scope import HotelScopeResolver
 
 logger = logging.getLogger(__name__)
@@ -47,10 +48,14 @@ class RoomTypeService:
         session: Session,
         repository: RoomTypeRepository,
         scope: HotelScopeResolver,
+        *,
+        clock: Clock | None = None,
     ) -> None:
         self._session = session
         self._repository = repository
         self._scope = scope
+        # Issue H1: what "today" is when a deactivation is judged. Injected for tests.
+        self._clock = clock or utc_now
 
     # --- reads --------------------------------------------------------------------------
 
@@ -115,6 +120,8 @@ class RoomTypeService:
             return self._to_response(room_type, hotel)
 
         self._check_occupancy_after(room_type, changes)
+        if changes.get("is_active") is False:
+            room_type = self._require_retirable(hotel, room_type)
 
         try:
             updated = self._repository.apply_changes(room_type, changes)
@@ -156,6 +163,26 @@ class RoomTypeService:
     def _require_room_type(self, hotel: Hotel, code: str) -> RoomType:
         """Delegate to the shared resolver."""
         return self._scope.require_room_type(hotel, code)
+
+    def _require_retirable(self, hotel: Hotel, room_type: RoomType) -> RoomType:
+        """Refuse to deactivate a room type while any of its rooms holds a stay ahead (H1).
+
+        Deactivating a type takes every one of its rooms off sale, so the rule is the room
+        rule, applied to all of them: no confirmed or checked-in stay ending after the hotel's
+        today. Decided under the type's row lock, which a booking write's ``FOR SHARE`` on the
+        room types it sells conflicts with.
+        """
+        room_type = self._repository.lock_for_update(room_type)
+        if not room_type.is_active:
+            return room_type
+        today = hotel_today(hotel, self._clock)
+        if self._repository.rooms_hold_stay_after(room_type.id, today):
+            raise ConflictError(
+                f"Room type {room_type.code!r} cannot be deactivated while one of its rooms "
+                f"holds a confirmed or checked-in stay ending after today ({today.isoformat()}). "
+                "Cancel, move or check out those stays first."
+            )
+        return room_type
 
     def _check_occupancy_after(self, room_type: RoomType, changes: dict[str, Any]) -> None:
         """Validate the occupancy rule against the post-update state.

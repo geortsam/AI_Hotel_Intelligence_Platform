@@ -594,6 +594,28 @@ describe('editing a room type', () => {
     expect(await screen.findByText('Nothing was saved')).toBeInTheDocument()
     expect(screen.getByText(/standard occupancy above the stored maximum/)).toBeInTheDocument()
   })
+
+  it('explains a refused withdrawal by the stays still to come on its rooms', async () => {
+    const user = await openEdit()
+    fetchStub.on('PATCH', '/room-types/', {
+      status: 409,
+      body: {
+        error: {
+          code: 'CONFLICT',
+          message:
+            "Room type 'DLX' cannot be deactivated while one of its rooms holds a confirmed or checked-in stay ending after today (2026-10-05). Cancel, move or check out those stays first.",
+        },
+      },
+    })
+
+    await user.click(screen.getByRole('checkbox', { name: /bookable/ }))
+    await user.click(screen.getByRole('button', { name: 'Save room type' }))
+
+    expect(await screen.findByText('Nothing was saved')).toBeInTheDocument()
+    expect(
+      screen.getByText(/one of its rooms holds a confirmed or checked-in stay ending after today/),
+    ).toBeInTheDocument()
+  })
 })
 
 describe('deleting a room type', () => {

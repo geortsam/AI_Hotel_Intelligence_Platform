@@ -32,6 +32,7 @@ from app.models.room import Room, RoomType
 from app.repositories.room import RoomRepository
 from app.schemas.common import Page
 from app.schemas.room import RoomCreate, RoomResponse, RoomUpdate
+from app.services.business_day import Clock, hotel_today, utc_now
 from app.services.scope import HotelScopeResolver
 
 logger = logging.getLogger(__name__)
@@ -44,11 +45,18 @@ class RoomService:
     """Domain operations on physical rooms, always within one hotel and room type."""
 
     def __init__(
-        self, session: Session, repository: RoomRepository, scope: HotelScopeResolver
+        self,
+        session: Session,
+        repository: RoomRepository,
+        scope: HotelScopeResolver,
+        *,
+        clock: Clock | None = None,
     ) -> None:
         self._session = session
         self._repository = repository
         self._scope = scope
+        # Issue H1: what "today" is when a deactivation is judged. Injected for tests.
+        self._clock = clock or utc_now
 
     # --- reads --------------------------------------------------------------------------
 
@@ -134,6 +142,9 @@ class RoomService:
         if not changes:
             return self._to_response(room, hotel, room_type)
 
+        if changes.get("is_active") is False:
+            room = self._require_retirable(hotel, room)
+
         try:
             updated = self._repository.apply_changes(room, changes)
             self._session.commit()
@@ -160,12 +171,36 @@ class RoomService:
             if sqlstate_of(exc) in SQLSTATE_DEPENDENCY_VIOLATIONS:
                 raise ConflictError(
                     "This room cannot be deleted because it is still referenced by existing "
-                    "reservations. Deactivate the room instead, or remove those records "
-                    "first."
+                    "reservations. Deactivate the room instead -- possible once it holds no "
+                    "confirmed or checked-in stay ending after today -- or remove those "
+                    "records first."
                 ) from exc
             raise self._translate(exc, room_number=room_number) from exc
 
     # --- internals ----------------------------------------------------------------------
+
+    def _require_retirable(self, hotel: Hotel, room: Room) -> Room:
+        """Refuse to deactivate a room that holds a stay ending after the hotel's today (H1).
+
+        Deactivating takes the room off sale; a confirmed or checked-in stay still to come
+        would be left on a room the hotel no longer sells. Such stays are cancelled, moved or
+        checked out first. A stay that checks out today has ended; one that already ended but
+        was never checked out does not block -- it is history, not a sale.
+
+        Decided under the room's row lock, which a concurrent booking write's ``FOR SHARE``
+        conflicts with, so a stay cannot be added between the check and the commit.
+        """
+        room = self._repository.lock_for_update(room)
+        if not room.is_active:
+            return room
+        today = hotel_today(hotel, self._clock)
+        if self._repository.holds_stay_after(room.id, today):
+            raise ConflictError(
+                f"Room {room.room_number!r} cannot be deactivated while it holds a confirmed "
+                f"or checked-in stay ending after today ({today.isoformat()}). Cancel, move or "
+                "check out those stays first."
+            )
+        return room
 
     def _require_room(self, hotel: Hotel, room_type: RoomType, room_number: str) -> Room:
         """Resolve a room within this hotel AND this room type, or raise 404.

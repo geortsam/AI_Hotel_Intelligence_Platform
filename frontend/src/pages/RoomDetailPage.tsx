@@ -46,10 +46,12 @@ const UPDATE_FAILURE_COPY = {
     detail: 'This room no longer exists under this room type. It may have been removed since the page was loaded.',
     canRetry: false,
   },
+  // Issue H1: a room cannot be withdrawn while a sold stay is still to come on it.
   conflict: {
     title: 'Nothing was saved',
-    detail: 'The change conflicts with existing data. The room is unchanged.',
-    canRetry: true,
+    detail:
+      'A room cannot be withdrawn from service while it holds a confirmed or checked-in stay ending after today. Cancel, move or check out those stays first. The room is unchanged.',
+    canRetry: false,
   },
   serverFault: {
     title: 'Nothing was saved',
@@ -73,7 +75,7 @@ const DELETE_FAILURE_COPY = {
   conflict: {
     title: 'The room was not deleted',
     detail:
-      'Existing reservations still refer to this room, and no cascade is performed. Withdrawing it from service keeps the history and takes it out of use; deleting it does not.',
+      'Existing reservations still refer to this room, and no cascade is performed. Withdrawing it from service keeps the history and takes it out of use; deleting it does not. It can be withdrawn once it holds no confirmed or checked-in stay ending after today.',
     canRetry: false,
   },
   serverFault: {

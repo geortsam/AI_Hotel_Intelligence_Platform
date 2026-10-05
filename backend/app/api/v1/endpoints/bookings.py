@@ -52,6 +52,16 @@ CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
         "taken, or the booking is still referenced by other records.",
     }
 }
+#: The writes that put a room on sale -- creation, a status change, a stay change, an extension
+#: -- are also refused on an inactive room or a room of an inactive type (Issue H1).
+SALE_CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
+    status.HTTP_409_CONFLICT: {
+        "model": ErrorResponse,
+        "description": "A room is already booked for overlapping dates, a room or its room "
+        "type is inactive, the reference is taken, or the booking is still referenced by other "
+        "records.",
+    }
+}
 
 
 @router.post(
@@ -62,7 +72,7 @@ CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
     description="Creates the booking, its room allocations and every priced night in one "
     "transaction. Room availability is decided by the database's exclusion constraint, not "
     "by a prior check.",
-    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},
+    responses={**NOT_FOUND_RESPONSE, **SALE_CONFLICT_RESPONSE},
     # Stage 4.2: staff or above. Declared here because which role a
     # verb needs is a fact about the HTTP surface, not about the hotel.
     dependencies=[Depends(require_role(HotelRole.STAFF))],
@@ -147,7 +157,7 @@ def get_reconciliation(
     description="Status, occupancy, source and commercial fields only. Dates, guest, "
     "reference and room allocation are not editable here -- changing them is a re-pricing "
     "operation the deferred night-completeness trigger will not accept as a field edit.",
-    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},
+    responses={**NOT_FOUND_RESPONSE, **SALE_CONFLICT_RESPONSE},
     # Stage 4.2: staff or above. Declared here because which role a verb
     # needs is a fact about the HTTP surface, not about the hotel.
     dependencies=[Depends(require_role(HotelRole.STAFF))],
@@ -178,7 +188,7 @@ def update_booking(
         "separate act through the payment endpoints."
     ),
     dependencies=[Depends(require_role(HotelRole.STAFF))],
-    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},
+    responses={**NOT_FOUND_RESPONSE, **SALE_CONFLICT_RESPONSE},
 )
 def modify_stay(
     hotel_public_id: HotelPath,
@@ -222,7 +232,7 @@ def modify_stay(
         "payment endpoints."
     ),
     dependencies=[Depends(require_role(HotelRole.STAFF))],
-    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},
+    responses={**NOT_FOUND_RESPONSE, **SALE_CONFLICT_RESPONSE},
 )
 def extend_stay(
     hotel_public_id: HotelPath,

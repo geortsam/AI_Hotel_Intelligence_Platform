@@ -1982,6 +1982,217 @@ STAGE_G1 = [
 ]
 
 
+BOOKING_SERVICE = "backend/app/services/booking.py"
+INACTIVE_ROOMS = "tests/integration/test_inactive_rooms.py"
+ROOMS_TESTS = "src/features/rooms/rooms.test.tsx"
+PROPERTY_TESTS = "src/features/property/property.test.tsx"
+FOR_SALE_BY_NUMBER = (
+    "        self._require_for_sale([rooms[room_input.room_number].id for room_input in "
+    "payload.rooms])\n"
+)
+HOLDS_AFTER = "                        BookingRoom.check_out_date > day,\n"
+HOLDS_AFTER_OR_ON = "                        BookingRoom.check_out_date >= day,\n"
+HOLDING = "                        BookingRoom.booking_status.in_(INVENTORY_HOLDING_STATUSES),\n"
+
+
+def inactive(name: str, breaks: str, edits: tuple[Edit, ...], killer: str) -> Mutation:
+    """An H1 mutation whose killer is an integration test in test_inactive_rooms.py."""
+    return Mutation(
+        name, "H1", breaks, edits, (f"{INACTIVE_ROOMS}::{killer}",), needs_database=True
+    )
+
+
+STAGE_H1 = [
+    inactive(
+        "H1-M1",
+        "a new booking can name an inactive room again",
+        one(
+            BOOKING_SERVICE,
+            FOR_SALE_BY_NUMBER + "\n        # Priced before the write",
+            "\n        # Priced before the write",
+        ),
+        "test_a_booking_cannot_be_created_on_an_inactive_room",
+    ),
+    inactive(
+        "H1-M2",
+        "a stay can be moved onto an inactive room again",
+        one(
+            BOOKING_SERVICE,
+            FOR_SALE_BY_NUMBER + "\n        # Computed BEFORE anything is written",
+            "\n        # Computed BEFORE anything is written",
+        ),
+        "test_a_stay_cannot_be_moved_onto_an_inactive_room",
+    ),
+    inactive(
+        "H1-M3",
+        "a pending booking on a retired room can be confirmed, putting the room back on sale",
+        one(
+            BOOKING_SERVICE,
+            "                self._require_for_sale([allocation.room_id for allocation in "
+            "booking.booking_rooms])\n",
+            "                pass\n",
+        ),
+        "test_a_pending_booking_on_a_retired_room_cannot_be_confirmed",
+    ),
+    inactive(
+        "H1-M4",
+        "a stay on an inactive room can be extended again",
+        one(
+            BOOKING_SERVICE,
+            "        self._require_for_sale([allocation.room_id for allocation in allocations])\n",
+            "",
+        ),
+        "test_a_stay_on_an_inactive_room_cannot_be_extended",
+    ),
+    inactive(
+        "H1-M5",
+        "a room of an inactive type is for sale",
+        one(
+            BOOKING_SERVICE,
+            "            number, room_active, type_active = for_sale[room_id]\n",
+            "            number, room_active, _ = for_sale[room_id]\n"
+            "            type_active = True\n",
+        ),
+        "test_a_booking_cannot_be_created_on_a_room_of_an_inactive_type",
+    ),
+    inactive(
+        "H1-M6",
+        "a room with a stay ahead can be deactivated",
+        one(
+            "backend/app/services/room.py",
+            "            room = self._require_retirable(hotel, room)\n",
+            "            pass\n",
+        ),
+        "test_a_room_with_a_stay_ahead_cannot_be_deactivated",
+    ),
+    inactive(
+        "H1-M7",
+        "a room type with a stay ahead on one of its rooms can be deactivated",
+        one(
+            "backend/app/services/room_type.py",
+            "            room_type = self._require_retirable(hotel, room_type)\n",
+            "            pass\n",
+        ),
+        "test_a_room_type_with_a_stay_ahead_on_any_room_cannot_be_deactivated",
+    ),
+    inactive(
+        "H1-M8",
+        "today is UTC's, not the hotel's",
+        one(
+            "backend/app/services/business_day.py",
+            "        zone = ZoneInfo(hotel.timezone)\n",
+            '        zone = ZoneInfo("UTC")\n',
+        ),
+        "test_a_stay_ending_on_the_hotels_today_has_ended",
+    ),
+    inactive(
+        "H1-M9",
+        "a room's stay ending today still blocks its deactivation",
+        one("backend/app/repositories/room.py", HOLDS_AFTER, HOLDS_AFTER_OR_ON),
+        "test_a_stay_ending_on_the_hotels_today_has_ended",
+    ),
+    inactive(
+        "H1-M10",
+        "a stay ending today on one of a type's rooms still blocks the type's deactivation",
+        one("backend/app/repositories/room_type.py", HOLDS_AFTER, HOLDS_AFTER_OR_ON),
+        "test_a_stay_ending_on_the_hotels_today_has_ended",
+    ),
+    inactive(
+        "H1-M11",
+        "a checked-in stay ahead no longer blocks a room's deactivation",
+        one(
+            "backend/app/repositories/room.py",
+            HOLDING + HOLDS_AFTER,
+            '                        BookingRoom.booking_status.in_(("confirmed",)),\n'
+            + HOLDS_AFTER,
+        ),
+        "test_a_stay_ending_the_day_after_the_hotels_today_blocks",
+    ),
+    inactive(
+        "H1-M12",
+        "a sale no longer locks its rooms and their types",
+        one(
+            "backend/app/repositories/booking.py",
+            "                .with_for_update(read=True)\n",
+            "",
+        ),
+        "test_a_sale_holds_its_room_and_type_against_a_deactivation",
+    ),
+    inactive(
+        "H1-M13",
+        "deactivating a room no longer locks it against a concurrent sale",
+        one(
+            "backend/app/repositories/room.py", "            .with_for_update(key_share=True)\n", ""
+        ),
+        "test_a_deactivation_holds_its_room_against_a_sale",
+    ),
+    inactive(
+        "H1-M14",
+        "deactivating a room type no longer locks it against a concurrent sale",
+        one(
+            "backend/app/repositories/room_type.py",
+            "            .with_for_update(key_share=True)\n",
+            "",
+        ),
+        "test_a_deactivation_holds_its_room_against_a_sale",
+    ),
+    inactive(
+        "H1-M15",
+        "the delete refusal again advises deactivating a room that may still hold stays",
+        one(
+            "backend/app/services/room.py",
+            '"reservations. Deactivate the room instead -- possible once it holds no "\n'
+            '                    "confirmed or checked-in stay ending after today -- '
+            'or remove those "\n'
+            '                    "records first."\n',
+            '"reservations. Deactivate the room instead, or remove those records "\n'
+            '                    "first."\n',
+        ),
+        "test_the_delete_refusal_says_when_deactivation_is_possible",
+    ),
+    Mutation(
+        "H1-M16",
+        "H1",
+        "the room page explains a refused withdrawal as a generic conflict",
+        one(
+            "frontend/src/pages/RoomDetailPage.tsx",
+            "      'A room cannot be withdrawn from service while it holds a confirmed or "
+            "checked-in stay ending after today. Cancel, move or check out those stays first. "
+            "The room is unchanged.',",
+            "      'The change conflicts with existing data. The room is unchanged.',",
+        ),
+        (f"{ROOMS_TESTS}::explains a refused withdrawal by the stays still to come",),
+        runner=Runner.VITEST,
+    ),
+    Mutation(
+        "H1-M17",
+        "H1",
+        "the property page explains a refused room-type withdrawal as an occupancy clash",
+        one(
+            "frontend/src/pages/PropertyPage.tsx",
+            ", or making the type unbookable while one of its rooms holds a confirmed or "
+            "checked-in stay ending after today. The room type is unchanged.',",
+            ". The room type is unchanged.',",
+        ),
+        (
+            f"{PROPERTY_TESTS}::"
+            "explains a refused withdrawal by the stays still to come on its rooms",
+        ),
+        runner=Runner.VITEST,
+    ),
+    inactive(
+        "H1-M18",
+        "the extension route no longer declares the inactive-room 409 it can answer",
+        one(
+            "backend/app/api/v1/endpoints/bookings.py",
+            "    responses={**NOT_FOUND_RESPONSE, **SALE_CONFLICT_RESPONSE},\n)\ndef extend_stay(",
+            "    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},\n)\ndef extend_stay(",
+        ),
+        "test_the_writes_that_sell_a_room_declare_the_inactive_room_conflict",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -2003,4 +2214,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_F3,
     *STAGE_F4,
     *STAGE_G1,
+    *STAGE_H1,
 )

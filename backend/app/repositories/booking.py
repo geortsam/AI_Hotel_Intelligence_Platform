@@ -26,7 +26,7 @@ from sqlalchemy import delete as sql_delete
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.models.booking import Booking, BookingRoom, BookingRoomNight
-from app.models.room import Room
+from app.models.room import Room, RoomType
 
 
 class BookingRepository:
@@ -347,6 +347,38 @@ class BookingRepository:
             select(Room).where(Room.hotel_id == hotel_id, Room.room_number.in_(list(room_numbers)))
         ).all()
         return {room.room_number: room for room in rows}
+
+    def lock_rooms_for_sale(self, room_ids: Sequence[int]) -> dict[int, tuple[str, bool, bool]]:
+        """Each room's number and whether it and its type are active, read under ``FOR SHARE``.
+
+        Issue H1. Every booking write that puts a room on sale -- creation, a stay change, an
+        extension, a move into an inventory-holding status -- reads this before deciding, and
+        the lock is what makes the answer hold until it commits. Deactivating a room or a room
+        type takes ``FOR NO KEY UPDATE`` on that row first (``RoomRepository.lock_for_update``,
+        ``RoomTypeRepository.lock_for_update``), which conflicts with ``FOR SHARE``: a sale and a
+        deactivation of the same room serialise, and whichever commits second decides against
+        what the first committed. Two sales share the lock and never wait for each other.
+
+        ``FOR SHARE`` without ``OF`` locks the row of every table in the FROM list, so the
+        joined room type is held too. Columns, not entities: the rooms are already in the
+        identity map, and an entity query would hand back their stale attributes.
+        """
+        if not room_ids:
+            return {}
+        rows = (
+            self._session.execute(
+                select(Room.id, Room.room_number, Room.is_active, RoomType.is_active)
+                .join(RoomType, RoomType.id == Room.room_type_id)
+                .where(Room.id.in_(list(room_ids)))
+                .order_by(Room.id)
+                .with_for_update(read=True)
+            )
+            .tuples()
+            .all()
+        )
+        return {
+            room_id: (number, active, type_active) for room_id, number, active, type_active in rows
+        }
 
     def room_type_codes_for(self, room_ids: list[int]) -> dict[int, str]:
         """Map room id -> room type code, for rendering allocations.

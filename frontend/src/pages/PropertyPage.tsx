@@ -113,7 +113,7 @@ const WRITE_COPY = {
     conflict: {
       title: 'Nothing was saved',
       detail:
-        'The values conflict with what is stored — most often a standard occupancy above the stored maximum. The room type is unchanged.',
+        'The values conflict with what is stored: a standard occupancy above the stored maximum, or making the type unbookable while one of its rooms holds a confirmed or checked-in stay ending after today. The room type is unchanged.',
       canRetry: false,
     },
     serverFault: {

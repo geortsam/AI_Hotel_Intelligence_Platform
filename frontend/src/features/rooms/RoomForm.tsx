@@ -260,7 +260,7 @@ export function RoomForm({
           </label>
           <span className={styles.hint}>
             Separate from the status: a room can be withdrawn from service whatever state it
-            is in.
+            is in, once it holds no confirmed or checked-in stay ending after today.
           </span>
         </div>
 
