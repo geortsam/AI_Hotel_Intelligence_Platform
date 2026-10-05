@@ -268,6 +268,12 @@ function adrCaption(overview: OverviewResponse, currency: string): string {
  * Why the ADR tile shows a dash (F2b). When the headline currency has no room-revenue bucket
  * but the hotel did sell room nights, they were sold in another currency: saying "no room
  * nights were sold" would be false, so the reason names the missing currency instead.
+ *
+ * The same holds when the headline currency HAS a bucket but its ADR is null: none of its
+ * nights were sold (the backend nulls ADR exactly when a currency's sold nights are 0), while
+ * the hotel's sold nights say others were. The reason then names the currency's unsold nights.
+ * It claims no more than that -- not "no revenue", since a complimentary night's rate need not
+ * be zero. Only when the hotel sold nothing at all is "no room nights were sold" true.
  */
 function adrUnavailableReason(
   overview: OverviewResponse,
@@ -276,6 +282,9 @@ function adrUnavailableReason(
 ): string {
   if (room === null && overview.occupancy.room_nights_sold > 0) {
     return `No room revenue in ${currency} was recorded in this period, so ADR was not reported.`
+  }
+  if (room !== null && room.adr === null && overview.occupancy.room_nights_sold > 0) {
+    return `No room nights in ${currency} were sold in this period, so ADR is undefined.`
   }
   return 'No room nights were sold in this period, so the average rate is undefined.'
 }

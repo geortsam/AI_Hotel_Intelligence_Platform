@@ -22,6 +22,7 @@ import { PeriodSelector } from '@/features/dashboard/PeriodSelector'
 import { StateMessage } from '@/features/dashboard/StateMessage'
 import { TrendChart, type TrendPoint } from '@/features/dashboard/TrendChart'
 import { useHotelContext } from '@/session/HotelProvider'
+import type { RoomRevenueByCurrency } from '@/types/analytics'
 import type { Hotel } from '@/types/hotel'
 
 import styles from './AnalyticsPage.module.css'
@@ -182,7 +183,7 @@ export function AnalyticsPage() {
                 ? formatMoneyCompact(roomRevenue.adr, roomRevenue.currency)
                 : null
             }
-            unavailableReason="No room nights were sold in this period."
+            unavailableReason={adrUnavailableReason(roomRevenue, occupancy.room_nights_sold)}
             caption="Average daily rate over nights sold"
           />
           <KpiCard
@@ -338,6 +339,22 @@ function Shell({
 }
 
 /** Pending state: the shape of the page, without inventing figures for it. */
+/**
+ * Why the ADR card shows a dash. The reporting currency is the first room-revenue currency, so
+ * its bucket exists; a null ADR means none of ITS nights were sold. When the hotel sold nights
+ * in another currency, "no room nights were sold" would be false -- the reason names the
+ * currency instead. Only when the hotel sold nothing at all is the general sentence true.
+ */
+function adrUnavailableReason(
+  room: RoomRevenueByCurrency | null,
+  roomNightsSold: number,
+): string {
+  if (room !== null && room.adr === null && roomNightsSold > 0) {
+    return `No room nights in ${room.currency} were sold in this period, so ADR is undefined.`
+  }
+  return 'No room nights were sold in this period.'
+}
+
 function LoadingReport() {
   return (
     <div className={styles.loading} aria-busy="true" aria-live="polite">

@@ -903,6 +903,40 @@ const ROOM_REVENUE_ONLY_IN_ANOTHER_CURRENCY = {
   is_multi_currency: true,
 }
 
+/**
+ * EUR, the headline currency, has a room-revenue bucket but sold none of its nights: its three
+ * occupied nights were complimentary, so the backend sends `adr: null`. USD sold 20. The hotel
+ * occupied 23 and sold 20 -- so "no room nights were sold" would be false.
+ */
+const HEADLINE_NIGHTS_ALL_COMPLIMENTARY = {
+  ...CURRENT_OVERVIEW,
+  occupancy: {
+    ...CURRENT_OVERVIEW.occupancy,
+    occupied_room_nights: 23,
+    room_nights_sold: 20,
+    complimentary_room_nights: 3,
+    occupancy_rate: '0.2054',
+  },
+  room_revenue: [
+    { currency: 'EUR', room_revenue: '0.00', adr: null, revpar: '0.00' },
+    { currency: 'USD', room_revenue: '4200.00', adr: '210.00', revpar: '37.50' },
+  ],
+  is_multi_currency: true,
+}
+
+/** Every occupied night complimentary, in the one currency: nothing was sold anywhere. */
+const EVERY_NIGHT_COMPLIMENTARY = {
+  ...CURRENT_OVERVIEW,
+  occupancy: {
+    ...CURRENT_OVERVIEW.occupancy,
+    occupied_room_nights: 3,
+    room_nights_sold: 0,
+    complimentary_room_nights: 3,
+    occupancy_rate: '0.0268',
+  },
+  room_revenue: [{ currency: 'EUR', room_revenue: '0.00', adr: null, revpar: '0.00' }],
+}
+
 /** One room-revenue currency; a second currency only in the ledger. */
 const LEDGER_ONLY_SECOND_CURRENCY = {
   ...CURRENT_OVERVIEW,
@@ -980,6 +1014,33 @@ describe('the ADR caption', () => {
     stubOverview(EMPTY_OVERVIEW)
     mount()
     await screen.findByText(/No activity in the last 7 days/i)
+
+    expect(
+      within(adrTile()).getByText(
+        'No room nights were sold in this period, so the average rate is undefined.',
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('says the headline currency sold no nights, not that none were sold, when another did', async () => {
+    stubOverview(HEADLINE_NIGHTS_ALL_COMPLIMENTARY, HEADLINE_NIGHTS_ALL_COMPLIMENTARY)
+    mount()
+    await screen.findByText('Multiple currencies')
+
+    const tile = adrTile()
+    expect(within(tile).getByText('—')).toBeInTheDocument()
+    expect(
+      within(tile).getByText('No room nights in EUR were sold in this period, so ADR is undefined.'),
+    ).toBeInTheDocument()
+    expect(tile.textContent).not.toMatch(/No room nights were sold/)
+    // Nothing about revenue is claimed: a complimentary night's rate need not be zero.
+    expect(tile.textContent).not.toMatch(/revenue/i)
+  })
+
+  it('still says no nights were sold when every night was complimentary', async () => {
+    stubOverview(EVERY_NIGHT_COMPLIMENTARY, EVERY_NIGHT_COMPLIMENTARY)
+    mount()
+    await screen.findByText('2.7%')
 
     expect(
       within(adrTile()).getByText(

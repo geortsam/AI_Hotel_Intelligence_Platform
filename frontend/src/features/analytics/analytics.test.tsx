@@ -316,6 +316,55 @@ describe('the figures on screen', () => {
     expect(within(adr).queryByText(/EUR/)).not.toBeInTheDocument()
   })
 
+  it('says the reporting currency sold no nights, not that none were sold, when another did', async () => {
+    /* EUR is listed first, so it is the reporting currency; its bucket exists but all three of
+       its nights were complimentary (`adr: null`). USD sold 20. */
+    fetchStub.on('GET', '/analytics/overview', {
+      body: overview({
+        occupancy: {
+          occupied_room_nights: 23,
+          room_nights_sold: 20,
+          complimentary_room_nights: 3,
+          available_room_nights: 1440,
+          occupancy_rate: '0.0160',
+          available_room_nights_basis: 'current_active_rooms',
+        },
+        room_revenue: [
+          { currency: 'EUR', room_revenue: '0.00', adr: null, revpar: '0.00' },
+          { currency: 'USD', room_revenue: '4200.00', adr: '210.00', revpar: '2.92' },
+        ],
+        is_multi_currency: true,
+      }),
+    })
+    renderPage()
+
+    await screen.findByText('No room nights in EUR were sold in this period, so ADR is undefined.')
+    const adr = screen.getByText('ADR').closest('div')!
+    expect(within(adr).getByText('—')).toBeInTheDocument()
+    expect(adr.textContent).not.toMatch(/No room nights were sold/)
+  })
+
+  it('still says no nights were sold when every night was complimentary', async () => {
+    fetchStub.on('GET', '/analytics/overview', {
+      body: overview({
+        occupancy: {
+          occupied_room_nights: 3,
+          room_nights_sold: 0,
+          complimentary_room_nights: 3,
+          available_room_nights: 1440,
+          occupancy_rate: '0.0021',
+          available_room_nights_basis: 'current_active_rooms',
+        },
+        room_revenue: [{ currency: 'EUR', room_revenue: '0.00', adr: null, revpar: '0.00' }],
+      }),
+    })
+    renderPage()
+
+    await screen.findByText('No room nights were sold in this period.')
+    const adr = screen.getByText('ADR').closest('div')!
+    expect(within(adr).getByText('—')).toBeInTheDocument()
+  })
+
   it('prints the category tables exactly as the server grouped them, with no total row', async () => {
     renderPage()
     await screen.findByText('28.7%')

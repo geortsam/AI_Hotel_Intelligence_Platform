@@ -23,6 +23,7 @@ from the original run, its ``note`` says how and why.
 | F2-ADR dashboard ADR caption | 6 | 6 | Vitest; "F2" was already the purge command's stage |
 | M1 runbook schema facts | 8 | 8 | |
 | M2 current-state docs | 8 | 8 | |
+| F2-COMP complimentary-only ADR reason | 6 | 6 | Vitest |
 """
 
 from __future__ import annotations
@@ -46,6 +47,7 @@ INVOCATION_MIGRATION = "database/migrations/versions/20261003_0017_llm_invocatio
 ANALYTICS_REPOSITORY = "backend/app/repositories/analytics.py"
 INTELLIGENCE_SERVICE = "backend/app/services/intelligence.py"
 DASHBOARD_PAGE = "frontend/src/pages/DashboardPage.tsx"
+ANALYTICS_PAGE = "frontend/src/pages/AnalyticsPage.tsx"
 BACKUP_RUNBOOK = "docs/deployment/backup-restore.md"
 BOOTSTRAP_RUNBOOK = "docs/deployment/first-run-bootstrap.md"
 COPILOT_FRONTEND_DOC = "docs/copilot-frontend.md"
@@ -67,6 +69,7 @@ INVOCATION_STATIC = "tests/backend/test_llm_invocation_retention.py"
 BUCKETING = "tests/integration/test_business_day_bucketing.py"
 BUSINESS_DAY_GUARD = "tests/backend/test_business_day_guard.py"
 DASHBOARD_TESTS = "src/features/dashboard/dashboard.test.tsx"
+ANALYTICS_TESTS = "src/features/analytics/analytics.test.tsx"
 RUNBOOK_FACTS = "tests/backend/test_runbook_schema_facts.py"
 CURRENT_STATE_DOCS = "tests/backend/test_current_state_docs.py"
 CONTRACT = "tests/backend/test_frontend_contract.py"
@@ -1494,6 +1497,78 @@ STAGE_M2 = [
     ),
 ]
 
+
+def comp(name: str, breaks: str, path: str, old: str, new: str, killer: str) -> Mutation:
+    """A complimentary-nights ADR-reason mutation (F2 residual): Vitest killer by file::title."""
+    return Mutation(name, "F2-COMP", breaks, one(path, old, new), (killer,), runner=Runner.VITEST)
+
+
+COMP_DASHBOARD_SAYS = (
+    f"{DASHBOARD_TESTS}::says the headline currency sold no nights, not that none were sold, "
+    "when another did"
+)
+COMP_DASHBOARD_KEEPS = (
+    f"{DASHBOARD_TESTS}::still says no nights were sold when every night was complimentary"
+)
+COMP_ANALYTICS_SAYS = (
+    f"{ANALYTICS_TESTS}::says the reporting currency sold no nights, not that none were sold, "
+    "when another did"
+)
+COMP_ANALYTICS_KEEPS = (
+    f"{ANALYTICS_TESTS}::still says no nights were sold when every night was complimentary"
+)
+
+STAGE_F2_COMP = [
+    comp(
+        "F2-COMP-M1",
+        "the dashboard says no room nights were sold although another currency sold some",
+        DASHBOARD_PAGE,
+        "  if (room !== null && room.adr === null && overview.occupancy.room_nights_sold > 0) {",
+        "  if (room !== null && room.adr === null && overview.occupancy.room_nights_sold < 0) {",
+        COMP_DASHBOARD_SAYS,
+    ),
+    comp(
+        "F2-COMP-M2",
+        "the dashboard names the currency even when the hotel sold nothing at all",
+        DASHBOARD_PAGE,
+        "  if (room !== null && room.adr === null && overview.occupancy.room_nights_sold > 0) {",
+        "  if (room !== null && room.adr === null) {",
+        COMP_DASHBOARD_KEEPS,
+    ),
+    comp(
+        "F2-COMP-M3",
+        "the dashboard reason no longer names the currency",
+        DASHBOARD_PAGE,
+        "`No room nights in ${currency} were sold",
+        "`No room nights in this currency were sold",
+        COMP_DASHBOARD_SAYS,
+    ),
+    comp(
+        "F2-COMP-M4",
+        "the analytics page says no room nights were sold although another currency sold some",
+        ANALYTICS_PAGE,
+        "  if (room !== null && room.adr === null && roomNightsSold > 0) {",
+        "  if (room !== null && room.adr === null && roomNightsSold < 0) {",
+        COMP_ANALYTICS_SAYS,
+    ),
+    comp(
+        "F2-COMP-M5",
+        "the analytics page names the currency even when the hotel sold nothing at all",
+        ANALYTICS_PAGE,
+        "  if (room !== null && room.adr === null && roomNightsSold > 0) {",
+        "  if (room !== null && room.adr === null) {",
+        COMP_ANALYTICS_KEEPS,
+    ),
+    comp(
+        "F2-COMP-M6",
+        "the analytics reason no longer names the currency",
+        ANALYTICS_PAGE,
+        "`No room nights in ${room.currency} were sold",
+        "`No room nights in this currency were sold",
+        COMP_ANALYTICS_SAYS,
+    ),
+]
+
 LIVE_CONTRACT = f"{CONTRACT}::test_the_frontend_types_are_compatible_with_the_live_backend_schema"
 
 STAGE_F16 = [
@@ -1648,4 +1723,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_F2_ADR,
     *STAGE_M1,
     *STAGE_M2,
+    *STAGE_F2_COMP,
 )
