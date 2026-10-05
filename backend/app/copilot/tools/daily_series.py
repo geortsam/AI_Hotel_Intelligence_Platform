@@ -37,7 +37,8 @@ CONTRACT = ToolContract(
     description=(
         "A gap-free daily series for the current hotel over an inclusive date range: occupied "
         "and available room nights, occupancy, room and other revenue, expenses, arrivals, "
-        "departures, bookings created and cancellations for each day."
+        "departures, bookings created and cancellations for each day. Arrivals and departures "
+        "count confirmed, checked-in and checked-out bookings only."
     ),
     min_role=HotelRole.VIEWER,
     input_model=DailySeriesArguments,

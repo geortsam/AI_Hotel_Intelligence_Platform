@@ -64,9 +64,9 @@ API cannot make that assumption (§4), which is a gap the job will have to resol
 | Metric | Source | Date column | Notes |
 |---|---|---|---|
 | `bookings_created.*` | `bookings` | `booked_at`, as a hotel-local date | Same column `daily_hotel_metrics.bookings_created` counts; see below |
-| `bookings_by_stay.*` | `bookings` | stay overlap | `check_in_date <= date_to AND check_out_date > date_from` |
-| `stay_flow.arrivals` | `bookings` | `check_in_date` | |
-| `stay_flow.departures` | `bookings` | `check_out_date` | A departure day is **not** a room night |
+| `bookings_by_stay.*` | `bookings` | stay overlap | `check_in_date <= date_to AND check_out_date > date_from`; every status, broken down by status |
+| `stay_flow.arrivals` | `bookings` | `check_in_date` | Only `OCCUPANCY_STATUSES` (confirmed, checked in, checked out): cancelled, no-show and pending bookings never arrived |
+| `stay_flow.departures` | `bookings` | `check_out_date` | A departure day is **not** a room night; same status rule as arrivals |
 | `stay_flow.cancellations` | `bookings` | `cancelled_at`, as a hotel-local date | When the cancellation happened; see below |
 | `occupied_room_nights` | `booking_room_nights` | `stay_date` | Joined to `booking_rooms` for status |
 | `room_nights_sold` | `booking_room_nights` | `stay_date` | Excludes `is_complimentary` |

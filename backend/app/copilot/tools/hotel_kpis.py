@@ -58,7 +58,9 @@ CONTRACT = ToolContract(
     description=(
         "Key figures for the current hotel over an inclusive date range: bookings by status, "
         "arrivals and departures, occupancy, room revenue with ADR and RevPAR per currency, "
-        "other revenue, expenses, net operating result and review totals."
+        "other revenue, expenses, net operating result and review totals. Arrivals and "
+        "departures count confirmed, checked-in and checked-out bookings only; bookings by "
+        "status, and by stay, include every status."
     ),
     min_role=HotelRole.VIEWER,
     input_model=HotelKpisArguments,

@@ -403,6 +403,26 @@ describe('period-over-period comparison', () => {
   })
 })
 
+/* --- stay activity: who arrives, who merely overlaps (F4) ------------------------------- */
+
+describe('stay activity', () => {
+  it('says which bookings arrive and depart, and that overlap counts every status', async () => {
+    stubSession()
+    stubOverview(CURRENT_OVERVIEW)
+    fetchStub.on('GET', 'analytics/daily', { body: DAILY })
+    mount()
+    await screen.findByText('58.0%')
+
+    expect(screen.getByText('Bookings overlapping this period (any status)')).toBeInTheDocument()
+    expect(screen.queryByText('Bookings staying')).not.toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /Arrivals and departures count confirmed, checked-in and checked-out\s+bookings; cancelled, no-show and pending ones are not counted\./,
+      ),
+    ).toBeInTheDocument()
+  })
+})
+
 /* --- request discipline ------------------------------------------------------------------ */
 
 describe('request count', () => {

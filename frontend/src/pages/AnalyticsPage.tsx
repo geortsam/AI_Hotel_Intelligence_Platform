@@ -235,7 +235,7 @@ export function AnalyticsPage() {
                 points={arrivalSeries}
                 formatValue={(value) => String(value)}
                 unit="arrivals"
-                emptyMessage="No arrivals were recorded in this period."
+                emptyMessage="No arrivals were expected or recorded in this period."
               />
             </CardBody>
           </Card>

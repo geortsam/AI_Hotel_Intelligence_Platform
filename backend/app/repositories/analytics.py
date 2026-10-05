@@ -207,25 +207,34 @@ class AnalyticsRepository:
         return dict(rows)
 
     def arrival_count(self, hotel_id: int, date_from: dt.date, date_to: dt.date) -> int:
-        """Bookings whose ``check_in_date`` falls in range, whatever their status."""
+        """Bookings that arrive -- or are due to -- with ``check_in_date`` in range.
+
+        Only bookings in ``OCCUPANCY_STATUSES`` (confirmed, checked in, checked out): the same
+        set that makes a night occupied (Issue F4). A cancelled booking and a no-show never
+        arrived, and a pending one was never committed; counting them made a booking cancelled
+        within the range both an arrival and a cancellation.
+        """
         return self._count(
             Booking,
             Booking.hotel_id == hotel_id,
             Booking.check_in_date >= date_from,
             Booking.check_in_date <= date_to,
+            Booking.status.in_(OCCUPANCY_STATUSES),
         )
 
     def departure_count(self, hotel_id: int, date_from: dt.date, date_to: dt.date) -> int:
-        """Bookings whose ``check_out_date`` falls in range.
+        """Bookings that depart -- or are due to -- with ``check_out_date`` in range.
 
         Distinct from a night: the schema's CHECK requires ``stay_date < check_out_date``, so
-        a departure date contributes a departure and no room night.
+        a departure date contributes a departure and no room night. The same status rule as
+        :meth:`arrival_count`: only bookings in ``OCCUPANCY_STATUSES``.
         """
         return self._count(
             Booking,
             Booking.hotel_id == hotel_id,
             Booking.check_out_date >= date_from,
             Booking.check_out_date <= date_to,
+            Booking.status.in_(OCCUPANCY_STATUSES),
         )
 
     def cancellation_count(
@@ -256,23 +265,27 @@ class AnalyticsRepository:
     def arrivals_by_day(
         self, hotel_id: int, date_from: dt.date, date_to: dt.date
     ) -> dict[dt.date, int]:
+        """:meth:`arrival_count`, per ``check_in_date``."""
         return self._count_by_day(
             Booking.check_in_date,
             Booking,
             Booking.hotel_id == hotel_id,
             Booking.check_in_date >= date_from,
             Booking.check_in_date <= date_to,
+            Booking.status.in_(OCCUPANCY_STATUSES),
         )
 
     def departures_by_day(
         self, hotel_id: int, date_from: dt.date, date_to: dt.date
     ) -> dict[dt.date, int]:
+        """:meth:`departure_count`, per ``check_out_date``."""
         return self._count_by_day(
             Booking.check_out_date,
             Booking,
             Booking.hotel_id == hotel_id,
             Booking.check_out_date >= date_from,
             Booking.check_out_date <= date_to,
+            Booking.status.in_(OCCUPANCY_STATUSES),
         )
 
     def cancellations_by_day(

@@ -25,6 +25,7 @@ from the original run, its ``note`` says how and why.
 | M2 current-state docs | 8 | 8 | |
 | F2-COMP complimentary-only ADR reason | 6 | 6 | Vitest |
 | F3 occupancy change in points | 8 | 8 | Vitest |
+| F4 arrivals and departures by status | 8 | 8 | PostgreSQL M1-M5, Vitest M6-M7 |
 """
 
 from __future__ import annotations
@@ -1648,6 +1649,100 @@ STAGE_F3 = [
     ),
 ]
 
+
+STAY_FLOW = "tests/integration/test_stay_flow_statuses.py"
+STAY_FLOW_CONTRACT = "tests/backend/test_stay_flow_contract.py"
+STATUS_FILTER = "            Booking.status.in_(OCCUPANCY_STATUSES),\n        )\n\n"
+
+
+def stay_flow(name: str, breaks: str, after: str, killer: str, new_filter: str = "") -> Mutation:
+    """Drop (or replace) the status filter in the stay-flow method followed by *after* (F4)."""
+    return Mutation(
+        name,
+        "F4",
+        breaks,
+        one(ANALYTICS_REPOSITORY, STATUS_FILTER + after, new_filter + "        )\n\n" + after),
+        (f"{STAY_FLOW}::{killer}",),
+        needs_database=True,
+    )
+
+
+STAGE_F4 = [
+    stay_flow(
+        "F4-M1",
+        "arrivals count every status again",
+        "    def departure_count(",
+        "test_only_bookings_that_occupy_a_room_arrive_and_depart",
+    ),
+    stay_flow(
+        "F4-M2",
+        "departures count every status again",
+        "    def cancellation_count(",
+        "test_only_bookings_that_occupy_a_room_arrive_and_depart",
+    ),
+    stay_flow(
+        "F4-M3",
+        "the daily arrival series counts every status again",
+        "    def departures_by_day(",
+        "test_the_daily_series_counts_the_same_bookings",
+    ),
+    stay_flow(
+        "F4-M4",
+        "the daily departure series counts every status again",
+        "    def cancellations_by_day(",
+        "test_the_daily_series_counts_the_same_bookings",
+    ),
+    stay_flow(
+        "F4-M5",
+        "arrivals use the inventory-holding set, which forgets completed stays",
+        "    def departure_count(",
+        "test_each_counted_status_is_an_arrival_and_a_departure",
+        new_filter='            Booking.status.in_(("confirmed", "checked_in")),\n',
+    ),
+    Mutation(
+        "F4-M6",
+        "F4",
+        "the dashboard calls every overlapping booking 'staying' again",
+        one(
+            DASHBOARD_PAGE,
+            "<dt>Bookings overlapping this period (any status)</dt>",
+            "<dt>Bookings staying</dt>",
+        ),
+        (
+            f"{DASHBOARD_TESTS}::says which bookings arrive and depart, and that overlap counts "
+            "every status",
+        ),
+        runner=Runner.VITEST,
+    ),
+    Mutation(
+        "F4-M7",
+        "F4",
+        "the analytics page says arrivals were recorded, though confirmed ones are only expected",
+        one(
+            ANALYTICS_PAGE,
+            'emptyMessage="No arrivals were expected or recorded in this period."',
+            'emptyMessage="No arrivals were recorded in this period."',
+        ),
+        (
+            f"{ANALYTICS_TESTS}::says no arrival was expected or recorded, not merely recorded, "
+            "for an empty series",
+        ),
+        runner=Runner.VITEST,
+    ),
+    Mutation(
+        "F4-M8",
+        "F4",
+        "the copilot's daily-series tool no longer tells the model who is counted",
+        one(
+            "backend/app/copilot/tools/daily_series.py",
+            ' Arrivals and departures "\n        "count confirmed, checked-in and checked-out '
+            'bookings only."',
+            '"',
+        ),
+        (f"{STAY_FLOW_CONTRACT}::test_each_copilot_tool_tells_the_model_who_is_counted",),
+    ),
+]
+
 LIVE_CONTRACT = f"{CONTRACT}::test_the_frontend_types_are_compatible_with_the_live_backend_schema"
 
 STAGE_F16 = [
@@ -1804,4 +1899,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_M2,
     *STAGE_F2_COMP,
     *STAGE_F3,
+    *STAGE_F4,
 )

@@ -573,6 +573,17 @@ describe('loading, empty and failure', () => {
     expect(screen.getByText(/no expenses were posted in this period/i)).toBeInTheDocument()
   })
 
+  it('says no arrival was expected or recorded, not merely recorded, for an empty series', async () => {
+    // Arrivals count confirmed bookings too (F4): a future arrival is expected, not recorded.
+    fetchStub.on('GET', '/analytics/daily', { body: dailySeries([]) })
+    renderPage()
+
+    expect(
+      await screen.findByText('No arrivals were expected or recorded in this period.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('No arrivals were recorded in this period.')).not.toBeInTheDocument()
+  })
+
   it('never shows zero when a report request failed', async () => {
     fetchStub.on('GET', '/analytics/overview', {
       status: 500,

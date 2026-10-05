@@ -114,10 +114,20 @@ class OccupancyMetrics(BaseModel):
 class StayFlowMetrics(BaseModel):
     """Arrivals, departures and cancellations, each on its own date column."""
 
-    #: bookings.check_in_date within range.
-    arrivals: int
-    #: bookings.check_out_date within range.
-    departures: int
+    #: bookings.check_in_date within range, for bookings in OCCUPANCY_STATUSES (Issue F4).
+    arrivals: int = Field(
+        description=(
+            "Bookings arriving -- or due to arrive -- on a date in the range: confirmed, "
+            "checked in or checked out. Cancelled, no-show and pending bookings are not counted."
+        )
+    )
+    #: bookings.check_out_date within range, for bookings in OCCUPANCY_STATUSES (Issue F4).
+    departures: int = Field(
+        description=(
+            "Bookings departing -- or due to depart -- on a date in the range: confirmed, "
+            "checked in or checked out. Cancelled, no-show and pending bookings are not counted."
+        )
+    )
     #: bookings.cancelled_at on a hotel-local date within range (Issue F1: the hotel's
     #: timezone, never the database session's).
     cancellations: int
@@ -276,8 +286,14 @@ class DailyMetricsRow(BaseModel):
     other_revenue: list[MoneyByCurrency]
     total_expenses: list[MoneyByCurrency]
 
-    arrivals: int
-    departures: int
+    arrivals: int = Field(
+        description="As overview `stay_flow.arrivals`, for this day: cancelled, no-show and "
+        "pending bookings are not counted."
+    )
+    departures: int = Field(
+        description="As overview `stay_flow.departures`, for this day: cancelled, no-show and "
+        "pending bookings are not counted."
+    )
     bookings_created: int
     cancellations: int
 

@@ -518,7 +518,7 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
               <dd>{formatCount(overview.stay_flow.departures)}</dd>
               <dt>Cancellations</dt>
               <dd>{formatCount(overview.stay_flow.cancellations)}</dd>
-              <dt>Bookings staying</dt>
+              <dt>Bookings overlapping this period (any status)</dt>
               <dd>{formatCount(overview.bookings_by_stay.total)}</dd>
               <dt>Bookings taken</dt>
               <dd>{formatCount(overview.bookings_created.total)}</dd>
@@ -526,9 +526,11 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
               <dd>{formatCount(overview.occupancy.room_nights_sold)}</dd>
             </dl>
             <p className={styles.footnote}>
-              &ldquo;Staying&rdquo; counts bookings whose stay overlaps this period;
-              &ldquo;taken&rdquo; counts bookings created in it. Neither answers the
-              other&rsquo;s question.
+              Arrivals and departures count confirmed, checked-in and checked-out
+              bookings; cancelled, no-show and pending ones are not counted.
+              &ldquo;Overlapping&rdquo; counts every booking whose stay overlaps this period,
+              whatever its status; &ldquo;taken&rdquo; counts bookings created in it. Neither
+              answers the other&rsquo;s question.
             </p>
           </CardBody>
         </Card>
