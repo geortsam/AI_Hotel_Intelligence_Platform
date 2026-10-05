@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
+from app.api.openapi import document_authorization_errors
 from app.api.routes import health as health_routes
 from app.api.v1.router import api_router as api_v1_router
 from app.core.config import Settings, get_settings
@@ -130,6 +131,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # The handler registered above replaces FastAPI's 422 body; this makes /openapi.json say so.
     document_validation_errors(app)
+    # And where 401 and 403 can be answered, which the routes' own dependencies decide (G1).
+    document_authorization_errors(app)
 
     return app
 

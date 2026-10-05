@@ -776,13 +776,13 @@ def test_the_stored_prediction_route_reaches_no_model() -> None:
     responses = set(schema["paths"][STORED_PREDICTIONS_PATH]["get"]["responses"])
 
     assert "503" not in responses, "a read path has no model to be unavailable"
-    assert responses == {"200", "404", "422"}
+    assert responses == {"200", "401", "404", "422"}
 
 
 def test_the_route_declares_its_failure_modes() -> None:
     responses = openapi()["paths"][SCHEMA_PATH]["get"]["responses"]
 
-    assert set(responses) == {"200", "404", "422", "503"}
+    assert set(responses) == {"200", "401", "404", "422", "503"}
     for code in ("404", "422", "503"):
         ref = responses[code]["content"]["application/json"]["schema"]["$ref"]
         assert ref.endswith("/ErrorResponse")

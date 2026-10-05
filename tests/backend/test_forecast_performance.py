@@ -830,13 +830,13 @@ def test_every_window_bound_is_explicit_rather_than_defaulted(
 def test_the_accuracy_route_declares_the_role_it_needs_and_the_403_that_follows() -> None:
     responses = openapi()["paths"][ACCURACY_PATH]["get"]["responses"]
 
-    assert set(responses) == {"200", "403", "404", "422"}
+    assert set(responses) == {"200", "401", "403", "404", "422"}
 
 
 def test_the_distribution_route_declares_no_403_because_membership_is_enough() -> None:
     responses = openapi()["paths"][DISTRIBUTION_PATH]["get"]["responses"]
 
-    assert set(responses) == {"200", "404", "422"}
+    assert set(responses) == {"200", "401", "404", "422"}
 
 
 @pytest.mark.parametrize("path", [ACCURACY_PATH, DISTRIBUTION_PATH])

@@ -23,6 +23,15 @@ router = APIRouter(prefix="/hotels", tags=["hotels"])
 NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
     status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Hotel not found."}
 }
+#: Updating and deleting a hotel need its owner. The check is made inside `HotelService` -- the
+#: hotel resource is resolved by the service itself -- so the route states the 403 by hand; the
+#: OpenAPI hook in `app.api.openapi` only sees role requirements declared on a route (Issue G1).
+OWNER_REQUIRED_RESPONSE: dict[int | str, dict[str, Any]] = {
+    status.HTTP_403_FORBIDDEN: {
+        "model": ErrorResponse,
+        "description": "The caller is a member of this hotel but is not its owner.",
+    }
+}
 CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
     status.HTTP_409_CONFLICT: {
         "model": ErrorResponse,
@@ -81,7 +90,7 @@ def get_hotel(public_id: uuid.UUID, service: HotelServiceDep) -> HotelResponse:
     "/{public_id}",
     response_model=HotelResponse,
     summary="Partially update a hotel",
-    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},
+    responses={**NOT_FOUND_RESPONSE, **OWNER_REQUIRED_RESPONSE, **CONFLICT_RESPONSE},
 )
 def update_hotel(
     public_id: uuid.UUID, payload: HotelUpdate, service: HotelServiceDep
@@ -94,7 +103,7 @@ def update_hotel(
     "/{public_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a hotel",
-    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},
+    responses={**NOT_FOUND_RESPONSE, **OWNER_REQUIRED_RESPONSE, **CONFLICT_RESPONSE},
 )
 def delete_hotel(public_id: uuid.UUID, service: HotelServiceDep) -> None:
     """204 on success. 409 when the database's RESTRICT policy refuses because dependent

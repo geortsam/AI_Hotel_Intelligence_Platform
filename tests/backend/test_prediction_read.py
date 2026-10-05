@@ -301,7 +301,7 @@ def test_the_route_declares_its_failure_modes_and_no_model_failure() -> None:
     """No 503: a read path has no artifact to find missing."""
     responses = openapi()["paths"][SCHEMA_PATH]["get"]["responses"]
 
-    assert set(responses) == {"200", "404", "422"}
+    assert set(responses) == {"200", "401", "404", "422"}
     for code in ("404", "422"):
         ref = responses[code]["content"]["application/json"]["schema"]["$ref"]
         assert ref.endswith("/ErrorResponse")

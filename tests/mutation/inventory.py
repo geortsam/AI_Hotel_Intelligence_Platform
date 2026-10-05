@@ -1880,6 +1880,108 @@ STAGE_F16 = [
     ),
 ]
 
+OPENAPI_HOOK = "backend/app/api/openapi.py"
+OPENAPI_AUTHORIZATION = "tests/backend/test_openapi_authorization.py"
+SECURED_401 = f"{OPENAPI_AUTHORIZATION}::test_every_authenticated_operation_declares_401"
+GATED_403 = f"{OPENAPI_AUTHORIZATION}::test_every_route_level_gate_declares_403"
+ADDS_401 = '                if operation.get("security") and "401" not in responses:\n'
+ADDS_403 = '                if reason is not None and "403" not in responses:\n'
+
+
+def hook(name: str, breaks: str, old: str, new: str, killer: str) -> Mutation:
+    """An edit to the OpenAPI hook of G1, caught by the named test in its test file."""
+    return Mutation(name, "G1", breaks, one(OPENAPI_HOOK, old, new), (killer,))
+
+
+STAGE_G1 = [
+    hook(
+        "G1-M1",
+        "the hook stops declaring 401 on authenticated operations",
+        ADDS_401,
+        '                if operation.get("security") and "401" in responses:\n',
+        SECURED_401,
+    ),
+    hook(
+        "G1-M2",
+        "401 is declared on operations that take no bearer token",
+        ADDS_401,
+        '                if "401" not in responses:\n',
+        f"{OPENAPI_AUTHORIZATION}::"
+        "test_an_operation_without_a_bearer_token_declares_no_401_but_a_failed_sign_in",
+    ),
+    hook(
+        "G1-M3",
+        "a hand-written 401 is overwritten by the generic one",
+        ADDS_401,
+        '                if operation.get("security"):\n',
+        f"{OPENAPI_AUTHORIZATION}::test_a_hand_written_401_is_kept_as_written",
+    ),
+    hook(
+        "G1-M4",
+        "the platform-administrator gate is no longer seen, so its 403 goes undeclared",
+        "        if dependency.call is require_platform_admin:\n"
+        "            return PLATFORM_FORBIDDEN_DESCRIPTION\n",
+        "",
+        GATED_403,
+    ),
+    hook(
+        "G1-M5",
+        "a missing platform grant is described as a hotel role that is too low",
+        "            return PLATFORM_FORBIDDEN_DESCRIPTION\n",
+        "            return ROLE_FORBIDDEN_DESCRIPTION\n",
+        f"{OPENAPI_AUTHORIZATION}::test_the_generated_403_names_the_authority_that_is_missing",
+    ),
+    hook(
+        "G1-M6",
+        "a viewer-level route claims a 403 it can never answer",
+        "        if role is not None and role is not HotelRole.VIEWER:\n",
+        "        if role is not None:\n",
+        f"{OPENAPI_AUTHORIZATION}::test_a_403_is_claimed_only_where_it_can_be_answered",
+    ),
+    hook(
+        "G1-M7",
+        "a hand-written 403 is overwritten by the generic one",
+        ADDS_403,
+        "                if reason is not None:\n",
+        f"{OPENAPI_AUTHORIZATION}::test_a_hand_written_403_is_kept_as_written",
+    ),
+    Mutation(
+        "G1-M8",
+        "G1",
+        "require_role no longer marks its role, so no route-level role gate gets a 403",
+        one(
+            "backend/app/api/deps.py",
+            "    dependency.minimum_role = required  # type: ignore[attr-defined]\n",
+            "",
+        ),
+        (GATED_403,),
+    ),
+    Mutation(
+        "G1-M9",
+        "G1",
+        "updating a hotel no longer declares the owner-only 403 its service answers",
+        one(
+            "backend/app/api/v1/endpoints/hotels.py",
+            '    summary="Partially update a hotel",\n'
+            "    responses={**NOT_FOUND_RESPONSE, **OWNER_REQUIRED_RESPONSE, **CONFLICT_RESPONSE},",
+            '    summary="Partially update a hotel",\n'
+            "    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},",
+        ),
+        (
+            f"{OPENAPI_AUTHORIZATION}::"
+            "test_a_role_checked_inside_a_service_is_declared_on_its_route",
+        ),
+    ),
+    Mutation(
+        "G1-M10",
+        "G1",
+        "the application no longer installs the hook",
+        one("backend/app/main.py", "    document_authorization_errors(app)\n", ""),
+        (SECURED_401,),
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -1900,4 +2002,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_F2_COMP,
     *STAGE_F3,
     *STAGE_F4,
+    *STAGE_G1,
 )

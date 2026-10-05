@@ -666,6 +666,9 @@ def require_role(required: HotelRole) -> Callable[..., None]:
     ) -> None:
         scope.require_hotel_with_role(hotel_public_id, required)
 
+    # Read by `app.api.openapi`, which declares 403 on every route that can refuse a member's
+    # role (Issue G1). The requirement is a fact about the route, so the route says it.
+    dependency.minimum_role = required  # type: ignore[attr-defined]
     return dependency
 
 
