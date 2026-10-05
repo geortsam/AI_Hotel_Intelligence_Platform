@@ -314,10 +314,68 @@ describe('period-over-period comparison', () => {
     mount()
     await screen.findByText('58.0%')
 
-    // ADR 150.00 against 125.00 is +20.0%. Occupancy 0.5804 against 0.5000 is +16.1%.
+    // ADR 150.00 against 125.00 is +20.0%: an amount, so a relative change.
     expect(screen.getByText('+20.0%')).toBeInTheDocument()
-    expect(screen.getByText('+16.1%')).toBeInTheDocument()
+    // Occupancy 58.04% against 50.00% is +8.0 points -- not "+16.1%", the proportion of a
+    // proportion it used to print, which a reader takes for points (F3).
+    const occupancy = kpiTile('Occupancy')
+    expect(within(occupancy).getByText('+8.0 pts')).toBeInTheDocument()
+    expect(occupancy.textContent).not.toMatch(/16\.1/)
     expect(screen.getAllByText('vs previous 7 days').length).toBeGreaterThan(0)
+  })
+
+  it('reads the occupancy change aloud as percentage points', async () => {
+    stubSession()
+    stubOverview(CURRENT_OVERVIEW)
+    fetchStub.on('GET', 'analytics/daily', { body: DAILY })
+    mount()
+    await screen.findByText('58.0%')
+
+    const occupancy = kpiTile('Occupancy')
+    // The abbreviation is hidden from assistive technology; the spoken form stands in for it.
+    expect(within(occupancy).getByText('+8.0 pts')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(occupancy).getByText('+8.0 percentage points')).toBeInTheDocument()
+    // A relative change is already read correctly, and is left exactly as it was.
+    expect(within(kpiTile('ADR')).getByText('+20.0%')).not.toHaveAttribute('aria-hidden')
+  })
+
+  it('states the occupancy change against a previous rate of zero', async () => {
+    stubSession()
+    stubOverview(CURRENT_OVERVIEW, {
+      ...PREVIOUS_OVERVIEW,
+      occupancy: { ...PREVIOUS_OVERVIEW.occupancy, occupancy_rate: '0.0000' },
+    })
+    fetchStub.on('GET', 'analytics/daily', { body: DAILY })
+    mount()
+    await screen.findByText('58.0%')
+
+    // 0% -> 58.04% is a defined +58.0 points; only a relative change from zero is undefined.
+    expect(within(kpiTile('Occupancy')).getByText('+58.0 pts')).toBeInTheDocument()
+  })
+
+  it('calls an occupancy change below 0.05 points no change', async () => {
+    stubSession()
+    stubOverview(CURRENT_OVERVIEW, {
+      ...PREVIOUS_OVERVIEW,
+      occupancy: { ...PREVIOUS_OVERVIEW.occupancy, occupancy_rate: '0.5800' },
+    })
+    fetchStub.on('GET', 'analytics/daily', { body: DAILY })
+    mount()
+    await screen.findByText('58.0%')
+
+    expect(within(kpiTile('Occupancy')).getByText('no change')).toBeInTheDocument()
+  })
+
+  it('says which changes are points and which are relative', async () => {
+    stubSession()
+    stubOverview(CURRENT_OVERVIEW)
+    fetchStub.on('GET', 'analytics/daily', { body: DAILY })
+    mount()
+    await screen.findByText('58.0%')
+
+    expect(
+      screen.getByText(/Occupancy changes\s+are in percentage points; ADR, RevPAR and room revenue/),
+    ).toBeInTheDocument()
   })
 
   it('shows no comparison at all when the previous window could not be fetched', async () => {
@@ -951,9 +1009,14 @@ const LEDGER_ONLY_SECOND_CURRENCY = {
   is_multi_currency: true,
 }
 
-/** The ADR tile: its `<dt>` and the `<dd>` and caption that follow it, inside one card. */
+/** A KPI tile: its `<dt>` and the `<dd>`, caption and change that follow it, in one card. */
+function kpiTile(label: string): HTMLElement {
+  return screen.getByText(label, { selector: 'dt' }).parentElement as HTMLElement
+}
+
+/** The ADR tile. */
 function adrTile(): HTMLElement {
-  return screen.getByText('ADR', { selector: 'dt' }).parentElement as HTMLElement
+  return kpiTile('ADR')
 }
 
 describe('the ADR caption', () => {

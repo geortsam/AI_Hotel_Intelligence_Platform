@@ -262,14 +262,14 @@ jobs:
   # ---------------------------------------------------------------------------------------
   # The recorded mutation checks, re-run on every push.
   #
-  # Stages 7.6-7.14, F2, F16, I4, F1, F2-ADR, M1, M2 and F2-COMP each broke their own
+  # Stages 7.6-7.14, F2, F16, I4, F1, F2-ADR, M1, M2, F2-COMP and F3 each broke their own
   # guarantees on purpose and reported that a test caught every break. `python -m tests.mutation`
-  # re-applies those 129 edits from tests/mutation/inventory.py -- in a throwaway copy of the
+  # re-applies those 137 edits from tests/mutation/inventory.py -- in a throwaway copy of the
   # tracked files, never in this checkout -- and fails unless every named killer fails under its
   # mutation and passes without it. See tests/mutation/harness.py.
   #
   # A job of its own, parallel to the others, so its ~10 minutes run beside quality-gates
-  # rather than after it. It needs both toolchains (129 mutations span Python and Vitest) and
+  # rather than after it. It needs both toolchains (137 mutations span Python and Vitest) and
   # its own disposable PostgreSQL for the 25 mutations whose killers are integration tests.
   # `--require-all` makes a mutation that could not run a failure, not a skip. Nothing here
   # builds or touches an image.

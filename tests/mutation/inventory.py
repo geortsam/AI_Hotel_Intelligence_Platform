@@ -24,6 +24,7 @@ from the original run, its ``note`` says how and why.
 | M1 runbook schema facts | 8 | 8 | |
 | M2 current-state docs | 8 | 8 | |
 | F2-COMP complimentary-only ADR reason | 6 | 6 | Vitest |
+| F3 occupancy change in points | 8 | 8 | Vitest |
 """
 
 from __future__ import annotations
@@ -1569,6 +1570,84 @@ STAGE_F2_COMP = [
     ),
 ]
 
+
+def points(name: str, breaks: str, path: str, old: str, new: str, killer: str) -> Mutation:
+    """An occupancy-change mutation (F3): one edit, a Vitest killer by file::title."""
+    return Mutation(name, "F3", breaks, one(path, old, new), (killer,), runner=Runner.VITEST)
+
+
+DELTA_FORMAT = "frontend/src/features/dashboard/format.ts"
+PERIOD_TESTS = "src/features/dashboard/period.test.ts"
+F3_DERIVES = f"{DASHBOARD_TESTS}::derives the change from two authoritative windows"
+
+STAGE_F3 = [
+    points(
+        "F3-M1",
+        "occupancy is compared as a relative change again",
+        DASHBOARD_PAGE,
+        "          delta={computePointsDelta(\n            overview.occupancy.occupancy_rate,",
+        "          delta={computeDelta(\n            overview.occupancy.occupancy_rate,",
+        F3_DERIVES,
+    ),
+    points(
+        "F3-M2",
+        "the points change forgets to scale the rates to percent",
+        DELTA_FORMAT,
+        "  const change = (now - before) * 100\n",
+        "  const change = now - before\n",
+        f"{PERIOD_TESTS}::is the difference of the two rates, times one hundred",
+    ),
+    points(
+        "F3-M3",
+        "ADR, an amount, is compared in points",
+        DASHBOARD_PAGE,
+        "delta={computeDelta(room?.adr ?? null, previousRoom?.adr ?? null)}",
+        "delta={computePointsDelta(room?.adr ?? null, previousRoom?.adr ?? null)}",
+        F3_DERIVES,
+    ),
+    points(
+        "F3-M4",
+        "a points change is printed as a percent",
+        DELTA_FORMAT,
+        "    return `${signedOneDecimal(delta.change, locale)} pts`",
+        "    return `${signedOneDecimal(delta.change, locale)}%`",
+        f"{PERIOD_TESTS}::is printed as points and spoken as percentage points",
+    ),
+    points(
+        "F3-M5",
+        "the flat threshold is the relative one, applied to points",
+        DELTA_FORMAT,
+        "  if (Math.abs(change) < 0.05) {",
+        "  if (Math.abs(change) < 0.0005) {",
+        f"{PERIOD_TESTS}::calls a change below 0.05 points flat, "
+        "and one of 0.05 points a direction",
+    ),
+    points(
+        "F3-M6",
+        "a previous occupancy of zero is refused, as a relative change would be",
+        DELTA_FORMAT,
+        "  if (!Number.isFinite(now) || !Number.isFinite(before)) {",
+        "  if (!Number.isFinite(now) || !Number.isFinite(before) || before === 0) {",
+        f"{PERIOD_TESTS}::is defined against a previous rate of zero",
+    ),
+    points(
+        "F3-M7",
+        "a screen reader hears the abbreviation instead of percentage points",
+        DELTA_FORMAT,
+        "    return `${signedOneDecimal(delta.change, locale)} percentage points`",
+        "    return `${signedOneDecimal(delta.change, locale)} pts`",
+        f"{DASHBOARD_TESTS}::reads the occupancy change aloud as percentage points",
+    ),
+    points(
+        "F3-M8",
+        "the page no longer says which changes are points and which are relative",
+        DASHBOARD_PAGE,
+        "this one starts. Occupancy changes\n",
+        "this one starts. Changes\n",
+        f"{DASHBOARD_TESTS}::says which changes are points and which are relative",
+    ),
+]
+
 LIVE_CONTRACT = f"{CONTRACT}::test_the_frontend_types_are_compatible_with_the_live_backend_schema"
 
 STAGE_F16 = [
@@ -1724,4 +1803,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_M1,
     *STAGE_M2,
     *STAGE_F2_COMP,
+    *STAGE_F3,
 )

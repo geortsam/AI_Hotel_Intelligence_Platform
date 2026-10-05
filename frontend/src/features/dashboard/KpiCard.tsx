@@ -2,7 +2,12 @@ import { ArrowDownRight, ArrowRight, ArrowUpRight } from 'lucide-react'
 
 import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { formatDelta, UNAVAILABLE, type Delta } from '@/features/dashboard/format'
+import {
+  formatDelta,
+  formatDeltaSpoken,
+  UNAVAILABLE,
+  type Delta,
+} from '@/features/dashboard/format'
 
 import styles from './KpiCard.module.css'
 
@@ -71,6 +76,8 @@ export function KpiCard({
   isLoading = false,
 }: KpiCardProps) {
   const DeltaIcon = delta ? DELTA_ICON[delta.direction] : null
+  const shown = delta ? formatDelta(delta) : null
+  const spoken = delta ? formatDeltaSpoken(delta) : null
 
   return (
     <Card className={styles.card}>
@@ -98,7 +105,10 @@ export function KpiCard({
       {!isLoading && delta && DeltaIcon ? (
         <p className={`${styles.delta} ${styles[delta.direction]}`}>
           <DeltaIcon size={14} aria-hidden="true" />
-          <span>{formatDelta(delta)}</span>
+          {/* Where the spoken form differs -- "pts" read aloud as "percentage points" -- the
+              visible text is hidden from assistive technology and the spoken one stands in. */}
+          <span aria-hidden={spoken !== shown ? true : undefined}>{shown}</span>
+          {spoken !== shown ? <span className={styles.srOnly}>{spoken}</span> : null}
           {deltaLabel ? <span className={styles.deltaLabel}>{deltaLabel}</span> : null}
         </p>
       ) : null}

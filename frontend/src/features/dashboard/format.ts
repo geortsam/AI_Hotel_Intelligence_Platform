@@ -129,19 +129,26 @@ export function currenciesIn(
   return seen
 }
 
-/** A period-over-period change, as a proportion. `null` when it cannot be stated honestly. */
+/** A period-over-period change. `null` when it cannot be stated honestly. */
 export interface Delta {
-  /** (current - previous) / |previous|. Positive means the figure rose. */
+  /**
+   * `relative`: (current - previous) / |previous|, a proportion -- for amounts, where "+20%" is
+   * the natural reading. `points`: (current - previous) x 100 -- for a ratio such as occupancy,
+   * where 50% -> 58% is "+8 points", and "+16%" would be misread as one (F3). Positive means the
+   * figure rose.
+   */
   readonly change: number
   /** The direction, so nothing depends on reading the sign of a number or on colour. */
   readonly direction: 'up' | 'down' | 'flat'
+  /** Which of the two `change` is. */
+  readonly unit: 'relative' | 'points'
 }
 
 /**
  * Compare two figures the backend produced for two adjacent, equal-length windows.
  *
- * **This is the only derived number in the dashboard, and it is derived from two
- * authoritative values rather than recomputed from parts.** Both operands come from the same
+ * **This and {@link computePointsDelta} are the only derived numbers in the dashboard, and
+ * each is derived from two authoritative values rather than recomputed from parts.** Both operands come from the same
  * endpoint with the same metric definition; the windows are the same length and adjacent
  * (see `previousRange`). Nothing is inferred about what happened inside either window.
  *
@@ -169,22 +176,67 @@ export function computeDelta(
   }
   const change = (now - before) / Math.abs(before)
   if (Math.abs(change) < 0.0005) {
-    return { change, direction: 'flat' }
+    return { change, direction: 'flat', unit: 'relative' }
   }
-  return { change, direction: change > 0 ? 'up' : 'down' }
+  return { change, direction: change > 0 ? 'up' : 'down', unit: 'relative' }
 }
 
-/** A delta as text, always signed, e.g. `+12.4%`. */
+/**
+ * The change of a RATIO between the same two windows, in percentage points (F3).
+ *
+ * Occupancy is already a percentage, so its change is stated as the difference of the two
+ * rates -- 50.0% -> 58.0% is "+8.0 pts" -- rather than as a proportion of a proportion, which
+ * the dashboard once printed as "+16.1%" and a reader would take for points. Both operands are
+ * the backend's own rates; nothing is recomputed from counts.
+ *
+ * Unlike {@link computeDelta}, a previous rate of zero is a valid base: 0% -> 10% is a defined
+ * "+10.0 pts". An undefined rate (`null`) on either side still means no comparison. A change
+ * below 0.05 points reports as `flat`, the same visible precision as the figure itself.
+ */
+export function computePointsDelta(
+  current: DecimalString | null,
+  previous: DecimalString | null,
+): Delta | null {
+  if (current === null || previous === null) {
+    return null
+  }
+  const now = Number(current)
+  const before = Number(previous)
+  if (!Number.isFinite(now) || !Number.isFinite(before)) {
+    return null
+  }
+  const change = (now - before) * 100
+  if (Math.abs(change) < 0.05) {
+    return { change, direction: 'flat', unit: 'points' }
+  }
+  return { change, direction: change > 0 ? 'up' : 'down', unit: 'points' }
+}
+
+function signedOneDecimal(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+    signDisplay: 'always',
+  }).format(value)
+}
+
+/** A delta as text, always signed: `+12.4%` for a relative change, `+8.0 pts` for points. */
 export function formatDelta(delta: Delta, locale = 'en-GB'): string {
   if (delta.direction === 'flat') {
     return 'no change'
   }
-  const percent = new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-    signDisplay: 'always',
-  }).format(delta.change * 100)
-  return `${percent}%`
+  if (delta.unit === 'points') {
+    return `${signedOneDecimal(delta.change, locale)} pts`
+  }
+  return `${signedOneDecimal(delta.change * 100, locale)}%`
+}
+
+/** The same delta as a screen reader should hear it: "pts" spelled out as percentage points. */
+export function formatDeltaSpoken(delta: Delta, locale = 'en-GB'): string {
+  if (delta.direction !== 'flat' && delta.unit === 'points') {
+    return `${signedOneDecimal(delta.change, locale)} percentage points`
+  }
+  return formatDelta(delta, locale)
 }
 
 /** The amount for one currency out of a money bucket list, formatted, or the dash. */

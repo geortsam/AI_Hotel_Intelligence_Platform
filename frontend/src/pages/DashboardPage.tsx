@@ -9,6 +9,7 @@ import { describeFailure } from '@/features/dashboard/failures'
 import {
   bucketFor,
   computeDelta,
+  computePointsDelta,
   currenciesIn,
   formatBucket,
   formatCount,
@@ -47,7 +48,8 @@ import styles from './DashboardPage.module.css'
  * `daily_hotel_metrics`'s generated columns, `NULLIF` guards included -- so the dashboard and
  * any report built later cannot disagree about what ADR means. The one derived number is the
  * period-over-period change, and it comes from two authoritative values for two adjacent,
- * equal-length windows; see `computeDelta` and `previousRange`.
+ * equal-length windows: relative for amounts, in percentage points for occupancy (F3); see
+ * `computeDelta`, `computePointsDelta` and `previousRange`.
  *
  * Three things this page refuses to do, each easy to do by accident:
  *
@@ -389,7 +391,7 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
             overview.occupancy.available_room_nights,
           )} room nights`}
           unavailableReason="The hotel has no active rooms, so occupancy is undefined."
-          delta={computeDelta(
+          delta={computePointsDelta(
             overview.occupancy.occupancy_rate,
             previous?.occupancy.occupancy_rate ?? null,
           )}
@@ -557,8 +559,10 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
               <li>
                 Comparisons are against the{' '}
                 {periodDays === 1 ? 'previous day' : `previous ${periodDays} days`}, an
-                equal-length window ending the day before this one starts. No comparison is
-                shown where either period&rsquo;s figure is undefined.
+                equal-length window ending the day before this one starts. Occupancy changes
+                are in percentage points; ADR, RevPAR and room revenue changes are relative to
+                the previous figure. No comparison is shown where either period&rsquo;s figure is
+                undefined.
               </li>
             </ul>
           </CardBody>

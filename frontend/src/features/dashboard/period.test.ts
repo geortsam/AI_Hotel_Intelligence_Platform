@@ -11,7 +11,10 @@ import {
 import {
   bucketFor,
   computeDelta,
+  computePointsDelta,
   currenciesIn,
+  formatDelta,
+  formatDeltaSpoken,
   formatMoney,
   formatRating,
   formatRatioAsPercent,
@@ -234,5 +237,42 @@ describe('period-over-period change', () => {
 
   it('reports an imperceptible change as flat rather than as a direction', () => {
     expect(computeDelta('100.01', '100.00')?.direction).toBe('flat')
+  })
+
+  it('is labelled relative', () => {
+    expect(computeDelta('110.00', '100.00')?.unit).toBe('relative')
+    expect(formatDelta(computeDelta('110.00', '100.00')!)).toBe('+10.0%')
+  })
+})
+
+describe('the change of a ratio, in percentage points (F3)', () => {
+  it('is the difference of the two rates, times one hundred', () => {
+    const delta = computePointsDelta('0.5804', '0.5000')!
+    expect(delta.change).toBeCloseTo(8.04, 10)
+    expect(delta.direction).toBe('up')
+    expect(delta.unit).toBe('points')
+    expect(computePointsDelta('0.4000', '0.5000')?.direction).toBe('down')
+  })
+
+  it('is defined against a previous rate of zero', () => {
+    expect(computePointsDelta('0.1000', '0.0000')?.change).toBeCloseTo(10, 10)
+  })
+
+  it('still refuses an undefined rate on either side', () => {
+    expect(computePointsDelta('0.5000', null)).toBeNull()
+    expect(computePointsDelta(null, '0.5000')).toBeNull()
+  })
+
+  it('calls a change below 0.05 points flat, and one of 0.05 points a direction', () => {
+    expect(computePointsDelta('0.5804', '0.5800')?.direction).toBe('flat')
+    expect(computePointsDelta('0.5805', '0.5800')?.direction).toBe('up')
+  })
+
+  it('is printed as points and spoken as percentage points', () => {
+    const delta = computePointsDelta('0.5804', '0.5000')!
+    expect(formatDelta(delta)).toBe('+8.0 pts')
+    expect(formatDeltaSpoken(delta)).toBe('+8.0 percentage points')
+    expect(formatDelta(computePointsDelta('0.4196', '0.5000')!)).toBe('-8.0 pts')
+    expect(formatDeltaSpoken(computeDelta('110.00', '100.00')!)).toBe('+10.0%')
   })
 })

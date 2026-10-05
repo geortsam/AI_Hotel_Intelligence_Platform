@@ -367,6 +367,7 @@ RECORDED_PER_STAGE = {
     "M1": 8,
     "M2": 8,
     "F2-COMP": 6,
+    "F3": 8,
 }
 
 
