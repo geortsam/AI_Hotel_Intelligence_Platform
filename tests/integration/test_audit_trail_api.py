@@ -21,6 +21,7 @@ not be the one that was posted.
 from __future__ import annotations
 
 import datetime as dt
+import re
 import threading
 import uuid
 from collections.abc import Iterator
@@ -172,6 +173,38 @@ def rows(session: Session, **where: object) -> list[dict[str, Any]]:
         sa.text(f"SELECT * FROM audit_events WHERE {clause} ORDER BY id"), where
     )
     return [dict(row) for row in result.mappings()]
+
+
+#: Columns whose type cannot hold text a caller sent: the integer keys, the UUID public id and
+#: the timestamp. Their values are sequential or random, so a substring search over them is a
+#: coin toss -- a UUID or a microsecond count contains "4242" about once in a few hundred runs.
+MINTED_COLUMNS = {"id", "public_id", "hotel_id", "actor_user_id", "occurred_at"}
+
+#: A value minted at random rather than sent: a UUID in either spelling (public ids, and the
+#: request id, which is a UUID4's hex), or the ``BK-`` reference :func:`booking_body` makes up.
+MINTED_VALUE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32}|BK-[0-9A-F]{8}"
+)
+
+
+def without_minted_values(value: Any) -> Any:
+    """*value* with each minted identifier replaced by a placeholder.
+
+    Only a WHOLE value is replaced, never a substring: a secret embedded in a longer string,
+    or stored on its own, is left exactly where a leak would put it."""
+    if isinstance(value, dict):
+        return {key: without_minted_values(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [without_minted_values(item) for item in value]
+    if isinstance(value, str) and MINTED_VALUE.fullmatch(value):
+        return "<minted>"
+    return value
+
+
+def caller_data(row: dict[str, Any]) -> dict[str, Any]:
+    """Every part of an audit row that could carry something a caller sent -- each text
+    column and ``details`` -- with minted identifiers masked. A column added later is kept."""
+    return without_minted_values({k: v for k, v in row.items() if k not in MINTED_COLUMNS})
 
 
 def manager(engine: Engine, hotel: str, email: str, role: str = "manager") -> TestClient:
@@ -764,7 +797,7 @@ def test_no_payment_event_stores_processor_or_card_data(api: TestClient, world: 
     )
 
     details = events(api, world["hotel"], action="payment.created")[0]["details"]
-    rendered = str(details)
+    rendered = str(without_minted_values(details))
 
     assert set(details) == {"amount", "currency", "method", "status", "booking_public_id"}
     for secret in ("stripe", "pi_3ABCDEF1234567890", "4242"):
@@ -1508,7 +1541,8 @@ BANNED_SUBSTRINGS = [
     "psycopg",
 ]
 
-#: Values this suite actually put into the system. None may appear anywhere at all.
+#: Values this suite actually put into the system. None may appear in any column that can
+#: hold one (see :func:`caller_data`).
 LITERAL_SECRETS = [TEST_PASSWORD, NEW_PASSWORD, "4242"]
 
 
@@ -1546,15 +1580,47 @@ def test_no_audit_row_carries_a_credential_or_sql_in_its_data(
 def test_no_audit_row_contains_a_value_this_suite_treated_as_secret(
     api: TestClient, world: dict, session: Session
 ) -> None:
-    """Every column this time, ``action`` included: an action name may say that a password
-    changed, and may never be one."""
+    """Every text column this time, ``action`` included: an action name may say that a
+    password changed, and may never be one."""
     produce_a_broad_sample(api, world)
 
     session.rollback()
-    rendered = str(rows(session))
+    sampled = rows(session)
+    assert sampled, "no audit rows were produced -- this sweep would be vacuous"
+    rendered = str([caller_data(row) for row in sampled])
 
     for secret in LITERAL_SECRETS:
         assert secret not in rendered, f"{secret!r} reached the audit trail"
+
+
+def test_masking_minted_values_cannot_hide_a_planted_secret() -> None:
+    """The sweeps above mask random identifiers so they cannot contain "4242" by chance. This
+    shows the mask removes exactly those and nothing a leak would look like."""
+    lucky = "00004242-0000-4000-8000-000000004242"
+    row = {
+        "id": 4242,
+        "public_id": uuid.UUID(lucky),
+        "hotel_id": 4242,
+        "actor_user_id": 4242,
+        "action": "payment.created",
+        "resource_type": "payment",
+        "resource_reference": "card 4242",
+        "request_id": "4242" * 8,
+        "details": {
+            "booking_public_id": lucky,
+            "reference": "BK-00004242",
+            "card_last_four": "4242",
+            "notes": [f"{lucky} paid with 4242"],
+        },
+        "occurred_at": dt.datetime(2026, 1, 1, 0, 0, 0, 424242, tzinfo=dt.UTC),
+    }
+
+    rendered = str(caller_data(row))
+
+    # resource_reference 1, card_last_four 1, and all 3 in the note: a UUID inside a longer
+    # string is not a whole minted value, so it is kept and searched with the rest.
+    assert rendered.count("4242") == 5, rendered
+    assert "<minted>" in rendered
 
 
 def test_the_only_row_naming_a_password_names_the_event_and_nothing_else(
