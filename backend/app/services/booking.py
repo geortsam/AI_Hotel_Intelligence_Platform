@@ -122,13 +122,15 @@ OVERLAP_CONSTRAINT = "excl_booking_rooms_room_no_overlap"
 #: this limit protects.
 MAX_EXTENSION_NIGHTS = 366
 
-#: How far back an early departure may be recorded (Issue H2).
+#: The age at which a night is out of an early departure's reach (Issue H2).
 #:
-#: The accuracy protocol scores a night once it is :data:`SETTLEMENT_LAG_DAYS` old, and states
-#: that a checked-in night is already final. An early departure removes nights from a
-#: checked-in stay, so it may reach back no further than that: every night it removes is
-#: within the last 28 days or later, and so never one an accuracy period may already have
-#: scored. The protocol's own constant, not a copy -- if the lag changed, this would follow.
+#: The accuracy protocol states that a checked-in night is already final, and a night becomes
+#: scorable on the day it turns :data:`SETTLEMENT_LAG_DAYS` old (``last_settled_target_date``
+#: is today minus the lag). An early departure removes nights from a checked-in stay, so a night
+#: that old is immutable to it: the departure date must be LATER than today minus this many
+#: days -- the earliest permitted departure is today minus 27 -- and every night it removes is
+#: then younger than any night an accuracy period may already have scored. The protocol's own
+#: constant, not a copy: if the lag changed, this would follow.
 DEPARTURE_LOOKBACK_DAYS = SETTLEMENT_LAG_DAYS
 REFERENCE_CONSTRAINT = "uq_bookings_hotel_id_reference"
 
@@ -922,9 +924,18 @@ class BookingService:
         """The earliest and latest departure dates allowed today, both inclusive."""
         day = dt.timedelta(days=1)
         return (
-            max(booking.check_in_date + day, today - dt.timedelta(days=DEPARTURE_LOOKBACK_DAYS)),
+            max(booking.check_in_date + day, BookingService._newest_scorable(today) + day),
             min(booking.check_out_date - day, today),
         )
+
+    @staticmethod
+    def _newest_scorable(today: dt.date) -> dt.date:
+        """The newest night an accuracy measurement run today may already have scored.
+
+        The accuracy protocol's ``last_settled_target_date(today)``: a night becomes scorable on
+        the day it turns :data:`DEPARTURE_LOOKBACK_DAYS` old. No departure may remove it.
+        """
+        return today - dt.timedelta(days=DEPARTURE_LOOKBACK_DAYS)
 
     @staticmethod
     def _require_departable(status: str) -> None:
@@ -940,7 +951,8 @@ class BookingService:
         * later than check-in: a stay is at least one night;
         * earlier than the planned check-out: leaving ON that day is an ordinary check-out;
         * no later than the hotel's today: a departure is something that happened;
-        * no earlier than :data:`DEPARTURE_LOOKBACK_DAYS` before it: see that constant.
+        * later than the newest night that may already be accuracy-scored, today minus
+          :data:`DEPARTURE_LOOKBACK_DAYS` -- so no earlier than today minus 27: see that constant.
         """
         if departure <= booking.check_in_date:
             raise ConflictError(
@@ -958,12 +970,12 @@ class BookingService:
                 f"A departure cannot be recorded for a future date; the hotel's today is "
                 f"{today.isoformat()}."
             )
-        earliest = today - dt.timedelta(days=DEPARTURE_LOOKBACK_DAYS)
-        if departure < earliest:
+        scored = BookingService._newest_scorable(today)
+        if departure <= scored:
             raise ConflictError(
-                f"A departure earlier than {earliest.isoformat()} cannot be recorded: nights more "
-                f"than {DEPARTURE_LOOKBACK_DAYS} days old may already have been scored for "
-                "forecast accuracy."
+                f"A departure on or before {scored.isoformat()} cannot be recorded: nights "
+                f"{DEPARTURE_LOOKBACK_DAYS} days old or older may already have been scored for "
+                "forecast accuracy, and an early departure cannot change them."
             )
 
     def _require_departure_due(self, hotel: Hotel, booking: Booking) -> None:

@@ -82,7 +82,8 @@ DEPARTURE_CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
         "model": ErrorResponse,
         "description": "The booking is not checked_in, or the departure date is outside the "
         "permitted range: it must be later than check-in, earlier than the planned check-out, "
-        "no later than the hotel's today and no earlier than 28 days before it. Also returned "
+        "no later than the hotel's today and later than 28 days before it -- a night 28 days "
+        "old may already be accuracy-scored. Also returned "
         "when the booking's ledger is in another currency.",
     }
 }
@@ -305,7 +306,9 @@ def extend_stay(
         "-- every night on or after it is removed from the stay, and the booking is checked "
         "out, in one transaction. The date must be later than check-in, earlier than the "
         "planned check-out (leaving on that day is an ordinary check-out), no later than the "
-        "hotel's today and no earlier than 28 days before it; the hotel's today is read in "
+        "hotel's today and later than 28 days before it, so no earlier than today minus 27 -- "
+        "a night already 28 days old may have been scored for forecast accuracy and cannot be "
+        "removed; the hotel's today is read in "
         "its own time zone. The response reports what the departure did to the money, "
         "computed from the rates of the nights actually removed: nothing is refunded, and "
         "settling a difference is a separate act through the payment endpoints. Not "

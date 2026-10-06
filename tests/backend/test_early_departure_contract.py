@@ -8,6 +8,7 @@ routes and the plain check-out refusal.
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any
 
 import pytest
@@ -15,15 +16,25 @@ import pytest
 import app.ml.accuracy_protocol as accuracy_protocol
 from app.core.config import Settings
 from app.main import create_app
-from app.ml.accuracy_protocol import PROTOCOL, SETTLEMENT_LAG_DAYS
+from app.ml.accuracy_protocol import (
+    PROTOCOL,
+    SETTLEMENT_LAG_DAYS,
+    is_eligible,
+    last_settled_target_date,
+)
 from app.models.enums import BOOKING_STATUS_TRANSITIONS, SAFE_AUDIT_DETAIL_KEYS
-from app.services.booking import DEPARTURE_LOOKBACK_DAYS
+from app.services.booking import DEPARTURE_LOOKBACK_DAYS, BookingService
 from tests.mutation.harness import REPOSITORY_ROOT
 
 BOOKING = "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}"
 DEPARTURE = f"{BOOKING}/stay/departure"
-BOUNDARY = "can remove only nights within the most recent 28 days or later"
-PURPOSE = "so already-scored accuracy periods are not mutated"
+#: What the protocol must say about the departure's bound -- each part of it, explicitly.
+STATEMENTS = (
+    "nights that are already 28 days old are immutable to early departure",
+    "the earliest permitted early-departure date is the hotel's today minus 27 days",
+    "protects nights that may already have entered accuracy scoring",
+    "checksum and transition graph are unchanged",
+)
 
 
 @pytest.fixture(scope="module")
@@ -34,6 +45,15 @@ def openapi() -> dict[str, Any]:
 
 def test_the_lookback_is_the_accuracy_protocols_settlement_lag() -> None:
     assert DEPARTURE_LOOKBACK_DAYS == SETTLEMENT_LAG_DAYS == 28
+
+
+def test_the_newest_night_out_of_reach_is_the_protocols_newest_scorable_night() -> None:
+    today = dt.date(2026, 9, 21)
+    newest = BookingService._newest_scorable(today)
+
+    assert newest == last_settled_target_date(today) == dt.date(2026, 8, 24)
+    assert is_eligible(newest, today)
+    assert not is_eligible(newest + dt.timedelta(days=1), today)
 
 
 def test_the_accuracy_protocol_is_unchanged() -> None:
@@ -51,8 +71,9 @@ def test_the_protocol_states_the_departure_boundary_and_why() -> None:
         " ".join((accuracy_protocol.__doc__ or "").split()),
         " ".join(measurement.split()),
     ):
-        assert BOUNDARY in text
-        assert PURPOSE in text
+        for statement in STATEMENTS:
+            assert statement in text, statement
+        assert "within the most recent 28 days or later" not in text
 
 
 def test_the_audit_trail_may_record_how_many_nights_left() -> None:

@@ -2213,6 +2213,9 @@ DEPARTURE_NEW_TOTAL = f"                new_total=previous_total - {REMOVED_SUM}
 PREVIEW_TOTALS = "\n            previous_total=previous_total,\n"
 PREVIEW_NEW_TOTAL = f"{PREVIEW_TOTALS}            new_total=previous_total - {REMOVED_SUM},\n"
 LATER_THAN_TODAY = "        if departure > today:\n"
+#: The H2 correction: a departure on or before the newest accuracy-scorable night is refused.
+NOT_AFTER_SCORED = "        if departure <= scored:\n"
+NEWEST_SCORABLE = "        return today - dt.timedelta(days=DEPARTURE_LOOKBACK_DAYS)\n"
 
 
 def departure(name: str, breaks: str, edits: tuple[Edit, ...], killer: str) -> Mutation:
@@ -2300,22 +2303,38 @@ STAGE_H2 = [
     ),
     departure(
         "H2-M9",
-        "a departure exactly 28 days ago is refused",
-        one(
-            BOOKING_SERVICE,
-            "        if departure < earliest:\n",
-            "        if departure <= earliest:\n",
-        ),
+        "the lower bound is inclusive: a departure exactly 28 days ago is accepted",
+        one(BOOKING_SERVICE, NOT_AFTER_SCORED, "        if departure < scored:\n"),
         DEPARTURE_BOUND,
     ),
     departure(
         "H2-M10",
-        "a departure 29 days ago is accepted",
+        "the earliest departure offered is 28 days ago, not 27",
         one(
             BOOKING_SERVICE,
-            "        earliest = today - dt.timedelta(days=DEPARTURE_LOOKBACK_DAYS)\n",
-            "        earliest = today - dt.timedelta(days=DEPARTURE_LOOKBACK_DAYS + 1)\n",
+            "            max(booking.check_in_date + day, "
+            "BookingService._newest_scorable(today) + day),\n",
+            "            max(booking.check_in_date + day, "
+            "BookingService._newest_scorable(today)),\n",
         ),
+        f"{EARLY_DEPARTURE}::test_the_preview_range_is_bounded_by_the_stay_and_by_the_lookback",
+    ),
+    departure(
+        "H2-M28",
+        "the newest night out of reach is one day too old: an accuracy-scored night can go",
+        one(BOOKING_SERVICE, NEWEST_SCORABLE, NEWEST_SCORABLE.replace("_DAYS)", "_DAYS + 1)")),
+        f"{EARLY_DEPARTURE}::test_a_departure_cannot_mutate_an_accuracy_scored_night",
+    ),
+    departure(
+        "H2-M29",
+        "the newest night out of reach is one day too young: a departure 27 days ago is refused",
+        one(BOOKING_SERVICE, NEWEST_SCORABLE, NEWEST_SCORABLE.replace("_DAYS)", "_DAYS - 1)")),
+        DEPARTURE_BOUND,
+    ),
+    departure(
+        "H2-M30",
+        "there is no lower bound: a departure 29 days ago is accepted",
+        one(BOOKING_SERVICE, NOT_AFTER_SCORED, "        if False:\n"),
         DEPARTURE_BOUND,
     ),
     departure(
@@ -2466,8 +2485,9 @@ STAGE_H2 = [
         "the accuracy protocol no longer states the departure's 28-day boundary",
         one(
             "backend/app/ml/accuracy_protocol.py",
-            "them out. It can remove only nights within the most recent 28 days or later:",
-            "them out. It can remove nights:",
+            "hotel's today minus 27 days. This protects nights that may already have entered "
+            "accuracy scoring --",
+            "hotel's today minus 28 days. This affects nights --",
         ),
         (f"{DEPARTURE_CONTRACT}::test_the_protocol_states_the_departure_boundary_and_why",),
     ),

@@ -29,6 +29,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 import app.services.booking as booking_module
+from app.ml.accuracy_protocol import is_eligible, last_settled_target_date
 from app.models.enums import AuditAction
 from app.repositories.ml_demand import MlDemandRepository
 from app.services.audit import AuditTrail
@@ -394,12 +395,18 @@ def test_reconciliation_owes_only_the_nights_stayed(api: TestClient, hotel: str)
             TODAY + dt.timedelta(days=1),
             False,
         ),
-        # No earlier than 28 days before it.
+        # Later than 28 days before it: a night 28 days old may already be accuracy-scored.
+        (
+            TODAY - dt.timedelta(days=30),
+            TODAY + dt.timedelta(days=2),
+            TODAY - dt.timedelta(days=27),
+            True,
+        ),
         (
             TODAY - dt.timedelta(days=30),
             TODAY + dt.timedelta(days=2),
             TODAY - dt.timedelta(days=28),
-            True,
+            False,
         ),
         (
             TODAY - dt.timedelta(days=30),
@@ -415,6 +422,7 @@ def test_reconciliation_owes_only_the_nights_stayed(api: TestClient, hotel: str)
         "planned_check_out",
         "today",
         "today_plus_1",
+        "today_minus_27",
         "today_minus_28",
         "today_minus_29",
     ],
@@ -447,8 +455,37 @@ def test_today_is_the_hotels_not_utcs(api: TestClient, hotel: str) -> None:
     booking = book(api, hotel, D(2026, 8, 20), D(2026, 9, 24))
 
     assert preview(api, hotel, booking).json()["departure_date"] == str(TODAY)
-    assert preview(api, hotel, booking, TODAY - dt.timedelta(days=28)).status_code == 200
+    assert preview(api, hotel, booking, TODAY - dt.timedelta(days=27)).status_code == 200
+    assert preview(api, hotel, booking, TODAY - dt.timedelta(days=28)).status_code == 409
     assert depart(api, hotel, booking, TODAY).status_code == 200
+
+
+def test_a_departure_cannot_mutate_an_accuracy_scored_night(
+    api: TestClient, hotel: str, engine: Engine
+) -> None:
+    """The departure's lower bound IS the accuracy protocol's settlement boundary.
+
+    ``last_settled_target_date(today)`` is the newest night an accuracy measurement run today
+    may already have scored. A departure on that date would delete that very night, so it is
+    refused and the night stays; the day after it is the earliest departure allowed, and every
+    night that departure removes is one the protocol does not yet consider scorable.
+    """
+    newest_scored = last_settled_target_date(TODAY)
+    assert is_eligible(newest_scored, TODAY)
+    assert not is_eligible(newest_scored + dt.timedelta(days=1), TODAY)
+    check_in, check_out = newest_scored - dt.timedelta(days=3), TODAY + dt.timedelta(days=2)
+    booking = book(api, hotel, check_in, check_out)
+
+    refused(depart(api, hotel, booking, newest_scored), "A departure on or before")
+    assert newest_scored in stay_dates(engine, booking)
+
+    earliest = newest_scored + dt.timedelta(days=1)
+    assert preview(api, hotel, booking).json()["earliest_departure_date"] == str(earliest)
+    assert depart(api, hotel, booking, earliest).status_code == 200
+    removed = set(days(check_in, check_out)) - set(stay_dates(engine, booking))
+    assert removed
+    assert not any(is_eligible(night, TODAY) for night in removed)
+    assert newest_scored in stay_dates(engine, booking)
 
 
 # --- the status policy ------------------------------------------------------------------------
@@ -544,7 +581,7 @@ def test_the_preview_range_is_bounded_by_the_stay_and_by_the_lookback(
     body = preview(api, hotel, booking).json()
 
     assert body["departure_date"] == str(TODAY)
-    assert body["earliest_departure_date"] == str(TODAY - dt.timedelta(days=28))
+    assert body["earliest_departure_date"] == str(TODAY - dt.timedelta(days=27))
     assert body["latest_departure_date"] == str(TODAY)
 
 

@@ -110,13 +110,13 @@ than restating them — a migration that changed the graph would change this wit
 
 **One exception, and its bound.** An early departure (Issue H2) removes the nights a checked-in
 guest did not stay -- every night from the departure date on -- in the same transaction that checks
-them out. It can remove only nights within the most recent 28 days or later: the departure date may
-be no earlier than the hotel's today minus `SETTLEMENT_LAG_DAYS`, and the booking service's
-`DEPARTURE_LOOKBACK_DAYS` is this constant rather than a copy. The bound exists so already-scored
-accuracy periods are not mutated: no night older than `SETTLEMENT_LAG_DAYS` is ever removed. The
-oldest night a departure can remove is exactly `SETTLEMENT_LAG_DAYS` old -- the first day it is
-eligible for scoring -- so only a measurement run earlier that same day can have scored it. The
-transition graph is unchanged, and so is the checksum.
+them out. A night becomes scorable on the day it turns `SETTLEMENT_LAG_DAYS` (28) old, so nights
+that are already 28 days old are immutable to early departure: the departure date must be later
+than the hotel's today minus 28 days, and the earliest permitted early-departure date is the
+hotel's today minus 27 days. This protects nights that may already have entered accuracy scoring --
+including those scored earlier on the same day. The booking service's `DEPARTURE_LOOKBACK_DAYS` is
+this constant rather than a copy. The accuracy protocol's checksum and transition graph are
+unchanged.
 
 Every allocation covering night *D* arrived on or before *D*, so its arrival decision was due on
 or before *D* itself. The lag is therefore recording slack over a decision already due, not

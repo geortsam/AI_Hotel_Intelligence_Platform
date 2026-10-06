@@ -291,7 +291,7 @@ class StayDeparture(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     #: The day the guest left. Later than check-in, earlier than the planned check-out, no later
-    #: than the hotel's today and no earlier than 28 days before it.
+    #: than the hotel's today and later than 28 days before it (today minus 27 at the earliest).
     departure_date: dt.date
 
 
