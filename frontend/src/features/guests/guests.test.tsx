@@ -693,7 +693,7 @@ describe('deleting a guest', () => {
         error: {
           code: 'CONFLICT',
           message:
-            'This guest cannot be deleted because existing reservations or reviews still reference them.',
+            'This guest cannot be deleted because existing reservations still reference them. Remove those reservations first.',
         },
       },
     })
@@ -704,7 +704,7 @@ describe('deleting a guest', () => {
     await user.click(screen.getByRole('button', { name: 'Yes, delete this guest' }))
 
     expect(await screen.findByText('The guest was not deleted')).toBeInTheDocument()
-    expect(screen.getByText(/reservations or reviews still refer/)).toBeInTheDocument()
+    expect(screen.getByText(/reservations still refer to this guest/)).toBeInTheDocument()
     // The guest is still on screen, because they still exist.
     expect(screen.getByRole('heading', { level: 1, name: 'Elena Papadakis' })).toBeInTheDocument()
   })

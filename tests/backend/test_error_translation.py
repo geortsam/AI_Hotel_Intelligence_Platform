@@ -619,9 +619,10 @@ def test_the_extraction_reads_the_two_diagnostic_fields() -> None:
 def test_a_not_null_violation_has_a_relation_but_no_constraint_name() -> None:
     """The measured case that decided the design.
 
-    ``revenue`` and ``reviews`` block a booking deletion through a composite SET NULL over a
-    NOT NULL ``hotel_id``, and PostgreSQL reports those with no constraint name at all. Any
-    attribution built on the constraint name alone would be unable to recognise them.
+    Before migration 0018 ``revenue`` and ``reviews`` blocked a booking deletion through a
+    composite SET NULL over a NOT NULL ``hotel_id``, and PostgreSQL reported those with no
+    constraint name at all -- which is why attribution reads the relation. The helper still
+    has to answer for any not-null violation, so the case stays.
     """
     error = _Error(constraint_name=None, table_name="revenue")
 
@@ -722,10 +723,11 @@ def test_a_service_that_writes_no_audit_event_is_not_discovered(name: str) -> No
 # ======================================================================================
 
 
-def test_the_booking_dependent_relations_are_the_three_the_schema_declares() -> None:
+def test_the_booking_dependent_relations_are_the_one_the_schema_still_restricts() -> None:
+    """Since migration 0018 revenue and reviews are detached, not refused: only payments block."""
     from app.services.booking import BOOKING_DEPENDENT_RELATIONS
 
-    assert set(BOOKING_DEPENDENT_RELATIONS) == {"payments", "revenue", "reviews"}
+    assert set(BOOKING_DEPENDENT_RELATIONS) == {"payments"}
     assert "audit_events" not in BOOKING_DEPENDENT_RELATIONS
 
 
@@ -738,10 +740,12 @@ def test_the_booking_service_checks_the_relation_before_blaming_a_dependent() ->
 
 
 def test_the_dependency_message_is_reachable_only_through_that_check() -> None:
-    """The sentence naming payments, revenue and reviews appears once, behind the guard."""
+    """The sentence naming payments appears once, behind the guard -- and nothing still blames
+    revenue or reviews, which migration 0018 detaches instead."""
     source = code_only((APP / "services" / "booking.py").read_text(encoding="utf-8"))
 
-    assert source.count("payments, revenue or reviews") == 1
+    assert source.count("payments have been recorded against it") == 1
+    assert "revenue or reviews" not in source
 
 
 # ======================================================================================
@@ -883,16 +887,15 @@ def test_every_audit_writer_keeps_its_client_conflict_fallback(service: ServiceC
 def test_the_audit_guard_cannot_reach_the_booking_dependency_message() -> None:
     """The Stage 4.5.15 defect, pinned from the other side.
 
-    The sentence naming payments, revenue and reviews sits behind a relation check that
-    excludes ``audit_events`` -- so no audit failure can arrive at it however the surrounding
-    code is rearranged.
+    The sentence naming payments sits behind a relation check that excludes ``audit_events``
+    -- so no audit failure can arrive at it however the surrounding code is rearranged.
     """
     from app.services.booking import BOOKING_DEPENDENT_RELATIONS
 
     source = code_only((APP / "services" / "booking.py").read_text(encoding="utf-8"))
 
     assert "audit_events" not in BOOKING_DEPENDENT_RELATIONS
-    assert source.count("payments, revenue or reviews") == 1
+    assert source.count("payments have been recorded against it") == 1
     assert source.count("relation_of(exc) in BOOKING_DEPENDENT_RELATIONS") == 2
 
 

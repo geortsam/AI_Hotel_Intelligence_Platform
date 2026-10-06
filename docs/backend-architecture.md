@@ -228,35 +228,27 @@ connectivity failure carries no row data and its traceback is what an operator n
 
 ## 9. Known schema debt
 
-**Three composite `ON DELETE SET NULL` foreign keys cannot fire.** Verified live, not inferred:
+**Resolved: the three composite `ON DELETE SET NULL` foreign keys now fire.** The three are recreated by migration `0018_composite_set_null_columns` (Issue H3) with a **column list**, so
+deleting the parent nulls only the optional reference and never the tenant:
 
 ```
-fk_reviews_guest_id_hotel_id_guests      (guest_id,   hotel_id) → guests(id, hotel_id)
-fk_reviews_booking_id_hotel_id_bookings  (booking_id, hotel_id) → bookings(id, hotel_id)
-fk_revenue_booking_id_hotel_id_bookings  (booking_id, hotel_id) → bookings(id, hotel_id)
+fk_revenue_booking_id_hotel_id_bookings  (booking_id, hotel_id) -> bookings  ON DELETE SET NULL (booking_id)
+fk_reviews_booking_id_hotel_id_bookings  (booking_id, hotel_id) -> bookings  ON DELETE SET NULL (booking_id)
+fk_reviews_guest_id_hotel_id_guests      (guest_id,   hotel_id) -> guests    ON DELETE SET NULL (guest_id)
 ```
 
-PostgreSQL nulls **every** referencing column when `SET NULL` fires, and the child's `hotel_id`
-is `NOT NULL`. The attempt raises `23502` and the parent delete is **refused**. Observed:
+- Deleting a booking keeps its revenue lines and its review: `revenue.booking_id` and
+  `reviews.booking_id` become NULL, and `hotel_id` and every other column are unchanged.
+- Deleting a guest keeps their reviews: `reviews.guest_id` becomes NULL, `hotel_id` unchanged.
+- `payments` still RESTRICTs a booking's deletion, and `bookings` still RESTRICTs a guest's.
+- A detached row is the shape an external review or walk-in revenue already had. Under
+  `MATCH SIMPLE` a NULL reference is not checked, and `hotel_id` is never nulled, so no partial
+  or cross-tenant key can arise. A review whose booking is gone is still listed by its hotel,
+  with `booking_public_id: null`; it has no URL of its own, so it can no longer be moderated.
 
-> `null value in column "hotel_id" of relation "reviews" violates not-null constraint`
-
-So the effective behaviour is an undeclared RESTRICT announced with the wrong SQLSTATE. The
-declared intent — keep the review, forget the author — never happens.
-
-**The corrective migration, not created in this stage:**
-
-```sql
-ALTER TABLE reviews DROP CONSTRAINT fk_reviews_guest_id_hotel_id_guests;
-ALTER TABLE reviews ADD CONSTRAINT fk_reviews_guest_id_hotel_id_guests
-    FOREIGN KEY (guest_id, hotel_id) REFERENCES guests (id, hotel_id)
-    ON DELETE SET NULL (guest_id);              -- PostgreSQL 15+ column list
--- and the same shape for the two booking-referencing constraints.
-```
-
-The services already report these as dependency conflicts (409) rather than leaking a not-null
-error, and the integration suites assert the *actual* behaviour, so nothing is broken today —
-the debt is that a documented capability does not exist.
+Before `0018_composite_set_null_columns` the keys were declared without a column list. PostgreSQL then sets **every**
+referencing column to NULL, `hotel_id` is NOT NULL, and the parent's delete failed with `23502` --
+an undeclared RESTRICT recorded here as schema debt until this correction.
 
 **Other recorded findings, all deliberate:**
 
@@ -303,7 +295,7 @@ In priority order.
    accepted, so it is a deliberate contract change rather than hardening. The cost of leaving
    it: the partial unique index on `(hotel_id, email)` cannot collapse two malformed spellings
    of one address.
-3. **The three `SET NULL` corrections** in §9.
+3. ~~**The three `SET NULL` corrections** in §9.~~ Done by migration `0018_composite_set_null_columns` (Issue H3).
 4. **Optimistic concurrency.** Two clients PATCHing one booking is currently last-write-wins.
    Every table has `updated_at`; a version column or an `If-Unmodified-Since` precondition is
    the natural next step. Note this is genuinely absent only for *updates* — creation races are

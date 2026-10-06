@@ -32,7 +32,6 @@ from app.core.errors import (
     GENERIC_SERVER_MESSAGE,
     ConflictError,
     InternalFaultError,
-    constraint_name_of,
     is_audit_integrity_failure,
     relation_of,
 )
@@ -45,7 +44,8 @@ OWNER_EMAIL = "attribution-owner@example.test"
 CHECK_IN = dt.date(2028, 5, 4)
 CHECK_OUT = dt.date(2028, 5, 7)
 
-DEPENDENCY_MESSAGE = "This booking cannot be deleted because payments, revenue or reviews"
+#: Since migration 0018 (Issue H3) only payments can block a booking's deletion.
+DEPENDENCY_MESSAGE = "This booking cannot be deleted because payments have been recorded"
 
 
 # ======================================================================================
@@ -193,20 +193,17 @@ def test_a_payments_restrict_is_attributed_to_the_dependents(api: TestClient, wo
     assert DEPENDENCY_MESSAGE in response.json()["error"]["message"]
 
 
-def test_a_reviews_set_null_is_attributed_to_the_dependents(api: TestClient, world: dict) -> None:
-    """``reviews`` blocks the delete through a composite SET NULL over a NOT NULL ``hotel_id``,
-    which PostgreSQL reports as 23502 with NO constraint name. The relation is what recognises
-    it -- an attribution built on the constraint name alone could not."""
+def test_a_review_is_no_longer_a_dependent(api: TestClient, world: dict) -> None:
+    """Before migration 0018 ``reviews`` blocked the delete through a composite SET NULL over a
+    NOT NULL ``hotel_id`` (23502, no constraint name) and was reported as a dependent. Its key
+    is now ``SET NULL (booking_id)``: the review is detached and the booking deleted."""
     response = api.post(
         f"/api/v1/hotels/{world['hotel']}/bookings/{world['booking']}/review",
         json={"source": "direct", "rating": 8, "rating_scale": 10, "review_date": str(CHECK_OUT)},
     )
     assert response.status_code == 201, response.text
 
-    refused = api.delete(booking_url(world))
-
-    assert refused.status_code == 409
-    assert DEPENDENCY_MESSAGE in refused.json()["error"]["message"]
+    assert api.delete(booking_url(world)).status_code == 204
 
 
 def test_an_audit_failure_is_not_attributed_to_the_dependents(
@@ -227,7 +224,7 @@ def test_an_audit_failure_is_not_attributed_to_the_dependents(
         service.delete(uuid.UUID(world["hotel"]), uuid.UUID(world["booking"]))
 
     message = str(caught.value)
-    assert "payments, revenue or reviews" not in message, "the audit failure was misattributed"
+    assert DEPENDENCY_MESSAGE not in message, "the audit failure was misattributed"
     assert "still referenced by other records" not in message
     assert message == GENERIC_SERVER_MESSAGE
     assert not isinstance(caught.value, ConflictError)
@@ -301,10 +298,12 @@ def test_the_diagnostics_really_do_differ_between_the_two_cases(
     assert str(audit.value.orig.sqlstate)[:2] == "23"  # type: ignore[union-attr]
 
 
-def test_a_not_null_violation_carries_no_constraint_name(
+def test_a_reviews_booking_reference_is_nulled_and_its_hotel_kept(
     api: TestClient, world: dict, session: Session
 ) -> None:
-    """Measured against the live database, because it is the fact the design rests on."""
+    """Measured against the live database. Before migration 0018 this DELETE failed with 23502
+    on ``reviews.hotel_id``, a failure that carries no constraint name; now the key nulls only
+    ``booking_id`` and the statement succeeds."""
     from app.models.booking import Booking
 
     session.rollback()
@@ -320,13 +319,12 @@ def test_a_not_null_violation_carries_no_constraint_name(
     )
     session.flush()
 
-    with pytest.raises(sa.exc.IntegrityError) as caught:
-        session.execute(sa.delete(Booking).where(Booking.id == booking.id))
-        session.flush()
-    session.rollback()
+    session.execute(sa.delete(Booking).where(Booking.id == booking.id))
+    session.flush()
 
-    assert constraint_name_of(caught.value) is None
-    assert relation_of(caught.value) == "reviews"
+    review = session.execute(sa.text("SELECT hotel_id, booking_id FROM reviews")).one()
+    session.rollback()
+    assert (review.hotel_id, review.booking_id) == (booking.hotel_id, None)
 
 
 # ======================================================================================

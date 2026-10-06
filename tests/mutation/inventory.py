@@ -1352,7 +1352,7 @@ def runbook(name: str, breaks: str, path: str, old: str, new: str, *tests: str) 
 
 
 STALE = "`0011_demand_prediction_public_id`"
-CURRENT = "`0017_llm_invocation_retention`"
+CURRENT = "`0018_composite_set_null_columns`"
 REVISIONS_IN_BACKUP = "test_every_revision_a_runbook_quotes_is_the_current_head[backup-restore]"
 
 STAGE_M1 = [
@@ -2556,6 +2556,208 @@ STAGE_H2 = [
 ]
 
 
+SET_NULL_MIGRATION = "database/migrations/versions/20261006_0018_composite_set_null_columns.py"
+INITIAL_SCHEMA = "database/migrations/versions/20260828_0001_initial_schema.py"
+SET_NULL_TESTS = "tests/integration/test_set_null_detach.py"
+REVIEW_DETACHED = f"{SET_NULL_TESTS}::test_deleting_a_booking_detaches_its_review"
+REVENUE_DETACHED = f"{SET_NULL_TESTS}::test_deleting_a_booking_detaches_its_revenue"
+GUEST_DETACHED = f"{SET_NULL_TESTS}::test_the_guest_key_detaches_on_its_own_in_the_database"
+MODELS_MATCH = f"{SET_NULL_TESTS}::test_the_models_match_the_migrated_schema"
+PAYMENT_STILL_BLOCKS = f"{SET_NULL_TESTS}::test_a_booking_with_a_payment_still_cannot_be_deleted"
+BOOKING_STILL_BLOCKS = f"{SET_NULL_TESTS}::test_a_guest_with_a_booking_still_cannot_be_deleted"
+
+#: Each 0018 key's own entry, ending at its ON DELETE action.
+SET_NULL_KEYS = {
+    "revenue": (
+        '        "fk_revenue_booking_id_hotel_id_bookings",\n'
+        '        "booking_id",\n        "bookings",\n        "SET NULL (booking_id)",\n'
+    ),
+    "review-booking": (
+        '        "fk_reviews_booking_id_hotel_id_bookings",\n'
+        '        "booking_id",\n        "bookings",\n        "SET NULL (booking_id)",\n'
+    ),
+    "review-guest": (
+        '        "fk_reviews_guest_id_hotel_id_guests",\n'
+        '        "guest_id",\n        "guests",\n        "SET NULL (guest_id)",\n'
+    ),
+}
+KILLER_OF_KEY = {
+    "revenue": REVENUE_DETACHED,
+    "review-booking": REVIEW_DETACHED,
+    "review-guest": GUEST_DETACHED,
+}
+
+
+def set_null_key(number: int, key: str, action: str, breaks: str) -> Mutation:
+    """One 0018 key recreated with *action* instead of its column-list SET NULL."""
+    anchor = SET_NULL_KEYS[key]
+    column = "guest_id" if key == "review-guest" else "booking_id"
+    return Mutation(
+        f"H3-M{number}",
+        "H3",
+        breaks,
+        one(SET_NULL_MIGRATION, anchor, anchor.replace(f'"SET NULL ({column})"', f'"{action}"')),
+        (KILLER_OF_KEY[key],),
+        needs_database=True,
+    )
+
+
+STAGE_H3 = [
+    set_null_key(1, "revenue", "SET NULL", "the revenue key nulls hotel_id too, so it cannot fire"),
+    set_null_key(2, "review-booking", "SET NULL", "the review-booking key nulls hotel_id too"),
+    set_null_key(3, "review-guest", "SET NULL", "the review-guest key nulls hotel_id too"),
+    set_null_key(4, "revenue", "RESTRICT", "revenue blocks its booking's deletion"),
+    set_null_key(5, "review-booking", "RESTRICT", "a review blocks its booking's deletion"),
+    set_null_key(6, "review-guest", "RESTRICT", "a review blocks its author's deletion"),
+    set_null_key(7, "revenue", "CASCADE", "deleting a booking deletes its revenue lines"),
+    set_null_key(8, "review-booking", "CASCADE", "deleting a booking deletes its review"),
+    set_null_key(9, "review-guest", "CASCADE", "deleting a guest deletes their reviews"),
+    Mutation(
+        "H3-M10",
+        "H3",
+        "the downgrade does not restore 0001's keys",
+        one(SET_NULL_MIGRATION, 'BEFORE = "SET NULL"\n', 'BEFORE = "RESTRICT"\n'),
+        (
+            f"{SET_NULL_TESTS}::"
+            "test_the_downgrade_restores_0001s_keys_and_the_upgrade_reapplies_0018",
+        ),
+        needs_database=True,
+    ),
+    Mutation(
+        "H3-M11",
+        "H3",
+        "the review model declares a bare SET NULL the migration no longer has",
+        one(
+            "backend/app/models/review.py",
+            '            ondelete="SET NULL (booking_id)",\n',
+            '            ondelete="SET NULL",\n',
+        ),
+        (MODELS_MATCH,),
+        needs_database=True,
+    ),
+    Mutation(
+        "H3-M12",
+        "H3",
+        "the review model lets hotel_id be null",
+        one(
+            "backend/app/models/review.py",
+            '        BigInteger, ForeignKey("hotels.id", ondelete="CASCADE"), nullable=False\n',
+            '        BigInteger, ForeignKey("hotels.id", ondelete="CASCADE"), nullable=True\n',
+        ),
+        (MODELS_MATCH,),
+        needs_database=True,
+    ),
+    Mutation(
+        "H3-M13",
+        "H3",
+        "the revenue model makes booking_id mandatory",
+        one(
+            "backend/app/models/finance.py",
+            "    booking_id: Mapped[int | None] = mapped_column(BigInteger)\n",
+            "    booking_id: Mapped[int | None] = mapped_column(BigInteger, nullable=False)\n",
+        ),
+        (MODELS_MATCH,),
+        needs_database=True,
+    ),
+    Mutation(
+        "H3-M14",
+        "H3",
+        "payments no longer protect a booking from deletion",
+        one(
+            INITIAL_SCHEMA,
+            "REFERENCES bookings (id, hotel_id) ON DELETE RESTRICT,",
+            "REFERENCES bookings (id, hotel_id) ON DELETE CASCADE,",
+        ),
+        (PAYMENT_STILL_BLOCKS,),
+        needs_database=True,
+    ),
+    Mutation(
+        "H3-M15",
+        "H3",
+        "a guest's bookings no longer protect the guest from deletion",
+        one(
+            INITIAL_SCHEMA,
+            "REFERENCES guests (id, hotel_id) ON DELETE RESTRICT,",
+            "REFERENCES guests (id, hotel_id) ON DELETE CASCADE,",
+        ),
+        (BOOKING_STILL_BLOCKS,),
+        needs_database=True,
+    ),
+    Mutation(
+        "H3-M16",
+        "H3",
+        "a detached review is rendered as though its booking still existed",
+        one(
+            "backend/app/services/review.py",
+            "                bookings.get(review.booking_id) "
+            "if review.booking_id is not None else None,\n",
+            "                bookings[review.booking_id],\n",
+        ),
+        (REVIEW_DETACHED,),
+        needs_database=True,
+    ),
+    Mutation(
+        "H3-M17",
+        "H3",
+        "a detached revenue line is rendered as though its booking still existed",
+        one(
+            "backend/app/services/finance.py",
+            "                bookings.get(row.booking_id) "
+            "if row.booking_id is not None else None,\n",
+            "                bookings[row.booking_id],\n",
+        ),
+        (REVENUE_DETACHED,),
+        needs_database=True,
+    ),
+    Mutation(
+        "H3-M18",
+        "H3",
+        "the hotel's review list joins to bookings and drops every detached review",
+        one(
+            "backend/app/repositories/review.py",
+            "        statement = self._filtered(select(Review), hotel_id, source, is_published)\n",
+            "        statement = self._filtered(\n"
+            "            select(Review).join(Booking, Booking.id == Review.booking_id),\n"
+            "            hotel_id,\n            source,\n            is_published,\n        )\n",
+        ),
+        (REVIEW_DETACHED,),
+        needs_database=True,
+    ),
+    Mutation(
+        "H3-M19",
+        "H3",
+        "the booking refusal still blames revenue and reviews",
+        one(
+            "backend/app/services/booking.py",
+            '                    "This booking cannot be deleted because '
+            'payments have been recorded "\n'
+            '                    "against it. Cancel the booking instead."\n',
+            '                    "This booking cannot be deleted because '
+            'payments, revenue or reviews "\n'
+            '                    "still reference it. Cancel the booking instead."\n',
+        ),
+        (PAYMENT_STILL_BLOCKS,),
+        needs_database=True,
+    ),
+    Mutation(
+        "H3-M20",
+        "H3",
+        "the guest refusal still blames reviews",
+        one(
+            "backend/app/services/guest.py",
+            '                    "This guest cannot be deleted because '
+            'existing reservations still "\n'
+            '                    "reference them. Remove those reservations first."\n',
+            '                    "This guest cannot be deleted because '
+            'existing reservations or reviews "\n'
+            '                    "still reference them. Remove those reservations first."\n',
+        ),
+        (BOOKING_STILL_BLOCKS,),
+        needs_database=True,
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -2579,4 +2781,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_G1,
     *STAGE_H1,
     *STAGE_H2,
+    *STAGE_H3,
 )

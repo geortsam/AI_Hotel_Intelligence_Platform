@@ -997,35 +997,48 @@ def test_the_booking_filter_cannot_reach_another_hotels_stay(
     assert response.status_code == 404
 
 
-# --- ON DELETE: the fourth SET NULL that cannot fire ----------------------------------------------
+# --- ON DELETE: SET NULL (booking_id), migration 0018 ---------------------------------------------
 
 
-def test_deleting_a_booking_with_revenue_is_refused(api: TestClient, hotel: str) -> None:
-    """SCHEMA CONTRADICTION, verified live rather than assumed -- the fourth instance.
+def test_deleting_a_booking_keeps_its_revenue_detached(
+    api: TestClient, hotel: str, session: Session
+) -> None:
+    """fk_revenue_booking_id_hotel_id_bookings is ON DELETE SET NULL (booking_id) since 0018.
 
-    fk_revenue_booking_id_hotel_id_bookings declares ON DELETE SET NULL over
-    (booking_id, hotel_id). PostgreSQL nulls EVERY referencing column, and revenue.hotel_id is
-    NOT NULL, so the policy cannot execute: the attempt raises 23502 and the delete is
-    refused. The declared intent -- keep the revenue, forget the stay -- never happens.
+    Before it, the bare SET NULL also nulled the NOT NULL revenue.hotel_id and the delete failed
+    with 23502. Now the ledger line stays -- same hotel, amount and category -- and forgets only
+    the stay; the ledger still lists it, with no booking.
     """
     booking = make_booking(api, hotel)
     api.post(revenue_url(hotel), json=revenue_payload(booking_public_id=booking))
+    before = session.scalars(sa.select(Revenue)).one()
+    kept = (before.hotel_id, before.category_id, before.amount, before.revenue_date)
 
     response = api.delete(f"/api/v1/hotels/{hotel}/bookings/{booking}")
 
-    assert response.status_code == 409
-    assert "revenue" in response.json()["error"]["message"]
+    assert response.status_code == 204, response.text
+    session.expire_all()
+    after = session.scalars(sa.select(Revenue)).one()
+    assert after.booking_id is None
+    assert (after.hotel_id, after.category_id, after.amount, after.revenue_date) == kept
+    [listed] = api.get(revenue_url(hotel)).json()["items"]
+    assert listed["booking_public_id"] is None
 
 
-def test_the_refused_booking_delete_leaves_both_rows_intact(
+def test_a_booking_with_a_payment_still_cannot_be_deleted_whatever_its_revenue(
     api: TestClient, hotel: str, session: Session
 ) -> None:
-    """The transaction rolls back whole: the revenue keeps its booking, not a null one."""
+    """payments RESTRICT is untouched by 0018, and the refusal names payments alone."""
     booking = make_booking(api, hotel)
     api.post(revenue_url(hotel), json=revenue_payload(booking_public_id=booking))
+    post_charge(api, hotel, booking)
 
-    api.delete(f"/api/v1/hotels/{hotel}/bookings/{booking}")
+    response = api.delete(f"/api/v1/hotels/{hotel}/bookings/{booking}")
+    message = response.json()["error"]["message"]
 
+    assert response.status_code == 409
+    assert "payments" in message
+    assert "revenue" not in message and "review" not in message
     assert api.get(f"/api/v1/hotels/{hotel}/bookings/{booking}").status_code == 200
     assert session.scalars(sa.select(Revenue)).one().booking_id is not None
 
@@ -1033,10 +1046,23 @@ def test_the_refused_booking_delete_leaves_both_rows_intact(
 def test_the_refusal_leaks_no_sqlstate_or_column_name(api: TestClient, hotel: str) -> None:
     booking = make_booking(api, hotel)
     api.post(revenue_url(hotel), json=revenue_payload(booking_public_id=booking))
+    post_charge(api, hotel, booking)
 
-    text = api.delete(f"/api/v1/hotels/{hotel}/bookings/{booking}").text
+    response = api.delete(f"/api/v1/hotels/{hotel}/bookings/{booking}")
+    assert response.status_code == 409, "the leak check needs a refusal to inspect"
+    text = response.text
 
-    for leak in ["23502", "fk_revenue", "not-null", "psycopg", "DETAIL:", "hotel_id"]:
+    for leak in [
+        "23502",
+        "23503",
+        "23001",
+        "fk_revenue",
+        "fk_payments",
+        "not-null",
+        "psycopg",
+        "DETAIL:",
+        "hotel_id",
+    ]:
         assert leak.lower() not in text.lower(), f"leaked {leak!r}"
 
 

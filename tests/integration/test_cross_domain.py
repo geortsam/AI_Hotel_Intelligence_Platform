@@ -642,8 +642,8 @@ def test_a_malformed_email_is_accepted_as_written(
 def test_deleting_a_booking_with_dependents_is_refused_and_changes_nothing(
     api: TestClient, workflow: tuple[str, str, str], session: Session
 ) -> None:
-    """Payments RESTRICT; reviews and revenue declare SET NULL that cannot fire. Either way
-    the delete is refused and the whole transaction rolls back."""
+    """Payments RESTRICT the delete, and the whole transaction rolls back. (Reviews and revenue
+    no longer block it: since migration 0018 their keys detach them instead.)"""
     hotel, booking, _ = workflow
     api.post(
         f"/api/v1/hotels/{hotel}/bookings/{booking}/payments",

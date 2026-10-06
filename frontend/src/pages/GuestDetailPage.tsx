@@ -72,7 +72,7 @@ const DELETE_FAILURE_COPY = {
   conflict: {
     title: 'The guest was not deleted',
     detail:
-      'Existing reservations or reviews still refer to this guest, and the database will not remove a record those depend on. Remove or reassign them first. Nothing was changed.',
+      'Existing reservations still refer to this guest, and the database will not remove a record those depend on. Remove or reassign them first. Nothing was changed.',
     canRetry: false,
   },
   serverFault: {
@@ -97,10 +97,10 @@ const DELETE_FAILURE_COPY = {
  * ## Deleting asks first, and says what will stop it
  *
  * This is the only hard delete the platform exposes. It needs the **manager** role — higher
- * than the staff role that edits — and the database refuses it whenever a reservation or a
- * review still refers to the guest. That refusal is not a rare edge: every seeded guest has
- * bookings, so it is the *usual* outcome, and the confirmation says so before the click
- * rather than after it.
+ * than the staff role that edits — and the database refuses it whenever a reservation still
+ * refers to the guest. Their reviews never block it: each is kept, detached from them. The
+ * refusal is not a rare edge: every seeded guest has bookings, so it is the *usual* outcome,
+ * and the confirmation says so before the click rather than after it.
  *
  * Nothing is removed from the screen before the server returns 204. On success the page keeps
  * standing and says the record is gone, instead of navigating away from underneath the person
@@ -334,9 +334,9 @@ export function GuestDetailPage() {
         ) : (
           <>
             <p className={styles.dangerNote}>
-              The database refuses this while any reservation or review still refers to the
-              guest, and deleting needs the manager role. Neither is checked here &mdash; the
-              server decides, and says so if it refuses.
+              The database refuses this while any reservation still refers to the guest, and
+              deleting needs the manager role. Neither is checked here &mdash; the server
+              decides, and says so if it refuses. Their reviews are kept, without their name.
             </p>
             <Button
               variant="danger"

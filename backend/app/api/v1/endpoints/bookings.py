@@ -372,6 +372,7 @@ def preview_departure(
 def delete_booking(
     hotel_public_id: HotelPath, booking_public_id: BookingPath, service: BookingServiceDep
 ) -> None:
-    """204 on success -- allocations and nights cascade away with it. 409 when payments,
-    revenue or reviews still reference it; cancelling is the usual alternative."""
+    """204 on success -- allocations and nights cascade away with it, and its reviews and
+    revenue lines are kept, detached from it. 409 when payments have been recorded against it;
+    cancelling is the usual alternative."""
     service.delete(hotel_public_id, booking_public_id)

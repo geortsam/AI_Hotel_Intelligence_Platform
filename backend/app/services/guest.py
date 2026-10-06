@@ -32,7 +32,6 @@ from app.core.errors import (
     GENERIC_CONFLICT_MESSAGE,
     SQLSTATE_CHECK_VIOLATION,
     SQLSTATE_DEPENDENCY_VIOLATIONS,
-    SQLSTATE_NOT_NULL_VIOLATION,
     SQLSTATE_UNIQUE_VIOLATION,
     ConflictError,
     NotFoundError,
@@ -134,19 +133,17 @@ class GuestService:
     def delete(self, hotel_public_id: uuid.UUID, guest_public_id: uuid.UUID) -> None:
         """Delete a guest and commit, honouring the database's delete policies.
 
-        No cascade is invented. Two tables reference guests, and BOTH block the delete --
-        though for different reasons, and only one of them obviously:
+        No cascade is invented. Two tables reference guests:
 
-        * ``bookings`` is ``ON DELETE RESTRICT`` -> 23503/23001, the expected refusal.
+        * ``bookings`` is ``ON DELETE RESTRICT`` -> 23503/23001: a guest with reservations
+          cannot be deleted, and that is the refusal reported here.
 
-        * ``reviews`` is ``ON DELETE SET NULL`` over the COMPOSITE ``(guest_id, hotel_id)``.
-          PostgreSQL nulls *every* column of the key, but ``reviews.hotel_id`` is NOT NULL,
-          so the policy cannot fire and the delete fails with 23502 on that column instead.
-          The declared SET NULL is therefore unreachable in this schema: a guest with
-          reviews cannot be deleted either.
+        * ``reviews`` is ``ON DELETE SET NULL (guest_id)`` (migration 0018, Issue H3): a
+          review survives its author's deletion, keeping its hotel and forgetting only the
+          guest. Before 0018 a bare SET NULL also nulled the NOT NULL ``hotel_id`` and the
+          delete failed with 23502 -- that refusal no longer exists, so it is not reported.
 
-        Verified against PostgreSQL 18.6 rather than inferred from the declaration. Both
-        outcomes stay the database's decision; this method only reports them accurately.
+        Both outcomes stay the database's decision; this method only reports them accurately.
         """
         hotel = self._scope.require_hotel(hotel_public_id)
         guest = self._require_guest(hotel, guest_public_id)
@@ -156,12 +153,10 @@ class GuestService:
         except IntegrityError as exc:
             self._session.rollback()
             state = sqlstate_of(exc)
-            # 23502 counts as a dependency signal HERE and nowhere else: during a delete it
-            # can only mean a referencing row could not be detached.
-            if state in SQLSTATE_DEPENDENCY_VIOLATIONS or state == SQLSTATE_NOT_NULL_VIOLATION:
+            if state in SQLSTATE_DEPENDENCY_VIOLATIONS:
                 raise ConflictError(
-                    "This guest cannot be deleted because existing reservations or reviews "
-                    "still reference them. Remove or reassign those records first."
+                    "This guest cannot be deleted because existing reservations still "
+                    "reference them. Remove those reservations first."
                 ) from exc
             raise self._translate(exc) from exc
 

@@ -39,7 +39,6 @@ from app.core.errors import (
     GENERIC_CONFLICT_MESSAGE,
     SQLSTATE_CHECK_VIOLATION,
     SQLSTATE_DEPENDENCY_VIOLATIONS,
-    SQLSTATE_NOT_NULL_VIOLATION,
     SQLSTATE_UNIQUE_VIOLATION,
     ConflictError,
     NotFoundError,
@@ -136,22 +135,17 @@ REFERENCE_CONSTRAINT = "uq_bookings_hotel_id_reference"
 
 #: The relations that can legitimately block a booking's deletion (Stage 4.5.16).
 #:
-#: Measured against PostgreSQL 18.6 rather than reasoned about, because the three do not fail
-#: the same way and the difference decides how they can be recognised::
+#: Since migration 0018 (Issue H3) only one: ``payments`` is ``ON DELETE RESTRICT`` -> 23503 or
+#: 23001. ``revenue`` and ``reviews`` reference a booking with ``ON DELETE SET NULL
+#: (booking_id)``: they survive its deletion with their stay forgotten and their hotel kept, so
+#: they no longer block it -- before 0018 their bare SET NULL also nulled the NOT NULL
+#: ``hotel_id`` and failed with 23502, which is why this set used to name them.
 #:
-#:     payments  ON DELETE RESTRICT   -> 23001, constraint fk_payments_..., table payments
-#:     revenue   composite SET NULL   -> 23502, constraint None,            table revenue
-#:     reviews   composite SET NULL   -> 23502, constraint None,            table reviews
-#:
-#: Two of the three carry NO constraint name at all: a not-null violation reports the column
-#: and the table instead. So the RELATION is the discriminator -- it is the one field present
-#: in every case -- and matching on the constraint name alone would leave both SET NULL paths
-#: unattributable.
-#:
-#: What this excludes is the point. Since Stage 4.5.12 a booking deletion also writes an audit
-#: event in the same transaction, so ``audit_events`` can fail inside the same ``except``; it
-#: is not in this set, so it can no longer be reported as a booking dependency.
-BOOKING_DEPENDENT_RELATIONS = frozenset({"payments", "revenue", "reviews"})
+#: The RELATION, not the constraint name, is the discriminator, and what this excludes is the
+#: point. Since Stage 4.5.12 a booking deletion also writes an audit event in the same
+#: transaction, so ``audit_events`` can fail inside the same ``except``; it is not in this set,
+#: so it can no longer be reported as a booking dependency.
+BOOKING_DEPENDENT_RELATIONS = frozenset({"payments"})
 
 
 def _is_night_completeness_failure(exc: IntegrityError) -> bool:
@@ -1037,14 +1031,10 @@ class BookingService:
     def delete(self, hotel_public_id: uuid.UUID, booking_public_id: uuid.UUID) -> None:
         """Delete a booking and commit, honouring the database's policies.
 
-        Allocations and their nights cascade away with it. What blocks the delete is
-        everything downstream of the booking, and -- as with guests -- for two different
-        reasons:
-
-        * ``payments`` is ``ON DELETE RESTRICT`` -> 23503/23001.
-        * ``revenue`` and ``reviews`` are ``ON DELETE SET NULL`` over composite keys whose
-          ``hotel_id`` is NOT NULL, so those policies cannot fire and surface as 23502
-          instead. The declared SET NULL is unreachable in this schema.
+        Allocations and their nights cascade away with it. ``revenue`` and ``reviews`` survive
+        it: their keys are ``ON DELETE SET NULL (booking_id)`` (migration 0018, Issue H3), so
+        each keeps its hotel and forgets only the stay. What blocks the delete is ``payments``,
+        ``ON DELETE RESTRICT`` -> 23503/23001: money taken against a stay is never orphaned.
 
         No cascade is invented for any of them.
 
@@ -1090,13 +1080,13 @@ class BookingService:
             # INSERT failing on its actor foreign key is also a 23503, and before this check
             # it was reported to the client as "payments still reference this booking" --
             # false, and unactionable. The relation the failure is about decides.
-            if relation_of(exc) in BOOKING_DEPENDENT_RELATIONS and (
-                state in SQLSTATE_DEPENDENCY_VIOLATIONS or state == SQLSTATE_NOT_NULL_VIOLATION
+            if (
+                relation_of(exc) in BOOKING_DEPENDENT_RELATIONS
+                and state in SQLSTATE_DEPENDENCY_VIOLATIONS
             ):
                 raise ConflictError(
-                    "This booking cannot be deleted because payments, revenue or reviews "
-                    "still reference it. Remove those records first, or cancel the booking "
-                    "instead."
+                    "This booking cannot be deleted because payments have been recorded "
+                    "against it. Cancel the booking instead."
                 ) from exc
             raise self._translate(exc) from exc
 
@@ -1374,8 +1364,9 @@ class BookingService:
             return ConflictError("That value is already taken by another booking.")
         if state == SQLSTATE_CHECK_VIOLATION:
             return ConflictError("The supplied values violate a booking constraint.")
-        if relation_of(exc) in BOOKING_DEPENDENT_RELATIONS and (
-            state in SQLSTATE_DEPENDENCY_VIOLATIONS or state == SQLSTATE_NOT_NULL_VIOLATION
+        if (
+            relation_of(exc) in BOOKING_DEPENDENT_RELATIONS
+            and state in SQLSTATE_DEPENDENCY_VIOLATIONS
         ):
             return ConflictError("This booking is still referenced by other records.")
         return ConflictError(GENERIC_CONFLICT_MESSAGE)

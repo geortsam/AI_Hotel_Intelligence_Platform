@@ -95,13 +95,15 @@ class Review(TimestampMixin, Base):
             ["guest_id", "hotel_id"],
             ["guests.id", "guests.hotel_id"],
             name="fk_reviews_guest_id_hotel_id_guests",
-            ondelete="SET NULL",
+            # Issue H3 (0018): null the author only. A bare SET NULL would null hotel_id too.
+            ondelete="SET NULL (guest_id)",
         ),
         ForeignKeyConstraint(
             ["booking_id", "hotel_id"],
             ["bookings.id", "bookings.hotel_id"],
             name="fk_reviews_booking_id_hotel_id_bookings",
-            ondelete="SET NULL",
+            # Issue H3 (0018): null the stay only; the review and its hotel stay.
+            ondelete="SET NULL (booking_id)",
         ),
         CheckConstraint(f"source IN ({ReviewSource.sql_in_list()})", name="source_valid"),
         CheckConstraint("rating_scale IN (5, 10)", name="rating_scale_valid"),

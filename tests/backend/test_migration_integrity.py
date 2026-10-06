@@ -64,6 +64,7 @@ EXPECTED_FILENAMES = (
     "20260927_0015_copilot_conversations.py",
     "20261002_0016_demand_observation_periods.py",
     "20261003_0017_llm_invocation_retention.py",
+    "20261006_0018_composite_set_null_columns.py",
 )
 
 #: sha256 of the canonicalised concatenation described in this module's docstring. Derived
@@ -81,12 +82,14 @@ EXPECTED_FILENAMES = (
 #: (`copilot_conversations`), still reproduced by the first fourteen; and `31b7886c...` over fifteen
 #: was the value before 0016 added `demand_observation_periods`, still reproduced by the first
 #: fifteen; and `5c20fc15...` over sixteen was the value before 0017 gave `llm_invocations` its
-#: retention rule, still reproduced by the first sixteen. All eight are recorded rather than
-#: discarded, because "the digest changed" should always be answerable with "yes, in that
-#: commit, for that migration".
-CANONICAL_SHA256 = "690a0cf9ced1f9e3c4b7a26980789449069b172b217c5a36781a59ccba11ea01"
+#: retention rule, still reproduced by the first sixteen; and `690a0cf9...` over seventeen was
+#: the value before 0018 (Issue H3) recreated the three composite SET NULL keys with column
+#: lists, still reproduced by the first seventeen. All nine are recorded rather than discarded,
+#: because "the digest changed" should always be answerable with "yes, in that commit, for
+#: that migration".
+CANONICAL_SHA256 = "745f856d31b91f78a1204bed47ecf9cbf2177cf895381c40df56672a643f27cf"
 
-EXPECTED_HEAD = "0017_llm_invocation_retention"
+EXPECTED_HEAD = "0018_composite_set_null_columns"
 EXPECTED_ROOT = "0001_initial_schema"
 
 REVISION = re.compile(r'^revision: str = "([^"]+)"', re.MULTILINE)
@@ -177,6 +180,17 @@ def test_llm_invocation_retention_left_every_earlier_migration_untouched() -> No
     earlier = [path.read_bytes() for path in migration_files()[:16]]
 
     assert digest_of(earlier) == "5c20fc157cc78112a484b95fd751b22dbfc9f3913e2dc41c902e1d92c2e383a5"
+
+
+def test_the_set_null_correction_left_every_earlier_migration_untouched() -> None:
+    """Adding 0018 moved the digest only because 0018 was added: 0001-0017 are byte-identical.
+
+    0018 recreates three foreign keys 0001 declared -- by a new revision, never by editing
+    0001 -- so 0001's bytes, like every other earlier file's, are unchanged.
+    """
+    earlier = [path.read_bytes() for path in migration_files()[:17]]
+
+    assert digest_of(earlier) == "690a0cf9ced1f9e3c4b7a26980789449069b172b217c5a36781a59ccba11ea01"
 
 
 def test_the_digest_does_not_depend_on_how_git_checked_the_files_out() -> None:

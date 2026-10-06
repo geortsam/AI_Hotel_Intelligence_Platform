@@ -116,13 +116,11 @@ export const guestService = {
   /**
    * Delete a guest. 204, with no body.
    *
-   * Throws `ApiError`: **409** when the guest is still referenced -- and both referencing
-   * tables block it, though the schema suggests otherwise. `bookings` is `ON DELETE RESTRICT`,
-   * the expected refusal; `reviews` declares `ON DELETE SET NULL` over a composite key whose
-   * `hotel_id` is `NOT NULL`, so that policy **cannot fire** and the delete fails too. The
-   * backend verified this against PostgreSQL rather than inferring it, and reports both as one
-   * conflict. Verified live: a seeded guest with reservations is a 409, and a guest with
-   * neither deletes with a 204.
+   * Throws `ApiError`: **409** when a booking still references the guest -- `bookings` is
+   * `ON DELETE RESTRICT`. Reviews never block it: since migration 0018 `reviews` is
+   * `ON DELETE SET NULL (guest_id)`, so each of their reviews is kept with its author nulled
+   * and its hotel untouched. A seeded guest with reservations is a 409, and a guest without
+   * any deletes with a 204.
    *
    * Also **403** without the *manager* role -- higher than create and update -- and **404**
    * for an unknown guest.

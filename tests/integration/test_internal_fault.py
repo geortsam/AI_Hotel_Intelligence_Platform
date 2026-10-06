@@ -499,7 +499,7 @@ def test_a_real_dependency_is_still_409(engine: Engine, session: Session) -> Non
     response = client.delete(booking_url(world))
 
     assert response.status_code == 409
-    assert "payments, revenue or reviews" in response.json()["error"]["message"]
+    assert "payments have been recorded against it" in response.json()["error"]["message"]
 
 
 def test_a_duplicate_reference_is_still_409(engine: Engine, session: Session) -> None:

@@ -660,8 +660,9 @@ def test_the_migration_chain_is_eleven_revisions() -> None:
     # Stage 7.11 added 0015 (`copilot_conversations`, `copilot_messages`).
     # Issue 1 added 0016 (`demand_observation_periods`).
     # Issue 4 added 0017 (the `llm_invocations` retention rule; no table).
-    assert len(revisions) == 17
-    assert revisions[-1] == "20261003_0017_llm_invocation_retention.py"
+    # Issue H3 added 0018 (three foreign keys recreated; no table).
+    assert len(revisions) == 18
+    assert revisions[-1] == "20261006_0018_composite_set_null_columns.py"
 
 
 # ======================================================================================

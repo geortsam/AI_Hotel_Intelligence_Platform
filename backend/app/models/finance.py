@@ -97,7 +97,8 @@ class Revenue(TimestampMixin, Base):
             ["booking_id", "hotel_id"],
             ["bookings.id", "bookings.hotel_id"],
             name="fk_revenue_booking_id_hotel_id_bookings",
-            ondelete="SET NULL",
+            # Issue H3 (0018): null the stay only; the ledger line and its hotel stay.
+            ondelete="SET NULL (booking_id)",
         ),
         CheckConstraint("tax_amount >= 0", name="tax_amount_non_negative"),
         CheckConstraint("currency ~ '^[A-Z]{3}$'", name="currency_format"),

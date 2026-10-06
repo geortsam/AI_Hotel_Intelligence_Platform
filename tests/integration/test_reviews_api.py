@@ -841,39 +841,45 @@ def test_reviews_cannot_be_deleted_or_replaced(
     assert response.status_code == 405
 
 
-# --- ON DELETE: the SET NULL that cannot fire -----------------------------------------------------
+# --- ON DELETE: SET NULL (booking_id) and SET NULL (guest_id), migration 0018 ---------------------
 
 
-def test_deleting_a_guest_with_a_review_is_refused(
+def test_deleting_a_reviewed_booking_keeps_the_review_detached(
+    api: TestClient, stay: tuple[str, str, str], session: Session
+) -> None:
+    """fk_reviews_booking_id_hotel_id_bookings is ON DELETE SET NULL (booking_id) since 0018.
+
+    Before it, the bare SET NULL also nulled the NOT NULL hotel_id and the delete failed with
+    23502. Now the review stays, keeps its hotel and its author, and forgets only the stay --
+    and the hotel's list still shows it, with no booking.
+    """
+    hotel, booking, guest = stay
+    api.post(review_url(hotel, booking), json=review_payload(title="Kept"))
+
+    response = api.delete(f"/api/v1/hotels/{hotel}/bookings/{booking}")
+
+    assert response.status_code == 204, response.text
+    [listed] = api.get(list_url(hotel)).json()["items"]
+    assert listed["booking_public_id"] is None
+    assert listed["guest_public_id"] == guest
+    assert (listed["title"], listed["rating"]) == ("Kept", "4.50")
+    stored = session.scalars(sa.select(Review)).one()
+    assert stored.booking_id is None and stored.guest_id is not None
+
+
+def test_a_reviewer_with_the_stay_still_cannot_be_deleted(
     api: TestClient, stay: tuple[str, str, str]
 ) -> None:
-    """SCHEMA CONTRADICTION, verified live rather than assumed.
-
-    fk_reviews_guest_id_hotel_id_guests declares ON DELETE SET NULL over (guest_id, hotel_id).
-    PostgreSQL nulls EVERY referencing column, and reviews.hotel_id is NOT NULL, so the
-    policy cannot execute: the attempt raises 23502 and the delete is refused. The declared
-    intent -- keep the review, forget the author -- never happens.
-    """
+    """A review written through the API always has a booking, and bookings RESTRICT the guest:
+    the refusal is the reservation's, and it no longer names the review."""
     hotel, booking, guest = stay
     api.post(review_url(hotel, booking), json=review_payload())
 
     response = api.delete(f"/api/v1/hotels/{hotel}/guests/{guest}")
 
     assert response.status_code == 409
-    assert "reviews" in response.json()["error"]["message"]
-
-
-def test_deleting_a_booking_with_a_review_is_refused(
-    api: TestClient, stay: tuple[str, str, str]
-) -> None:
-    """The same contradiction on fk_reviews_booking_id_hotel_id_bookings."""
-    hotel, booking, _ = stay
-    api.post(review_url(hotel, booking), json=review_payload())
-
-    response = api.delete(f"/api/v1/hotels/{hotel}/bookings/{booking}")
-
-    assert response.status_code == 409
-    assert "reviews" in response.json()["error"]["message"]
+    assert "reservations" in response.json()["error"]["message"]
+    assert "review" not in response.json()["error"]["message"]
 
 
 def test_the_refused_delete_leaves_both_rows_intact(
@@ -883,7 +889,7 @@ def test_the_refused_delete_leaves_both_rows_intact(
     hotel, booking, guest = stay
     api.post(review_url(hotel, booking), json=review_payload())
 
-    api.delete(f"/api/v1/hotels/{hotel}/guests/{guest}")
+    assert api.delete(f"/api/v1/hotels/{hotel}/guests/{guest}").status_code == 409
 
     assert api.get(f"/api/v1/hotels/{hotel}/guests/{guest}").status_code == 200
     stored = session.scalars(sa.select(Review)).one()
@@ -897,9 +903,20 @@ def test_the_refusal_leaks_no_sqlstate_or_constraint_name(
     hotel, booking, guest = stay
     api.post(review_url(hotel, booking), json=review_payload())
 
-    text = api.delete(f"/api/v1/hotels/{hotel}/guests/{guest}").text
+    response = api.delete(f"/api/v1/hotels/{hotel}/guests/{guest}")
+    assert response.status_code == 409, "the leak check needs a refusal to inspect"
+    text = response.text
 
-    for leak in ["23502", "fk_reviews", "not-null", "psycopg", "DETAIL:", "hotel_id"]:
+    for leak in [
+        "23502",
+        "23503",
+        "fk_reviews",
+        "fk_bookings",
+        "not-null",
+        "psycopg",
+        "DETAIL:",
+        "hotel_id",
+    ]:
         assert leak.lower() not in text.lower(), f"leaked {leak!r}"
 
 

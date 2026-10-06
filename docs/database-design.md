@@ -5,7 +5,7 @@
 > migrations (users, memberships, platform admins, audit events, audit archive, served demand
 > predictions, LLM invocations, knowledge documents, copilot conversations, declared demand
 > observation periods, the LLM-invocation retention rule); the head is now
-> `0017_llm_invocation_retention` over 28 application tables. The "design only" status line below
+> `0018_composite_set_null_columns` (Issue H3, three foreign keys recreated, no table) over 28 application tables. The "design only" status line below
 > describes this document at the time it was written, not the repository today.
 
 **Status: design only. No ORM models, no migrations, no SQL has been written.**
@@ -898,39 +898,37 @@ committed?", which is what profitability analysis actually needs.
 | Booking → Payments | 1 : N | Booking may have 0 | RESTRICT | Unpaid bookings are valid |
 | Payment → Payment (refund) | 1 : N | Self-referencing, optional | RESTRICT | |
 | Hotel → Reviews | 1 : N | Hotel may have 0 | CASCADE | |
-| Booking → Reviews | 1 : 0..1 | **Optional both ways** | SET NULL — **unreachable, see below** | Enforced by partial unique on `booking_id` |
-| Guest → Reviews | 1 : N | **Optional** | SET NULL — **unreachable, see below** | Null for external reviews |
+| Booking → Reviews | 1 : 0..1 | **Optional both ways** | SET NULL (`booking_id`) — see below | Enforced by partial unique on `booking_id` |
+| Guest → Reviews | 1 : N | **Optional** | SET NULL (`guest_id`) — see below | Null for external reviews |
 | Hotel → DailyHotelMetrics | 1 : N | Exactly one per date | CASCADE | Derived data — safe to cascade |
 | Hotel → Revenue | 1 : N | Hotel may have 0 | RESTRICT | |
-| Booking → Revenue | 1 : N | **Optional** | SET NULL — **unreachable, see below** | Null for non-guest spend |
+| Booking → Revenue | 1 : N | **Optional** | SET NULL (`booking_id`) — see below | Null for non-guest spend |
 | RevenueCategory → Revenue | 1 : N | — | RESTRICT | |
 | Hotel → Expenses | 1 : N | Hotel may have 0 | RESTRICT | |
 | ExpenseCategory → Expenses | 1 : N | — | RESTRICT | |
 
-**The three `SET NULL` policies cannot fire.** Verified live against PostgreSQL 18.6 in
-Stage 3B.8, not inferred from the DDL. Each is declared over a *composite* foreign key that
-carries `hotel_id`:
+**The three `SET NULL` policies keep the child and forget only the parent.** The three are recreated by migration `0018_composite_set_null_columns` (Issue H3) with a **column list**, so
+deleting the parent nulls only the optional reference and never the tenant:
 
 ```
-fk_reviews_guest_id_hotel_id_guests      (guest_id,   hotel_id) -> guests(id, hotel_id)
-fk_reviews_booking_id_hotel_id_bookings  (booking_id, hotel_id) -> bookings(id, hotel_id)
-fk_revenue_booking_id_hotel_id_bookings  (booking_id, hotel_id) -> bookings(id, hotel_id)
+fk_revenue_booking_id_hotel_id_bookings  (booking_id, hotel_id) -> bookings  ON DELETE SET NULL (booking_id)
+fk_reviews_booking_id_hotel_id_bookings  (booking_id, hotel_id) -> bookings  ON DELETE SET NULL (booking_id)
+fk_reviews_guest_id_hotel_id_guests      (guest_id,   hotel_id) -> guests    ON DELETE SET NULL (guest_id)
 ```
 
-PostgreSQL sets **every** referencing column to NULL when `SET NULL` fires, and the child's
-`hotel_id` is `NOT NULL`. The attempt therefore raises `23502 not_null_violation` and the parent
-delete is **refused**. Observed message:
+- Deleting a booking keeps its revenue lines and its review: `revenue.booking_id` and
+  `reviews.booking_id` become NULL, and `hotel_id` and every other column are unchanged.
+- Deleting a guest keeps their reviews: `reviews.guest_id` becomes NULL, `hotel_id` unchanged.
+- `payments` still RESTRICTs a booking's deletion, and `bookings` still RESTRICTs a guest's.
+- A detached row is the shape an external review or walk-in revenue already had. Under
+  `MATCH SIMPLE` a NULL reference is not checked, and `hotel_id` is never nulled, so no partial
+  or cross-tenant key can arise. A review whose booking is gone is still listed by its hotel,
+  with `booking_public_id: null`; it has no URL of its own, so it can no longer be moderated.
 
-> `null value in column "hotel_id" of relation "reviews" violates not-null constraint`
-
-So the effective behaviour is an undeclared RESTRICT, announced with the wrong SQLSTATE. The
-declared intent — keep the review, forget the author — never happens; a guest or booking with a
-review simply cannot be deleted.
-
-The services already report this as a dependency conflict (409) rather than leaking a not-null
-error, and the integration suites assert the *actual* behaviour. **The fix is a column list on
-the FK** (`ON DELETE SET NULL (guest_id)`, PostgreSQL 15+), deferred to a dedicated schema
-correction stage rather than smuggled into a domain stage.
+Before `0018_composite_set_null_columns` the keys were declared without a column list. PostgreSQL then sets **every**
+referencing column to NULL, `hotel_id` is NOT NULL, and the parent's delete failed with `23502` --
+an undeclared RESTRICT that `docs/backend-architecture.md` §9 recorded as schema debt until
+this correction.
 
 **On delete policies.** `RESTRICT` is the default across operational data on purpose: deleting a
 hotel that has bookings should *fail loudly*, not silently erase financial history. `CASCADE` is

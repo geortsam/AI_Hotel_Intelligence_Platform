@@ -814,7 +814,7 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     """
     chain = revisions()
 
-    assert len(chain) == 17
+    assert len(chain) == 18
     roots = [rev for rev, down in chain.items() if down is None]
     heads = [rev for rev in chain if rev not in set(chain.values())]
 
@@ -832,7 +832,9 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     # touches no audit table: the audit trail's refusal to delete stands.
     # Issue 1 added 0016, which creates `demand_observation_periods` and touches no audit table:
     # a declaration is an operator's act with no actor, like the purge and the archival.
-    assert heads == ["0017_llm_invocation_retention"]
+    # Issue H3 added 0018, which recreates three foreign keys of `revenue` and `reviews` and
+    # touches no audit table.
+    assert heads == ["0018_composite_set_null_columns"]
     assert chain["0007_audit_events"] == "0006_users_password_changed_at"
     assert chain["0008_audit_retention_archive"] == "0007_audit_events"
     assert chain["0009_audit_booking_deleted"] == "0008_audit_retention_archive"
@@ -842,9 +844,10 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     assert chain["0015_copilot_conversations"] == "0014_hotel_documents"
     assert chain["0016_demand_observation_periods"] == "0015_copilot_conversations"
     assert chain["0017_llm_invocation_retention"] == "0016_demand_observation_periods"
+    assert chain["0018_composite_set_null_columns"] == "0017_llm_invocation_retention"
     # Every other revision is somebody's parent exactly once: no fork.
     parents = [down for down in chain.values() if down is not None]
-    assert len(parents) == len(set(parents)) == 16
+    assert len(parents) == len(set(parents)) == 17
 
 
 def test_the_audit_table_is_created_by_exactly_one_migration() -> None:

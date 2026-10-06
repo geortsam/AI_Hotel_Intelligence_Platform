@@ -12,7 +12,7 @@ database *as a database*, kept separate from the application code that queries i
 
 ## Current state
 
-**Seventeen migrations, head `0017_llm_invocation_retention`,** applied by `alembic upgrade
+**Eighteen migrations, head `0018_composite_set_null_columns`,** applied by `alembic upgrade
 head`. They build **28 tables** and the `historical_room_overlaps` view; with Alembic's own
 `alembic_version`, a migrated database reports 30 entries in `information_schema.tables`. Every
 one of the 28 is ORM-mapped -- `tests/backend/test_model_metadata.py` pins the list, so a table

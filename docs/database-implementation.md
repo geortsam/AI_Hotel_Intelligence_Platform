@@ -9,8 +9,9 @@
 > `0013_llm_invocations` (7.7, one append-only table), `0014_hotel_documents` (7.9, the two
 > knowledge-document tables) and `0015_copilot_conversations` (7.11, the two conversation
 > tables); `0016_demand_observation_periods` (Issue 1, the declared observation spans); and
-> `0017_llm_invocation_retention` (Issue 4, the `llm_invocations` retention rule, no table). The
-> head is `0017` across 17 linear revisions. In particular, §9's environment notes describe the machine as it
+> `0017_llm_invocation_retention` (Issue 4, the `llm_invocations` retention rule, no table); and
+> `0018_composite_set_null_columns` (Issue H3, three composite `SET NULL` keys recreated with column lists, no
+> table). The head is `0018` across 18 linear revisions. In particular, §9's environment notes describe the machine as it
 > was at Stage 2B, not as it is. See [architecture.md](architecture.md) and
 > [../database/README.md](../database/README.md).
 

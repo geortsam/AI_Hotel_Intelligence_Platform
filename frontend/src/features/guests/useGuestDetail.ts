@@ -21,7 +21,7 @@ import type { Guest, GuestUpdateRequest } from '@/types/guest'
  * ## Delete is separated from update, because its refusals differ
  *
  * `DELETE` needs the **manager** role where `PATCH` needs staff, and it has a 409 that update
- * does not: a guest with reservations or reviews cannot be removed. Both outcomes are the
+ * does not: a guest with reservations cannot be removed. Both outcomes are the
  * database's, and the hook reports which mutation failed so the page can say the right thing.
  *
  * `inFlight` is a ref rather than state: two clicks in the same tick both read the same stale

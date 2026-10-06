@@ -464,8 +464,9 @@ def test_the_migration_chain_is_unchanged() -> None:
     # that the ML work of Stage 6.3 needed no schema change of its own, and it still did not.
     # Issue 1 added 0016 (`demand_observation_periods`), a declaration table, not a model change.
     # Issue 4 added 0017 (the `llm_invocations` retention rule), which no model reads.
-    assert len(revisions) == 17
-    assert revisions[-1].endswith("0017_llm_invocation_retention.py")
+    # Issue H3 added 0018 (three foreign keys of `revenue` and `reviews`), which no model reads.
+    assert len(revisions) == 18
+    assert revisions[-1].endswith("20261006_0018_composite_set_null_columns.py")
 
 
 #: Committed beside the model: four JSON records. `model.pkl` is the Stage 6.5 payload, which is

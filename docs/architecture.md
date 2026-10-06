@@ -191,8 +191,10 @@ to the demand model, its dataset and the intelligence forecasts alike. Spans are
 operator with `python -m app.jobs.demand_observation` (no route), and go with their hotel (`CASCADE`). Issue 4 added the
 eighth, `0017_llm_invocation_retention`, which creates nothing: it replaces the body of `llm_invocations`'
 trigger function, so a record is kept 365 days and then deleted by the operator's purge
-(`python -m app.jobs.purge_llm_invocations`, no route); UPDATE is still refused. Head `0017` across
-17 linear revisions, 28 application tables. Four of V2's tables reference `hotels` with `RESTRICT`, so — as V1's
+(`python -m app.jobs.purge_llm_invocations`, no route); UPDATE is still refused. Issue H3 added the
+ninth, `0018_composite_set_null_columns`, which recreates the three composite `SET NULL` keys of `revenue` and
+`reviews` with column lists, so deleting a booking or a guest keeps those rows and nulls only the
+reference. Head `0018` across 18 linear revisions, 28 application tables. Four of V2's tables reference `hotels` with `RESTRICT`, so — as V1's
 append-only audit trail already did — they can make a hotel undeletable: `DELETE /hotels/{id}`
 still answers 409 rather than cascading. See [v2-architecture.md](v2-architecture.md) §10. See [knowledge-documents.md](knowledge-documents.md) and
 [copilot-conversations.md](copilot-conversations.md).

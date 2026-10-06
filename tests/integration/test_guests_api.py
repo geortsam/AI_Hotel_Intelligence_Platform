@@ -497,58 +497,61 @@ def add_review(session: Session, guest: Guest) -> None:
     session.commit()
 
 
-def test_the_reviews_set_null_policy_cannot_fire_so_the_delete_is_refused(
+def test_deleting_a_guest_keeps_their_reviews_without_them(
     api: TestClient, hotel_id: str, session: Session
 ) -> None:
-    """A frozen-schema fact that the declaration alone does not reveal.
+    """``reviews.(guest_id, hotel_id)`` is ON DELETE SET NULL (guest_id) since migration 0018.
 
-    ``reviews.(guest_id, hotel_id)`` is declared ON DELETE SET NULL, which reads as though a
-    guest with reviews were deletable. PostgreSQL nulls EVERY column of a composite key, and
-    ``reviews.hotel_id`` is NOT NULL -- so the policy cannot fire and the delete fails with
-    23502 on that column. The declared SET NULL is unreachable in this schema.
-
-    Asserted against the live database rather than inferred from the DDL.
+    Before it, the SET NULL had no column list: PostgreSQL nulled ``hotel_id`` as well, which is
+    NOT NULL, and the delete failed with 23502. Now the review keeps its hotel and everything it
+    says, and forgets only its author. Asserted against the live database.
     """
     created = api.post(guests_url(hotel_id), json=guest_payload()).json()
-    add_review(session, session.scalars(sa.select(Guest)).one())
+    guest = session.scalars(sa.select(Guest)).one()
+    hotel = guest.hotel_id
+    add_review(session, guest)
 
     response = api.delete(f"{guests_url(hotel_id)}/{created['public_id']}")
-    body = response.json()
+
+    assert response.status_code == 204, response.text
+    session.expire_all()
+    assert session.scalar(sa.select(sa.func.count()).select_from(Guest)) == 0
+    review = session.scalars(sa.select(Review)).one()
+    assert (review.guest_id, review.hotel_id) == (None, hotel)
+    assert (review.rating, review.review_date) == (Decimal("5.00"), dt.date(2026, 9, 10))
+
+
+def test_a_guest_with_a_reservation_still_cannot_be_deleted_whatever_their_reviews(
+    api: TestClient, hotel_id: str, session: Session
+) -> None:
+    """The RESTRICT from bookings is untouched by 0018, and the refusal names it alone."""
+    created = api.post(guests_url(hotel_id), json=guest_payload()).json()
+    guest = session.scalars(sa.select(Guest)).one()
+    attach_booking(session, guest)
+    add_review(session, guest)
+
+    response = api.delete(f"{guests_url(hotel_id)}/{created['public_id']}")
+    message = response.json()["error"]["message"]
 
     assert response.status_code == 409
-    assert body["error"]["code"] == "CONFLICT"
-    assert "cannot be deleted" in body["error"]["message"]
-    assert "reviews" in body["error"]["message"]
-
-    # Neither row was touched.
+    assert "reservations" in message
+    assert "review" not in message
     session.expire_all()
     assert session.scalar(sa.select(sa.func.count()).select_from(Guest)) == 1
     assert session.scalars(sa.select(Review)).one().guest_id is not None
 
 
-def test_the_guest_becomes_deletable_once_the_review_is_gone(
-    api: TestClient, hotel_id: str, session: Session
-) -> None:
-    """Confirms the review really is what blocks it -- not something else."""
-    created = api.post(guests_url(hotel_id), json=guest_payload()).json()
-    add_review(session, session.scalars(sa.select(Guest)).one())
-    assert api.delete(f"{guests_url(hotel_id)}/{created['public_id']}").status_code == 409
-
-    session.execute(sa.delete(Review))
-    session.commit()
-
-    assert api.delete(f"{guests_url(hotel_id)}/{created['public_id']}").status_code == 204
-
-
 def test_a_refused_delete_leaks_no_constraint_column_or_sql(
     api: TestClient, hotel_id: str, session: Session
 ) -> None:
-    """The driver message names reviews.hotel_id and the failing statement; neither may
+    """The driver message names the constraint, the column and the failing statement; none may
     reach the client."""
     created = api.post(guests_url(hotel_id), json=guest_payload(email=EMAIL)).json()
-    add_review(session, session.scalars(sa.select(Guest)).one())
+    attach_booking(session, session.scalars(sa.select(Guest)).one())
 
-    text = api.delete(f"{guests_url(hotel_id)}/{created['public_id']}").text.lower()
+    response = api.delete(f"{guests_url(hotel_id)}/{created['public_id']}")
+    assert response.status_code == 409, "the leak check needs a refusal to inspect"
+    text = response.text.lower()
 
     for leak in [
         "hotel_id",
@@ -557,7 +560,11 @@ def test_a_refused_delete_leaks_no_constraint_column_or_sql(
         "psycopg",
         "sqlalchemy",
         "notnullviolation",
+        "foreignkeyviolation",
+        "fk_bookings",
         "23502",
+        "23503",
+        "23001",
         "detail:",
     ]:
         assert leak not in text, f"leaked {leak!r}"
