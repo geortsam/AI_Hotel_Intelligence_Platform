@@ -1039,8 +1039,9 @@ def test_the_api_surface_is_the_one_stage_73_published() -> None:
     # Stage 7.9 added the knowledge documents and their search: 55 / 87 -> 60 / 93.
     # Stage 7.11 added the copilot conversations: 60 / 93 -> 63 / 98.
     # Stage 7.12 added the attention list: 63 / 98 -> 64 / 99.
-    assert len(schema["paths"]) == 64
-    assert operations == 99
+    # Issue H2 added the early departure and its preview: 64 / 99 -> 65 / 101.
+    assert len(schema["paths"]) == 65
+    assert operations == 101
 
 
 def test_the_frozen_result_type_is_still_not_an_http_contract() -> None:

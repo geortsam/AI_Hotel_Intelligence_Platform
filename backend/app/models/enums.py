@@ -526,6 +526,9 @@ SAFE_AUDIT_DETAIL_KEYS: frozenset[str] = frozenset(
         # A date, like the two above it, and the only way an audit row can say how much
         # longer the guest stayed rather than merely when they now leave.
         "previous_check_out_date",
+        # Issue H2. How many night rows an early departure removed: a count, like `nights`,
+        # which an extension uses for the nights it ADDED.
+        "nights_removed",
         # The charge a refund reverses, named by its public identifier.
         "refunds_public_id",
         # The booking a payment settles, likewise.

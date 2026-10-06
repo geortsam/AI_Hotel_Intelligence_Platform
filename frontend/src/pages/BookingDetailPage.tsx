@@ -19,10 +19,12 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { BookingStatusBadge } from '@/features/bookings/BookingStatusBadge'
 import { RepricingNotice } from '@/features/bookings/RepricingNotice'
+import { EarlyDepartureForm } from '@/features/bookings/EarlyDepartureForm'
 import { StatusActions } from '@/features/bookings/StatusActions'
 import { StayEditor } from '@/features/bookings/StayEditor'
 import { StayExtensionForm } from '@/features/bookings/StayExtensionForm'
 import { canExtendStay, canModifyStay } from '@/features/bookings/transitions'
+import { todayInZone } from '@/features/dashboard/period'
 import { paymentStatePresentation, sourceLabel } from '@/features/bookings/vocabulary'
 import { useBookingDetail } from '@/features/bookings/useBookingDetail'
 import { useBookingMutations } from '@/features/bookings/useBookingMutations'
@@ -48,6 +50,7 @@ import type {
   Booking,
   BookingReconciliation,
   BookingStatus,
+  StayDepartureRequest,
   StayExtensionRequest,
   StayModificationRequest,
 } from '@/types/booking'
@@ -165,7 +168,12 @@ export function BookingDetailPage() {
   return (
     <Frame reference={booking.reference} status={booking.status}>
       <div className={styles.sections}>
-        <OperationsSection booking={booking} mutations={mutations} />
+        <OperationsSection
+          booking={booking}
+          mutations={mutations}
+          hotelPublicId={booking.hotel_public_id}
+          timeZone={timeZone}
+        />
         <OverviewSection booking={booking} timeZone={timeZone} />
         <StaySection booking={booking} />
         <GuestSection guest={guest} />
@@ -265,25 +273,45 @@ function Fact({ label, children }: { readonly label: string; readonly children: 
 function OperationsSection({
   booking,
   mutations,
+  hotelPublicId,
+  timeZone,
 }: {
   booking: Booking
   mutations: ReturnType<typeof useBookingMutations>
+  hotelPublicId: string
+  timeZone: string
 }) {
-  const [editing, setEditing] = useState<'stay' | 'extension' | null>(null)
+  const [editing, setEditing] = useState<'stay' | 'extension' | 'departure' | null>(null)
   const { pending, outcome, error, dismiss } = mutations
   const busy = pending !== null
+  // Which operation the failure belongs to, so a refused departure gets its own copy.
+  const [attempted, setAttempted] = useState<'depart' | 'other'>('other')
 
   // The target being applied, so only the pressed button says "Working…".
   const [runningTarget, setRunningTarget] = useState<BookingStatus | null>(null)
 
+  // Issue H2. The hotel's own date: checking a guest out before the planned check-out is an
+  // early departure, recorded on its own route -- the server refuses the plain check-out.
+  const today = todayInZone(timeZone)
+
   const changeStatus = useCallback(
     (target: BookingStatus, reason?: string) => {
+      if (
+        target === 'checked_out' &&
+        booking.status === 'checked_in' &&
+        booking.check_out_date > today
+      ) {
+        dismiss()
+        setEditing('departure')
+        return
+      }
+      setAttempted('other')
       setRunningTarget(target)
       void mutations.changeStatus(target, reason).finally(() => {
         setRunningTarget(null)
       })
     },
-    [mutations],
+    [mutations, booking.status, booking.check_out_date, today, dismiss],
   )
 
   const submitStay = useCallback(
@@ -304,7 +332,23 @@ function OperationsSection({
     [mutations],
   )
 
-  const failure = error === null ? null : describeFailure(error, MUTATION_FAILURE_COPY)
+  const submitDeparture = useCallback(
+    (payload: StayDepartureRequest) => {
+      setAttempted('depart')
+      void mutations.departEarly(payload).then(() => {
+        setEditing((current) => (current === 'departure' ? null : current))
+      })
+    },
+    [mutations],
+  )
+
+  const failure =
+    error === null
+      ? null
+      : describeFailure(
+          error,
+          attempted === 'depart' ? DEPARTURE_FAILURE_COPY : MUTATION_FAILURE_COPY,
+        )
 
   return (
     <Card padded={false}>
@@ -377,6 +421,17 @@ function OperationsSection({
                   </Button>
                 ) : null}
               </div>
+            ) : editing === 'departure' ? (
+              <EarlyDepartureForm
+                hotelPublicId={hotelPublicId}
+                booking={booking}
+                today={today}
+                busy={busy}
+                onSubmit={submitDeparture}
+                onCancel={() => {
+                  setEditing(null)
+                }}
+              />
             ) : editing === 'stay' ? (
               <StayEditor
                 booking={booking}
@@ -428,6 +483,17 @@ const MUTATION_FAILURE_COPY = {
   serverFault: {
     title: 'The action could not be completed',
     detail: 'The request did not go through. Reload the booking and try again shortly.',
+    canRetry: false,
+  },
+} as const
+
+/** What a refused early departure says (Issue H2). Fixed copy, like every refusal here. */
+const DEPARTURE_FAILURE_COPY = {
+  ...MUTATION_FAILURE_COPY,
+  conflict: {
+    title: 'The early departure was not recorded',
+    detail:
+      'The booking may no longer be checked in, or the date is outside the range the server accepts. Nothing was changed. Reload the booking and try again.',
     canRetry: false,
   },
 } as const

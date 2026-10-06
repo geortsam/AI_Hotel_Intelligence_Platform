@@ -369,8 +369,9 @@ def test_the_openapi_document_is_unchanged() -> None:
     # Stage 7.9 added the knowledge documents and their search: 55 / 87 -> 60 / 93.
     # Stage 7.11 added the copilot conversations: 60 / 93 -> 63 / 98.
     # Stage 7.12 added the attention list: 63 / 98 -> 64 / 99.
-    assert len(spec["paths"]) == 64
-    assert len(operations) == 99
+    # Issue H2 added the early departure and its preview: 64 / 99 -> 65 / 101.
+    assert len(spec["paths"]) == 65
+    assert len(operations) == 101
     # Built from the real factory, so the middleware is present -- and contributes nothing.
     assert not any("security" in path.lower() for path in spec["paths"])
 

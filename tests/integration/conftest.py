@@ -182,6 +182,24 @@ def session(engine: Engine) -> Iterator[Session]:
         s.commit()
 
 
+#: An instant after every stay any suite books (Issue H2).
+AFTER_EVERY_STAY = dt.datetime(2031, 1, 1, 12, tzinfo=dt.UTC)
+
+
+def stand_after_every_stay(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Read the booking service's "now" as :data:`AFTER_EVERY_STAY`.
+
+    Issue H2 refuses a plain ``checked_in -> checked_out`` before the planned check-out: that
+    is an early departure, recorded on its own route. A suite that walks the lifecycle over
+    stays dated in the future therefore stands after all of them, so its check-outs are on
+    time; what it asserts about the lifecycle is unchanged. ``test_early_departure.py`` is
+    where the date rule itself is tested.
+    """
+    import app.services.booking as booking_module
+
+    monkeypatch.setattr(booking_module, "utc_now", lambda: AFTER_EVERY_STAY)
+
+
 # --------------------------------------------------------------------------------------
 # Builders. Each returns a persisted row so tests read as scenarios, not as setup noise.
 # --------------------------------------------------------------------------------------

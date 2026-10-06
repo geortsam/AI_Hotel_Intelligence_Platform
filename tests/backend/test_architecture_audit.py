@@ -468,7 +468,8 @@ def test_every_documented_422_is_the_envelope_the_handler_really_sends() -> None
         if "422" in operation["responses"]
     }
 
-    assert len(documented) == 95
+    # Issue H2: the departure's body and its preview's query are both validated: 95 -> 97.
+    assert len(documented) == 97
     for key, refusal in documented.items():
         schema = refusal["content"]["application/json"]["schema"]
         assert schema == {"$ref": "#/components/schemas/ErrorResponse"}, key
@@ -630,6 +631,9 @@ NON_CREATING_POSTS = {
     # resource: the added nights belong to the booking that was already there, and its
     # URL does not change. 201 would promise a Location that does not exist.
     "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/stay/extension": "200",
+    # Issue H2. An early departure likewise creates nothing: it shortens and checks out the
+    # booking that was already there, whose URL does not change.
+    "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/stay/departure": "200",
     # Stage 7.7. Asking a question creates no resource: the answer is returned, not kept,
     # and the accounting row it leaves is not addressable. 201 would promise a Location.
     "/api/v1/hotels/{hotel_public_id}/copilot/ask": "200",

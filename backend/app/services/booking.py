@@ -50,6 +50,7 @@ from app.core.errors import (
     relation_of,
     sqlstate_of,
 )
+from app.ml.accuracy_protocol import SETTLEMENT_LAG_DAYS
 from app.models.booking import Booking, BookingRoom, BookingRoomNight
 from app.models.enums import (
     EXTENDABLE_BOOKING_STATUSES,
@@ -58,6 +59,7 @@ from app.models.enums import (
     TERMINAL_BOOKING_STATUSES,
     AuditAction,
     AuditResourceType,
+    BookingStatus,
     is_booking_transition_allowed,
 )
 from app.models.hotel import Hotel
@@ -72,6 +74,8 @@ from app.schemas.booking import (
     BookingRoomResponse,
     BookingUpdate,
     RoomInputBase,
+    StayDeparture,
+    StayDeparturePreview,
     StayExtension,
     StayModification,
     StayModificationResponse,
@@ -79,6 +83,7 @@ from app.schemas.booking import (
 )
 from app.schemas.common import Page
 from app.services.audit import AuditTrail
+from app.services.business_day import Clock, hotel_today, utc_now
 from app.services.pricing import NightRequest, PricingService
 from app.services.repricing import RepricingOutcome, RepricingPolicy
 from app.services.scope import HotelScopeResolver
@@ -116,6 +121,15 @@ OVERLAP_CONSTRAINT = "excl_booking_rooms_room_no_overlap"
 #: and each such request is a separately audited act. That is the honest reading of what
 #: this limit protects.
 MAX_EXTENSION_NIGHTS = 366
+
+#: How far back an early departure may be recorded (Issue H2).
+#:
+#: The accuracy protocol scores a night once it is :data:`SETTLEMENT_LAG_DAYS` old, and states
+#: that a checked-in night is already final. An early departure removes nights from a
+#: checked-in stay, so it may reach back no further than that: every night it removes is
+#: within the last 28 days or later, and so never one an accuracy period may already have
+#: scored. The protocol's own constant, not a copy -- if the lag changed, this would follow.
+DEPARTURE_LOOKBACK_DAYS = SETTLEMENT_LAG_DAYS
 REFERENCE_CONSTRAINT = "uq_bookings_hotel_id_reference"
 
 #: The relations that can legitimately block a booking's deletion (Stage 4.5.16).
@@ -161,6 +175,8 @@ class BookingService:
         audit: AuditTrail,
         pricing: PricingService,
         payments: PaymentRepository,
+        *,
+        clock: Clock | None = None,
     ) -> None:
         self._session = session
         self._repository = repository
@@ -178,6 +194,8 @@ class BookingService:
         # Stage 4.5.12. Required, not optional: a booking service that could be constructed
         # without one would be a booking service that could write unaudited.
         self._audit = audit
+        # Issue H2: what the hotel's "today" is when a departure is judged. Injected for tests.
+        self._clock = clock or utc_now
 
     # --- reads --------------------------------------------------------------------------
 
@@ -376,6 +394,11 @@ class BookingService:
                 # Issue H1. Moving into a status that holds inventory puts every allocated
                 # room on sale, so it is refused on an inactive room as creation would be.
                 self._require_for_sale([allocation.room_id for allocation in booking.booking_rooms])
+            if (booking.status, changes["status"]) == (
+                BookingStatus.CHECKED_IN.value,
+                BookingStatus.CHECKED_OUT.value,
+            ):
+                self._require_departure_due(hotel, booking)
             if booking.status != changes["status"]:
                 # A PATCH asking for the status the booking already holds is permitted and
                 # is a no-op (see BOOKING_STATUS_TRANSITIONS on idempotence). Recording it
@@ -752,6 +775,215 @@ class BookingService:
             booking=self._to_response(self._require_booking(hotel, booking_public_id), hotel),
             repricing=self._render_repricing(outcome),
         )
+
+    def depart_early(
+        self,
+        hotel_public_id: uuid.UUID,
+        booking_public_id: uuid.UUID,
+        payload: StayDeparture,
+    ) -> StayModificationResponse:
+        """Record that a checked-in guest left before the planned check-out (Issue H2).
+
+        Until this existed the only way to let a departing guest go was ``checked_in ->
+        checked_out``. That releases the room -- ``checked_out`` holds no inventory -- but
+        leaves every unstayed night in the stay, and ``checked_out`` still counts as occupied:
+        the nights went on counting as occupancy and revenue, stayed owed in reconciliation,
+        and were counted twice once the freed room was sold again.
+
+        In one transaction, under the booking's row lock, and in this order:
+
+        1. the booking must be ``checked_in`` and the date allowed
+           (:meth:`_require_departure_date`);
+        2. the stay's current value is read while every night is still there;
+        3. the nights ON or after the departure date are deleted, and the money that leaves is
+           the sum of the rates those rows carried -- read back from the DELETE itself;
+        4. one UPDATE moves the check-out back to the departure date and checks the booking
+           out; the composite foreign keys carry both to every allocation and every remaining
+           night;
+        5. two audit events, the stay change and the status change, and one COMMIT.
+
+        Nights are half-open, ``[check_in, check_out)``, so the departure date is the new
+        check-out and the night of that date is not stayed. Nothing is refunded: the response
+        states what the departure did to the money, and settling it stays a separate act.
+
+        Not idempotent, like the extension: once checked out, a repeat is refused with 409.
+        """
+        hotel = self._scope.require_hotel(hotel_public_id)
+        booking = self._require_booking(hotel, booking_public_id)
+
+        # Before any decision: the status, the dates and the starting value are all read from
+        # the committed row, and nothing else can move them until this transaction ends.
+        booking = self._repository.lock_for_update(booking)
+        self._require_departable(booking.status)
+        self._require_departure_date(booking, payload.departure_date, self._today(hotel))
+
+        planned_check_out = booking.check_out_date
+        previous_total = self._repository.accommodation_total(booking.id)
+        self._require_single_currency(booking.id, booking.currency)
+        charged, refunded = self._payments.ledger_totals_for_booking(booking.id)
+        rooms = len(booking.booking_rooms)
+
+        try:
+            removed = self._repository.delete_nights_from(booking.id, payload.departure_date)
+            outcome = self._repricing.outcome(
+                currency=booking.currency,
+                previous_total=previous_total,
+                new_total=previous_total - sum(removed, decimal.Decimal("0.00")),
+                net_paid=charged - refunded,
+            )
+            self._repository.apply_changes(
+                booking,
+                {
+                    "check_out_date": payload.departure_date,
+                    "status": BookingStatus.CHECKED_OUT.value,
+                },
+            )
+            self._audit.record(
+                AuditAction.BOOKING_STAY_MODIFIED,
+                AuditResourceType.BOOKING,
+                str(booking.public_id),
+                hotel_id=hotel.id,
+                details={
+                    "changed_fields": ["check_out_date"],
+                    "previous_check_out_date": planned_check_out.isoformat(),
+                    "check_out_date": payload.departure_date.isoformat(),
+                    "nights_removed": len(removed),
+                    "rooms": rooms,
+                    "previous_amount": str(outcome.previous_total),
+                    "new_amount": str(outcome.new_total),
+                    "difference": str(outcome.difference),
+                    "currency": outcome.currency,
+                },
+            )
+            self._audit.record(
+                AuditAction.BOOKING_STATUS_CHANGED,
+                AuditResourceType.BOOKING,
+                str(booking.public_id),
+                hotel_id=hotel.id,
+                details={
+                    "old_status": BookingStatus.CHECKED_IN.value,
+                    "new_status": BookingStatus.CHECKED_OUT.value,
+                },
+            )
+            # The cascade rewrote rows SQLAlchemy never issued an UPDATE for.
+            self._repository.refresh_allocations(booking.id)
+            self._session.commit()
+        except IntegrityError as exc:
+            # All of it goes: the nights come back, the check-out and status revert, and both
+            # audit events vanish with them.
+            self._session.rollback()
+            raise self._translate(exc) from exc
+
+        return StayModificationResponse(
+            booking=self._to_response(self._require_booking(hotel, booking_public_id), hotel),
+            repricing=self._render_repricing(outcome),
+        )
+
+    def preview_departure(
+        self,
+        hotel_public_id: uuid.UUID,
+        booking_public_id: uuid.UUID,
+        departure_date: dt.date | None = None,
+    ) -> StayDeparturePreview:
+        """What :meth:`depart_early` would do on *departure_date* -- the hotel's today when
+        omitted -- refused exactly as it would refuse. Reads only: no lock, no write."""
+        hotel = self._scope.require_hotel(hotel_public_id)
+        booking = self._require_booking(hotel, booking_public_id)
+        self._require_departable(booking.status)
+        today = self._today(hotel)
+        departure = departure_date or today
+        self._require_departure_date(booking, departure, today)
+        self._require_single_currency(booking.id, booking.currency)
+
+        previous_total = self._repository.accommodation_total(booking.id)
+        removed = self._repository.nights_from(booking.id, departure)
+        charged, refunded = self._payments.ledger_totals_for_booking(booking.id)
+        outcome = self._repricing.outcome(
+            currency=booking.currency,
+            previous_total=previous_total,
+            new_total=previous_total - sum(removed, decimal.Decimal("0.00")),
+            net_paid=charged - refunded,
+        )
+        earliest, latest = self._departure_window(booking, today)
+        return StayDeparturePreview(
+            departure_date=departure,
+            earliest_departure_date=earliest,
+            latest_departure_date=latest,
+            planned_check_out_date=booking.check_out_date,
+            nights_removed=len(removed),
+            repricing=self._render_repricing(outcome),
+        )
+
+    def _today(self, hotel: Hotel) -> dt.date:
+        return hotel_today(hotel, self._clock)
+
+    @staticmethod
+    def _departure_window(booking: Booking, today: dt.date) -> tuple[dt.date, dt.date]:
+        """The earliest and latest departure dates allowed today, both inclusive."""
+        day = dt.timedelta(days=1)
+        return (
+            max(booking.check_in_date + day, today - dt.timedelta(days=DEPARTURE_LOOKBACK_DAYS)),
+            min(booking.check_out_date - day, today),
+        )
+
+    @staticmethod
+    def _require_departable(status: str) -> None:
+        """Only a guest who is in the property can leave early. Judged under the lock."""
+        if status == BookingStatus.CHECKED_IN.value:
+            return
+        raise ConflictError(f"Only a checked-in stay can depart early; this booking is {status}.")
+
+    @staticmethod
+    def _require_departure_date(booking: Booking, departure: dt.date, today: dt.date) -> None:
+        """Refuse, with 409, a departure date the stay or the hotel's calendar cannot take.
+
+        * later than check-in: a stay is at least one night;
+        * earlier than the planned check-out: leaving ON that day is an ordinary check-out;
+        * no later than the hotel's today: a departure is something that happened;
+        * no earlier than :data:`DEPARTURE_LOOKBACK_DAYS` before it: see that constant.
+        """
+        if departure <= booking.check_in_date:
+            raise ConflictError(
+                f"A departure must be later than check-in ({booking.check_in_date.isoformat()}): "
+                "a stay is at least one night."
+            )
+        if departure >= booking.check_out_date:
+            raise ConflictError(
+                "An early departure must be before the planned check-out "
+                f"({booking.check_out_date.isoformat()}); leaving on that day is an ordinary "
+                "check-out."
+            )
+        if departure > today:
+            raise ConflictError(
+                f"A departure cannot be recorded for a future date; the hotel's today is "
+                f"{today.isoformat()}."
+            )
+        earliest = today - dt.timedelta(days=DEPARTURE_LOOKBACK_DAYS)
+        if departure < earliest:
+            raise ConflictError(
+                f"A departure earlier than {earliest.isoformat()} cannot be recorded: nights more "
+                f"than {DEPARTURE_LOOKBACK_DAYS} days old may already have been scored for "
+                "forecast accuracy."
+            )
+
+    def _require_departure_due(self, hotel: Hotel, booking: Booking) -> None:
+        """Refuse a plain check-out before the planned check-out day (Issue H2).
+
+        ``checked_in -> checked_out`` releases the room but leaves the stay's nights in place,
+        and ``checked_out`` counts as occupied: done early, the unstayed nights would go on
+        counting -- and twice, once the room is sold again. An early departure is recorded
+        with :meth:`depart_early`, which removes them. On or after the planned day there is
+        nothing unstayed, and the plain check-out is unchanged.
+        """
+        today = self._today(hotel)
+        # One date against the hotel's today -- not two stays' ranges, which are PostgreSQL's.
+        if today < booking.check_out_date:
+            raise ConflictError(
+                f"This stay is planned to check out on {booking.check_out_date.isoformat()}, "
+                f"after the hotel's today ({today.isoformat()}). Record an early departure "
+                "with the stay departure operation instead, which also removes the nights "
+                "not stayed."
+            )
 
     @staticmethod
     def _render_repricing(outcome: RepricingOutcome) -> StayRepricing:

@@ -16,6 +16,7 @@ forecloses.
 
 from __future__ import annotations
 
+import datetime as dt
 import decimal
 import uuid
 from collections.abc import Sequence
@@ -164,6 +165,45 @@ class BookingRepository:
         """
         self._session.execute(sql_delete(BookingRoom).where(BookingRoom.booking_id == booking_id))
         self._session.flush()
+
+    def nights_from(self, booking_id: int, day: dt.date) -> list[decimal.Decimal]:
+        """The rate of every night of this booking ON or after *day*, every room (Issue H2).
+
+        What an early departure on *day* would remove: nights are half-open, so the night of
+        the departure date itself is not stayed. Read without a lock, for a preview.
+        """
+        return list(
+            self._session.scalars(
+                select(BookingRoomNight.rate).where(*self._nights_from(booking_id, day))
+            )
+        )
+
+    def delete_nights_from(self, booking_id: int, day: dt.date) -> list[decimal.Decimal]:
+        """Delete every night of this booking ON or after *day*, returning their stored rates.
+
+        Issue H2. ``RETURNING`` is what makes the money exact: the figure an early departure
+        reports is the sum of the rows this statement actually removed, at the rates they were
+        sold at -- not a count of nights times a price, and not the contracted total.
+
+        Run BEFORE the check-out moves back: the cascade that carries the new check-out to the
+        night rows would otherwise meet nights the shorter stay no longer covers.
+        ``synchronize_session=False``: the caller re-reads the allocations it renders.
+        """
+        rows = self._session.execute(
+            sql_delete(BookingRoomNight)
+            .where(*self._nights_from(booking_id, day))
+            .returning(BookingRoomNight.rate)
+            .execution_options(synchronize_session=False)
+        )
+        return list(rows.scalars())
+
+    @staticmethod
+    def _nights_from(booking_id: int, day: dt.date) -> tuple[Any, ...]:
+        allocations = select(BookingRoom.id).where(BookingRoom.booking_id == booking_id)
+        return (
+            BookingRoomNight.booking_room_id.in_(allocations.scalar_subquery()),
+            BookingRoomNight.stay_date >= day,
+        )
 
     def delete(self, booking: Booking) -> int:
         """Delete with a Core statement, returning how many rows went.

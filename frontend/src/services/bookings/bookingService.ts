@@ -4,6 +4,8 @@ import type {
   Booking,
   BookingReconciliation,
   BookingStatusUpdate,
+  StayDeparturePreview,
+  StayDepartureRequest,
   StayExtensionRequest,
   StayModificationRequest,
   StayModificationResponse,
@@ -201,6 +203,42 @@ export const bookingMutations = {
     return api.post<StayModificationResponse>(
       `/hotels/${hotelPublicId}/bookings/${bookingPublicId}/stay/extension`,
       { body: payload, ...(signal ? { signal } : {}) },
+    )
+  },
+
+  /**
+   * Record that a checked-in guest left before the planned check-out (Issue H2).
+   *
+   * `POST /hotels/{h}/bookings/{b}/stay/departure` with a `StayDeparture` -- one field. The
+   * departure date becomes the new check-out, every night from it on leaves the stay, and the
+   * booking is checked out, in one transaction. Not idempotent: a repeat is a 409.
+   */
+  departEarly(
+    hotelPublicId: string,
+    bookingPublicId: string,
+    payload: StayDepartureRequest,
+    signal?: AbortSignal,
+  ): Promise<StayModificationResponse> {
+    return api.post<StayModificationResponse>(
+      `/hotels/${hotelPublicId}/bookings/${bookingPublicId}/stay/departure`,
+      { body: payload, ...(signal ? { signal } : {}) },
+    )
+  },
+
+  /**
+   * What an early departure on `departureDate` would do -- read-only. The server applies the
+   * same rule, nights and ledger the departure itself would, and refuses with 409 where it
+   * would refuse.
+   */
+  previewDeparture(
+    hotelPublicId: string,
+    bookingPublicId: string,
+    departureDate: string,
+    signal?: AbortSignal,
+  ): Promise<StayDeparturePreview> {
+    return api.get<StayDeparturePreview>(
+      `/hotels/${hotelPublicId}/bookings/${bookingPublicId}/stay/departure`,
+      { query: { departure_date: departureDate }, ...(signal ? { signal } : {}) },
     )
   },
 } as const

@@ -887,7 +887,8 @@ def test_the_v1_application_is_unaffected_by_the_flag() -> None:
     # Stage 7.9 added five knowledge paths, none of which depends on the flag either.
     # Stage 7.11 added three conversation paths: like `ask`, they exist with the flag off.
     # Stage 7.12 added the attention list, which involves no language model at all.
-    assert len(off["paths"]) == 64
+    # Issue H2 added the early departure path, which involves none either.
+    assert len(off["paths"]) == 65
 
 
 # ======================================================================================

@@ -403,6 +403,8 @@ def test_the_safe_detail_keys_are_the_authorised_set() -> None:
         # Stage 4.5.27: the far end of the stay before an in-house extension
         # moved it. A date, and the only way a row can say how much LONGER.
         "previous_check_out_date",
+        # Issue H2: how many night rows an early departure removed. A count.
+        "nights_removed",
         "method",
         "refunds_public_id",
         "booking_public_id",

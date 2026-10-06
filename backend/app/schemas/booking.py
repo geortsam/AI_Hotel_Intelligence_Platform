@@ -276,6 +276,25 @@ class StayExtension(BaseModel):
     check_out_date: dt.date
 
 
+class StayDeparture(BaseModel):
+    """A checked-in guest left before the planned check-out: the day they left (Issue H2).
+
+    One field, like :class:`StayExtension`, and the mirror of it: an extension pushes the
+    departure later, this one records that it came earlier. Nights are half-open
+    ``[check_in, check_out)``, so ``departure_date`` becomes the new check-out -- the night OF
+    the departure date is not stayed, and every night from it onward leaves the stay.
+
+    Whether the date is allowed depends on the booking and on the hotel's own calendar, so it
+    is decided under the booking's row lock, not here.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The day the guest left. Later than check-in, earlier than the planned check-out, no later
+    #: than the hotel's today and no earlier than 28 days before it.
+    departure_date: dt.date
+
+
 class StayRepricing(BaseModel):
     """What a stay modification did to the money.
 
@@ -323,6 +342,28 @@ class StayModificationResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     booking: BookingResponse
+    repricing: StayRepricing
+
+
+class StayDeparturePreview(BaseModel):
+    """What recording an early departure on ``departure_date`` would do. Nothing is written.
+
+    Issue H2. The departure form shows the guest's refundable difference BEFORE it is
+    confirmed, and that figure is the server's: the same nights, the same ledger and the same
+    repricing rule the departure itself applies. The permitted range is the server's too, so
+    the form offers exactly the dates the departure would accept.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    departure_date: dt.date
+    #: The earliest and latest departure dates the booking accepts today, both inclusive.
+    earliest_departure_date: dt.date
+    latest_departure_date: dt.date
+    #: The check-out the departure would bring forward.
+    planned_check_out_date: dt.date
+    #: Night rows that would leave the stay -- one per room per night.
+    nights_removed: int
     repricing: StayRepricing
 
 
@@ -424,6 +465,8 @@ __all__ = [
     "BookingUpdate",
     "NightInputBase",
     "RoomInputBase",
+    "StayDeparture",
+    "StayDeparturePreview",
     "StayExtension",
     "StayModification",
     "StayModificationResponse",

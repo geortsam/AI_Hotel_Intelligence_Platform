@@ -231,6 +231,29 @@ export interface StayExtensionRequest {
 }
 
 /**
+ * `POST /hotels/{h}/bookings/{b}/stay/departure` -- a checked-in guest left early (Issue H2).
+ * The day they left becomes the new check-out; every night from it on leaves the stay.
+ */
+export interface StayDepartureRequest {
+  /** `YYYY-MM-DD`. Within the range the preview reports. */
+  readonly departure_date: string
+}
+
+/**
+ * `GET /hotels/{h}/bookings/{b}/stay/departure` -- what a departure on `departure_date` would
+ * do, without doing it. The range is the server's: the dates the booking accepts today.
+ */
+export interface StayDeparturePreview {
+  readonly departure_date: string
+  readonly earliest_departure_date: string
+  readonly latest_departure_date: string
+  readonly planned_check_out_date: string
+  /** Night rows that would leave the stay -- one per room per night. */
+  readonly nights_removed: number
+  readonly repricing: StayRepricing
+}
+
+/**
  * What a stay change did to the money. Every figure is server-derived.
  *
  * **Not a receipt.** The backend's own words: `additional_amount_due` has not been charged

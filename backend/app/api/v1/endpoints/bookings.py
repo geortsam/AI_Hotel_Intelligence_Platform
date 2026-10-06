@@ -15,6 +15,7 @@ by the Stage 3A handlers.
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 from typing import Annotated, Any
 
@@ -26,6 +27,8 @@ from app.schemas.booking import (
     BookingCreate,
     BookingResponse,
     BookingUpdate,
+    StayDeparture,
+    StayDeparturePreview,
     StayExtension,
     StayModification,
     StayModificationResponse,
@@ -60,6 +63,27 @@ SALE_CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
         "description": "A room is already booked for overlapping dates, a room or its room "
         "type is inactive, the reference is taken, or the booking is still referenced by other "
         "records.",
+    }
+}
+#: A status change can also be refused for checking a guest out before the planned
+#: check-out: that is an early departure, recorded on its own route (Issue H2).
+STATUS_CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
+    status.HTTP_409_CONFLICT: {
+        "model": ErrorResponse,
+        "description": "A room is already booked for overlapping dates, a room or its room "
+        "type is inactive, the lifecycle does not permit the change, or a checked-in stay is "
+        "checked out before its planned check-out -- an early departure, recorded with "
+        "POST .../stay/departure.",
+    }
+}
+#: Why an early departure, or its preview, is refused (Issue H2).
+DEPARTURE_CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
+    status.HTTP_409_CONFLICT: {
+        "model": ErrorResponse,
+        "description": "The booking is not checked_in, or the departure date is outside the "
+        "permitted range: it must be later than check-in, earlier than the planned check-out, "
+        "no later than the hotel's today and no earlier than 28 days before it. Also returned "
+        "when the booking's ledger is in another currency.",
     }
 }
 
@@ -156,8 +180,11 @@ def get_reconciliation(
     summary="Partially update a booking",
     description="Status, occupancy, source and commercial fields only. Dates, guest, "
     "reference and room allocation are not editable here -- changing them is a re-pricing "
-    "operation the deferred night-completeness trigger will not accept as a field edit.",
-    responses={**NOT_FOUND_RESPONSE, **SALE_CONFLICT_RESPONSE},
+    "operation the deferred night-completeness trigger will not accept as a field edit. "
+    "Checking a checked_in booking out before its planned check-out is refused with 409: "
+    "an early departure is recorded with POST .../stay/departure, which removes the nights "
+    "not stayed.",
+    responses={**NOT_FOUND_RESPONSE, **STATUS_CONFLICT_RESPONSE},
     # Stage 4.2: staff or above. Declared here because which role a verb
     # needs is a fact about the HTTP surface, not about the hotel.
     dependencies=[Depends(require_role(HotelRole.STAFF))],
@@ -265,6 +292,69 @@ def extend_stay(
     than for cancelling the same booking would be a policy nobody decided.
     """
     return service.extend_stay(hotel_public_id, booking_public_id, payload)
+
+
+@router.post(
+    "/{booking_public_id}/stay/departure",
+    response_model=StayModificationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Record a checked-in guest's early departure",
+    description=(
+        "A checked_in guest left before the planned check-out. The departure date becomes "
+        "the new check-out -- nights are half-open, so the night of that date is not stayed "
+        "-- every night on or after it is removed from the stay, and the booking is checked "
+        "out, in one transaction. The date must be later than check-in, earlier than the "
+        "planned check-out (leaving on that day is an ordinary check-out), no later than the "
+        "hotel's today and no earlier than 28 days before it; the hotel's today is read in "
+        "its own time zone. The response reports what the departure did to the money, "
+        "computed from the rates of the nights actually removed: nothing is refunded, and "
+        "settling a difference is a separate act through the payment endpoints. Not "
+        "idempotent: once the booking is checked out a repeat is refused with 409."
+    ),
+    dependencies=[Depends(require_role(HotelRole.STAFF))],
+    responses={**NOT_FOUND_RESPONSE, **DEPARTURE_CONFLICT_RESPONSE},
+)
+def depart_early(
+    hotel_public_id: HotelPath,
+    booking_public_id: BookingPath,
+    payload: StayDeparture,
+    service: BookingServiceDep,
+) -> StayModificationResponse:
+    """The mirror of the extension (Issue H2), and a route of its own for the same reason.
+
+    A plain ``checked_in -> checked_out`` releases the room but keeps every night, so a guest
+    who left early went on counting as occupancy and revenue. This removes the nights not
+    stayed in the same transaction that checks the guest out. STAFF, like every other change
+    to a booking's stay.
+    """
+    return service.depart_early(hotel_public_id, booking_public_id, payload)
+
+
+@router.get(
+    "/{booking_public_id}/stay/departure",
+    response_model=StayDeparturePreview,
+    summary="Preview an early departure",
+    description=(
+        "What recording an early departure on departure_date would do, without doing it: the "
+        "nights it would remove, what that would do to the money, and the range of departure "
+        "dates the booking accepts today. departure_date defaults to the hotel's today. "
+        "Refused with 409 exactly where the departure itself would be."
+    ),
+    dependencies=[Depends(require_role(HotelRole.STAFF))],
+    responses={**NOT_FOUND_RESPONSE, **DEPARTURE_CONFLICT_RESPONSE},
+)
+def preview_departure(
+    hotel_public_id: HotelPath,
+    booking_public_id: BookingPath,
+    service: BookingServiceDep,
+    departure_date: Annotated[
+        dt.date | None,
+        Query(description="The day the guest left. Defaults to the hotel's today."),
+    ] = None,
+) -> StayDeparturePreview:
+    """Read-only, so the departure form can show the server's own figure before anyone
+    confirms -- the same rule, the same nights and the same ledger. STAFF, like the action."""
+    return service.preview_departure(hotel_public_id, booking_public_id, departure_date)
 
 
 @router.delete(

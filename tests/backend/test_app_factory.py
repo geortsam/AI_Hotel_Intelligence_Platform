@@ -130,6 +130,9 @@ APPROVED_RESOURCE_SEGMENTS = {
     # policy: /stay replaces the whole aggregate and refuses a checked-in booking,
     # while this one may only push check-out outward and accepts nothing else.
     "extension",
+    # Issue H2. A checked-in guest leaving early: the mirror of /extension, a child of /stay
+    # for the same reason -- it is its own operation with its own status and date policy.
+    "departure",
     # Stage 4.5.9. A derived view of one booking: what it is worth, what has been paid, what
     # remains. Not under /analytics, whose routes are period reports and require an explicit
     # date window that a single booking has none of.
@@ -300,6 +303,7 @@ def test_domain_surface_is_exactly_the_approved_hierarchy() -> None:
         "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/reconciliation",
         "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/stay",
         "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/stay/extension",
+        "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/stay/departure",
         "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/payments",
         "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/payments/refunds",
         "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}"

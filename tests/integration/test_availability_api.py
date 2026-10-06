@@ -33,12 +33,19 @@ from tests.integration.conftest import (
     authenticated_client,
     grant_membership,
     requires_postgres,
+    stand_after_every_stay,
 )
 
 SUITE_EMAIL = "availability@example.test"
 OTHER_EMAIL = "availability-other@example.test"
 
 pytestmark = requires_postgres
+
+
+@pytest.fixture(autouse=True)
+def checked_out_on_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every check-out here is on or after its stay's planned day (Issue H2)."""
+    stand_after_every_stay(monkeypatch)
 
 
 def sep(day: int) -> dt.date:

@@ -659,6 +659,200 @@ describe('extending an in-house stay', () => {
   })
 })
 
+/* --- early departure (Issue H2) ----------------------------------------------------------- */
+
+describe('an early departure', () => {
+  /*
+   * 22:30 UTC on the 20th is 01:30 on the 21st in Athens: the hotel's today is the 21st while
+   * the browser's UTC date is still the 20th. Only `Date` is faked, so `waitFor` still polls.
+   */
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-09-20T22:30:00Z'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const IN_HOUSE = { status: 'checked_in', check_in_date: '2026-09-15', check_out_date: '2026-09-25' } as const
+
+  /** The server's preview, echoing the date it was asked about. */
+  function previewFor(departure: string) {
+    return {
+      departure_date: departure,
+      earliest_departure_date: '2026-09-16',
+      latest_departure_date: '2026-09-21',
+      planned_check_out_date: '2026-09-25',
+      nights_removed: 4,
+      repricing: {
+        currency: 'EUR',
+        previous_total: '1200.00',
+        new_total: '720.00',
+        difference: '-480.00',
+        additional_amount_due: '0.00',
+        refundable_amount: '480.00',
+        outstanding_after: '-480.00',
+        adjustment: 'refundable',
+      },
+    }
+  }
+
+  /** Registered BEFORE the page's reads: the bare `/bookings/` fragment would match it too. */
+  function stubPreview() {
+    fetchStub.on('GET', 'stay/departure', ({ url }) => ({
+      body: previewFor(new URL(url, 'http://localhost').searchParams.get('departure_date') ?? ''),
+    }))
+  }
+
+  async function openInHouse(overrides: Partial<Booking> = {}) {
+    const user = userEvent.setup()
+    stubPreview()
+    stubReads(makeBooking({ ...IN_HOUSE, ...overrides }))
+    mount()
+    await screen.findByText('Booking MH-00162')
+    return user
+  }
+
+  async function openDeparture() {
+    const user = await openInHouse()
+    await user.click(screen.getByRole('button', { name: /Mark checked out/i }))
+    await screen.findByRole('form', { name: 'Record an early departure' })
+    return user
+  }
+
+  const previewCalls = () => fetchStub.calls.filter((c) => c.url.includes('stay/departure') && c.method === 'GET')
+
+  it('opens the early-departure form instead of checking the guest out', async () => {
+    await openDeparture()
+
+    expect(mutationCalls('PATCH')).toHaveLength(0)
+    expect(screen.getByText(/Early departure\./)).toBeInTheDocument()
+  })
+
+  it('opens on the hotel’s own today, not the browser’s UTC date', async () => {
+    await openDeparture()
+
+    expect(screen.getByLabelText('Departure date')).toHaveValue('2026-09-21')
+    await waitFor(() => {
+      expect(previewCalls().length).toBeGreaterThan(0)
+    })
+    expect(previewCalls()[0]!.url).toContain(`/bookings/${BOOKING_ID}/stay/departure?departure_date=2026-09-21`)
+  })
+
+  it('offers only the server’s range of dates', async () => {
+    await openDeparture()
+
+    const input = screen.getByLabelText('Departure date')
+    await waitFor(() => {
+      expect(input).toHaveAttribute('min', '2026-09-16')
+    })
+    expect(input).toHaveAttribute('max', '2026-09-21')
+  })
+
+  it('shows what the server says the departure does to the money before anything is sent', async () => {
+    await openDeparture()
+
+    expect(await screen.findByText(/Removes 4 nights/)).toBeInTheDocument()
+    expect(screen.getByText('This change made an amount refundable')).toBeInTheDocument()
+    const refundable = screen.getByText('Refundable').closest('div') as HTMLElement
+    expect(refundable).toHaveTextContent('480.00')
+    expect(fetchStub.calls.filter((c) => c.method === 'POST')).toHaveLength(0)
+  })
+
+  it('asks the server again when the date changes', async () => {
+    await openDeparture()
+    await screen.findByText(/Removes 4 nights/)
+
+    fireEvent.change(screen.getByLabelText('Departure date'), { target: { value: '2026-09-19' } })
+
+    await waitFor(() => {
+      expect(previewCalls().some((c) => c.url.endsWith('departure_date=2026-09-19'))).toBe(true)
+    })
+  })
+
+  it('records the departure with one field, by POST, on the departure route', async () => {
+    const user = await openDeparture()
+    fetchStub.on('POST', 'stay/departure', {
+      body: stayResponse(makeBooking({ status: 'checked_out', check_in_date: '2026-09-15', check_out_date: '2026-09-21' }), {
+        difference: '-480.00',
+        adjustment: 'refundable',
+      }),
+    })
+    await screen.findByText(/Removes 4 nights/)
+
+    await user.click(screen.getByRole('button', { name: 'Record early departure' }))
+
+    await waitFor(() => {
+      expect(mutationCalls('POST')).toHaveLength(1)
+    })
+    const call = mutationCalls('POST')[0]!
+    expect(call.url).toContain(`/bookings/${BOOKING_ID}/stay/departure`)
+    expect(bodyOf(call)).toEqual({ departure_date: '2026-09-21' })
+    expect(mutationCalls('PATCH')).toHaveLength(0)
+    expect(await screen.findByText('Early departure recorded. The guest is checked out.')).toBeInTheDocument()
+  })
+
+  it('renders a refused departure in its own words, never the server text', async () => {
+    const user = await openDeparture()
+    fetchStub.on('POST', 'stay/departure', {
+      status: 409,
+      body: envelope('CONFLICT', 'SERVER-ONLY: Only a checked-in stay can depart early.'),
+    })
+    await screen.findByText(/Removes 4 nights/)
+
+    await user.click(screen.getByRole('button', { name: 'Record early departure' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText('The early departure was not recorded')).toBeInTheDocument()
+    expect(screen.queryByText(/SERVER-ONLY/)).not.toBeInTheDocument()
+    expect(mutationCalls('POST')).toHaveLength(1)
+  })
+
+  it('renders a refused preview and offers nothing to submit', async () => {
+    const user = await openInHouse()
+    // Replaces the preview handler `openInHouse` registered: handlers are keyed by route.
+    fetchStub.on('GET', 'stay/departure', {
+      status: 409,
+      body: envelope('CONFLICT', 'SERVER-ONLY: a departure must be later than check-in.'),
+    })
+    await user.click(screen.getByRole('button', { name: /Mark checked out/i }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText('This departure cannot be recorded')).toBeInTheDocument()
+    expect(screen.queryByText(/SERVER-ONLY/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Record early departure' })).toBeDisabled()
+  })
+
+  it.each([
+    ['today', '2026-09-21'],
+    ['in the past', '2026-09-19'],
+  ])('checks the guest out as before when the planned check-out is %s', async (_, checkOut) => {
+    const user = await openInHouse({ check_out_date: checkOut })
+    fetchStub.on('PATCH', '/bookings/', { body: makeBooking({ ...IN_HOUSE, check_out_date: checkOut, status: 'checked_out' }) })
+
+    await user.click(screen.getByRole('button', { name: /Mark checked out/i }))
+
+    await waitFor(() => {
+      expect(mutationCalls('PATCH')).toHaveLength(1)
+    })
+    expect(bodyOf(mutationCalls('PATCH')[0]!)).toEqual({ status: 'checked_out' })
+    expect(screen.queryByRole('form', { name: 'Record an early departure' })).not.toBeInTheDocument()
+  })
+
+  it('is labelled, and can be cancelled from the keyboard without sending anything', async () => {
+    const user = await openDeparture()
+    await screen.findByText(/Removes 4 nights/)
+
+    expect(screen.getByLabelText('Departure date')).toHaveAttribute('type', 'date')
+    screen.getByRole('button', { name: 'Cancel' }).focus()
+    await user.keyboard('{Enter}')
+
+    expect(screen.queryByRole('form', { name: 'Record an early departure' })).not.toBeInTheDocument()
+    expect(fetchStub.calls.filter((c) => c.method === 'POST' || c.method === 'PATCH')).toHaveLength(0)
+  })
+})
+
 /* --- failures across every mutation ------------------------------------------------------- */
 
 describe('refused mutations', () => {

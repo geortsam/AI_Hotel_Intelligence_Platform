@@ -5,6 +5,7 @@ import { bookingMutations } from '@/services/bookings/bookingService'
 import type {
   Booking,
   BookingStatus,
+  StayDepartureRequest,
   StayExtensionRequest,
   StayModificationRequest,
   StayRepricing,
@@ -52,7 +53,7 @@ import type {
  */
 
 /** Which operation is in flight, or `null`. Named so the UI can disable precisely. */
-export type MutationKind = 'status' | 'modify' | 'extend'
+export type MutationKind = 'status' | 'modify' | 'extend' | 'depart'
 
 export interface MutationOutcome {
   readonly kind: MutationKind
@@ -71,6 +72,7 @@ export interface BookingMutationsState {
   readonly changeStatus: (target: BookingStatus, reason?: string) => Promise<void>
   readonly modifyStay: (payload: StayModificationRequest) => Promise<void>
   readonly extendStay: (payload: StayExtensionRequest) => Promise<void>
+  readonly departEarly: (payload: StayDepartureRequest) => Promise<void>
   readonly dismiss: () => void
 }
 
@@ -219,12 +221,47 @@ export function useBookingMutations({
     [run, onBooking, onStayChanged],
   )
 
+  const departEarly = useCallback(
+    async (payload: StayDepartureRequest) => {
+      await run(
+        'depart',
+        (hotel, booking) => bookingMutations.departEarly(hotel, booking, payload),
+        async (result) => {
+          if (!isStayResponse(result)) {
+            throw new ApiError(
+              200,
+              ApiError.MALFORMED_CODE,
+              'The departure response was not in the expected format.',
+            )
+          }
+          onBooking(result.booking)
+          setOutcome({
+            kind: 'depart',
+            message: 'Early departure recorded. The guest is checked out.',
+            repricing: result.repricing,
+          })
+          await onStayChanged()
+        },
+      )
+    },
+    [run, onBooking, onStayChanged],
+  )
+
   const dismiss = useCallback(() => {
     setOutcome(null)
     setError(null)
   }, [])
 
-  return { pending, outcome, error, changeStatus, modifyStay, extendStay, dismiss }
+  return {
+    pending,
+    outcome,
+    error,
+    changeStatus,
+    modifyStay,
+    extendStay,
+    departEarly,
+    dismiss,
+  }
 }
 
 /*

@@ -2193,6 +2193,349 @@ STAGE_H1 = [
 ]
 
 
+EARLY_DEPARTURE = "tests/integration/test_early_departure.py"
+DEPARTURE_CONTRACT = "tests/backend/test_early_departure_contract.py"
+BOOKING_MUTATIONS_TESTS = "src/features/bookings/mutations.test.tsx"
+BOOKING_DETAIL_PAGE = "frontend/src/pages/BookingDetailPage.tsx"
+DEPART_SUCCEEDS = (
+    f"{EARLY_DEPARTURE}::test_an_early_departure_keeps_the_nights_stayed_and_removes_the_rest"
+)
+DEPARTURE_BOUND = f"{EARLY_DEPARTURE}::test_each_bound_of_the_departure_date"
+DEPARTURE_EVENTS = f"{EARLY_DEPARTURE}::test_both_events_are_recorded"
+DEPARTURE_MONEY = (
+    f"{EARLY_DEPARTURE}::test_the_money_that_leaves_is_the_rates_of_the_nights_removed"
+)
+REMOVED_SUM = 'sum(removed, decimal.Decimal("0.00"))'
+#: The departure's own repricing: inside its try block, so indented deeper than the preview's.
+DEPARTURE_NEW_TOTAL = f"                new_total=previous_total - {REMOVED_SUM},\n"
+#: The preview's, anchored on the line before it: at twelve spaces it is otherwise a suffix of
+#: the departure's sixteen-space line.
+PREVIEW_TOTALS = "\n            previous_total=previous_total,\n"
+PREVIEW_NEW_TOTAL = f"{PREVIEW_TOTALS}            new_total=previous_total - {REMOVED_SUM},\n"
+LATER_THAN_TODAY = "        if departure > today:\n"
+
+
+def departure(name: str, breaks: str, edits: tuple[Edit, ...], killer: str) -> Mutation:
+    """An H2 mutation whose killer is a database-backed test."""
+    return Mutation(name, "H2", breaks, edits, (killer,), needs_database=True)
+
+
+STAGE_H2 = [
+    departure(
+        "H2-M1",
+        "the nights after the departure are kept instead of deleted",
+        one(
+            BOOKING_SERVICE,
+            "            removed = self._repository.delete_nights_from(booking.id, "
+            "payload.departure_date)\n",
+            "            removed = self._repository.nights_from(booking.id, "
+            "payload.departure_date)\n",
+        ),
+        DEPART_SUCCEEDS,
+    ),
+    departure(
+        "H2-M2",
+        "the night of the departure date is kept: the boundary night is wrong",
+        one(
+            "backend/app/repositories/booking.py",
+            "            BookingRoomNight.stay_date >= day,\n",
+            "            BookingRoomNight.stay_date > day,\n",
+        ),
+        DEPART_SUCCEEDS,
+    ),
+    departure(
+        "H2-M3",
+        "the last night stayed is deleted too: [check_in, check_out) read as closed",
+        one(
+            "backend/app/repositories/booking.py",
+            "            BookingRoomNight.stay_date >= day,\n",
+            "            BookingRoomNight.stay_date >= day - dt.timedelta(days=1),\n",
+        ),
+        DEPART_SUCCEEDS,
+    ),
+    departure(
+        "H2-M4",
+        "the new check-out is the day after the departure",
+        one(
+            BOOKING_SERVICE,
+            '                    "check_out_date": payload.departure_date,\n',
+            '                    "check_out_date": payload.departure_date '
+            "+ dt.timedelta(days=1),\n",
+        ),
+        DEPART_SUCCEEDS,
+    ),
+    departure(
+        "H2-M5",
+        "the booking stays checked in after its departure",
+        one(
+            BOOKING_SERVICE, '                    "status": BookingStatus.CHECKED_OUT.value,\n', ""
+        ),
+        DEPART_SUCCEEDS,
+    ),
+    departure(
+        "H2-M6",
+        "a departure on the planned check-out day is accepted",
+        one(
+            BOOKING_SERVICE,
+            "        if departure >= booking.check_out_date:\n",
+            "        if departure > booking.check_out_date:\n",
+        ),
+        DEPARTURE_BOUND,
+    ),
+    departure(
+        "H2-M7",
+        "a departure tomorrow is accepted",
+        one(
+            BOOKING_SERVICE,
+            LATER_THAN_TODAY,
+            "        if departure > today + dt.timedelta(days=1):\n",
+        ),
+        DEPARTURE_BOUND,
+    ),
+    departure(
+        "H2-M8",
+        "a departure today is refused",
+        one(BOOKING_SERVICE, LATER_THAN_TODAY, "        if departure >= today:\n"),
+        DEPARTURE_BOUND,
+    ),
+    departure(
+        "H2-M9",
+        "a departure exactly 28 days ago is refused",
+        one(
+            BOOKING_SERVICE,
+            "        if departure < earliest:\n",
+            "        if departure <= earliest:\n",
+        ),
+        DEPARTURE_BOUND,
+    ),
+    departure(
+        "H2-M10",
+        "a departure 29 days ago is accepted",
+        one(
+            BOOKING_SERVICE,
+            "        earliest = today - dt.timedelta(days=DEPARTURE_LOOKBACK_DAYS)\n",
+            "        earliest = today - dt.timedelta(days=DEPARTURE_LOOKBACK_DAYS + 1)\n",
+        ),
+        DEPARTURE_BOUND,
+    ),
+    departure(
+        "H2-M11",
+        "today is UTC's date, not the hotel's",
+        one(
+            BOOKING_SERVICE,
+            "        return hotel_today(hotel, self._clock)\n",
+            "        return self._clock().date()\n",
+        ),
+        f"{EARLY_DEPARTURE}::test_today_is_the_hotels_not_utcs",
+    ),
+    departure(
+        "H2-M12",
+        "a booking that is not checked in can depart early",
+        one(
+            BOOKING_SERVICE,
+            "        if status == BookingStatus.CHECKED_IN.value:\n            return\n"
+            '        raise ConflictError(f"Only a checked-in stay can depart early;',
+            "        if True:\n            return\n"
+            '        raise ConflictError(f"Only a checked-in stay can depart early;',
+        ),
+        f"{EARLY_DEPARTURE}::test_only_a_checked_in_stay_departs_early",
+    ),
+    departure(
+        "H2-M13",
+        "the departure decides before taking the booking's lock",
+        one(
+            BOOKING_SERVICE,
+            "        booking = self._repository.lock_for_update(booking)\n"
+            "        self._require_departable(booking.status)\n",
+            "        self._require_departable(booking.status)\n",
+        ),
+        f"{EARLY_DEPARTURE}::"
+        "test_a_departure_waits_for_a_concurrent_change_and_judges_what_it_committed",
+    ),
+    departure(
+        "H2-M14",
+        "the stay change is not audited",
+        one(
+            BOOKING_SERVICE,
+            "            self._audit.record(\n                AuditAction.BOOKING_STAY_MODIFIED,\n"
+            "                AuditResourceType.BOOKING,\n                str(booking.public_id),\n"
+            "                hotel_id=hotel.id,\n                details={\n"
+            '                    "changed_fields": ["check_out_date"],\n'
+            '                    "previous_check_out_date": planned_check_out.isoformat(),\n',
+            "            (lambda *_, **__: None)(\n"
+            "                AuditAction.BOOKING_STAY_MODIFIED,\n"
+            "                AuditResourceType.BOOKING,\n                str(booking.public_id),\n"
+            "                hotel_id=hotel.id,\n                details={\n"
+            '                    "changed_fields": ["check_out_date"],\n'
+            '                    "previous_check_out_date": planned_check_out.isoformat(),\n',
+        ),
+        DEPARTURE_EVENTS,
+    ),
+    departure(
+        "H2-M15",
+        "the status change is not audited",
+        one(
+            BOOKING_SERVICE,
+            "            self._audit.record(\n                AuditAction.BOOKING_STATUS_CHANGED,\n"
+            "                AuditResourceType.BOOKING,\n                str(booking.public_id),\n"
+            "                hotel_id=hotel.id,\n                details={\n"
+            '                    "old_status": BookingStatus.CHECKED_IN.value,\n',
+            "            (lambda *_, **__: None)(\n"
+            "                AuditAction.BOOKING_STATUS_CHANGED,\n"
+            "                AuditResourceType.BOOKING,\n                str(booking.public_id),\n"
+            "                hotel_id=hotel.id,\n                details={\n"
+            '                    "old_status": BookingStatus.CHECKED_IN.value,\n',
+        ),
+        DEPARTURE_EVENTS,
+    ),
+    departure(
+        "H2-M16",
+        "the refund is measured from the contracted total, not the nights",
+        one(
+            BOOKING_SERVICE,
+            "                previous_total=previous_total,\n" + DEPARTURE_NEW_TOTAL,
+            "                previous_total=booking.total_amount,\n"
+            f"                new_total=booking.total_amount - {REMOVED_SUM},\n",
+        ),
+        DEPARTURE_MONEY,
+    ),
+    departure(
+        "H2-M17",
+        "the money that leaves is counted as nights times one rate, ignoring complimentary ones",
+        one(
+            BOOKING_SERVICE,
+            DEPARTURE_NEW_TOTAL,
+            "                new_total=previous_total - len(removed) * max(removed),\n",
+        ),
+        f"{EARLY_DEPARTURE}::test_a_complimentary_night_removed_takes_no_money_with_it",
+    ),
+    departure(
+        "H2-M18",
+        "the preview reports no change to the money",
+        one(
+            BOOKING_SERVICE,
+            PREVIEW_NEW_TOTAL,
+            f"{PREVIEW_TOTALS}            new_total=previous_total,\n",
+        ),
+        f"{EARLY_DEPARTURE}::test_the_preview_states_what_the_departure_then_does",
+    ),
+    departure(
+        "H2-M19",
+        "a plain check-out before the planned day is accepted again",
+        one(
+            BOOKING_SERVICE,
+            "                self._require_departure_due(hotel, booking)\n",
+            "                pass\n",
+        ),
+        f"{EARLY_DEPARTURE}::test_a_plain_check_out_before_the_planned_day_is_refused",
+    ),
+    departure(
+        "H2-M20",
+        "a plain check-out on the planned day is refused",
+        one(
+            BOOKING_SERVICE,
+            "        if today < booking.check_out_date:\n",
+            "        if today <= booking.check_out_date:\n",
+        ),
+        f"{EARLY_DEPARTURE}::test_a_plain_check_out_on_or_after_the_planned_day_is_unchanged",
+    ),
+    departure(
+        "H2-M21",
+        "the audit records one night fewer than were removed",
+        one(
+            BOOKING_SERVICE,
+            '                    "nights_removed": len(removed),\n',
+            '                    "nights_removed": len(removed) - 1,\n',
+        ),
+        DEPARTURE_EVENTS,
+    ),
+    Mutation(
+        "H2-M22",
+        "H2",
+        "the departure's look-back is no longer the accuracy protocol's settlement lag",
+        one(
+            BOOKING_SERVICE,
+            "DEPARTURE_LOOKBACK_DAYS = SETTLEMENT_LAG_DAYS\n",
+            "DEPARTURE_LOOKBACK_DAYS = SETTLEMENT_LAG_DAYS + 1\n",
+        ),
+        (f"{DEPARTURE_CONTRACT}::test_the_lookback_is_the_accuracy_protocols_settlement_lag",),
+    ),
+    Mutation(
+        "H2-M23",
+        "H2",
+        "the accuracy protocol no longer states the departure's 28-day boundary",
+        one(
+            "backend/app/ml/accuracy_protocol.py",
+            "them out. It can remove only nights within the most recent 28 days or later:",
+            "them out. It can remove nights:",
+        ),
+        (f"{DEPARTURE_CONTRACT}::test_the_protocol_states_the_departure_boundary_and_why",),
+    ),
+    Mutation(
+        "H2-M24",
+        "H2",
+        "checking an in-house guest out early goes straight to the plain check-out again",
+        one(
+            BOOKING_DETAIL_PAGE,
+            "        booking.check_out_date > today\n",
+            "        booking.check_out_date > '9999-12-31'\n",
+        ),
+        (
+            f"{BOOKING_MUTATIONS_TESTS}::"
+            "opens the early-departure form instead of checking the guest out",
+        ),
+        runner=Runner.VITEST,
+    ),
+    Mutation(
+        "H2-M25",
+        "H2",
+        "the departure form opens on the browser's UTC date, not the hotel's",
+        one(
+            BOOKING_DETAIL_PAGE,
+            "  const today = todayInZone(timeZone)\n",
+            "  const today = todayInZone('UTC')\n",
+        ),
+        (
+            f"{BOOKING_MUTATIONS_TESTS}::opens on the hotel{TYPOGRAPHIC_APOSTROPHE}s own today, "
+            f"not the browser{TYPOGRAPHIC_APOSTROPHE}s UTC date",
+        ),
+        runner=Runner.VITEST,
+    ),
+    Mutation(
+        "H2-M26",
+        "H2",
+        "the departure form posts to the extension route",
+        one(
+            "frontend/src/services/bookings/bookingService.ts",
+            "    return api.post<StayModificationResponse>(\n"
+            "      `/hotels/${hotelPublicId}/bookings/${bookingPublicId}/stay/departure`,\n",
+            "    return api.post<StayModificationResponse>(\n"
+            "      `/hotels/${hotelPublicId}/bookings/${bookingPublicId}/stay/extension`,\n",
+        ),
+        (
+            f"{BOOKING_MUTATIONS_TESTS}::"
+            "records the departure with one field, by POST, on the departure route",
+        ),
+        runner=Runner.VITEST,
+    ),
+    Mutation(
+        "H2-M27",
+        "H2",
+        "the departure form ignores the server's range of dates",
+        one(
+            "frontend/src/features/bookings/EarlyDepartureForm.tsx",
+            "min: preview.earliest_departure_date,",
+            "min: undefined,",
+        ),
+        (
+            f"{BOOKING_MUTATIONS_TESTS}::"
+            f"offers only the server{TYPOGRAPHIC_APOSTROPHE}s range of dates",
+        ),
+        runner=Runner.VITEST,
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -2215,4 +2558,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_F4,
     *STAGE_G1,
     *STAGE_H1,
+    *STAGE_H2,
 )
