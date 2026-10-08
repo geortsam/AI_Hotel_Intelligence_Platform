@@ -35,6 +35,12 @@ database (``scripts/testdb.py create``): the integration suite truncates and mig
 ``tests/db_safety.py`` refuses anything else. The harness never reads ``TEST_DATABASE_URL`` from
 the environment, because on a developer machine that may point at seeded demo data. Without a
 URL those mutations are reported as not run -- which ``--require-all`` turns into a failure.
+
+Before every database-backed pytest run the harness rebuilds that database's ``public`` schema
+from nothing, behind the same guard. A mutated migration can leave a schema no real migration
+expects -- an upgrade made a no-op still stamps the head -- and the next run's
+``downgrade base`` would then fail in setup, which counts here as its killers failing. Each run
+must start where a freshly created database starts, whatever the previous one left.
 """
 
 from __future__ import annotations
@@ -289,10 +295,47 @@ def parse_vitest_report(report: dict[str, object], killers: Sequence[str]) -> Re
     return results
 
 
+#: Run in the copy, with the child environment, before each database-backed pytest run: the
+#: project's own two-signal guard first, then ``public`` dropped and recreated. The database's
+#: comment -- where a disposable marker lives -- belongs to the database, not the schema, and
+#: survives.
+RESET_DATABASE = (
+    "import os\n"
+    "import sqlalchemy as sa\n"
+    "from tests.db_safety import assert_safe_destructive_target\n"
+    "url = os.environ['TEST_DATABASE_URL']\n"
+    "assert_safe_destructive_target(url)\n"
+    "engine = sa.create_engine(url, poolclass=sa.pool.NullPool)\n"
+    "with engine.begin() as connection:\n"
+    "    connection.execute(sa.text('DROP SCHEMA public CASCADE'))\n"
+    "    connection.execute(sa.text('CREATE SCHEMA public'))\n"
+    "engine.dispose()\n"
+)
+
+
+def reset_database(copy: Path, env: dict[str, str]) -> None:
+    """Give the next run an empty schema, or stop the run: a reset that failed means every
+    verdict after it would rest on whatever the last mutation left behind."""
+    completed = subprocess.run(
+        [sys.executable, "-c", RESET_DATABASE],
+        cwd=copy,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    if completed.returncode != 0:
+        raise HarnessError(f"could not reset the test database: {completed.stderr.strip()}")
+
+
 def make_executor(database_url: str | None) -> Execute:
     def execute(copy: Path, runner: Runner, killers: Sequence[str], database: bool) -> Results:
         env = child_environment(database_url if database else None)
         if runner is Runner.PYTEST:
+            if database:
+                reset_database(copy, env)
             completed = subprocess.run(
                 [
                     sys.executable,

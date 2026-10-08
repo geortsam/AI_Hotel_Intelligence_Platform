@@ -661,8 +661,9 @@ def test_the_migration_chain_is_eleven_revisions() -> None:
     # Issue 1 added 0016 (`demand_observation_periods`).
     # Issue 4 added 0017 (the `llm_invocations` retention rule; no table).
     # Issue H3 added 0018 (three foreign keys recreated; no table).
-    assert len(revisions) == 18
-    assert revisions[-1] == "20261006_0018_composite_set_null_columns.py"
+    # Issue H4 added 0019 (one unique index of `reviews` replaced; no table).
+    assert len(revisions) == 19
+    assert revisions[-1] == "20261007_0019_review_external_id_scope.py"
 
 
 # ======================================================================================

@@ -43,6 +43,14 @@ export const DEFAULT_PAGE_SIZE = 20
 export const MAX_PAGE_SIZE = 100
 
 /**
+ * `error.code` on the 409 a recording gets when this hotel already holds the same `source` and
+ * `external_review_id` -- `uq_reviews_hotel_source_external_review_id`, per hotel since
+ * migration 0019. Transcribed from `app.services.review`. The stay rule's 409 stays `CONFLICT`,
+ * so the code alone tells the two apart; the message is never read.
+ */
+export const DUPLICATE_EXTERNAL_REVIEW = 'DUPLICATE_EXTERNAL_REVIEW'
+
+/**
  * The filters the review list actually supports.
  *
  * Exactly these. There is no search, no rating filter, no date range and no sort, and the
@@ -110,7 +118,10 @@ export const reviewService = {
    * Record the review of a stay.
    *
    * Throws `ApiError`: **409** when the stay already has one -- `uq_reviews_booking_id`
-   * decides that, not a prior lookup, verified; **403** without the staff role; **404** for
+   * decides that, not a prior lookup, verified -- with code `CONFLICT`; **409** with code
+   * {@link DUPLICATE_EXTERNAL_REVIEW} when this hotel has already recorded the same platform
+   * reference for the same source (another hotel's never counts); **403** without the staff
+   * role; **404** for
    * an unknown hotel or booking; **422** for a rating above its scale, more than two decimal
    * places, a `rating_scale` other than 5 or 10, a malformed `language`, or any field the
    * schema does not have.

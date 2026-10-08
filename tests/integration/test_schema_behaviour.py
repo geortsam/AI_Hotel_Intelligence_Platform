@@ -452,7 +452,8 @@ def test_16_external_review_without_guest_is_allowed(session: Session) -> None:
     assert review.rating_normalized == Decimal("0.8000")
 
 
-def test_16b_reimporting_the_same_external_review_is_idempotent(session: Session) -> None:
+def test_16b_recording_the_same_external_review_twice_is_refused(session: Session) -> None:
+    """Per hotel since migration 0019 (Issue H4): the key is (hotel_id, source, id)."""
     hotel = make_hotel(session)
     for _ in range(1):
         session.add(
@@ -475,7 +476,7 @@ def test_16b_reimporting_the_same_external_review_is_idempotent(session: Session
             review_date=dt.date(2026, 9, 12),
         )
     )
-    with pytest.raises(IntegrityError, match="uq_reviews_source_external_review_id"):
+    with pytest.raises(IntegrityError, match="uq_reviews_hotel_source_external_review_id"):
         session.commit()
 
 

@@ -149,7 +149,7 @@ raceable.
 | Every night of a stay is priced | **deferred constraint trigger** | `trg_booking_room_nights_complete` |
 | Webhook idempotency | **partial UNIQUE** | `uq_payments_provider_transaction_reference WHERE transaction_reference IS NOT NULL` |
 | One review per stay | **partial UNIQUE** | `uq_reviews_booking_id WHERE booking_id IS NOT NULL` |
-| Idempotent review import | **partial UNIQUE** | `uq_reviews_source_external_review_id` (global, not per-hotel) |
+| One review per platform reference, per hotel | **partial UNIQUE** | `uq_reviews_hotel_source_external_review_id WHERE external_review_id IS NOT NULL` — `(hotel_id, source, external_review_id)`; a duplicate is a 409 `DUPLICATE_EXTERNAL_REVIEW` |
 | Unique hotel slug / room number / booking reference / category code | **UNIQUE** | `uq_hotels_slug`, `uq_rooms_hotel_id_room_number`, `uq_bookings_hotel_id_reference`, `uq_*_categories_code` |
 | Category in use cannot be deleted | **FK ON DELETE RESTRICT** | `fk_revenue_category_id_*`, `fk_expenses_category_id_*` |
 | Cross-tenant reference refused | **composite FK** | `(child_id, hotel_id) → parent(id, hotel_id)` throughout |
@@ -256,8 +256,6 @@ an undeclared RESTRICT recorded here as schema debt until this correction.
   constrains only `amount > 0`.
 - `is_room_revenue` is an exclusion **flag**, not a constraint: room revenue can be posted to
   the ledger. Analytics reports such rows in their own bucket and adds them to nothing.
-- `uq_reviews_source_external_review_id` is **global**, not per-hotel: two properties importing
-  the same platform id collide with each other.
 - `revenue.currency` is not tied to `hotels.currency` by any constraint.
 - `review_date` is unconstrained relative to the stay.
 - `daily_hotel_metrics` is **empty**, with no function, trigger or view populating it, and it

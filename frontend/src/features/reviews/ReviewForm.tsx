@@ -49,7 +49,9 @@ export interface ReviewFormProps {
  * that column -- so there is no confirmation step. What there is instead is a guard against
  * sending it twice: the button disables while a request is in flight, and the hook holds a
  * ref so two clicks in one tick cannot both fire. A repeat that did get through would be a
- * **409** from `uq_reviews_booking_id`, not a second review, and that refusal is rendered.
+ * **409** from `uq_reviews_booking_id`, not a second review, and that refusal is rendered. A
+ * platform reference this property has already recorded is a 409 of its own,
+ * `DUPLICATE_EXTERNAL_REVIEW`, and the page words it separately.
  */
 export function ReviewForm({ today, onSubmit, onCancel, busy, onDirty }: ReviewFormProps) {
   const bookingId = useId()
@@ -320,8 +322,8 @@ export function ReviewForm({ today, onSubmit, onCancel, busy, onDirty }: ReviewF
             }}
           />
           <span className={styles.hint}>
-            The channel&rsquo;s own identifier for this review. Re-importing the same one is
-            refused, which is what makes an import safe to repeat.
+            The channel&rsquo;s own identifier for this review. This property cannot record the
+            same one twice for the same channel.
           </span>
         </div>
 

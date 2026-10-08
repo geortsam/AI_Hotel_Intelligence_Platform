@@ -39,7 +39,7 @@ from app.schemas.review import (
     ReviewResponse,
     ReviewSourceLiteral,
 )
-from app.services.review import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from app.services.review import DEFAULT_PAGE_SIZE, DUPLICATE_EXTERNAL_REVIEW, MAX_PAGE_SIZE
 
 router = APIRouter(prefix="/hotels/{hotel_public_id}", tags=["reviews"])
 
@@ -56,6 +56,16 @@ CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
     status.HTTP_409_CONFLICT: {
         "model": ErrorResponse,
         "description": "The stay already has a review, or the values violate a constraint.",
+    }
+}
+#: Recording can meet a second, distinct refusal, so its 409 names both codes.
+CREATE_CONFLICT_RESPONSE: dict[int | str, dict[str, Any]] = {
+    status.HTTP_409_CONFLICT: {
+        "model": ErrorResponse,
+        "description": "`error.code` is `CONFLICT` when the stay already has a review, or the "
+        f"values violate a constraint; `{DUPLICATE_EXTERNAL_REVIEW}` when this hotel has already "
+        "recorded another review with the same `source` and `external_review_id`. Another "
+        "hotel's reviews never cause either.",
     }
 }
 
@@ -101,7 +111,7 @@ def list_reviews(
     status_code=status.HTTP_201_CREATED,
     summary="Record the review of a stay",
     description="The author is the booking's guest; it is not accepted in the payload.",
-    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},
+    responses={**NOT_FOUND_RESPONSE, **CREATE_CONFLICT_RESPONSE},
     # Stage 4.2: staff or above. Declared here because which role a
     # verb needs is a fact about the HTTP surface, not about the hotel.
     dependencies=[Depends(require_role(HotelRole.STAFF))],
@@ -113,7 +123,8 @@ def create_review(
     service: ReviewServiceDep,
 ) -> ReviewResponse:
     """201 on success; 404 if the hotel or booking is unknown; 409 if the stay has already
-    been reviewed -- ``uq_reviews_booking_id`` decides that, not a prior lookup."""
+    been reviewed -- ``uq_reviews_booking_id`` decides that, not a prior lookup -- or, with
+    ``DUPLICATE_EXTERNAL_REVIEW``, if this hotel already holds the platform reference."""
     return service.create(hotel_public_id, booking_public_id, payload)
 
 

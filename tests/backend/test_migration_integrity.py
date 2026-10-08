@@ -65,12 +65,13 @@ EXPECTED_FILENAMES = (
     "20261002_0016_demand_observation_periods.py",
     "20261003_0017_llm_invocation_retention.py",
     "20261006_0018_composite_set_null_columns.py",
+    "20261007_0019_review_external_id_scope.py",
 )
 
 #: sha256 of the canonicalised concatenation described in this module's docstring. Derived
-#: from the seventeen files above; not a value chosen to make anything pass.
+#: from the nineteen files above; not a value chosen to make anything pass.
 #:
-#: Moved four times. `0dc2f8b1...` over nine files was the value before Stage 6.8 added
+#: Moved on every migration. `0dc2f8b1...` over nine files was the value before Stage 6.8 added
 #: `demand_predictions`; `35162fde...` over ten was the value before Stage 6.11 added
 #: `demand_predictions.public_id`; `5104c312...` over eleven was the value before Stage 7.6
 #: added 0012 (the `tool.invoked` audit vocabulary) -- and recomputing it over the first eleven
@@ -84,12 +85,14 @@ EXPECTED_FILENAMES = (
 #: fifteen; and `5c20fc15...` over sixteen was the value before 0017 gave `llm_invocations` its
 #: retention rule, still reproduced by the first sixteen; and `690a0cf9...` over seventeen was
 #: the value before 0018 (Issue H3) recreated the three composite SET NULL keys with column
-#: lists, still reproduced by the first seventeen. All nine are recorded rather than discarded,
+#: lists, still reproduced by the first seventeen; and `745f856d...` over eighteen was the value
+#: before 0019 (Issue H4) scoped the reviews' external-identifier key to the hotel, still
+#: reproduced by the first eighteen. All ten are recorded rather than discarded,
 #: because "the digest changed" should always be answerable with "yes, in that commit, for
 #: that migration".
-CANONICAL_SHA256 = "745f856d31b91f78a1204bed47ecf9cbf2177cf895381c40df56672a643f27cf"
+CANONICAL_SHA256 = "e941eb8dff069b7a4fd97781e188a4f94d3cbea5c9f56273b5dc2dd41b5913d5"
 
-EXPECTED_HEAD = "0018_composite_set_null_columns"
+EXPECTED_HEAD = "0019_review_external_id_scope"
 EXPECTED_ROOT = "0001_initial_schema"
 
 REVISION = re.compile(r'^revision: str = "([^"]+)"', re.MULTILINE)
@@ -191,6 +194,17 @@ def test_the_set_null_correction_left_every_earlier_migration_untouched() -> Non
     earlier = [path.read_bytes() for path in migration_files()[:17]]
 
     assert digest_of(earlier) == "690a0cf9ced1f9e3c4b7a26980789449069b172b217c5a36781a59ccba11ea01"
+
+
+def test_the_tenant_scope_correction_left_every_earlier_migration_untouched() -> None:
+    """Adding 0019 moved the digest only because 0019 was added: 0001-0018 are byte-identical.
+
+    0019 replaces the external-identifier index 0001 declared -- by a new revision, never by
+    editing 0001 -- so 0001's bytes, like every other earlier file's, are unchanged.
+    """
+    earlier = [path.read_bytes() for path in migration_files()[:18]]
+
+    assert digest_of(earlier) == "745f856d31b91f78a1204bed47ecf9cbf2177cf895381c40df56672a643f27cf"
 
 
 def test_the_digest_does_not_depend_on_how_git_checked_the_files_out() -> None:

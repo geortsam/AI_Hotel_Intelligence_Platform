@@ -5,7 +5,8 @@
 > migrations (users, memberships, platform admins, audit events, audit archive, served demand
 > predictions, LLM invocations, knowledge documents, copilot conversations, declared demand
 > observation periods, the LLM-invocation retention rule); the head is now
-> `0018_composite_set_null_columns` (Issue H3, three foreign keys recreated, no table) over 28 application tables. The "design only" status line below
+> `0019_review_external_id_scope` (Issue H4, the reviews' external-identifier key scoped to the hotel, no table)
+> over 28 application tables. The "design only" status line below
 > describes this document at the time it was written, not the repository today.
 
 **Status: design only. No ORM models, no migrations, no SQL has been written.**
@@ -671,7 +672,7 @@ it without the transactional schema knowing anything about models.
 | `guest_id` | BIGINT | NULL | — | Composite FK `(guest_id, hotel_id)`. Null for external reviews |
 | `booking_id` | BIGINT | NULL | — | Composite FK `(booking_id, hotel_id)`. Null when unmatchable |
 | `source` | TEXT | NOT NULL | `'direct'` | `direct`, `booking_com`, `tripadvisor`, `google`, `expedia`, `airbnb`, `other` |
-| `external_review_id` | TEXT | NULL | — | The platform's own ID — **necessary**, see below |
+| `external_review_id` | TEXT | NULL | — | The platform's own ID — **necessary**, see below. Unique per hotel and source |
 | `rating` | NUMERIC(4,2) | NOT NULL | — | `CHECK (rating >= 0 AND rating <= rating_scale)` |
 | `rating_scale` | SMALLINT | NOT NULL | `5` | `CHECK (IN (5,10))` — Booking.com uses 10, TripAdvisor 5 |
 | `rating_normalized` | NUMERIC(5,4) | GENERATED | — | `GENERATED ALWAYS AS (rating / rating_scale) STORED` — comparable across sources |
@@ -684,13 +685,22 @@ it without the transactional schema knowing anything about models.
 | `responded_at` | TIMESTAMPTZ | NULL | — | Management response tracking |
 | `created_at` / `updated_at` | TIMESTAMPTZ | NOT NULL | `now()` | |
 
-**Why `external_review_id` is necessary.** External reviews are acquired by repeated polling or
-periodic bulk import. Without a stable per-source identifier there is no way to distinguish "a new
-review" from "the same review, fetched again", and the table accumulates duplicates that then
-skew every aggregate and every model trained on it. The partial unique constraint
-`UNIQUE (source, external_review_id) WHERE external_review_id IS NOT NULL` makes re-import
-idempotent and lets ingestion use `ON CONFLICT DO UPDATE`. Direct reviews leave it null and are
-unaffected.
+**Why `external_review_id` is necessary.** A review from a channel can reach this table more than
+once — the same review entered again from the channel's own listing. Without a stable per-source
+identifier there is no way to distinguish "a new review" from "the same review, recorded again",
+and the table accumulates duplicates that then
+skew every aggregate and every model trained on it. The partial unique index
+`uq_reviews_hotel_source_external_review_id` — `UNIQUE (hotel_id, source, external_review_id)
+WHERE external_review_id IS NOT NULL` — refuses a second review with the same platform reference
+for the same source **at the same hotel**. Another hotel may hold the same pair: hotels are
+tenants, and migration `0019_review_external_id_scope` (Issue H4) replaced 0001's global
+`(source, external_review_id)` key, which let one property's reviews refuse another's.
+
+What the application does with it: the only write path is `POST …/bookings/{id}/review`, and a
+duplicate is **refused** — 409 with `error.code` `DUPLICATE_EXTERNAL_REVIEW` — never merged into
+the existing review. There is no bulk-import job and nothing uses `ON CONFLICT DO UPDATE` on this
+table. Any source may carry an identifier, `direct` and `other` included; a review without one
+is unconstrained by the index.
 
 **Why `rating_scale` + a generated `rating_normalized`.** Averaging an 8/10 with a 4/5 is
 meaningless. Storing the source's raw value *and* its scale preserves fidelity, while the
@@ -721,7 +731,7 @@ CHECK ( body IS NOT NULL OR rating IS NOT NULL )
 UNIQUE (booking_id) WHERE booking_id IS NOT NULL     -- one review per stay
 ```
 
-- **Indexes:** PK; `(hotel_id, review_date DESC)` — the dominant query; partial unique on `(source, external_review_id)`; partial unique on `booking_id`; `(hotel_id, source)` for channel breakdown. A GIN full-text index on `body` is **not** proposed yet — see Open Decision 9
+- **Indexes:** PK; `(hotel_id, review_date DESC)` — the dominant query; partial unique on `(hotel_id, source, external_review_id)` (per hotel since `0019`); partial unique on `booking_id`; `(hotel_id, source)` for channel breakdown. A GIN full-text index on `body` is **not** proposed yet — see Open Decision 9
 - **Cardinality:** 1 hotel → N reviews; 1 guest → 0..N reviews; 1 booking → 0..1 review
 
 ---
@@ -1004,7 +1014,7 @@ rows per year.
 | `booking_rooms` | `(id, check_in_date, check_out_date)`, `(id, hotel_id)` | **Composite-FK targets for `booking_room_nights`** |
 | `booking_room_nights` | `(booking_room_id, stay_date)` | **One rate per room per night**; makes re-pricing idempotent |
 | `payments` | `(provider, transaction_reference) WHERE ... NOT NULL` | Webhook idempotency |
-| `reviews` | `(source, external_review_id) WHERE ... NOT NULL` | Re-import idempotency |
+| `reviews` | `(hotel_id, source, external_review_id) WHERE ... NOT NULL` | One review per platform reference, per hotel |
 | `reviews` | `(booking_id) WHERE booking_id IS NOT NULL` | One review per stay |
 | `daily_hotel_metrics` | `(hotel_id, metric_date)` | One snapshot per day |
 | `amenities`, `revenue_categories`, `expense_categories` | `code` | |
@@ -1041,7 +1051,7 @@ cascade needs it.
 | 11 | `guests` | `(hotel_id, last_name)` | Front-desk search |
 | 12 | `guests` | `UNIQUE (hotel_id, email) WHERE NOT NULL` | Dedupe on booking creation |
 | 13 | `reviews` | `(hotel_id, review_date DESC)` | Dominant read: recent reviews for a property |
-| 14 | `reviews` | `UNIQUE (source, external_review_id) WHERE NOT NULL` | Idempotent ingestion |
+| 14 | `reviews` | `UNIQUE (hotel_id, source, external_review_id) WHERE NOT NULL` | Duplicate guard, per hotel (`0019`) |
 | 15 | `reviews` | `(hotel_id, source)` | Channel-mix reporting |
 | 16 | `daily_hotel_metrics` | `UNIQUE (hotel_id, metric_date)` | **The forecasting range scan.** Serves `WHERE hotel_id=? AND metric_date BETWEEN ? AND ?` and guarantees one row per day |
 | 17 | `revenue` | `(hotel_id, revenue_date, category_id)` | Daily rollup by category — the metrics job's main read |

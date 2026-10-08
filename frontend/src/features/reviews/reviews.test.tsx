@@ -876,6 +876,76 @@ describe('recording a review', () => {
     expect(requestsFor('/review', 'POST')).toHaveLength(1)
   })
 
+  /* Issue H4: a recording has two 409s, and only `error.code` tells them apart. Each server
+   * message below is written to say the OTHER refusal, so a page that read the words instead
+   * of the code would show the wrong copy -- and none of them may reach the screen at all. */
+  const DUPLICATE_REFERENCE = /That platform reference is already recorded for another review at this property\. Nothing was written\./
+  const STAY_HAS_A_REVIEW = /That stay already has a review/
+
+  async function recordWithReference(user: Awaited<ReturnType<typeof openForm>>) {
+    await user.type(screen.getByLabelText('Stay'), BOOKING_ID)
+    await user.selectOptions(screen.getByLabelText('Channel'), 'tripadvisor')
+    await user.type(screen.getByLabelText('Rating'), '4')
+    await user.type(screen.getByLabelText('Platform reference (optional)'), 'ta-77123')
+    await user.click(screen.getByRole('button', { name: 'Record review' }))
+  }
+
+  it('explains DUPLICATE_EXTERNAL_REVIEW as a platform reference already recorded here', async () => {
+    const user = await openForm()
+    fetchStub.on('POST', '/review', {
+      status: 409,
+      body: {
+        error: {
+          code: 'DUPLICATE_EXTERNAL_REVIEW',
+          message: 'This booking already has a review. (server words, never shown)',
+        },
+      },
+    })
+
+    await recordWithReference(user)
+
+    expect(await screen.findByText(DUPLICATE_REFERENCE)).toBeInTheDocument()
+    expect(screen.getByText('Nothing was recorded')).toBeInTheDocument()
+    expect(visibleText()).not.toMatch(STAY_HAS_A_REVIEW)
+    expect(visibleText()).not.toMatch(/A stay can have exactly one/)
+    expect(visibleText()).not.toMatch(/server words/)
+    expect(requestsFor('/review', 'POST')).toHaveLength(1)
+  })
+
+  it('keeps the stay rule for CONFLICT, whatever the message says', async () => {
+    const user = await openForm()
+    fetchStub.on('POST', '/review', {
+      status: 409,
+      body: {
+        error: {
+          code: 'CONFLICT',
+          message:
+            'That platform reference is already recorded for another review at this property.',
+        },
+      },
+    })
+
+    await recordWithReference(user)
+
+    expect(await screen.findByText(/A stay can have exactly one/)).toBeInTheDocument()
+    expect(visibleText()).toMatch(STAY_HAS_A_REVIEW)
+    expect(visibleText()).not.toMatch(/platform reference is already recorded/)
+  })
+
+  it('never shows the server message for a code it does not know', async () => {
+    const user = await openForm()
+    fetchStub.on('POST', '/review', {
+      status: 409,
+      body: { error: { code: 'SOMETHING_NEW', message: 'raw server sentence' } },
+    })
+
+    await recordWithReference(user)
+
+    expect(await screen.findByText(/A stay can have exactly one/)).toBeInTheDocument()
+    expect(visibleText()).not.toMatch(/raw server sentence/)
+    expect(visibleText()).not.toMatch(DUPLICATE_REFERENCE)
+  })
+
   it('describes a failed recording as a recording, not as a change', async () => {
     const user = await openForm()
     fetchStub.on('POST', '/review', {

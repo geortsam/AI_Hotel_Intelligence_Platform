@@ -248,3 +248,37 @@ describe('the reviews feature offers no operation the API lacks', () => {
     }
   })
 })
+
+describe('the reviews feature classifies a refusal by its code', () => {
+  /* Issue H4. A recording has two 409s -- `CONFLICT` for the stay rule and
+   * `DUPLICATE_EXTERNAL_REVIEW` for a platform reference this hotel already holds -- and the
+   * page tells them apart by `error.code`. The server's message is never read, so it can
+   * neither be shown nor be matched against. */
+  const errorMessage = /\b\w*(?:[Ee]rror|failure|cause)\??\.message\b/
+  const matchedMessage = /\.message\s*\??\.\s*(?:includes|match|startsWith|endsWith|indexOf|search|test)\b/
+
+  it('detects a message read where one really exists', () => {
+    // The positive control: a sentence known to contain both patterns.
+    const known = "if (error.message.includes('already')) { show(error.message) }"
+    expect(known).toMatch(errorMessage)
+    expect(known).toMatch(matchedMessage)
+  })
+
+  it('never reads or matches a server message', () => {
+    for (const file of sources) {
+      expect(code(file.text), `${file.name} must not read a server message`).not.toMatch(
+        errorMessage,
+      )
+      expect(code(file.text), `${file.name} must not match a server message`).not.toMatch(
+        matchedMessage,
+      )
+    }
+  })
+
+  it('chooses the duplicate-reference copy by the structured code', () => {
+    const page = code(sources.find((file) => file.name === 'ReviewsPage.tsx')!.text)
+    expect(page).toMatch(/error\.code === DUPLICATE_EXTERNAL_REVIEW/)
+    const service = code(sources.find((file) => file.name === 'reviewService.ts')!.text)
+    expect(service).toMatch(/DUPLICATE_EXTERNAL_REVIEW = 'DUPLICATE_EXTERNAL_REVIEW'/)
+  })
+})

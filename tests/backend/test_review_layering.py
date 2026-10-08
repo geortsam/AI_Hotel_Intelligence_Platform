@@ -12,6 +12,7 @@ import datetime as dt
 import decimal
 import inspect
 import uuid
+from pathlib import Path
 from typing import Any, get_args
 
 import pytest
@@ -118,10 +119,53 @@ def test_the_two_partial_unique_keys_still_exist() -> None:
     assert [c.name for c in one_per_stay.columns] == ["booking_id"]
     assert one_per_stay.dialect_options["postgresql"]["where"] is not None
 
+    # Per hotel since migration 0019 (Issue H4); 0001's global pair is gone from the model.
     external = indexes[EXTERNAL_ID_CONSTRAINT]
+    assert EXTERNAL_ID_CONSTRAINT == "uq_reviews_hotel_source_external_review_id"
     assert external.unique
-    assert [c.name for c in external.columns] == ["source", "external_review_id"]
-    assert external.dialect_options["postgresql"]["where"] is not None
+    assert [c.name for c in external.columns] == ["hotel_id", "source", "external_review_id"]
+    assert str(external.dialect_options["postgresql"]["where"]) == (
+        "external_review_id IS NOT NULL"
+    )
+    assert "uq_reviews_source_external_review_id" not in indexes
+
+
+#: The cases Issue H4's acceptance rests on, by file. Renaming or deleting one silently drops
+#: the coverage it gives -- pytest only runs what it can find -- so their presence is pinned
+#: here, and the H4 mutation stage proves this test notices a case going missing.
+TENANT_SCOPE_CASES = {
+    "tests/integration/test_review_external_id_scope.py": (
+        "test_the_same_hotel_cannot_record_a_reference_twice_for_one_source",
+        "test_different_hotels_may_record_the_same_reference",
+        "test_one_hotel_may_record_the_same_reference_from_another_source",
+        "test_reviews_without_a_reference_are_unrestricted",
+        "test_direct_and_other_reviews_may_carry_a_reference",
+        "test_the_index_is_exactly_the_approved_definition",
+        "test_the_api_refuses_a_hotels_own_duplicate_with_its_own_code",
+        "test_the_api_accepts_a_reference_on_direct_and_other_reviews",
+        "test_tenants_are_isolated_both_ways",
+        "test_a_hotel_learns_nothing_about_another_from_a_reference",
+        "test_0019_changes_only_the_external_id_index",
+        "test_the_downgrade_restores_0001s_index_and_the_upgrade_reapplies_0019",
+        "test_rows_written_under_0018_survive_the_upgrade",
+    ),
+    "tests/integration/test_reviews_api.py": (
+        "test_a_duplicate_external_identifier_returns_409",
+        "test_another_hotel_may_record_the_same_external_identifier",
+        "test_a_same_stay_duplicate_keeps_the_stay_rule_even_with_a_reference",
+        "test_the_external_index_is_partial_so_direct_reviews_are_unconstrained",
+        "test_many_hotels_may_hold_reviews_with_no_external_id",
+    ),
+}
+
+
+def test_the_tenant_scope_cases_are_still_collected() -> None:
+    root = Path(__file__).resolve().parents[2]
+    for relative, names in TENANT_SCOPE_CASES.items():
+        tree = ast.parse((root / relative).read_text(encoding="utf-8"))
+        defined = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
+        missing = [name for name in names if name not in defined]
+        assert not missing, f"{relative} lost {missing}"
 
 
 def test_no_layer_offers_a_lookup_by_review_identifier() -> None:

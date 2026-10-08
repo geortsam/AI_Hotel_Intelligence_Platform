@@ -7,10 +7,10 @@ it can rely on:
 * ``uq_reviews_booking_id`` -- UNIQUE (booking_id) WHERE booking_id IS NOT NULL. One review
   per stay. A review created through this API always carries a booking, so the booking's own
   ``public_id`` *is* the review's address.
-* ``uq_reviews_source_external_review_id`` -- UNIQUE (source, external_review_id) WHERE
-  external_review_id IS NOT NULL. The identity of a review harvested from an external
-  platform. Note it is **global, not per-hotel** (verified live), so it is an ingestion key,
-  not an addressing scheme this API hands to clients.
+* ``uq_reviews_hotel_source_external_review_id`` -- UNIQUE (hotel_id, source,
+  external_review_id) WHERE external_review_id IS NOT NULL. A hotel records a platform's
+  review once; another hotel may record the same pair (Issue H4, migration 0019). It is a
+  duplicate guard, not an addressing scheme this API hands to clients.
 
 ``reviews.id`` is never exposed, and neither is ``guest_id``, ``booking_id`` or ``hotel_id``.
 
@@ -56,8 +56,9 @@ class ReviewBase(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     source: ReviewSourceLiteral = "direct"
-    #: Set only for reviews imported from an external platform; the partial unique index on
-    #: (source, external_review_id) makes re-import idempotent.
+    #: The platform's own identifier, when there is one. Any source may carry it. The partial
+    #: unique index on (hotel_id, source, external_review_id) refuses a second review with the
+    #: same pair at the same hotel -- a 409, ``DUPLICATE_EXTERNAL_REVIEW``, never an update.
     external_review_id: Annotated[str, Field(max_length=200)] | None = None
     rating: RatingField
     rating_scale: RatingScaleLiteral = 5

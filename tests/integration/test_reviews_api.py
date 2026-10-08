@@ -2,13 +2,12 @@
 
 What only the database can prove here: that ``rating_normalized`` is generated and comparable
 across scoring scales, that the two partial unique indexes behave as partial indexes (and
-that one of them is global rather than per-hotel), that the CHECK constraints bound the rating
-at both ends, and -- the point of the ON DELETE section -- that two foreign keys declared
-``SET NULL`` **cannot fire in this schema** and refuse the delete instead.
+that the external-identifier one is per hotel since Issue H4, migration 0019), that the CHECK
+constraints bound the rating at both ends, and -- the point of the ON DELETE section -- that
+the two foreign keys declared ``SET NULL`` detach a review from its stay and its author rather
+than refuse the delete (Issue H3, migration 0018).
 
-The ON DELETE tests assert the behaviour PostgreSQL actually has, not the behaviour the DDL
-appears to intend. The divergence is reported, not corrected: schema repair is a later,
-dedicated stage.
+The ON DELETE tests assert the behaviour PostgreSQL actually has, measured by real deletes.
 
 SQLite is not substituted.
 """
@@ -28,6 +27,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import Hotel, Review
+from app.services.review import DUPLICATE_EXTERNAL_REVIEW, DUPLICATE_EXTERNAL_REVIEW_MESSAGE
 from tests.integration.conftest import (
     authenticated_client,
     grant_membership,
@@ -427,13 +427,17 @@ def test_a_guest_may_review_each_of_their_stays(api: TestClient) -> None:
 
 
 # --- uniqueness: the external identifier ----------------------------------------------------------
+#
+# Issue H4 (migration 0019): uq_reviews_hotel_source_external_review_id is
+# (hotel_id, source, external_review_id). A hotel cannot record a platform reference twice for
+# one source; another hotel may record the same pair.
 
 
 def test_a_duplicate_external_identifier_returns_409(
     api: TestClient, stay: tuple[str, str, str]
 ) -> None:
-    """uq_reviews_source_external_review_id makes re-import idempotent: a platform fetched
-    twice cannot produce two rows for the same review."""
+    """The same hotel recording the same platform reference again is refused -- with its own
+    code, not the stay rule's, and never by quietly updating the first review."""
     hotel, first, guest = stay
     payload = review_payload(source="google", external_review_id=EXTERNAL_ID)
     assert api.post(review_url(hotel, first), json=payload).status_code == 201
@@ -442,13 +446,13 @@ def test_a_duplicate_external_identifier_returns_409(
     response = api.post(review_url(hotel, second), json=payload)
 
     assert response.status_code == 409
-    assert response.json()["error"]["code"] == "CONFLICT"
-    assert "external identifier" in response.json()["error"]["message"]
+    assert response.json()["error"]["code"] == DUPLICATE_EXTERNAL_REVIEW
+    assert response.json()["error"]["message"] == DUPLICATE_EXTERNAL_REVIEW_MESSAGE
+    assert response.json()["error"]["details"] == []
 
 
-def test_the_external_identifier_is_unique_across_hotels(api: TestClient) -> None:
-    """FINDING. The index carries no hotel column, so the pair is GLOBAL. Two properties
-    importing the same platform id collide with each other."""
+def test_another_hotel_may_record_the_same_external_identifier(api: TestClient) -> None:
+    """Hotels are tenants. Before 0019 the key carried no hotel column and this was a 409."""
     hotel_a, booking_a, _ = build_booking(api, "hotel-a")
     hotel_b, booking_b, _ = build_booking(api, "hotel-b")
     payload = review_payload(source="google", external_review_id=EXTERNAL_ID)
@@ -456,25 +460,43 @@ def test_the_external_identifier_is_unique_across_hotels(api: TestClient) -> Non
 
     response = api.post(review_url(hotel_b, booking_b), json=payload)
 
-    assert response.status_code == 409
-    assert "external identifier" in response.json()["error"]["message"]
+    assert response.status_code == 201, response.text
+    assert response.json()["external_review_id"] == EXTERNAL_ID
+    assert response.json()["hotel_public_id"] == hotel_b
 
 
-def test_the_same_identifier_from_a_different_source_is_allowed(api: TestClient) -> None:
-    """The index spans BOTH columns."""
-    hotel_a, booking_a, _ = build_booking(api, "hotel-a")
-    hotel_b, booking_b, _ = build_booking(api, "hotel-b")
+def test_the_same_identifier_from_a_different_source_is_allowed(
+    api: TestClient, stay: tuple[str, str, str]
+) -> None:
+    """The index spans the source too: one hotel, one identifier, two channels."""
+    hotel, first, guest = stay
+    second = second_booking(api, hotel, guest)
     api.post(
-        review_url(hotel_a, booking_a),
+        review_url(hotel, first),
         json=review_payload(source="google", external_review_id=EXTERNAL_ID),
     )
 
     response = api.post(
-        review_url(hotel_b, booking_b),
+        review_url(hotel, second),
         json=review_payload(source="expedia", external_review_id=EXTERNAL_ID),
     )
 
     assert response.status_code == 201
+
+
+def test_a_same_stay_duplicate_keeps_the_stay_rule_even_with_a_reference(
+    api: TestClient, stay: tuple[str, str, str]
+) -> None:
+    """A second review of one stay that also repeats the platform reference breaks both keys.
+    The stay rule answers, as it did before 0019: ``CONFLICT``, the stay's own sentence."""
+    hotel, booking, _ = stay
+    payload = review_payload(source="google", external_review_id=EXTERNAL_ID)
+    assert api.post(review_url(hotel, booking), json=payload).status_code == 201
+
+    body = api.post(review_url(hotel, booking), json=payload).json()
+
+    assert body["error"]["code"] == "CONFLICT"
+    assert body["error"]["message"] == "This booking already has a review."
 
 
 def test_the_external_index_is_partial_so_direct_reviews_are_unconstrained(
@@ -500,17 +522,29 @@ def test_many_hotels_may_hold_reviews_with_no_external_id(api: TestClient) -> No
     assert api.post(review_url(hotel_b, booking_b), json=review_payload()).status_code == 201
 
 
-def test_the_duplicate_import_leaks_no_sql_or_identifier(api: TestClient) -> None:
-    hotel_a, booking_a, _ = build_booking(api, "hotel-a")
-    hotel_b, booking_b, _ = build_booking(api, "hotel-b")
-    payload = review_payload(source="google", external_review_id=EXTERNAL_ID)
-    api.post(review_url(hotel_a, booking_a), json=payload)
+def test_the_duplicate_reference_leaks_no_sql_or_identifier(api: TestClient) -> None:
+    """The refusal names nothing: not the identifier, not the other review's stay, guest or
+    hotel, not another tenant, and none of the database's own words."""
+    other_hotel, other_booking, _ = build_booking(api, "hotel-b")
+    hotel, first, guest = build_booking(api, "hotel-a")
+    second = second_booking(api, hotel, guest)
+    payload = review_payload(
+        source="google", external_review_id=EXTERNAL_ID, reviewer_name=REVIEWER_NAME
+    )
+    assert api.post(review_url(other_hotel, other_booking), json=payload).status_code == 201
+    assert api.post(review_url(hotel, first), json=payload).status_code == 201
 
-    text = api.post(review_url(hotel_b, booking_b), json=payload).text
+    response = api.post(review_url(hotel, second), json=payload)
+    text = response.text
 
+    assert response.status_code == 409
     assert EXTERNAL_ID not in text
+    for identifier in [other_hotel, other_booking, first, guest, hotel, "hotel-b", REVIEWER_NAME]:
+        assert identifier not in text, f"leaked {identifier!r}"
     for leak in [
+        "uq_reviews_hotel_source_external_review_id",
         "uq_reviews_source_external_review_id",
+        "hotel_id",
         "insert",
         "psycopg",
         "sqlalchemy",

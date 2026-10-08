@@ -55,9 +55,9 @@ class Review(TimestampMixin, Base):
     booking_id: Mapped[int | None] = mapped_column(BigInteger)
 
     source: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'direct'"))
-    # Necessary for idempotent re-import: without a stable per-source identifier there is no
-    # way to tell a new review from the same review fetched again, and duplicates skew every
-    # aggregate and every model trained on them.
+    # Without a stable per-source identifier there is no way to tell a new review from the
+    # same review recorded again, and duplicates skew every aggregate and every model trained
+    # on them. Unique per hotel and source; any source may carry one, `direct` included.
     external_review_id: Mapped[str | None] = mapped_column(Text)
 
     rating: Mapped[decimal.Decimal] = mapped_column(Numeric(4, 2), nullable=False)
@@ -109,9 +109,11 @@ class Review(TimestampMixin, Base):
         CheckConstraint("rating_scale IN (5, 10)", name="rating_scale_valid"),
         CheckConstraint("rating >= 0 AND rating <= rating_scale", name="rating_in_scale"),
         CheckConstraint("language IS NULL OR language ~ '^[a-z]{2}$'", name="language_format"),
-        # Idempotent ingestion from external platforms.
+        # A hotel records a platform's review once. Per hotel, not platform-wide: Issue H4
+        # (0019) replaced 0001's global (source, external_review_id) key, which coupled tenants.
         Index(
-            "uq_reviews_source_external_review_id",
+            "uq_reviews_hotel_source_external_review_id",
+            "hotel_id",
             "source",
             "external_review_id",
             unique=True,

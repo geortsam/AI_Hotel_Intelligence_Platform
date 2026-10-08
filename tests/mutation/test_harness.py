@@ -373,6 +373,7 @@ RECORDED_PER_STAGE = {
     "H1": 18,
     "H2": 30,
     "H3": 20,
+    "H4": 20,
 }
 
 
@@ -418,3 +419,66 @@ def test_the_harness_imports_nothing_from_the_application() -> None:
     """It edits the application's files; importing them would load the unmutated originals."""
     source = Path(harness.__file__).read_text(encoding="utf-8")
     assert not re.search(r"^\s*(from|import) (app|ml)\b", source, re.M)
+
+
+# --- the database is rebuilt before every database-backed run ------------------------------------
+
+
+class RunRecorder:
+    """Stands in for ``subprocess.run`` inside the executor and records every call."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def __call__(self, args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        env = kwargs.get("env")
+        assert isinstance(env, dict)
+        self.calls.append((list(args), dict(env)))
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+
+def test_a_database_backed_run_starts_from_a_rebuilt_schema(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Issue H4 found the hole: a mutated migration left a schema the next run's
+    ``downgrade base`` could not handle, and that setup error counted as a kill."""
+    recorder = RunRecorder()
+    monkeypatch.setattr(harness.subprocess, "run", recorder)
+    url = "postgresql+psycopg://u:p@localhost:5432/scratch_test"
+
+    harness.make_executor(url)(tmp_path, harness.Runner.PYTEST, ["tests/x.py::test_a"], True)
+
+    assert len(recorder.calls) == 2
+    (reset, reset_env), (pytest_call, pytest_env) = recorder.calls
+    assert reset[1:] == ["-c", harness.RESET_DATABASE]
+    assert reset_env["TEST_DATABASE_URL"] == pytest_env["TEST_DATABASE_URL"] == url
+    assert pytest_call[1:3] == ["-m", "pytest"]
+    # The guard runs before anything is dropped.
+    guard = harness.RESET_DATABASE.index("assert_safe_destructive_target(url)")
+    assert guard < harness.RESET_DATABASE.index("DROP SCHEMA public CASCADE")
+
+
+def test_a_run_without_a_database_resets_nothing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    recorder = RunRecorder()
+    monkeypatch.setattr(harness.subprocess, "run", recorder)
+
+    harness.make_executor("postgresql+psycopg://u:p@localhost:5432/scratch_test")(
+        tmp_path, harness.Runner.PYTEST, ["tests/x.py::test_a"], False
+    )
+
+    assert len(recorder.calls) == 1
+    assert "TEST_DATABASE_URL" not in recorder.calls[0][1]
+
+
+def test_a_failed_reset_stops_the_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def refuse(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 1, stdout="", stderr="UNSAFE")
+
+    monkeypatch.setattr(harness.subprocess, "run", refuse)
+
+    with pytest.raises(harness.HarnessError, match="could not reset the test database: UNSAFE"):
+        harness.make_executor("postgresql+psycopg://u:p@localhost:5432/scratch_test")(
+            tmp_path, harness.Runner.PYTEST, ["tests/x.py::test_a"], True
+        )

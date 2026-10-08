@@ -194,7 +194,9 @@ trigger function, so a record is kept 365 days and then deleted by the operator'
 (`python -m app.jobs.purge_llm_invocations`, no route); UPDATE is still refused. Issue H3 added the
 ninth, `0018_composite_set_null_columns`, which recreates the three composite `SET NULL` keys of `revenue` and
 `reviews` with column lists, so deleting a booking or a guest keeps those rows and nulls only the
-reference. Head `0018` across 18 linear revisions, 28 application tables. Four of V2's tables reference `hotels` with `RESTRICT`, so — as V1's
+reference. Issue H4 added the tenth, `0019_review_external_id_scope`, which replaces the
+reviews' global `(source, external_review_id)` unique index with one per hotel, so another
+property's reviews never refuse a recording. Head `0019` across 19 linear revisions, 28 application tables. Four of V2's tables reference `hotels` with `RESTRICT`, so — as V1's
 append-only audit trail already did — they can make a hotel undeletable: `DELETE /hotels/{id}`
 still answers 409 rather than cascading. See [v2-architecture.md](v2-architecture.md) §10. See [knowledge-documents.md](knowledge-documents.md) and
 [copilot-conversations.md](copilot-conversations.md).

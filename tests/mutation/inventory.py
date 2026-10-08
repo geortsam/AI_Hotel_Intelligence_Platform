@@ -1352,7 +1352,7 @@ def runbook(name: str, breaks: str, path: str, old: str, new: str, *tests: str) 
 
 
 STALE = "`0011_demand_prediction_public_id`"
-CURRENT = "`0018_composite_set_null_columns`"
+CURRENT = "`0019_review_external_id_scope`"
 REVISIONS_IN_BACKUP = "test_every_revision_a_runbook_quotes_is_the_current_head[backup-restore]"
 
 STAGE_M1 = [
@@ -2758,6 +2758,259 @@ STAGE_H3 = [
 ]
 
 
+TENANT_MIGRATION = "database/migrations/versions/20261007_0019_review_external_id_scope.py"
+TENANT_TESTS = "tests/integration/test_review_external_id_scope.py"
+REVIEWS_API_TESTS = "tests/integration/test_reviews_api.py"
+REVIEW_LAYERING = "tests/backend/test_review_layering.py"
+REVIEW_SERVICE = "backend/app/services/review.py"
+REVIEW_MODEL = "backend/app/models/review.py"
+REVIEWS_PAGE = "frontend/src/pages/ReviewsPage.tsx"
+REVIEW_UI_TESTS = "src/features/reviews/reviews.test.tsx"
+REVIEW_ARCH_TESTS = "src/features/reviews/architecture.node.test.ts"
+
+INDEX_IS_APPROVED = f"{TENANT_TESTS}::test_the_index_is_exactly_the_approved_definition"
+SAME_HOTEL_REFUSED = (
+    f"{TENANT_TESTS}::test_the_same_hotel_cannot_record_a_reference_twice_for_one_source"
+)
+OTHER_HOTEL_ACCEPTED = f"{TENANT_TESTS}::test_different_hotels_may_record_the_same_reference"
+NULLS_UNRESTRICTED = f"{TENANT_TESTS}::test_reviews_without_a_reference_are_unrestricted"
+OWN_CODE = f"{TENANT_TESTS}::test_the_api_refuses_a_hotels_own_duplicate_with_its_own_code"
+TENANTS_ISOLATED = f"{TENANT_TESTS}::test_tenants_are_isolated_both_ways"
+DOWNGRADE_RESTORES = (
+    f"{TENANT_TESTS}::test_the_downgrade_restores_0001s_index_and_the_upgrade_reapplies_0019"
+)
+UPGRADE_PRECHECK = f"{TENANT_TESTS}::test_the_upgrade_refuses_rows_the_new_key_cannot_hold"
+API_DUPLICATE_409 = f"{REVIEWS_API_TESTS}::test_a_duplicate_external_identifier_returns_409"
+API_OTHER_HOTEL = f"{REVIEWS_API_TESTS}::test_another_hotel_may_record_the_same_external_identifier"
+API_NULLS_PARTIAL = (
+    f"{REVIEWS_API_TESTS}::test_the_external_index_is_partial_so_direct_reviews_are_unconstrained"
+)
+MODEL_KEYS = f"{REVIEW_LAYERING}::test_the_two_partial_unique_keys_still_exist"
+CASES_COLLECTED = f"{REVIEW_LAYERING}::test_the_tenant_scope_cases_are_still_collected"
+UI_DUPLICATE_COPY = (
+    f"{REVIEW_UI_TESTS}::explains DUPLICATE_EXTERNAL_REVIEW as a platform reference already "
+    "recorded here"
+)
+UI_STAY_RULE = f"{REVIEW_UI_TESTS}::keeps the stay rule for CONFLICT, whatever the message says"
+UI_NEVER_READS = f"{REVIEW_ARCH_TESTS}::never reads or matches a server message"
+UI_BY_CODE = f"{REVIEW_ARCH_TESTS}::chooses the duplicate-reference copy by the structured code"
+
+#: 0019's one statement that builds an index, in both directions.
+CREATE_STATEMENT = (
+    '    op.execute(f"CREATE UNIQUE INDEX {create} ON reviews ({columns}) WHERE {PREDICATE}")\n'
+)
+UPGRADE_SWAP = "    _replace(drop=GLOBAL_INDEX, create=TENANT_INDEX, columns=TENANT_COLUMNS)\n"
+MODEL_KEY = (
+    '            "uq_reviews_hotel_source_external_review_id",\n'
+    '            "hotel_id",\n'
+    '            "source",\n'
+)
+CHOSEN_COPY = "    ? { ...CREATION_FAILURE_COPY, conflict: DUPLICATE_REFERENCE_COPY }\n"
+
+
+def tenant_db(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An H4 mutation whose killers run against PostgreSQL."""
+    return Mutation(
+        f"H4-M{number}", "H4", breaks, one(path, old, new), killers, needs_database=True
+    )
+
+
+def tenant_static(number: int, breaks: str, path: str, old: str, new: str, killer: str) -> Mutation:
+    """An H4 mutation caught without a database: a pytest source pin."""
+    return Mutation(f"H4-M{number}", "H4", breaks, one(path, old, new), (killer,))
+
+
+def tenant_ui(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An H4 mutation of the Reviews page or client, caught by Vitest."""
+    return Mutation(
+        f"H4-M{number}", "H4", breaks, one(path, old, new), killers, runner=Runner.VITEST
+    )
+
+
+STAGE_H4 = [
+    tenant_db(
+        1,
+        "the new index leaves hotel_id out, so it is global again under the new name",
+        TENANT_MIGRATION,
+        'TENANT_COLUMNS = "hotel_id, source, external_review_id"\n',
+        'TENANT_COLUMNS = "source, external_review_id"\n',
+        OTHER_HOTEL_ACCEPTED,
+        INDEX_IS_APPROVED,
+    ),
+    tenant_db(
+        2,
+        "the upgrade leaves 0001's global key in place",
+        TENANT_MIGRATION,
+        UPGRADE_SWAP,
+        "    pass\n",
+        INDEX_IS_APPROVED,
+        API_OTHER_HOTEL,
+        TENANTS_ISOLATED,
+    ),
+    tenant_db(
+        3,
+        "the index loses its external_review_id IS NOT NULL predicate",
+        TENANT_MIGRATION,
+        CREATE_STATEMENT,
+        '    op.execute(f"CREATE UNIQUE INDEX {create} ON reviews ({columns})")\n',
+        INDEX_IS_APPROVED,
+        DOWNGRADE_RESTORES,
+    ),
+    tenant_db(
+        4,
+        "reviews without a reference collide with each other",
+        TENANT_MIGRATION,
+        CREATE_STATEMENT,
+        '    op.execute(f"CREATE UNIQUE INDEX {create} ON reviews ({columns}) '
+        'NULLS NOT DISTINCT")\n',
+        NULLS_UNRESTRICTED,
+        API_NULLS_PARTIAL,
+    ),
+    tenant_db(
+        5,
+        "the duplicate-reference refusal carries a different code",
+        REVIEW_SERVICE,
+        'DUPLICATE_EXTERNAL_REVIEW = "DUPLICATE_EXTERNAL_REVIEW"\n',
+        'DUPLICATE_EXTERNAL_REVIEW = "DUPLICATE_REVIEW_REFERENCE"\n',
+        OWN_CODE,
+    ),
+    tenant_db(
+        6,
+        "the duplicate-reference refusal falls back to the generic CONFLICT",
+        REVIEW_SERVICE,
+        "                    DUPLICATE_EXTERNAL_REVIEW_MESSAGE, code=DUPLICATE_EXTERNAL_REVIEW\n",
+        "                    DUPLICATE_EXTERNAL_REVIEW_MESSAGE\n",
+        OWN_CODE,
+        API_DUPLICATE_409,
+        TENANTS_ISOLATED,
+    ),
+    tenant_db(
+        7,
+        "the service still listens for 0001's index name, so the refusal is never recognised",
+        REVIEW_SERVICE,
+        'EXTERNAL_ID_CONSTRAINT = "uq_reviews_hotel_source_external_review_id"\n',
+        'EXTERNAL_ID_CONSTRAINT = "uq_reviews_source_external_review_id"\n',
+        OWN_CODE,
+        MODEL_KEYS,
+    ),
+    tenant_db(
+        8,
+        "the model still declares 0001's global key",
+        REVIEW_MODEL,
+        MODEL_KEY,
+        '            "uq_reviews_source_external_review_id",\n            "source",\n',
+        MODEL_KEYS,
+        MODELS_MATCH,
+    ),
+    tenant_db(
+        9,
+        "the model's key leaves hotel_id out",
+        REVIEW_MODEL,
+        MODEL_KEY,
+        '            "uq_reviews_hotel_source_external_review_id",\n            "source",\n',
+        MODEL_KEYS,
+        MODELS_MATCH,
+    ),
+    tenant_db(
+        10,
+        "the index is no longer unique, so a hotel may record a reference twice",
+        TENANT_MIGRATION,
+        CREATE_STATEMENT,
+        '    op.execute(f"CREATE INDEX {create} ON reviews ({columns}) WHERE {PREDICATE}")\n',
+        SAME_HOTEL_REFUSED,
+        OWN_CODE,
+        API_DUPLICATE_409,
+    ),
+    tenant_db(
+        11,
+        "the upgrade adds the per-hotel key but keeps the global one: other hotels still collide",
+        TENANT_MIGRATION,
+        UPGRADE_SWAP,
+        '    op.execute(f"CREATE UNIQUE INDEX {TENANT_INDEX} ON reviews ({TENANT_COLUMNS}) '
+        'WHERE {PREDICATE}")\n',
+        OTHER_HOTEL_ACCEPTED,
+        API_OTHER_HOTEL,
+        INDEX_IS_APPROVED,
+    ),
+    tenant_db(
+        12,
+        "the downgrade rebuilds the per-hotel key instead of 0001's global one",
+        TENANT_MIGRATION,
+        "    _replace(drop=TENANT_INDEX, create=GLOBAL_INDEX, columns=GLOBAL_COLUMNS)\n",
+        "    _replace(drop=TENANT_INDEX, create=GLOBAL_INDEX, columns=TENANT_COLUMNS)\n",
+        DOWNGRADE_RESTORES,
+    ),
+    tenant_db(
+        13,
+        "the upgrade no longer counts the rows its key would refuse",
+        TENANT_MIGRATION,
+        "    found = _duplicates(TENANT_COLUMNS)\n",
+        "    found = 0\n",
+        UPGRADE_PRECHECK,
+    ),
+    tenant_ui(
+        14,
+        "the page words DUPLICATE_EXTERNAL_REVIEW as the stay already having a review",
+        REVIEWS_PAGE,
+        CHOSEN_COPY,
+        "    ? CREATION_FAILURE_COPY\n",
+        UI_DUPLICATE_COPY,
+    ),
+    tenant_ui(
+        15,
+        "the client's copy of the code no longer matches the server's",
+        "frontend/src/services/reviews/reviewService.ts",
+        "export const DUPLICATE_EXTERNAL_REVIEW = 'DUPLICATE_EXTERNAL_REVIEW'\n",
+        "export const DUPLICATE_EXTERNAL_REVIEW = 'DUPLICATE_REVIEW_REFERENCE'\n",
+        UI_DUPLICATE_COPY,
+        UI_BY_CODE,
+    ),
+    tenant_ui(
+        16,
+        "the page tells the two 409s apart by matching the server's words",
+        REVIEWS_PAGE,
+        "  return error.code === DUPLICATE_EXTERNAL_REVIEW\n",
+        "  return error.message.includes('platform reference')\n",
+        UI_NEVER_READS,
+        UI_STAY_RULE,
+    ),
+    tenant_ui(
+        17,
+        "the page shows the server's own message for a duplicate reference",
+        REVIEWS_PAGE,
+        CHOSEN_COPY,
+        "    ? { ...CREATION_FAILURE_COPY, conflict: { ...DUPLICATE_REFERENCE_COPY, "
+        "detail: error.message } }\n",
+        UI_DUPLICATE_COPY,
+        UI_NEVER_READS,
+    ),
+    tenant_static(
+        18,
+        "the tenant-isolation case is no longer collected",
+        TENANT_TESTS,
+        "def test_tenants_are_isolated_both_ways(",
+        "def _tenants_are_isolated_both_ways(",
+        CASES_COLLECTED,
+    ),
+    tenant_static(
+        19,
+        "the API's cross-hotel acceptance case is no longer collected",
+        REVIEWS_API_TESTS,
+        "def test_another_hotel_may_record_the_same_external_identifier(",
+        "def _another_hotel_may_record_the_same_external_identifier(",
+        CASES_COLLECTED,
+    ),
+    tenant_static(
+        20,
+        "the NULL-reference case is no longer collected",
+        TENANT_TESTS,
+        "def test_reviews_without_a_reference_are_unrestricted(",
+        "def _reviews_without_a_reference_are_unrestricted(",
+        CASES_COLLECTED,
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -2782,4 +3035,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_H1,
     *STAGE_H2,
     *STAGE_H3,
+    *STAGE_H4,
 )

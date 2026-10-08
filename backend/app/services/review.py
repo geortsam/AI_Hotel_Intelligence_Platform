@@ -5,6 +5,10 @@
 * One review per stay -- ``uq_reviews_booking_id``. Not re-implemented as a check-then-insert;
   the insert is attempted and the unique violation is translated. Two concurrent submissions
   cannot both win.
+* One review per platform reference, **per hotel** -- ``uq_reviews_hotel_source_external_review_id``
+  (Issue H4, migration 0019). Translated the same way, to its own code,
+  :data:`DUPLICATE_EXTERNAL_REVIEW`, so a client can tell it from the stay rule without reading
+  prose. Another hotel holding the same pair is not a conflict: the key carries ``hotel_id``.
 * A review's guest is the booking's guest. ``bookings.guest_id`` is NOT NULL, so this is a
   derivation from the row already resolved, not an invented rule -- and it removes the only
   way a client could have attributed a review to someone who did not stay.
@@ -65,9 +69,18 @@ DEFAULT_PAGE_SIZE = 20
 
 #: UNIQUE (booking_id) WHERE booking_id IS NOT NULL -- the schema's "one review per stay".
 ONE_PER_BOOKING_CONSTRAINT = "uq_reviews_booking_id"
-#: UNIQUE (source, external_review_id) WHERE external_review_id IS NOT NULL. Global rather
-#: than per-hotel, verified live: the same pair at a different property still collides.
-EXTERNAL_ID_CONSTRAINT = "uq_reviews_source_external_review_id"
+#: UNIQUE (hotel_id, source, external_review_id) WHERE external_review_id IS NOT NULL. Per
+#: hotel since migration 0019 (Issue H4): another property may hold the same pair.
+EXTERNAL_ID_CONSTRAINT = "uq_reviews_hotel_source_external_review_id"
+#: The error code for a refusal by :data:`EXTERNAL_ID_CONSTRAINT`. Its own code rather than
+#: ``CONFLICT``, because the two review conflicts ask for different actions and a client must
+#: never have to read the message to tell them apart.
+DUPLICATE_EXTERNAL_REVIEW = "DUPLICATE_EXTERNAL_REVIEW"
+#: Says only what the caller already knows. The key is per hotel, so the other review is this
+#: property's own -- but it is still not named, and neither is the identifier.
+DUPLICATE_EXTERNAL_REVIEW_MESSAGE = (
+    "That platform reference is already recorded for another review at this property."
+)
 
 #: Declared at module scope on purpose: inside the class, ``list`` is the name of a method,
 #: so ``list[Review]`` there resolves to that method rather than to the builtin.
@@ -287,8 +300,7 @@ class ReviewService:
             if constraint == EXTERNAL_ID_CONSTRAINT:
                 # The identifier is not quoted back; the client already sent it.
                 return ConflictError(
-                    "A review with this external identifier has already been recorded for "
-                    "this source."
+                    DUPLICATE_EXTERNAL_REVIEW_MESSAGE, code=DUPLICATE_EXTERNAL_REVIEW
                 )
             return ConflictError("That value is already taken by another review.")
         if state == SQLSTATE_CHECK_VIOLATION:
@@ -300,6 +312,8 @@ class ReviewService:
 
 __all__ = [
     "DEFAULT_PAGE_SIZE",
+    "DUPLICATE_EXTERNAL_REVIEW",
+    "DUPLICATE_EXTERNAL_REVIEW_MESSAGE",
     "EXTERNAL_ID_CONSTRAINT",
     "MAX_PAGE_SIZE",
     "ONE_PER_BOOKING_CONSTRAINT",

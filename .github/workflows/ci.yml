@@ -170,7 +170,7 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
         run: |
           set -euo pipefail
-          expected='0018_composite_set_null_columns'
+          expected='0019_review_external_id_scope'
 
           echo "--- declared head ---"
           heads="$(python -m alembic heads 2>&1)"
@@ -262,15 +262,15 @@ jobs:
   # ---------------------------------------------------------------------------------------
   # The recorded mutation checks, re-run on every push.
   #
-  # Stages 7.6-7.14, F2, F16, I4, F1, F2-ADR, M1, M2, F2-COMP, F3, F4, G1, H1, H2 and H3
+  # Stages 7.6-7.14, F2, F16, I4, F1, F2-ADR, M1, M2, F2-COMP, F3, F4, G1, H1, H2, H3 and H4
   # each broke their own guarantees on purpose and reported that a test caught every break.
-  # `python -m tests.mutation` re-applies those 223 edits from tests/mutation/inventory.py -- in
+  # `python -m tests.mutation` re-applies those 243 edits from tests/mutation/inventory.py -- in
   # a throwaway copy of the tracked files, never in this checkout -- and fails unless every named
   # killer fails under its mutation and passes without it. See tests/mutation/harness.py.
   #
   # A job of its own, parallel to the others, so its ~10 minutes run beside quality-gates
-  # rather than after it. It needs both toolchains (223 mutations span Python and Vitest) and
-  # its own disposable PostgreSQL for the 90 mutations whose killers are integration tests.
+  # rather than after it. It needs both toolchains (243 mutations span Python and Vitest) and
+  # its own disposable PostgreSQL for the 103 mutations whose killers are integration tests.
   # `--require-all` makes a mutation that could not run a failure, not a skip. Nothing here
   # builds or touches an image.
   mutation-checks:
@@ -619,8 +619,8 @@ jobs:
 
             revisions=$(ls /app/database/migrations/versions/*.py | wc -l)
             echo "  revisions present: $revisions"
-            if [ "$revisions" -ne 18 ]; then
-              echo "::error::expected 18 revisions, found $revisions"
+            if [ "$revisions" -ne 19 ]; then
+              echo "::error::expected 19 revisions, found $revisions"
               exit 1
             fi
 
@@ -981,9 +981,9 @@ jobs:
           echo "--- alembic_version, read from PostgreSQL ---"
           revision="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  $revision"
-          [ "$revision" = "0018_composite_set_null_columns" ] || {
-            echo "::error::expected 0018_composite_set_null_columns, got $revision"; exit 1; }
-          echo "  OK   schema is at 0018_composite_set_null_columns"
+          [ "$revision" = "0019_review_external_id_scope" ] || {
+            echo "::error::expected 0019_review_external_id_scope, got $revision"; exit 1; }
+          echo "  OK   schema is at 0019_review_external_id_scope"
 
           tables="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  public tables created: $tables"
@@ -1469,7 +1469,7 @@ jobs:
 
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  after : $after"
-          [ "$after" = "0018_composite_set_null_columns" ] || {
+          [ "$after" = "0019_review_external_id_scope" ] || {
             echo "::error::revision moved to $after"; exit 1; }
           [ "$before" = "$after" ] || { echo "::error::revision changed"; exit 1; }
           echo "  OK   upgrade head is idempotent and the schema is unchanged"
@@ -1494,7 +1494,7 @@ jobs:
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  revision after restart: $revision"
           echo "  tables after restart  : $after"
-          [ "$revision" = "0018_composite_set_null_columns" ] || {
+          [ "$revision" = "0019_review_external_id_scope" ] || {
             echo "::error::schema did not survive the restart"; exit 1; }
           [ "$rows" = "$after" ] || { echo "::error::table count changed across restart"; exit 1; }
           echo "  OK   the named volume preserved the schema across stop/start"
@@ -2174,9 +2174,9 @@ jobs:
           # The diff above is the real proof. These restate the few facts that must hold
           # absolutely, so a failure names what was wrong rather than only that something was.
           revision="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc 'SELECT version_num FROM alembic_version')"
-          [ "$revision" = "0018_composite_set_null_columns" ] || {
+          [ "$revision" = "0019_review_external_id_scope" ] || {
             echo "::error::restored revision is $revision"; exit 1; }
-          echo "  OK   alembic_version is 0018_composite_set_null_columns -- no upgrade or downgrade happened"
+          echo "  OK   alembic_version is 0019_review_external_id_scope -- no upgrade or downgrade happened"
 
           tables="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")"
           [ "$tables" -eq 29 ] || { echo "::error::restored database has $tables base tables, expected 29"; exit 1; }

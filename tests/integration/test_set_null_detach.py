@@ -50,8 +50,10 @@ from tests.integration.test_finance_api import (
 pytestmark = requires_postgres
 
 SUITE_EMAIL = "set-null@example.test"
-HEAD = "0018_composite_set_null_columns"
-MIGRATION = REPO_ROOT / "database" / "migrations" / "versions" / f"20261006_{HEAD}.py"
+#: The revision this suite is about. No longer the head: Issue H4 added 0019 on top of it.
+REVISION = "0018_composite_set_null_columns"
+HEAD = "0019_review_external_id_scope"
+MIGRATION = REPO_ROOT / "database" / "migrations" / "versions" / f"20261006_{REVISION}.py"
 RANGE = {"date_from": "2026-09-01", "date_to": "2026-09-30"}
 REVIEW = {"rating": "4.50", "review_date": "2026-09-05", "title": "Kept", "body": "Quiet room."}
 
@@ -501,7 +503,8 @@ def foreign_keys(connection: sa.Connection) -> dict[str, str]:
     return {str(name): str(definition) for name, definition in rows}
 
 
-def test_the_database_is_at_0018(engine: Engine) -> None:
+def test_the_database_is_migrated_past_0018(engine: Engine) -> None:
+    """At the head, which 0018 leads to: 0019 replaced one index and touched no foreign key."""
     with engine.connect() as connection:
         revision = connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar()
     assert revision == HEAD
@@ -563,4 +566,4 @@ def test_the_downgrade_restores_0001s_keys_and_the_upgrade_reapplies_0018(engine
 
 def test_the_migration_is_the_one_on_disk() -> None:
     assert MIGRATION.is_file()
-    assert Path(MIGRATION).name.endswith(f"{HEAD}.py")
+    assert Path(MIGRATION).name.endswith(f"{REVISION}.py")

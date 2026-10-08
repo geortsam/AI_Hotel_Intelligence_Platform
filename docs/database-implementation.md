@@ -11,7 +11,8 @@
 > tables); `0016_demand_observation_periods` (Issue 1, the declared observation spans); and
 > `0017_llm_invocation_retention` (Issue 4, the `llm_invocations` retention rule, no table); and
 > `0018_composite_set_null_columns` (Issue H3, three composite `SET NULL` keys recreated with column lists, no
-> table). The head is `0018` across 18 linear revisions. In particular, §9's environment notes describe the machine as it
+> table); and `0019_review_external_id_scope` (Issue H4, the reviews' external-identifier key
+> scoped to the hotel, no table). The head is `0019` across 19 linear revisions. In particular, §9's environment notes describe the machine as it
 > was at Stage 2B, not as it is. See [architecture.md](architecture.md) and
 > [../database/README.md](../database/README.md).
 

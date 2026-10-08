@@ -465,8 +465,9 @@ def test_the_migration_chain_is_unchanged() -> None:
     # Issue 1 added 0016 (`demand_observation_periods`), a declaration table, not a model change.
     # Issue 4 added 0017 (the `llm_invocations` retention rule), which no model reads.
     # Issue H3 added 0018 (three foreign keys of `revenue` and `reviews`), which no model reads.
-    assert len(revisions) == 18
-    assert revisions[-1].endswith("20261006_0018_composite_set_null_columns.py")
+    # Issue H4 added 0019 (the scope of one `reviews` unique index), which no model reads.
+    assert len(revisions) == 19
+    assert revisions[-1].endswith("20261007_0019_review_external_id_scope.py")
 
 
 #: Committed beside the model: four JSON records. `model.pkl` is the Stage 6.5 payload, which is

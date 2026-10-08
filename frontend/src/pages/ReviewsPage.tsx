@@ -22,7 +22,8 @@ import { ReviewSummary } from '@/features/reviews/ReviewSummary'
 import { hasActiveReviewFilters, useReviews } from '@/features/reviews/useReviews'
 import { formatCount } from '@/lib/format'
 import { ApiError } from '@/services/api/ApiError'
-import { describeFailure } from '@/services/api/failures'
+import { describeFailure, type FailureCopyOverrides } from '@/services/api/failures'
+import { DUPLICATE_EXTERNAL_REVIEW } from '@/services/reviews/reviewService'
 import { useHotelContext } from '@/session/HotelProvider'
 
 import styles from './ReviewsPage.module.css'
@@ -120,6 +121,29 @@ const CREATION_FAILURE_COPY = {
 } as const
 
 /**
+ * A recording's second 409: this hotel already holds the platform reference for that source.
+ *
+ * Not the stay rule, and saying "that stay already has a review" here would send the reader
+ * looking for a review that does not exist. The server tells the two apart by `error.code`
+ * (`DUPLICATE_EXTERNAL_REVIEW` against `CONFLICT`), so this page does too -- never by its
+ * message, which is not read at all. Only this property's reviews can cause it: the key is per
+ * hotel since migration 0019.
+ */
+const DUPLICATE_REFERENCE_COPY = {
+  title: 'Nothing was recorded',
+  detail:
+    'That platform reference is already recorded for another review at this property. Nothing was written.',
+  canRetry: false,
+} as const
+
+/** The copy for a failed recording, chosen by the refusal's code where the status is shared. */
+function creationFailureCopy(error: ApiError): FailureCopyOverrides {
+  return error.code === DUPLICATE_EXTERNAL_REVIEW
+    ? { ...CREATION_FAILURE_COPY, conflict: DUPLICATE_REFERENCE_COPY }
+    : CREATION_FAILURE_COPY
+}
+
+/**
  * Reviews &mdash; what guests said about one property.
  *
  * ## What the backend gives, and what this page therefore is
@@ -201,7 +225,9 @@ export function ReviewsPage() {
       ? null
       : describeFailure(
           reviews.moderationError,
-          reviews.failedWrite === 'creation' ? CREATION_FAILURE_COPY : MODERATION_FAILURE_COPY,
+          reviews.failedWrite === 'creation'
+            ? creationFailureCopy(reviews.moderationError)
+            : MODERATION_FAILURE_COPY,
         )
 
   return (

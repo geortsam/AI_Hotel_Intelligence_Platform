@@ -498,18 +498,19 @@ def test_the_migration_chain_is_linear_and_ends_at_0008() -> None:
         assert revision and down, path.name
         chain[revision.group(1)] = None if down.group(1) == "None" else down.group(1).strip('"')
 
-    assert len(chain) == 18
+    assert len(chain) == 19
     heads = [rev for rev in chain if rev not in set(chain.values())]
     # Stage 4.5.15 added 0009 and Stage 6.8 added 0010. What this file is responsible for is
     # 0008's own position, which is unchanged; the head moves because the chain grew past it.
     # Stage 7.6 added 0012; Stage 7.9 added 0014; Stage 7.11 added 0015; Issue 1 added 0016;
     # Issue 4 added 0017, which touches llm_invocations' trigger function and no audit table.
     # Issue H3 added 0018, which recreates three foreign keys and touches no audit table.
-    assert heads == ["0018_composite_set_null_columns"]
+    # Issue H4 added 0019, which replaces one unique index of `reviews`; no audit table.
+    assert heads == ["0019_review_external_id_scope"]
     assert chain["0008_audit_retention_archive"] == "0007_audit_events"
 
     parents = [down for down in chain.values() if down is not None]
-    assert len(parents) == len(set(parents)) == 17
+    assert len(parents) == len(set(parents)) == 18
 
 
 def test_no_earlier_migration_mentions_the_archive() -> None:
