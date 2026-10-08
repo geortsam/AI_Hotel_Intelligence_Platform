@@ -445,17 +445,50 @@ def test_a_database_backed_run_starts_from_a_rebuilt_schema(
     recorder = RunRecorder()
     monkeypatch.setattr(harness.subprocess, "run", recorder)
     url = "postgresql+psycopg://u:p@localhost:5432/scratch_test"
+    execute = harness.make_executor(url)
 
-    harness.make_executor(url)(tmp_path, harness.Runner.PYTEST, ["tests/x.py::test_a"], True)
+    execute(tmp_path, harness.Runner.PYTEST, ["tests/x.py::test_a"], True)
+    execute(tmp_path, harness.Runner.PYTEST, ["tests/x.py::test_b"], True)
 
-    assert len(recorder.calls) == 2
-    (reset, reset_env), (pytest_call, pytest_env) = recorder.calls
-    assert reset[1:] == ["-c", harness.RESET_DATABASE]
-    assert reset_env["TEST_DATABASE_URL"] == pytest_env["TEST_DATABASE_URL"] == url
-    assert pytest_call[1:3] == ["-m", "pytest"]
-    # The guard runs before anything is dropped.
-    guard = harness.RESET_DATABASE.index("assert_safe_destructive_target(url)")
-    assert guard < harness.RESET_DATABASE.index("DROP SCHEMA public CASCADE")
+    snippets = [args[2] if args[1] == "-c" else "pytest" for args, _ in recorder.calls]
+    # The full guard once, first; then a rebuild before each of the two runs.
+    assert snippets == [
+        harness.VERIFY_DATABASE,
+        harness.RESET_DATABASE,
+        "pytest",
+        harness.RESET_DATABASE,
+        "pytest",
+    ]
+    assert all(env["TEST_DATABASE_URL"] == url for _, env in recorder.calls)
+
+
+def test_the_full_guard_precedes_every_write_and_each_rebuild_rechecks_the_name() -> None:
+    """The contents check reads the database as it was handed over. A rebuild cannot repeat
+    it -- the harness's own killers leave rows behind, and CI's database carries no
+    disposable marker -- so each rebuild re-checks the name before anything is dropped."""
+    assert "assert_safe_destructive_target(" in harness.VERIFY_DATABASE
+    assert "DROP" not in harness.VERIFY_DATABASE
+    name_check = harness.RESET_DATABASE.index("assert_safe_test_database_url(url)")
+    assert name_check < harness.RESET_DATABASE.index("DROP SCHEMA public CASCADE")
+
+
+def test_a_database_that_fails_the_full_guard_is_never_written(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    recorder = RunRecorder()
+
+    def refuse_the_guard(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        recorder(args, **kwargs)
+        failed = args[1:] == ["-c", harness.VERIFY_DATABASE]
+        return subprocess.CompletedProcess(args, int(failed), stdout="", stderr="UNSAFE")
+
+    monkeypatch.setattr(harness.subprocess, "run", refuse_the_guard)
+
+    with pytest.raises(harness.HarnessError, match="the test database is not disposable: UNSAFE"):
+        harness.make_executor("postgresql+psycopg://u:p@localhost:5432/scratch_test")(
+            tmp_path, harness.Runner.PYTEST, ["tests/x.py::test_a"], True
+        )
+    assert len(recorder.calls) == 1
 
 
 def test_a_run_without_a_database_resets_nothing(
@@ -473,10 +506,11 @@ def test_a_run_without_a_database_resets_nothing(
 
 
 def test_a_failed_reset_stops_the_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    def refuse(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(args, 1, stdout="", stderr="UNSAFE")
+    def refuse_the_reset(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        failed = args[1:] == ["-c", harness.RESET_DATABASE]
+        return subprocess.CompletedProcess(args, int(failed), stdout="", stderr="UNSAFE")
 
-    monkeypatch.setattr(harness.subprocess, "run", refuse)
+    monkeypatch.setattr(harness.subprocess, "run", refuse_the_reset)
 
     with pytest.raises(harness.HarnessError, match="could not reset the test database: UNSAFE"):
         harness.make_executor("postgresql+psycopg://u:p@localhost:5432/scratch_test")(

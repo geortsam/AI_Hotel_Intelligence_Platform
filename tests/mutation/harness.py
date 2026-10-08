@@ -37,10 +37,11 @@ the environment, because on a developer machine that may point at seeded demo da
 URL those mutations are reported as not run -- which ``--require-all`` turns into a failure.
 
 Before every database-backed pytest run the harness rebuilds that database's ``public`` schema
-from nothing, behind the same guard. A mutated migration can leave a schema no real migration
-expects -- an upgrade made a no-op still stamps the head -- and the next run's
-``downgrade base`` would then fail in setup, which counts here as its killers failing. Each run
-must start where a freshly created database starts, whatever the previous one left.
+from nothing. A mutated migration can leave a schema no real migration expects -- an upgrade
+made a no-op still stamps the head -- and the next run's ``downgrade base`` would then fail in
+setup, which counts here as its killers failing. Each run must start where a freshly created
+database starts, whatever the previous one left. The full guard runs once, before the first
+rebuild, while the database is still as it was handed over; each rebuild re-checks the name.
 """
 
 from __future__ import annotations
@@ -295,16 +296,27 @@ def parse_vitest_report(report: dict[str, object], killers: Sequence[str]) -> Re
     return results
 
 
-#: Run in the copy, with the child environment, before each database-backed pytest run: the
-#: project's own two-signal guard first, then ``public`` dropped and recreated. The database's
-#: comment -- where a disposable marker lives -- belongs to the database, not the schema, and
-#: survives.
+#: Run once, before the harness first touches the database: the project's full two-signal
+#: guard -- the name, and a read of what the database holds -- while it is still as the caller
+#: handed it over. A database that fails here is never written to.
+VERIFY_DATABASE = (
+    "import os\n"
+    "from tests.db_safety import assert_safe_destructive_target\n"
+    "assert_safe_destructive_target(os.environ['TEST_DATABASE_URL'])\n"
+)
+
+#: Run before every database-backed pytest run: ``public`` dropped and recreated. Only the
+#: name is re-checked here. The contents check cannot be repeated: after a run the database
+#: holds rows the harness's own killers wrote -- a failed killer may stop before cleaning up --
+#: and on a database with no disposable marker (CI's) those rows would read as data worth
+#: keeping. It was vetted by :data:`VERIFY_DATABASE` before the first of them existed. The
+#: database's comment, where a disposable marker lives, belongs to the database and survives.
 RESET_DATABASE = (
     "import os\n"
     "import sqlalchemy as sa\n"
-    "from tests.db_safety import assert_safe_destructive_target\n"
+    "from tests.db_safety import assert_safe_test_database_url\n"
     "url = os.environ['TEST_DATABASE_URL']\n"
-    "assert_safe_destructive_target(url)\n"
+    "assert_safe_test_database_url(url)\n"
     "engine = sa.create_engine(url, poolclass=sa.pool.NullPool)\n"
     "with engine.begin() as connection:\n"
     "    connection.execute(sa.text('DROP SCHEMA public CASCADE'))\n"
@@ -313,11 +325,11 @@ RESET_DATABASE = (
 )
 
 
-def reset_database(copy: Path, env: dict[str, str]) -> None:
-    """Give the next run an empty schema, or stop the run: a reset that failed means every
-    verdict after it would rest on whatever the last mutation left behind."""
+def run_in_copy(copy: Path, env: dict[str, str], code: str, failure: str) -> None:
+    """Run one of the snippets above, or stop the run: a database step that failed means
+    every verdict after it would rest on whatever the last mutation left behind."""
     completed = subprocess.run(
-        [sys.executable, "-c", RESET_DATABASE],
+        [sys.executable, "-c", code],
         cwd=copy,
         env=env,
         capture_output=True,
@@ -327,15 +339,21 @@ def reset_database(copy: Path, env: dict[str, str]) -> None:
         timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     if completed.returncode != 0:
-        raise HarnessError(f"could not reset the test database: {completed.stderr.strip()}")
+        raise HarnessError(f"{failure}: {completed.stderr.strip()}")
 
 
 def make_executor(database_url: str | None) -> Execute:
+    verified = False
+
     def execute(copy: Path, runner: Runner, killers: Sequence[str], database: bool) -> Results:
+        nonlocal verified
         env = child_environment(database_url if database else None)
         if runner is Runner.PYTEST:
             if database:
-                reset_database(copy, env)
+                if not verified:
+                    run_in_copy(copy, env, VERIFY_DATABASE, "the test database is not disposable")
+                    verified = True
+                run_in_copy(copy, env, RESET_DATABASE, "could not reset the test database")
             completed = subprocess.run(
                 [
                     sys.executable,
