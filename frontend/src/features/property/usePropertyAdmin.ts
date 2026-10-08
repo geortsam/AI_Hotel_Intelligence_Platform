@@ -68,9 +68,18 @@ export interface PropertyAdminState {
   readonly setPage: (page: number) => void
   readonly setPageSize: (pageSize: number) => void
   readonly reload: () => void
-  readonly updateHotel: (payload: HotelUpdateRequest) => Promise<boolean>
+  /**
+   * `version` is the `updated_at` the edit was made against: given, a record saved since is
+   * refused with 412 `STALE_UPDATE` and this resolves `false`, nothing retried (Issue H6).
+   */
+  readonly updateHotel: (payload: HotelUpdateRequest, version?: string) => Promise<boolean>
   readonly createType: (payload: RoomTypeCreateRequest) => Promise<boolean>
-  readonly updateType: (code: string, payload: RoomTypeUpdateRequest) => Promise<boolean>
+  /** As `updateHotel`, for one room type. */
+  readonly updateType: (
+    code: string,
+    payload: RoomTypeUpdateRequest,
+    version?: string,
+  ) => Promise<boolean>
   readonly deleteType: (code: string) => Promise<boolean>
   readonly dismiss: () => void
 }
@@ -255,11 +264,11 @@ export function usePropertyAdmin(hotelPublicId: string | null): PropertyAdminSta
   )
 
   const updateHotel = useCallback(
-    (payload: HotelUpdateRequest) =>
+    (payload: HotelUpdateRequest, version?: string) =>
       run(
         'hotel-update',
         async () => {
-          const result = await hotelService.update(hotelPublicId!, payload)
+          const result = await hotelService.update(hotelPublicId!, payload, version)
           if (!isHotel(result)) {
             throw new ApiError(
               200,
@@ -291,11 +300,11 @@ export function usePropertyAdmin(hotelPublicId: string | null): PropertyAdminSta
   )
 
   const updateType = useCallback(
-    (code: string, payload: RoomTypeUpdateRequest) =>
+    (code: string, payload: RoomTypeUpdateRequest, version?: string) =>
       run(
         'type-update',
         async () => {
-          await roomTypeService.update(hotelPublicId!, code, payload)
+          await roomTypeService.update(hotelPublicId!, code, payload, version)
           setAttempt((n) => n + 1)
         },
         'Room type updated.',

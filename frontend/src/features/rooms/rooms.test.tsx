@@ -611,7 +611,7 @@ describe('updating a room', () => {
     expect(screen.getByText(/not something the API allows/)).toBeInTheDocument()
   })
 
-  it('patches the four writable fields and nothing else', async () => {
+  it('patches only the field that changed, of the four writable ones', async () => {
     const user = await openEdit()
     fetchStub.on('PATCH', '/rooms/', { body: room({ floor: 5 }) })
 
@@ -623,8 +623,8 @@ describe('updating a room', () => {
       expect(requestsFor('/rooms/', 'PATCH')).toHaveLength(1)
     })
     const body = JSON.parse(requestsFor('/rooms/', 'PATCH')[0]!.body!) as Record<string, unknown>
-    expect(Object.keys(body).sort()).toEqual(['floor', 'is_active', 'notes', 'status'])
-    expect(body.floor).toBe(5)
+    // Only what changed (Issue H6): status, notes and is_active were not touched.
+    expect(body).toEqual({ floor: 5 })
   })
 
   it('clears an emptied floor with an explicit null', async () => {
@@ -653,9 +653,9 @@ describe('updating a room', () => {
       expect(requestsFor('/rooms/', 'PATCH')).toHaveLength(1)
     })
     const body = JSON.parse(requestsFor('/rooms/', 'PATCH')[0]!.body!) as Record<string, unknown>
-    expect(body.is_active).toBe(false)
-    // The two fields are independent; the status went along unchanged, not derived.
-    expect(body.status).toBe('available')
+    // The two fields are independent: the status is not sent at all (Issue H6), so a
+    // housekeeping change made elsewhere while the form was open cannot be undone by it.
+    expect(body).toEqual({ is_active: false })
     expect(await screen.findByText('Withdrawn')).toBeInTheDocument()
   })
 
@@ -885,5 +885,97 @@ describe('accessibility', () => {
     expect(screen.getByText('Available')).toBeInTheDocument()
     expect(screen.getByText('Cleaning')).toBeInTheDocument()
     expect(screen.getAllByText('In service')).toHaveLength(2)
+  })
+})
+
+/* --- conditional updates (Issue H6) ------------------------------------------------------ */
+
+describe('editing a room sends only what changed, against the version loaded', () => {
+  const NEWER = '2026-09-02T09:00:00.123456+03:00'
+
+  async function openEdit() {
+    const user = userEvent.setup()
+    renderDetail()
+    await screen.findByRole('heading', { level: 1, name: 'Room 201' })
+    await user.click(screen.getByRole('button', { name: 'Edit room' }))
+    return user
+  }
+
+  function patchBody(index = 0): unknown {
+    return JSON.parse(requestsFor('/rooms/', 'PATCH')[index]!.body!)
+  }
+
+  it('sends a notes edit alone -- never the stale status -- with If-Match', async () => {
+    const user = await openEdit()
+    fetchStub.on('PATCH', '/rooms/', { body: room({ notes: 'Sea-facing balcony' }) })
+
+    await user.type(screen.getByLabelText('Notes (optional)'), 'Sea-facing balcony')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/rooms/', 'PATCH')).toHaveLength(1)
+    })
+    // The housekeeping status this form loaded is not sent back: a room marked out of order
+    // elsewhere meanwhile could not be put back on sale by it.
+    expect(patchBody()).toEqual({ notes: 'Sea-facing balcony' })
+    expect(requestsFor('/rooms/', 'PATCH')[0]!.ifMatch).toBe(`"${room().updated_at}"`)
+  })
+
+  it('sends a status chosen in the form alone', async () => {
+    const user = await openEdit()
+    fetchStub.on('PATCH', '/rooms/', { body: room({ status: 'cleaning' }) })
+
+    await user.selectOptions(screen.getByLabelText('Status'), 'cleaning')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/rooms/', 'PATCH')).toHaveLength(1)
+    })
+    expect(patchBody()).toEqual({ status: 'cleaning' })
+  })
+
+  it('leaves the status control unconditional: a command carries no If-Match', async () => {
+    const user = userEvent.setup()
+    fetchStub.on('PATCH', '/rooms/', { body: room({ status: 'maintenance' }) })
+    renderDetail()
+    await screen.findByRole('heading', { level: 1, name: 'Room 201' })
+
+    const group = screen.getByRole('group', { name: 'Set status' })
+    await user.click(within(group).getByRole('button', { name: 'Maintenance' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/rooms/', 'PATCH')).toHaveLength(1)
+    })
+    expect(requestsFor('/rooms/', 'PATCH')[0]!.ifMatch).toBeNull()
+  })
+
+  it('keeps the draft on a stale save and reloads only when asked', async () => {
+    const user = await openEdit()
+    fetchStub.on('PATCH', '/rooms/', {
+      status: 412,
+      body: { error: { code: 'STALE_UPDATE', message: 'server words, never shown' } },
+    })
+    const loads = requestsFor('/rooms/', 'GET').length
+
+    await user.type(screen.getByLabelText('Notes (optional)'), 'Typed here')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText(/Someone else changed this room/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Notes (optional)')).toHaveValue('Typed here')
+    expect(requestsFor('/rooms/', 'PATCH')).toHaveLength(1)
+    expect(requestsFor('/rooms/', 'GET')).toHaveLength(loads)
+    expect(visibleText()).not.toMatch(/server words/)
+
+    fetchStub.on('GET', '/rooms/', {
+      body: room({ status: 'out_of_order', notes: 'Leak under the sink', updated_at: NEWER }),
+    })
+    await user.click(within(alert).getByRole('button', { name: 'Reload the current version' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Notes (optional)')).toHaveValue('Leak under the sink')
+    })
+    expect(screen.getByLabelText('Status')).toHaveValue('out_of_order')
+    expect(requestsFor('/rooms/', 'GET')).toHaveLength(loads + 1)
   })
 })

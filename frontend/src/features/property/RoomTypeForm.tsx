@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from 'react'
 
 import { Button } from '@/components/ui/Button'
+import { changedFields } from '@/services/api/preconditions'
 import type { RoomType } from '@/types/room'
 import type { RoomTypeCreateRequest, RoomTypeUpdateRequest } from '@/types/roomType'
 
@@ -12,7 +13,11 @@ export interface RoomTypeFormProps {
   /** The property's currency, used as the default for a new type. */
   readonly defaultCurrency: string
   readonly onCreate?: (payload: RoomTypeCreateRequest) => void
-  readonly onUpdate?: (payload: RoomTypeUpdateRequest) => void
+  /**
+   * Only the fields that differ from `roomType` as loaded, and that record's `updated_at` --
+   * the version the edit was made against (Issue H6).
+   */
+  readonly onUpdate?: (payload: RoomTypeUpdateRequest, version: string) => void
   readonly onCancel: () => void
   readonly busy: boolean
   readonly onDirty?: () => void
@@ -48,6 +53,24 @@ function draftFrom(roomType: RoomType | undefined, defaultCurrency: string): Dra
   }
 }
 
+/** Every editable field as an update would write it. Emptied optionals become an explicit
+ * null; the price and the size are decimal strings, sent as typed. */
+function updateFrom(draft: Draft): RoomTypeUpdateRequest {
+  return {
+    name: draft.name.trim(),
+    max_occupancy: Number(draft.max_occupancy),
+    standard_occupancy: Number(draft.standard_occupancy),
+    bed_count: Number(draft.bed_count),
+    base_price: draft.base_price.trim(),
+    currency: draft.currency.trim(),
+    description: draft.description.trim() === '' ? null : draft.description.trim(),
+    bed_configuration:
+      draft.bed_configuration.trim() === '' ? null : draft.bed_configuration.trim(),
+    size_sqm: draft.size_sqm.trim() === '' ? null : draft.size_sqm.trim(),
+    is_active: draft.is_active,
+  }
+}
+
 /**
  * Creating a room type, or editing one.
  *
@@ -72,9 +95,11 @@ function draftFrom(roomType: RoomType | undefined, defaultCurrency: string): Dra
  * `standard_occupancy` may not exceed `max_occupancy`. Both are on this form, so the check
  * is mirrored and lands on the field. Note that the server enforces it twice with different
  * statuses: a **422** when both values are sent, and a **409** when only one is and the
- * comparison is against the stored value. Because this form always sends both on an update,
- * a refusal from it arrives as the 422 -- but the 409 path is real and is handled by the
- * page.
+ * comparison is against the stored value. An update sends only the fields that changed
+ * (Issue H6), so changing one occupancy sends one, and the server compares it with the stored
+ * other -- which is the form's own value unless the record has been saved since, and then the
+ * update carries a stale `If-Match` and is refused with 412 before that comparison is made.
+ * The 409 path is still real and is still handled by the page.
  */
 export function RoomTypeForm({
   roomType,
@@ -174,14 +199,11 @@ export function RoomTypeForm({
     }
 
     if (editing) {
-      onUpdate?.({
-        ...shared,
-        description: draft.description.trim() === '' ? null : draft.description.trim(),
-        bed_configuration:
-          draft.bed_configuration.trim() === '' ? null : draft.bed_configuration.trim(),
-        size_sqm: draft.size_sqm.trim() === '' ? null : draft.size_sqm.trim(),
-        is_active: draft.is_active,
-      })
+      // Only what differs from the record as loaded, both sides normalised alike (Issue H6).
+      onUpdate?.(
+        changedFields(updateFrom(draftFrom(roomType, defaultCurrency)), updateFrom(draft)),
+        roomType.updated_at,
+      )
       return
     }
 

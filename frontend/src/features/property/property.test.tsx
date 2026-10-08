@@ -266,7 +266,7 @@ describe('editing the property', () => {
     expect(screen.getByText(/does not allow changing it/)).toBeInTheDocument()
   })
 
-  it('patches the hotel without the slug and with is_active', async () => {
+  it('patches the hotel without the slug, sending only what changed', async () => {
     const user = await openForm()
     fetchStub.on('PATCH', `/hotels/${TEST_HOTEL.public_id}`, { body: hotel({ name: 'Renamed' }) })
 
@@ -280,12 +280,11 @@ describe('editing the property', () => {
     const body = JSON.parse(
       requestsFor(`/hotels/${TEST_HOTEL.public_id}`, 'PATCH')[0]!.body!,
     ) as Record<string, unknown>
-    expect(body.name).toBe('Renamed')
+    // Only what changed (Issue H6): no stale time zone, currency or is_active rides along.
+    expect(body).toEqual({ name: 'Renamed' })
     // Immutable, and a 422 if sent.
     expect(body).not.toHaveProperty('slug')
     expect(body).not.toHaveProperty('public_id')
-    // Update-only, and present.
-    expect(body).toHaveProperty('is_active')
   })
 
   it('sends codes as typed, leaving case to the server', async () => {
@@ -556,7 +555,7 @@ describe('editing a room type', () => {
     expect(screen.getByText(/not something the API allows/)).toBeInTheDocument()
   })
 
-  it('patches without the code and with is_active', async () => {
+  it('patches without the code, sending only what changed', async () => {
     const user = await openEdit()
     fetchStub.on('PATCH', '/room-types/', { body: roomType({ name: 'Renamed' }) })
 
@@ -572,9 +571,9 @@ describe('editing a room type', () => {
       `/api/v1/hotels/${TEST_HOTEL.public_id}/room-types/DLX`,
     )
     const body = JSON.parse(request.body!) as Record<string, unknown>
-    expect(body.name).toBe('Renamed')
+    // Only what changed (Issue H6).
+    expect(body).toEqual({ name: 'Renamed' })
     expect(body).not.toHaveProperty('code')
-    expect(body).toHaveProperty('is_active')
   })
 
   it('explains the 409 the partial-update occupancy rule produces', async () => {
@@ -843,5 +842,156 @@ describe('the compact layout', () => {
     // And the per-row controls keep their codes, so they stay distinguishable by name.
     expect(screen.getByRole('button', { name: 'Edit DLX' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete STD' })).toBeInTheDocument()
+  })
+})
+
+/* --- conditional updates (Issue H6) ------------------------------------------------------ */
+
+describe('editing the property or a room type sends only what changed', () => {
+  const HOTEL_PATH = `/hotels/${TEST_HOTEL.public_id}`
+  const NEWER = '2026-09-02T09:00:00.123456+03:00'
+
+  function staleAt(fragment: string) {
+    fetchStub.on('PATCH', fragment, {
+      status: 412,
+      body: { error: { code: 'STALE_UPDATE', message: 'server words, never shown' } },
+    })
+  }
+
+  async function openHotel() {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByRole('heading', { level: 3, name: 'Meridian Harbour Hotel' })
+    await user.click(screen.getByRole('button', { name: 'Edit property' }))
+    return user
+  }
+
+  async function openType() {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Deluxe Sea View')
+    await user.click(screen.getByRole('button', { name: 'Edit DLX' }))
+    return user
+  }
+
+  function patchBody(fragment: string, index = 0): unknown {
+    return JSON.parse(requestsFor(fragment, 'PATCH')[index]!.body!)
+  }
+
+  it('sends one changed hotel field with the loaded updated_at as If-Match', async () => {
+    const user = await openHotel()
+    fetchStub.on('PATCH', HOTEL_PATH, { body: hotel({ phone: '+30 210 555 0111' }) })
+
+    await user.clear(screen.getByLabelText('Phone (optional)'))
+    await user.type(screen.getByLabelText('Phone (optional)'), '+30 210 555 0111')
+    await user.click(screen.getByRole('button', { name: 'Save property' }))
+
+    await waitFor(() => {
+      expect(requestsFor(HOTEL_PATH, 'PATCH')).toHaveLength(1)
+    })
+    // No stale time zone, currency or status rides along.
+    expect(patchBody(HOTEL_PATH)).toEqual({ phone: '+30 210 555 0111' })
+    expect(requestsFor(HOTEL_PATH, 'PATCH')[0]!.ifMatch).toBe(`"${hotel().updated_at}"`)
+  })
+
+  it('sends a cleared hotel field as null and a flipped status as a boolean, alone', async () => {
+    const user = await openHotel()
+    fetchStub.on('PATCH', HOTEL_PATH, { body: hotel({ phone: null, is_active: false }) })
+
+    await user.clear(screen.getByLabelText('Phone (optional)'))
+    await user.click(screen.getByRole('checkbox', { name: 'This property is active' }))
+    await user.click(screen.getByRole('button', { name: 'Save property' }))
+
+    await waitFor(() => {
+      expect(requestsFor(HOTEL_PATH, 'PATCH')).toHaveLength(1)
+    })
+    expect(patchBody(HOTEL_PATH)).toEqual({ phone: null, is_active: false })
+  })
+
+  it('keeps the hotel draft on a stale save and reloads only when asked', async () => {
+    const user = await openHotel()
+    staleAt(HOTEL_PATH)
+    const loads = requestsAt(`/api/v1${HOTEL_PATH}`).length
+
+    await user.clear(screen.getByLabelText('Phone (optional)'))
+    await user.type(screen.getByLabelText('Phone (optional)'), '+30 210 555 0111')
+    await user.click(screen.getByRole('button', { name: 'Save property' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText(/Someone else changed this property/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Phone (optional)')).toHaveValue('+30 210 555 0111')
+    expect(requestsFor(HOTEL_PATH, 'PATCH')).toHaveLength(1)
+    expect(requestsAt(`/api/v1${HOTEL_PATH}`)).toHaveLength(loads)
+    expect(visibleText()).not.toMatch(/server words/)
+
+    fetchStub.on('GET', HOTEL_PATH, {
+      body: hotel({ phone: '+30 210 555 0999', updated_at: NEWER }),
+    })
+    await user.click(within(alert).getByRole('button', { name: 'Reload the current version' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Phone (optional)')).toHaveValue('+30 210 555 0999')
+    })
+    expect(requestsAt(`/api/v1${HOTEL_PATH}`)).toHaveLength(loads + 1)
+  })
+
+  it('sends one changed room-type field with the loaded updated_at as If-Match', async () => {
+    const user = await openType()
+    fetchStub.on('PATCH', '/room-types/', { body: roomType({ description: null }) })
+
+    await user.clear(screen.getByLabelText('Description (optional)'))
+    await user.click(screen.getByRole('button', { name: 'Save room type' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/room-types/', 'PATCH')).toHaveLength(1)
+    })
+    expect(patchBody('/room-types/')).toEqual({ description: null })
+    expect(requestsFor('/room-types/', 'PATCH')[0]!.ifMatch).toBe(`"${roomType().updated_at}"`)
+  })
+
+  it('sends a flipped room-type status alone', async () => {
+    const user = await openType()
+    fetchStub.on('PATCH', '/room-types/', { body: roomType({ is_active: false }) })
+
+    await user.click(screen.getByRole('checkbox', { name: 'This room type is bookable' }))
+    await user.click(screen.getByRole('button', { name: 'Save room type' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/room-types/', 'PATCH')).toHaveLength(1)
+    })
+    expect(patchBody('/room-types/')).toEqual({ is_active: false })
+  })
+
+  it('keeps the room-type draft on a stale save; a reload takes the reloaded row', async () => {
+    const user = await openType()
+    staleAt('/room-types/')
+
+    await user.clear(screen.getByLabelText('Description (optional)'))
+    await user.type(screen.getByLabelText('Description (optional)'), 'Typed here')
+    await user.click(screen.getByRole('button', { name: 'Save room type' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText(/Someone else changed this room type/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Description (optional)')).toHaveValue('Typed here')
+    expect(requestsFor('/room-types/', 'PATCH')).toHaveLength(1)
+
+    fetchStub.on('GET', '/room-types?page=', {
+      body: page([roomType({ description: 'Changed elsewhere', updated_at: NEWER }), STANDARD], 2),
+    })
+    await user.click(within(alert).getByRole('button', { name: 'Reload the current version' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Description (optional)')).toHaveValue('Changed elsewhere')
+    })
+
+    fetchStub.on('PATCH', '/room-types/', { body: roomType({ name: 'Renamed', updated_at: NEWER }) })
+    await user.clear(screen.getByLabelText('Name'))
+    await user.type(screen.getByLabelText('Name'), 'Renamed')
+    await user.click(screen.getByRole('button', { name: 'Save room type' }))
+    await waitFor(() => {
+      expect(requestsFor('/room-types/', 'PATCH')).toHaveLength(2)
+    })
+    expect(patchBody('/room-types/', 1)).toEqual({ name: 'Renamed' })
+    expect(requestsFor('/room-types/', 'PATCH')[1]!.ifMatch).toBe(`"${NEWER}"`)
   })
 })

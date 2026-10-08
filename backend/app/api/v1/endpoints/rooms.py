@@ -18,6 +18,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Path, Query, status
 
 from app.api.deps import RoomServiceDep, require_role
+from app.api.preconditions import STALE_UPDATE_RESPONSE, IfMatch
 from app.models.enums import HotelRole
 from app.schemas.common import ErrorResponse, Page
 from app.schemas.room import RoomCreate, RoomResponse, RoomUpdate
@@ -127,7 +128,7 @@ def get_room(
     "/{room_number}",
     response_model=RoomResponse,
     summary="Partially update a room",
-    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},
+    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE, **STALE_UPDATE_RESPONSE},
     # Stage 4.2: manager or above. Declared here because which role a verb
     # needs is a fact about the HTTP surface, not about the hotel.
     dependencies=[Depends(require_role(HotelRole.MANAGER))],
@@ -137,10 +138,18 @@ def update_room(
     room_type_code: RoomTypeCodePath,
     room_number: RoomNumberPath,
     payload: RoomUpdate,
+    if_match: IfMatch,
     service: RoomServiceDep,
 ) -> RoomResponse:
-    """Only the fields present in the body are written; the rest are preserved."""
-    return service.update(hotel_public_id, room_type_code.upper(), room_number.upper(), payload)
+    """Only the fields present in the body are written; the rest are preserved. 412 if an
+    ``If-Match`` names a version of the room that is no longer current (Issue H6)."""
+    return service.update(
+        hotel_public_id,
+        room_type_code.upper(),
+        room_number.upper(),
+        payload,
+        expected_updated_at=if_match,
+    )
 
 
 @router.delete(

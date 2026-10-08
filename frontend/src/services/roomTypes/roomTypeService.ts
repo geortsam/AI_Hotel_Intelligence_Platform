@@ -1,4 +1,5 @@
 import { api } from '@/services/api/client'
+import { ifMatch } from '@/services/api/preconditions'
 import type { Page } from '@/types/api'
 import type { RoomType } from '@/types/room'
 import type { RoomTypeCreateRequest, RoomTypeUpdateRequest } from '@/types/roomType'
@@ -98,16 +99,25 @@ export const roomTypeService = {
    * validation error. Both verified, and the difference in status between the two is real.
    *
    * Also **403** without the manager role and **404** for an unknown code.
+   *
+   * `version` is the `updated_at` of the record as it was loaded. Given, the update is
+   * conditional (Issue H6): **412** `STALE_UPDATE` and nothing saved if the record has been
+   * written since. Omitted, the update is applied as it always was.
    */
   update(
     hotelPublicId: string,
     code: string,
     payload: RoomTypeUpdateRequest,
+    version?: string,
     signal?: AbortSignal,
   ): Promise<RoomType> {
     return api.patch<RoomType>(
       `/hotels/${hotelPublicId}/room-types/${encodeURIComponent(code)}`,
-      { body: payload, ...(signal ? { signal } : {}) },
+      {
+        body: payload,
+        ...(version === undefined ? {} : { headers: ifMatch(version) }),
+        ...(signal ? { signal } : {}),
+      },
     )
   },
 

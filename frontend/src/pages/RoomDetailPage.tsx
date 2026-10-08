@@ -58,6 +58,13 @@ const UPDATE_FAILURE_COPY = {
     detail: 'The change could not be saved. The room is unchanged.',
     canRetry: true,
   },
+  stale: {
+    title: 'Nothing was saved',
+    detail:
+      'Someone else changed this room after you opened the form, so your changes were not applied. They are still in the form. Reload to see the current record — reloading replaces your edits.',
+    canRetry: false,
+    canReload: true,
+  },
 } as const
 
 const DELETE_FAILURE_COPY = {
@@ -215,6 +222,21 @@ export function RoomDetailPage() {
           <div>
             <p className={styles.failureTitle}>{mutationFailure.title}</p>
             <p className={styles.failureDetail}>{mutationFailure.detail}</p>
+            {mutationFailure.canReload === true ? (
+              <div className={styles.failureAction}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    // The reader's choice, never automatic: it replaces the draft (Issue H6).
+                    detail.dismiss()
+                    detail.reload()
+                  }}
+                >
+                  Reload the current version
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -225,6 +247,8 @@ export function RoomDetailPage() {
             Edit room
           </h2>
           <RoomForm
+            // A reloaded record is a new baseline: remounting replaces the draft with it.
+            key={room.updated_at}
             room={room}
             roomTypeCode={room.room_type_code}
             busy={detail.pending === 'update'}
@@ -232,8 +256,8 @@ export function RoomDetailPage() {
             onCancel={() => {
               setEditing(false)
             }}
-            onUpdate={(payload) => {
-              void detail.update(payload, 'Room updated.').then((accepted) => {
+            onUpdate={(payload, version) => {
+              void detail.update(payload, 'Room updated.', version).then((accepted) => {
                 if (accepted) {
                   setEditing(false)
                 }

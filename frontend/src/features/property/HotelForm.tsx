@@ -1,13 +1,18 @@
 import { useId, useState, type FormEvent } from 'react'
 
 import { Button } from '@/components/ui/Button'
+import { changedFields } from '@/services/api/preconditions'
 import type { Hotel, HotelUpdateRequest } from '@/types/hotel'
 
 import styles from './PropertyForms.module.css'
 
 export interface HotelFormProps {
   readonly hotel: Hotel
-  readonly onUpdate: (payload: HotelUpdateRequest) => void
+  /**
+   * Only the fields that differ from `hotel` as loaded, and that record's `updated_at` --
+   * the version the edit was made against (Issue H6).
+   */
+  readonly onUpdate: (payload: HotelUpdateRequest, version: string) => void
   readonly onCancel: () => void
   readonly busy: boolean
   readonly onDirty?: () => void
@@ -46,6 +51,27 @@ function draftFrom(hotel: Hotel): Draft {
     phone: hotel.phone ?? '',
     website: hotel.website ?? '',
     is_active: hotel.is_active,
+  }
+}
+
+/** Every editable field as an update would write it. */
+function updateFrom(draft: Draft): HotelUpdateRequest {
+  return {
+    name: draft.name.trim(),
+    address_line1: draft.address_line1.trim(),
+    // An emptied optional becomes an explicit null: that is how the API clears a column.
+    address_line2: draft.address_line2.trim() === '' ? null : draft.address_line2.trim(),
+    city: draft.city.trim(),
+    region: draft.region.trim() === '' ? null : draft.region.trim(),
+    postal_code: draft.postal_code.trim() === '' ? null : draft.postal_code.trim(),
+    country_code: draft.country_code.trim(),
+    timezone: draft.timezone.trim(),
+    currency: draft.currency.trim(),
+    star_rating: draft.star_rating === '' ? null : Number(draft.star_rating),
+    email: draft.email.trim() === '' ? null : draft.email.trim(),
+    phone: draft.phone.trim() === '' ? null : draft.phone.trim(),
+    website: draft.website.trim() === '' ? null : draft.website.trim(),
+    is_active: draft.is_active,
   }
 }
 
@@ -141,23 +167,9 @@ export function HotelForm({ hotel, onUpdate, onCancel, busy, onDirty }: HotelFor
     }
     setProblem(null)
 
-    onUpdate({
-      name: draft.name.trim(),
-      address_line1: draft.address_line1.trim(),
-      // An emptied optional becomes an explicit null: that is how the API clears a column.
-      address_line2: draft.address_line2.trim() === '' ? null : draft.address_line2.trim(),
-      city: draft.city.trim(),
-      region: draft.region.trim() === '' ? null : draft.region.trim(),
-      postal_code: draft.postal_code.trim() === '' ? null : draft.postal_code.trim(),
-      country_code: draft.country_code.trim(),
-      timezone: draft.timezone.trim(),
-      currency: draft.currency.trim(),
-      star_rating: draft.star_rating === '' ? null : Number(draft.star_rating),
-      email: draft.email.trim() === '' ? null : draft.email.trim(),
-      phone: draft.phone.trim() === '' ? null : draft.phone.trim(),
-      website: draft.website.trim() === '' ? null : draft.website.trim(),
-      is_active: draft.is_active,
-    })
+    // Only what differs from the record as loaded, both sides normalised alike (Issue H6): a
+    // stale copy of the time zone or the currency is never sent back over a newer one.
+    onUpdate(changedFields(updateFrom(draftFrom(hotel)), updateFrom(draft)), hotel.updated_at)
   }
 
   return (

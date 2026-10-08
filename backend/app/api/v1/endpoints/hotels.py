@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import APIRouter, Query, status
 
 from app.api.deps import HotelServiceDep
+from app.api.preconditions import STALE_UPDATE_RESPONSE, IfMatch
 from app.schemas.common import ErrorResponse, Page
 from app.schemas.hotel import HotelCreate, HotelResponse, HotelUpdate
 from app.services.hotel import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
@@ -90,13 +91,19 @@ def get_hotel(public_id: uuid.UUID, service: HotelServiceDep) -> HotelResponse:
     "/{public_id}",
     response_model=HotelResponse,
     summary="Partially update a hotel",
-    responses={**NOT_FOUND_RESPONSE, **OWNER_REQUIRED_RESPONSE, **CONFLICT_RESPONSE},
+    responses={
+        **NOT_FOUND_RESPONSE,
+        **OWNER_REQUIRED_RESPONSE,
+        **CONFLICT_RESPONSE,
+        **STALE_UPDATE_RESPONSE,
+    },
 )
 def update_hotel(
-    public_id: uuid.UUID, payload: HotelUpdate, service: HotelServiceDep
+    public_id: uuid.UUID, payload: HotelUpdate, if_match: IfMatch, service: HotelServiceDep
 ) -> HotelResponse:
-    """Only the fields present in the body are written; the rest are preserved."""
-    return service.update(public_id, payload)
+    """Only the fields present in the body are written; the rest are preserved. 412 if an
+    ``If-Match`` names a version of the hotel that is no longer current (Issue H6)."""
+    return service.update(public_id, payload, expected_updated_at=if_match)
 
 
 @router.delete(

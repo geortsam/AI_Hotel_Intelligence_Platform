@@ -18,6 +18,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Path, Query, status
 
 from app.api.deps import GuestServiceDep, require_role
+from app.api.preconditions import STALE_UPDATE_RESPONSE, IfMatch
 from app.models.enums import HotelRole
 from app.schemas.common import ErrorResponse, Page
 from app.schemas.guest import GuestCreate, GuestResponse, GuestUpdate
@@ -100,7 +101,7 @@ def get_guest(
     "/{guest_public_id}",
     response_model=GuestResponse,
     summary="Partially update a guest",
-    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},
+    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE, **STALE_UPDATE_RESPONSE},
     # Stage 4.2: staff or above. Declared here because which role a verb
     # needs is a fact about the HTTP surface, not about the hotel.
     dependencies=[Depends(require_role(HotelRole.STAFF))],
@@ -109,10 +110,12 @@ def update_guest(
     hotel_public_id: HotelPath,
     guest_public_id: GuestPath,
     payload: GuestUpdate,
+    if_match: IfMatch,
     service: GuestServiceDep,
 ) -> GuestResponse:
-    """Only the fields present in the body are written; the rest are preserved."""
-    return service.update(hotel_public_id, guest_public_id, payload)
+    """Only the fields present in the body are written; the rest are preserved. 412 if an
+    ``If-Match`` names a version of the guest that is no longer current (Issue H6)."""
+    return service.update(hotel_public_id, guest_public_id, payload, expected_updated_at=if_match)
 
 
 @router.delete(

@@ -22,6 +22,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Path, Query, status
 
 from app.api.deps import BookingServiceDep, ReconciliationServiceDep, require_role
+from app.api.preconditions import STALE_UPDATE_RESPONSE, IfMatch
 from app.models.enums import HotelRole
 from app.schemas.booking import (
     BookingCreate,
@@ -184,8 +185,9 @@ def get_reconciliation(
     "operation the deferred night-completeness trigger will not accept as a field edit. "
     "Checking a checked_in booking out before its planned check-out is refused with 409: "
     "an early departure is recorded with POST .../stay/departure, which removes the nights "
-    "not stayed.",
-    responses={**NOT_FOUND_RESPONSE, **STATUS_CONFLICT_RESPONSE},
+    "not stayed. An optional If-Match carrying the booking's updated_at makes a field edit "
+    "conditional: 412 STALE_UPDATE, with nothing written, if the booking has changed since.",
+    responses={**NOT_FOUND_RESPONSE, **STATUS_CONFLICT_RESPONSE, **STALE_UPDATE_RESPONSE},
     # Stage 4.2: staff or above. Declared here because which role a verb
     # needs is a fact about the HTTP surface, not about the hotel.
     dependencies=[Depends(require_role(HotelRole.STAFF))],
@@ -194,11 +196,13 @@ def update_booking(
     hotel_public_id: HotelPath,
     booking_public_id: BookingPath,
     payload: BookingUpdate,
+    if_match: IfMatch,
     service: BookingServiceDep,
 ) -> BookingResponse:
     """Confirming a booking whose room has since been taken returns 409: the status change
-    cascades to the allocations and re-triggers the exclusion constraint."""
-    return service.update(hotel_public_id, booking_public_id, payload)
+    cascades to the allocations and re-triggers the exclusion constraint. 412 if an
+    ``If-Match`` names a version of the booking that is no longer current (Issue H6)."""
+    return service.update(hotel_public_id, booking_public_id, payload, expected_updated_at=if_match)
 
 
 @router.patch(

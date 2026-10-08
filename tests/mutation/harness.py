@@ -232,25 +232,35 @@ def child_environment(database_url: str | None) -> dict[str, str]:
     return env
 
 
-SUMMARY_WORDS = (("PASSED", "passed"), ("FAILED", "failed"), ("ERROR", "failed"))
+#: ``ERROR`` is not ``FAILED``. A test that errors -- in setup above all, but in teardown too --
+#: did not reach a verdict on the mutation: the fixture that migrates the database fell over,
+#: or the previous run left something behind. Counting it as a failing killer would report a
+#: mutation killed that no assertion ever saw (Issue H6). It is an error, and reported as one.
+SUMMARY_WORDS = (("PASSED", "passed"), ("FAILED", "failed"), ("ERROR", "error"))
+
+#: When one node is reported twice -- a call that passed or failed, then a teardown error --
+#: the stronger word stands. A call that genuinely FAILED is a verdict, whatever teardown did
+#: next; a teardown error after a PASS leaves the node an error.
+RANK = {"passed": 0, "error": 1, "failed": 2}
 
 
 def summary_verdicts(output: str) -> dict[str, str]:
-    """Every node id in ``-rA`` summary lines (``PASSED <id>``, ``FAILED <id> - <why>``)."""
+    """Every node id in ``-rA`` summary lines (``PASSED <id>``, ``FAILED <id> - <why>``,
+    ``ERROR <id> - <why>``), each at the strongest verdict reported for it."""
     verdicts: dict[str, str] = {}
     for line in output.splitlines():
         for word, verdict in SUMMARY_WORDS:
             if line.startswith(f"{word} "):
                 node = line[len(word) + 1 :].split(" - ", 1)[0]
-                # A failure outranks a pass: a test that errors in teardown is reported twice.
-                if verdicts.get(node) != "failed":
+                if RANK[verdict] >= RANK.get(verdicts.get(node, "passed"), 0):
                     verdicts[node] = verdict
     return verdicts
 
 
 def parse_pytest_summary(output: str, killers: Sequence[str]) -> Results:
     """A killer names one test, or -- without ``[...]`` -- every parametrised instance of it:
-    it failed if any instance failed, and passed only if every instance ran and passed."""
+    it failed if any instance failed, errored if none failed but one errored, and passed only
+    if every instance ran and passed."""
     verdicts = summary_verdicts(output)
     results: Results = {}
     for killer in killers:
@@ -261,6 +271,8 @@ def parse_pytest_summary(output: str, killers: Sequence[str]) -> Results:
         ]
         if "failed" in instances:
             results[killer] = "failed"
+        elif "error" in instances:
+            results[killer] = "error"
         elif instances:
             results[killer] = "passed"
     return results
@@ -410,6 +422,12 @@ def make_executor(database_url: str | None) -> Execute:
 
 
 def judge(mutation: Mutation, results: Results) -> Outcome:
+    errored = [killer for killer in mutation.killers if results.get(killer) == "error"]
+    if errored:
+        # Never a kill: no assertion saw the mutation. See SUMMARY_WORDS.
+        return Outcome(
+            mutation, Verdict.ERROR, "killer(s) errored before a verdict: " + "; ".join(errored)
+        )
     failed = [killer for killer in mutation.killers if results.get(killer) == "failed"]
     if len(failed) == len(mutation.killers):
         return Outcome(mutation, Verdict.KILLED, f"{len(failed)} killer(s) failed")

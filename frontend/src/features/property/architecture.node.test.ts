@@ -138,7 +138,11 @@ describe('the immutable identities are never sent to an update', () => {
     const form = named('RoomTypeForm.tsx')
     // The two payloads, taken apart so each can be searched for what the other owns.
     const create = /onCreate\?\.\(\{([\s\S]*?)\n    \}\)/.exec(form)![1]!
-    const update = /onUpdate\?\.\(\{([\s\S]*?)\n      \}\)/.exec(form)![1]!
+    // Every field an update may carry is built by `updateFrom`; the form sends the subset
+    // that changed (Issue H6).
+    const update = /function updateFrom\(draft: Draft\): RoomTypeUpdateRequest \{([\s\S]*?)\n\}/.exec(
+      form,
+    )![1]!
 
     expect(create).toMatch(/code: draft\.code\.trim\(\)/)
     // Update-only, and a 422 at creation.

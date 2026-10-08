@@ -8,6 +8,7 @@ import {
   ROOM_STATUSES,
   statusPresentation,
 } from '@/features/rooms/vocabulary'
+import { changedFields } from '@/services/api/preconditions'
 import type { Room, RoomCreateRequest, RoomStatus, RoomUpdateRequest } from '@/types/room'
 
 import styles from './RoomForm.module.css'
@@ -18,7 +19,11 @@ export interface RoomFormProps {
   /** The type the new room will belong to. Shown, not chosen: it comes from the URL. */
   readonly roomTypeCode: string
   readonly onCreate?: (payload: RoomCreateRequest) => void
-  readonly onUpdate?: (payload: RoomUpdateRequest) => void
+  /**
+   * Only the fields that differ from `room` as loaded, and that record's `updated_at` -- the
+   * version the edit was made against (Issue H6).
+   */
+  readonly onUpdate?: (payload: RoomUpdateRequest, version: string) => void
   readonly onCancel: () => void
   readonly busy: boolean
   readonly onDirty?: () => void
@@ -39,6 +44,17 @@ function draftFrom(room: Room | undefined): Draft {
     status: room?.status ?? 'available',
     notes: room?.notes ?? '',
     is_active: room?.is_active ?? true,
+  }
+}
+
+/** Every editable field as an update would write it. Emptied optionals become an explicit
+ * null. */
+function updateFrom(draft: Draft): RoomUpdateRequest {
+  return {
+    floor: draft.floor.trim() === '' ? null : Number(draft.floor.trim()),
+    status: draft.status,
+    notes: draft.notes.trim() === '' ? null : draft.notes.trim(),
+    is_active: draft.is_active,
   }
 }
 
@@ -138,12 +154,9 @@ export function RoomForm({
     const floor = draft.floor.trim() === '' ? null : Number(draft.floor.trim())
 
     if (editing) {
-      onUpdate?.({
-        floor,
-        status: draft.status,
-        notes: draft.notes.trim() === '' ? null : draft.notes.trim(),
-        is_active: draft.is_active,
-      })
+      // Only what differs from the record as loaded, both sides normalised alike (Issue H6): a
+      // housekeeping status set elsewhere while this form was open is never sent back stale.
+      onUpdate?.(changedFields(updateFrom(draftFrom(room)), updateFrom(draft)), room.updated_at)
       return
     }
 

@@ -74,6 +74,23 @@ class HotelRepository:
             ).all()
         )
 
+    def lock_for_update(self, hotel: Hotel) -> Hotel:
+        """Re-read this hotel under ``FOR NO KEY UPDATE``, refreshing it in place (Issue H6).
+
+        Taken before an ``If-Match`` precondition is compared, so no other write can land
+        between the comparison and the update. ``NO KEY`` is the lock PostgreSQL's own UPDATE
+        takes when no key changes: it serialises with every other writer of this row, while the
+        foreign-key checks of the many inserts referencing a hotel (``FOR KEY SHARE``) need not
+        wait behind an edit of its name. ``populate_existing``, because the instance is already
+        in the identity map and would otherwise keep the ``updated_at`` it was first loaded with.
+        """
+        return self._session.scalars(
+            select(Hotel)
+            .where(Hotel.id == hotel.id)
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        ).one()
+
     def apply_changes(self, hotel: Hotel, changes: dict[str, Any]) -> Hotel:
         """Apply a partial update to a managed instance and flush it.
 

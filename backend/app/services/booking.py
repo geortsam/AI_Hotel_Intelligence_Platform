@@ -83,6 +83,7 @@ from app.schemas.booking import (
 from app.schemas.common import Page
 from app.services.audit import AuditTrail
 from app.services.business_day import Clock, hotel_today, utc_now
+from app.services.concurrency import require_unchanged
 from app.services.pricing import NightRequest, PricingService
 from app.services.repricing import RepricingOutcome, RepricingPolicy
 from app.services.scope import HotelScopeResolver
@@ -353,15 +354,27 @@ class BookingService:
         hotel_public_id: uuid.UUID,
         booking_public_id: uuid.UUID,
         payload: BookingUpdate,
+        *,
+        expected_updated_at: dt.datetime | None = None,
     ) -> BookingResponse:
         """Apply a partial update and commit.
 
         A status change is the interesting case: it cascades to every allocation through
         ``ON UPDATE CASCADE`` and re-evaluates the exclusion constraint, so confirming a
         booking whose room has since been taken is refused by the database.
+
+        With ``expected_updated_at`` -- an optional ``If-Match`` precondition, meant for field
+        edits -- refuse with 412 unless the booking is still that version. A status change
+        sent without one is judged against the current status under the lock, as before; the
+        frontend's own status control sends none.
         """
         hotel = self._scope.require_hotel(hotel_public_id)
         booking = self._require_booking(hotel, booking_public_id)
+        if expected_updated_at is not None:
+            # Issue H6. Lock, then compare -- before anything else this update does, the
+            # empty-update shortcut included. A stale version is refused with nothing written.
+            booking = self._repository.lock_for_update(booking)
+            require_unchanged(booking.updated_at, expected_updated_at)
         changes: dict[str, Any] = payload.model_dump(exclude_unset=True)
 
         if not changes:

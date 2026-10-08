@@ -74,6 +74,13 @@ const WRITE_COPY = {
       detail: 'The change could not be saved. The property is unchanged.',
       canRetry: true,
     },
+  stale: {
+    title: 'Nothing was saved',
+    detail:
+      'Someone else changed this property after you opened the form, so your changes were not applied. They are still in the form. Reload to see the current version — reloading replaces your edits.',
+    canRetry: false,
+    canReload: true,
+  },
   },
   'type-create': {
     forbidden: {
@@ -121,6 +128,13 @@ const WRITE_COPY = {
       detail: 'The change could not be saved. The room type is unchanged.',
       canRetry: true,
     },
+  stale: {
+    title: 'Nothing was saved',
+    detail:
+      'Someone else changed this room type after you opened the form, so your changes were not applied. They are still in the form. Reload to see the current version — reloading replaces your edits.',
+    canRetry: false,
+    canReload: true,
+  },
   },
   'type-delete': {
     forbidden: {
@@ -181,7 +195,13 @@ export function PropertyPage() {
   const admin = usePropertyAdmin(selected?.public_id ?? null)
   const [editingHotel, setEditingHotel] = useState(false)
   const [addingType, setAddingType] = useState(false)
-  const [editingType, setEditingType] = useState<RoomType | null>(null)
+  /* The code being edited, not a copy of the row: the form's baseline is always the row as
+   * last loaded, so a reload after a stale save (Issue H6) replaces it. */
+  const [editingTypeCode, setEditingTypeCode] = useState<string | null>(null)
+  const editingType =
+    editingTypeCode === null
+      ? null
+      : (admin.types.find((type) => type.code === editingTypeCode) ?? null)
   const [confirmingDelete, setConfirmingDelete] = useState<RoomType | null>(null)
 
   /* Switching property closes every form and clears its banners: a refusal at one hotel must
@@ -189,7 +209,7 @@ export function PropertyPage() {
   useEffect(() => {
     setEditingHotel(false)
     setAddingType(false)
-    setEditingType(null)
+    setEditingTypeCode(null)
     setConfirmingDelete(null)
     admin.dismiss()
   }, [selected?.public_id])
@@ -246,6 +266,21 @@ export function PropertyPage() {
           <div>
             <p className={styles.failureTitle}>{writeFailure.title}</p>
             <p className={styles.failureDetail}>{writeFailure.detail}</p>
+            {writeFailure.canReload === true ? (
+              <div className={styles.failureAction}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    // The reader's choice, never automatic: it replaces the draft (Issue H6).
+                    admin.dismiss()
+                    admin.reload()
+                  }}
+                >
+                  Reload the current version
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -287,14 +322,16 @@ export function PropertyPage() {
         ) : editingHotel ? (
           <div className={styles.panel}>
             <HotelForm
+              // A reloaded record is a new baseline: remounting replaces the draft with it.
+              key={admin.hotel.updated_at}
               hotel={admin.hotel}
               busy={admin.pending === 'hotel-update'}
               onDirty={admin.dismiss}
               onCancel={() => {
                 setEditingHotel(false)
               }}
-              onUpdate={(payload) => {
-                void admin.updateHotel(payload).then((accepted) => {
+              onUpdate={(payload, version) => {
+                void admin.updateHotel(payload, version).then((accepted) => {
                   if (accepted) {
                     setEditingHotel(false)
                   }
@@ -410,17 +447,19 @@ export function PropertyPage() {
         {editingType !== null ? (
           <div className={styles.panel}>
             <RoomTypeForm
+              // A reloaded row is a new baseline: remounting replaces the draft with it.
+              key={editingType.updated_at}
               roomType={editingType}
               defaultCurrency={admin.hotel?.currency ?? ''}
               busy={admin.pending === 'type-update'}
               onDirty={admin.dismiss}
               onCancel={() => {
-                setEditingType(null)
+                setEditingTypeCode(null)
               }}
-              onUpdate={(payload) => {
-                void admin.updateType(editingType.code, payload).then((accepted) => {
+              onUpdate={(payload, version) => {
+                void admin.updateType(editingType.code, payload, version).then((accepted) => {
                   if (accepted) {
-                    setEditingType(null)
+                    setEditingTypeCode(null)
                   }
                 })
               }}
@@ -496,7 +535,7 @@ export function PropertyPage() {
               onEdit={(type) => {
                 admin.dismiss()
                 setAddingType(false)
-                setEditingType(type)
+                setEditingTypeCode(type.code)
               }}
               onDelete={(type) => {
                 admin.dismiss()

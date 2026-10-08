@@ -46,7 +46,12 @@ export interface GuestDetailState {
   readonly deleted: boolean
 
   readonly reload: () => void
-  readonly update: (payload: GuestUpdateRequest) => Promise<boolean>
+  /**
+   * `version` is the `updated_at` the edit was made against. Given, a record saved since is
+   * refused with 412 `STALE_UPDATE` and this resolves `false`, with the refusal in
+   * `mutationError` -- nothing is retried and nothing on screen changes (Issue H6).
+   */
+  readonly update: (payload: GuestUpdateRequest, version?: string) => Promise<boolean>
   readonly remove: () => Promise<boolean>
   readonly dismiss: () => void
 }
@@ -130,7 +135,7 @@ export function useGuestDetail({
   }, [])
 
   const update = useCallback(
-    async (payload: GuestUpdateRequest): Promise<boolean> => {
+    async (payload: GuestUpdateRequest, version?: string): Promise<boolean> => {
       if (inFlight.current || hotelPublicId === null || guestPublicId === undefined) {
         return false
       }
@@ -141,7 +146,7 @@ export function useGuestDetail({
       setSaved(null)
 
       try {
-        const result = await guestService.update(hotelPublicId, guestPublicId, payload)
+        const result = await guestService.update(hotelPublicId, guestPublicId, payload, version)
         if (!isGuest(result)) {
           throw new ApiError(
             200,

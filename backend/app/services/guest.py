@@ -21,6 +21,7 @@ Two departures from the pattern established in earlier stages, both deliberate:
 
 from __future__ import annotations
 
+import datetime as dt
 import logging
 import uuid
 from typing import Any
@@ -43,6 +44,7 @@ from app.models.hotel import Hotel
 from app.repositories.guest import GuestRepository
 from app.schemas.common import Page
 from app.schemas.guest import GuestCreate, GuestResponse, GuestUpdate
+from app.services.concurrency import require_unchanged
 from app.services.scope import HotelScopeResolver
 
 logger = logging.getLogger(__name__)
@@ -111,11 +113,22 @@ class GuestService:
         return self._to_response(created, hotel)
 
     def update(
-        self, hotel_public_id: uuid.UUID, guest_public_id: uuid.UUID, payload: GuestUpdate
+        self,
+        hotel_public_id: uuid.UUID,
+        guest_public_id: uuid.UUID,
+        payload: GuestUpdate,
+        *,
+        expected_updated_at: dt.datetime | None = None,
     ) -> GuestResponse:
-        """Apply a partial update and commit."""
+        """Apply a partial update and commit. With ``expected_updated_at`` -- an ``If-Match``
+        precondition -- refuse with 412 unless the guest is still that version."""
         hotel = self._scope.require_hotel(hotel_public_id)
         guest = self._require_guest(hotel, guest_public_id)
+        if expected_updated_at is not None:
+            # Issue H6. Lock, then compare -- before anything else this update does, the
+            # empty-update shortcut included. A stale version is refused with nothing written.
+            guest = self._repository.lock_for_update(guest)
+            require_unchanged(guest.updated_at, expected_updated_at)
         changes: dict[str, Any] = payload.model_dump(exclude_unset=True)
 
         if not changes:

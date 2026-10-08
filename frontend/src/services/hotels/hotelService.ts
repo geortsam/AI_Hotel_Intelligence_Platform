@@ -1,4 +1,5 @@
 import { api } from '@/services/api/client'
+import { ifMatch } from '@/services/api/preconditions'
 import type { Page } from '@/types/api'
 import type { Hotel, HotelCreateRequest, HotelUpdateRequest } from '@/types/hotel'
 
@@ -90,10 +91,20 @@ export const hotelService = {
    *
    * Throws `ApiError`: **403** without the owner role; **404** for an unknown hotel; **422**
    * for `slug`, which is immutable, or any other field the schema lacks.
+   *
+   * `version` is the `updated_at` of the record as it was loaded. Given, the update is
+   * conditional (Issue H6): **412** `STALE_UPDATE` and nothing saved if the record has been
+   * written since. Omitted, the update is applied as it always was.
    */
-  update(publicId: string, payload: HotelUpdateRequest, signal?: AbortSignal): Promise<Hotel> {
+  update(
+    publicId: string,
+    payload: HotelUpdateRequest,
+    version?: string,
+    signal?: AbortSignal,
+  ): Promise<Hotel> {
     return api.patch<Hotel>(`/hotels/${publicId}`, {
       body: payload,
+      ...(version === undefined ? {} : { headers: ifMatch(version) }),
       ...(signal ? { signal } : {}),
     })
   },

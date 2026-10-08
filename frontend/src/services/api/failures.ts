@@ -1,4 +1,5 @@
 import { ApiError } from '@/services/api/ApiError'
+import { STALE_UPDATE } from '@/services/api/preconditions'
 
 /**
  * What a failed request says to the person looking at it.
@@ -24,6 +25,12 @@ export interface FailureNotice {
   readonly detail: string
   /** Whether retrying the same request could plausibly succeed. */
   readonly canRetry: boolean
+  /**
+   * Whether the remedy is to reload the record first (Issue H6). Set only for a stale update:
+   * re-sending the same request would be refused again, and the page offers a reload instead
+   * -- one the reader chooses, because it replaces what they typed.
+   */
+  readonly canReload?: boolean
 }
 
 export interface FailureCopyOverrides {
@@ -57,6 +64,20 @@ export interface FailureCopyOverrides {
    * itself; nothing about a server fault is the reader's business.
    */
   readonly serverFault?: FailureNotice
+  /**
+   * What a 412 `STALE_UPDATE` means for this record: someone else saved it after this form
+   * was opened. Recognised by `error.code` alone, never by the server's words.
+   */
+  readonly stale?: FailureNotice
+}
+
+/** The default copy for a conditional update that met a newer version of its record. */
+export const STALE_UPDATE_NOTICE: FailureNotice = {
+  title: 'Nothing was saved',
+  detail:
+    'Someone else changed this record after you opened the form, so your changes were not applied. They are still in the form. Reload to see the current version — reloading replaces your edits.',
+  canRetry: false,
+  canReload: true,
 }
 
 export function describeFailure(
@@ -92,6 +113,10 @@ export function describeFailure(
         canRetry: false,
       }
     )
+  }
+
+  if (error.status === 412 && error.code === STALE_UPDATE) {
+    return overrides.stale ?? STALE_UPDATE_NOTICE
   }
 
   if (error.status === 409) {

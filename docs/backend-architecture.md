@@ -83,6 +83,44 @@ booking, a duplicate payment reference, a second review of one stay, a refused c
 delete, a rejected guest update and a refused booking delete each leave **every** table
 byte-identical, checked by counting all eleven.
 
+### Conditional updates (Issue H6)
+
+Without help, a PATCH is last-write-wins: a client that loaded a record, waited and saved
+overwrote whatever was written in between. Five routes now take an optional `If-Match` — the
+hotel, guest, room type, room and booking PATCHes — carrying the record's own `updated_at` as a
+strong entity-tag, exactly as the API returned it (`"2026-10-09T10:00:00.123456Z"`):
+
+- **Lock, then compare, in the update's own transaction.** With the header, the service
+  re-reads the row under a row lock (`populate_existing`) before anything else the update does
+  — the empty-update shortcut included — and compares `updated_at` by **instant and exact
+  equality**. Never by order: the `set_updated_at` trigger stamps `now()`, the transaction's
+  *start*, so stamps need not follow commit order. A writer that commits while the update
+  waits for the lock is therefore seen, not overwritten.
+- **The lock** is the one the row's other writers already contend on: `FOR UPDATE` on a
+  booking (`BookingRepository.lock_for_update`, shared with status transitions and stay
+  moves); `FOR NO KEY UPDATE` on a hotel, guest, room type or room — the lock PostgreSQL's own
+  non-key UPDATE takes, so it serialises with every writer of the row without making the
+  foreign-key checks of unrelated inserts (`FOR KEY SHARE`) wait behind an edit.
+- **A mismatch is `412 STALE_UPDATE`**, raised before anything is flushed: nothing is written.
+  A malformed header — a weak `W/` tag, an unquoted value, a list, a timestamp without a zone
+  or finer than a microsecond — is the usual `422 VALIDATION_ERROR` located at
+  `["header", "If-Match"]`. `*` constrains nothing.
+- **No header, no change.** The update runs exactly as before: no lock, no comparison. Every
+  existing client keeps working; the frontend always sends one from its edit forms.
+- **Not on commands.** Booking status changes and stay moves are judged against the current
+  state under the booking's lock already; member role changes, review moderation and the room
+  status control are single deliberate commands. None of them carries the precondition.
+- **Not on the global catalogues.** `amenities`, `revenue_categories` and `expense_categories`
+  have no `updated_at`, so there is no version to name; adding one is a migration H6 did not
+  make. Their forms send only the fields that changed, which keeps an untouched field from
+  being restored from a stale copy — but two operators changing the **same** field of the same
+  entry still leave the later value in place.
+
+The edit forms send only the fields that differ from the record as loaded (each side put
+through the same draft-to-payload function), so even without a precondition an update can no
+longer restore, from a stale form, a value someone else saved to a field this operator never
+touched.
+
 ---
 
 ## 4. Tenant isolation
@@ -294,10 +332,10 @@ In priority order.
    it: the partial unique index on `(hotel_id, email)` cannot collapse two malformed spellings
    of one address.
 3. ~~**The three `SET NULL` corrections** in §9.~~ Done by migration `0018_composite_set_null_columns` (Issue H3).
-4. **Optimistic concurrency.** Two clients PATCHing one booking is currently last-write-wins.
-   Every table has `updated_at`; a version column or an `If-Unmodified-Since` precondition is
-   the natural next step. Note this is genuinely absent only for *updates* — creation races are
-   already decided by the database (§6).
+4. ~~**Optimistic concurrency.**~~ Done for the hotel, guest, room type, room and booking
+   PATCHes by an optional `If-Match` on `updated_at` (Issue H6, §3). **Remaining:** the three
+   global catalogues have no `updated_at`, so same-field edits there are still last-write-wins;
+   giving them one is a migration. Creation races were always decided by the database (§6).
 5. **A `daily_hotel_metrics` population job**, which is also what would make forecast
    backtesting reproducible.
 6. **Rate limiting and request size limits.** `page_size` is capped at 100 and analytics ranges

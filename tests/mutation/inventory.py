@@ -1963,9 +1963,12 @@ STAGE_G1 = [
         one(
             "backend/app/api/v1/endpoints/hotels.py",
             '    summary="Partially update a hotel",\n'
-            "    responses={**NOT_FOUND_RESPONSE, **OWNER_REQUIRED_RESPONSE, **CONFLICT_RESPONSE},",
+            "    responses={\n"
+            "        **NOT_FOUND_RESPONSE,\n"
+            "        **OWNER_REQUIRED_RESPONSE,\n",
             '    summary="Partially update a hotel",\n'
-            "    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},",
+            "    responses={\n"
+            "        **NOT_FOUND_RESPONSE,\n",
         ),
         (
             f"{OPENAPI_AUTHORIZATION}::"
@@ -3011,6 +3014,300 @@ STAGE_H4 = [
 ]
 
 
+OCC_TESTS = "tests/integration/test_optimistic_concurrency.py"
+PRECONDITION_TESTS = "tests/backend/test_preconditions.py"
+STALE_REFUSED = f"{OCC_TESTS}::test_a_stale_version_is_refused_and_nothing_is_written"
+WAITS_FOR_WRITER = (
+    f"{OCC_TESTS}::test_a_writer_that_commits_while_the_update_waits_is_seen_not_overwritten"
+)
+MALFORMED_IS_422 = (
+    f"{PRECONDITION_TESTS}::test_a_malformed_precondition_is_a_validation_error_at_the_header"
+)
+OTHER_INSTANT_STALE = f"{PRECONDITION_TESTS}::test_any_other_instant_is_stale_earlier_or_later"
+GUEST_UI = "src/features/guests/guests.test.tsx"
+PROPERTY_UI = "src/features/property/property.test.tsx"
+ROOMS_UI = "src/features/rooms/rooms.test.tsx"
+PLATFORM_UI = "src/features/platform/platform.test.tsx"
+PRECONDITIONS_UI = "src/services/api/preconditions.test.ts"
+GUEST_SENDS_DIFF = (
+    f"{GUEST_UI}::sends the changed field alone, with the loaded updated_at as If-Match"
+)
+GUEST_STALE_KEPT = (
+    f"{GUEST_UI}::keeps the draft on a stale save, retries nothing, and reloads only when asked"
+)
+
+
+def stale_check(number: int, service: str, name: str, resource: str) -> Mutation:
+    """One service's precondition taken out: lock and comparison both."""
+    return Mutation(
+        f"H6-M{number}",
+        "H6",
+        f"a stale If-Match on the {resource} PATCH is ignored and the write lands",
+        one(
+            f"backend/app/services/{service}.py",
+            f"            {name} = self._repository.lock_for_update({name})\n"
+            f"            require_unchanged({name}.updated_at, expected_updated_at)\n",
+            "            pass\n",
+        ),
+        (f"{STALE_REFUSED}[{resource}]",),
+        needs_database=True,
+    )
+
+
+def precondition_static(
+    number: int, breaks: str, path: str, old: str, new: str, *killers: str
+) -> Mutation:
+    """An H6 mutation caught by a test that needs no database."""
+    return Mutation(f"H6-M{number}", "H6", breaks, one(path, old, new), killers)
+
+
+def precondition_ui(
+    number: int, breaks: str, path: str, old: str, new: str, *killers: str
+) -> Mutation:
+    """An H6 mutation of the client, caught by Vitest."""
+    return Mutation(
+        f"H6-M{number}", "H6", breaks, one(path, old, new), killers, runner=Runner.VITEST
+    )
+
+
+STAGE_H6 = [
+    stale_check(1, "guest", "guest", "guest"),
+    stale_check(2, "hotel", "hotel", "hotel"),
+    stale_check(3, "room", "room", "room"),
+    stale_check(4, "room_type", "room_type", "room-type"),
+    stale_check(5, "booking", "booking", "booking"),
+    Mutation(
+        "H6-M6",
+        "H6",
+        "the version is compared before the row lock, so a writer the update waits for is missed",
+        one(
+            "backend/app/services/guest.py",
+            "            guest = self._repository.lock_for_update(guest)\n"
+            "            require_unchanged(guest.updated_at, expected_updated_at)\n",
+            "            require_unchanged(guest.updated_at, expected_updated_at)\n"
+            "            guest = self._repository.lock_for_update(guest)\n",
+        ),
+        (WAITS_FOR_WRITER,),
+        needs_database=True,
+    ),
+    Mutation(
+        "H6-M7",
+        "H6",
+        "the locked re-read keeps the identity map's stale updated_at",
+        one(
+            "backend/app/repositories/guest.py",
+            "            .execution_options(populate_existing=True)\n",
+            "",
+        ),
+        (WAITS_FOR_WRITER,),
+        needs_database=True,
+    ),
+    Mutation(
+        "H6-M8",
+        "H6",
+        "the route no longer passes the precondition to the service",
+        one(
+            "backend/app/api/v1/endpoints/guests.py",
+            "    return service.update(hotel_public_id, guest_public_id, payload, "
+            "expected_updated_at=if_match)\n",
+            "    return service.update(hotel_public_id, guest_public_id, payload)\n",
+        ),
+        (f"{STALE_REFUSED}[guest]",),
+        needs_database=True,
+    ),
+    Mutation(
+        "H6-M9",
+        "H6",
+        "an empty update returns before the precondition is checked",
+        one(
+            "backend/app/services/guest.py",
+            "        if expected_updated_at is not None:\n"
+            "            # Issue H6. Lock, then compare",
+            "        if not payload.model_dump(exclude_unset=True):\n"
+            "            return self._to_response(guest, hotel)\n"
+            "        if expected_updated_at is not None:\n"
+            "            # Issue H6. Lock, then compare",
+        ),
+        (f"{OCC_TESTS}::test_an_empty_update_is_still_checked[guest]",),
+        needs_database=True,
+    ),
+    precondition_static(
+        10,
+        "versions are compared by order, so a newer stamp than the client's passes",
+        "backend/app/services/concurrency.py",
+        "    if expected is not None and current != expected:\n",
+        "    if expected is not None and current < expected:\n",
+        OTHER_INSTANT_STALE,
+    ),
+    precondition_static(
+        11,
+        "a weak entity-tag is no longer refused for what it is",
+        "backend/app/api/preconditions.py",
+        '    if text.startswith("W/"):\n',
+        '    if text.startswith("W/") and False:\n',
+        MALFORMED_IS_422,
+    ),
+    precondition_static(
+        12,
+        "a timestamp finer than a microsecond is silently truncated instead of refused",
+        "backend/app/api/preconditions.py",
+        "    if SUB_MICROSECOND.search(content):\n",
+        "    if False:\n",
+        MALFORMED_IS_422,
+    ),
+    precondition_static(
+        13,
+        "a timestamp without a zone is accepted",
+        "backend/app/api/preconditions.py",
+        "    if stamp.tzinfo is None:\n",
+        "    if False:\n",
+        MALFORMED_IS_422,
+    ),
+    precondition_static(
+        14,
+        "a stale update is answered 409, not 412",
+        "backend/app/core/errors.py",
+        "    status_code = status.HTTP_412_PRECONDITION_FAILED\n",
+        "    status_code = status.HTTP_409_CONFLICT\n",
+        OTHER_INSTANT_STALE,
+    ),
+    precondition_static(
+        15,
+        "a stale update carries the generic CONFLICT code",
+        "backend/app/core/errors.py",
+        '    code = "STALE_UPDATE"\n',
+        '    code = "CONFLICT"\n',
+        OTHER_INSTANT_STALE,
+    ),
+    precondition_static(
+        16,
+        "the guest PATCH no longer documents its 412",
+        "backend/app/api/v1/endpoints/guests.py",
+        "    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE, **STALE_UPDATE_RESPONSE},\n",
+        "    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},\n",
+        f"{PRECONDITION_TESTS}::test_exactly_the_five_conditional_operations_declare_412",
+    ),
+    precondition_static(
+        17,
+        "the mutation harness counts an ERROR as a kill again",
+        "tests/mutation/harness.py",
+        'SUMMARY_WORDS = (("PASSED", "passed"), ("FAILED", "failed"), ("ERROR", "error"))\n',
+        'SUMMARY_WORDS = (("PASSED", "passed"), ("FAILED", "failed"), ("ERROR", "failed"))\n',
+        "tests/mutation/test_harness.py::test_an_error_is_reported_as_an_error_not_a_failure",
+    ),
+    precondition_ui(
+        18,
+        "the guest form sends every field again",
+        "frontend/src/features/guests/GuestForm.tsx",
+        "        changedFields(updateFrom(draftFrom(guest)), updateFrom(draft)),\n",
+        "        updateFrom(draft),\n",
+        GUEST_SENDS_DIFF,
+    ),
+    precondition_ui(
+        19,
+        "the property form sends every field again, time zone and currency included",
+        "frontend/src/features/property/HotelForm.tsx",
+        "    onUpdate(changedFields(updateFrom(draftFrom(hotel)),"
+        " updateFrom(draft)), hotel.updated_at)\n",
+        "    onUpdate(updateFrom(draft), hotel.updated_at)\n",
+        f"{PROPERTY_UI}::sends one changed hotel field with the loaded updated_at as If-Match",
+    ),
+    precondition_ui(
+        20,
+        "the room form sends every field again, the loaded status included",
+        "frontend/src/features/rooms/RoomForm.tsx",
+        "      onUpdate?.(changedFields(updateFrom(draftFrom(room)),"
+        " updateFrom(draft)), room.updated_at)\n",
+        "      onUpdate?.(updateFrom(draft), room.updated_at)\n",
+        f"{ROOMS_UI}::sends a notes edit alone -- never the stale status -- with If-Match",
+    ),
+    precondition_ui(
+        21,
+        "the room-type form sends every field again",
+        "frontend/src/features/property/RoomTypeForm.tsx",
+        "        changedFields(updateFrom(draftFrom(roomType,"
+        " defaultCurrency)), updateFrom(draft)),\n",
+        "        updateFrom(draft),\n",
+        f"{PROPERTY_UI}::sends one changed room-type field with the loaded updated_at as If-Match",
+    ),
+    precondition_ui(
+        22,
+        "the catalogue form sends every field again",
+        "frontend/src/features/platform/CatalogueForm.tsx",
+        "      onSubmit(changedFields(payloadFrom(kind, valuesOf(entry)), shared))\n",
+        "      onSubmit(shared)\n",
+        f"{PLATFORM_UI}::sends a retired revenue category as is_active alone",
+    ),
+    precondition_ui(
+        23,
+        "the guest client no longer sends If-Match",
+        "frontend/src/services/guests/guestService.ts",
+        "      ...(version === undefined ? {} : { headers: ifMatch(version) }),\n",
+        "",
+        GUEST_SENDS_DIFF,
+    ),
+    precondition_ui(
+        24,
+        "a stale update is described as a server fault, with a retry and no reload",
+        "frontend/src/services/api/failures.ts",
+        "  if (error.status === 412 && error.code === STALE_UPDATE) {\n",
+        "  if (error.status === 412 && error.code === 'NEVER') {\n",
+        f"{PRECONDITIONS_UI}::offers a reload, not a retry",
+        GUEST_STALE_KEPT,
+    ),
+    precondition_ui(
+        25,
+        "a stale update is recognised by its status alone, not its code",
+        "frontend/src/services/api/failures.ts",
+        "  if (error.status === 412 && error.code === STALE_UPDATE) {\n",
+        "  if (error.status === 412) {\n",
+        f"{PRECONDITIONS_UI}::goes by the code alone: a 412 with another code is not stale",
+        f"{GUEST_UI}::recognises a stale save by its code, not its words",
+    ),
+    precondition_ui(
+        26,
+        "a reloaded guest does not replace the open form's draft",
+        "frontend/src/pages/GuestDetailPage.tsx",
+        "            key={guest.updated_at}\n",
+        "",
+        GUEST_STALE_KEPT,
+    ),
+    precondition_ui(
+        27,
+        "a reloaded property does not replace the open form's draft",
+        "frontend/src/pages/PropertyPage.tsx",
+        "              key={admin.hotel.updated_at}\n",
+        "",
+        f"{PROPERTY_UI}::keeps the hotel draft on a stale save and reloads only when asked",
+    ),
+    precondition_ui(
+        28,
+        "a reloaded room type does not replace the open form's draft",
+        "frontend/src/pages/PropertyPage.tsx",
+        "              key={editingType.updated_at}\n",
+        "",
+        f"{PROPERTY_UI}::keeps the room-type draft on a"
+        " stale save; a reload takes the reloaded row",
+    ),
+    precondition_ui(
+        29,
+        "a reloaded room does not replace the open form's draft",
+        "frontend/src/pages/RoomDetailPage.tsx",
+        "            key={room.updated_at}\n",
+        "",
+        f"{ROOMS_UI}::keeps the draft on a stale save and reloads only when asked",
+    ),
+    precondition_ui(
+        30,
+        "the diff keeps every field, changed or not",
+        "frontend/src/services/api/preconditions.ts",
+        "    if (after[key] !== before[key]) {\n",
+        "    if (after[key] !== before[key] || true) {\n",
+        f"{PRECONDITIONS_UI}::is empty when nothing changed",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -3036,4 +3333,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_H2,
     *STAGE_H3,
     *STAGE_H4,
+    *STAGE_H6,
 )

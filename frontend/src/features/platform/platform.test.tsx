@@ -515,7 +515,8 @@ describe('editing a catalogue entry', () => {
     })
     expect(urlOf('/amenities/', 'PATCH').pathname).toBe('/api/v1/amenities/WIFI')
     const body = bodyOf('/amenities/', 'PATCH')
-    expect(body).toEqual({ name: 'Wi-Fi', category: null })
+    // Only what changed (Issue H6): the untouched group is not sent back.
+    expect(body).toEqual({ name: 'Wi-Fi' })
     // Create-only, and a 422 on PATCH.
     expect(body).not.toHaveProperty('code')
   })
@@ -912,5 +913,78 @@ describe('the compact layout', () => {
     expect(screen.getByText('Outlook')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit WIFI' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete SEA_VIEW' })).toBeInTheDocument()
+  })
+})
+
+/* --- diff-only updates (Issue H6) -------------------------------------------------------- */
+
+describe('editing a catalogue entry sends only what changed', () => {
+  // The catalogues carry no `updated_at`, so no version goes with an update: what the form
+  // can still guarantee is never to send back a field the operator did not touch.
+
+  it('sends a cleared amenity group as null, and no If-Match', async () => {
+    const user = userEvent.setup()
+    fetchStub.on('PATCH', '/amenities/', {
+      body: { code: 'SEA_VIEW', name: 'Sea view', category: null },
+    })
+    renderPage()
+    await screen.findByText('Sea view')
+
+    await user.click(screen.getByRole('button', { name: 'Edit SEA_VIEW' }))
+    await user.clear(screen.getByLabelText('Group (optional)'))
+    await user.click(screen.getByRole('button', { name: 'Save entry' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/amenities/', 'PATCH')).toHaveLength(1)
+    })
+    expect(bodyOf('/amenities/', 'PATCH')).toEqual({ category: null })
+    expect(requestsFor('/amenities/', 'PATCH')[0]!.ifMatch).toBeNull()
+  })
+
+  it('sends a retired revenue category as is_active alone', async () => {
+    const user = userEvent.setup()
+    fetchStub.on('PATCH', '/revenue-categories/', {
+      body: { code: 'FNB', name: 'Food and beverage', is_room_revenue: false, is_active: false },
+    })
+    renderPage()
+    await screen.findByText('Sea view')
+    await openTab(user, 'Revenue categories')
+    await screen.findByText('Food and beverage')
+
+    await user.click(screen.getByRole('button', { name: 'Edit FNB' }))
+    await user.click(screen.getByLabelText('Available for new postings'))
+    await user.click(screen.getByRole('button', { name: 'Save entry' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/revenue-categories/', 'PATCH')).toHaveLength(1)
+    })
+    // Neither the name nor the room-revenue flag rides along.
+    expect(bodyOf('/revenue-categories/', 'PATCH')).toEqual({ is_active: false })
+    expect(requestsFor('/revenue-categories/', 'PATCH')[0]!.ifMatch).toBeNull()
+  })
+
+  it('sends a flipped expense flag and a renamed entry, and nothing else', async () => {
+    const user = userEvent.setup()
+    fetchStub.on('PATCH', '/expense-categories/', {
+      body: { code: 'PAYROLL', name: 'Staff payroll', is_fixed_cost: false, is_active: true },
+    })
+    renderPage()
+    await screen.findByText('Sea view')
+    await openTab(user, 'Expense categories')
+    await screen.findByText('Payroll')
+
+    await user.click(screen.getByRole('button', { name: 'Edit PAYROLL' }))
+    await user.clear(screen.getByLabelText('Name'))
+    await user.type(screen.getByLabelText('Name'), 'Staff payroll')
+    await user.click(screen.getByLabelText('This is a fixed cost'))
+    await user.click(screen.getByRole('button', { name: 'Save entry' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/expense-categories/', 'PATCH')).toHaveLength(1)
+    })
+    expect(bodyOf('/expense-categories/', 'PATCH')).toEqual({
+      name: 'Staff payroll',
+      is_fixed_cost: false,
+    })
   })
 })

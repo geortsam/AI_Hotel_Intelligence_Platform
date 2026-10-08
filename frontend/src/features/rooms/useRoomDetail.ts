@@ -45,7 +45,16 @@ export interface RoomDetailState {
   readonly deleted: boolean
 
   readonly reload: () => void
-  readonly update: (payload: RoomUpdateRequest, message: string) => Promise<boolean>
+  /**
+   * `version` is the `updated_at` the edit was made against: given, a record saved since is
+   * refused with 412 `STALE_UPDATE` and this resolves `false`, nothing retried (Issue H6). The
+   * status control sends none -- a status change is a command, judged as it arrives.
+   */
+  readonly update: (
+    payload: RoomUpdateRequest,
+    message: string,
+    version?: string,
+  ) => Promise<boolean>
   readonly remove: () => Promise<boolean>
   readonly dismiss: () => void
 }
@@ -136,7 +145,7 @@ export function useRoomDetail({
   }, [])
 
   const update = useCallback(
-    async (payload: RoomUpdateRequest, message: string): Promise<boolean> => {
+    async (payload: RoomUpdateRequest, message: string, version?: string): Promise<boolean> => {
       if (
         inFlight.current ||
         hotelPublicId === null ||
@@ -152,7 +161,13 @@ export function useRoomDetail({
       setSaved(null)
 
       try {
-        const result = await roomService.update(hotelPublicId, roomTypeCode, roomNumber, payload)
+        const result = await roomService.update(
+          hotelPublicId,
+          roomTypeCode,
+          roomNumber,
+          payload,
+          version,
+        )
         if (!isRoom(result)) {
           throw new ApiError(
             200,

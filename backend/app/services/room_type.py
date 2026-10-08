@@ -11,6 +11,7 @@ Knows the domain; knows no SQL and no HTTP.
 
 from __future__ import annotations
 
+import datetime as dt
 import logging
 import uuid
 from typing import Any
@@ -32,6 +33,7 @@ from app.repositories.room_type import RoomTypeRepository
 from app.schemas.common import Page
 from app.schemas.room_type import RoomTypeCreate, RoomTypeResponse, RoomTypeUpdate
 from app.services.business_day import Clock, hotel_today, utc_now
+from app.services.concurrency import require_unchanged
 from app.services.scope import HotelScopeResolver
 
 logger = logging.getLogger(__name__)
@@ -109,11 +111,22 @@ class RoomTypeService:
         return self._to_response(created, hotel)
 
     def update(
-        self, hotel_public_id: uuid.UUID, code: str, payload: RoomTypeUpdate
+        self,
+        hotel_public_id: uuid.UUID,
+        code: str,
+        payload: RoomTypeUpdate,
+        *,
+        expected_updated_at: dt.datetime | None = None,
     ) -> RoomTypeResponse:
-        """Apply a partial update and commit."""
+        """Apply a partial update and commit. With ``expected_updated_at`` -- an ``If-Match``
+        precondition -- refuse with 412 unless the room type is still that version."""
         hotel = self._require_hotel(hotel_public_id)
         room_type = self._require_room_type(hotel, code)
+        if expected_updated_at is not None:
+            # Issue H6. Lock, then compare -- before anything else this update does, the
+            # empty-update shortcut included. A stale version is refused with nothing written.
+            room_type = self._repository.lock_for_update(room_type)
+            require_unchanged(room_type.updated_at, expected_updated_at)
         changes: dict[str, Any] = payload.model_dump(exclude_unset=True)
 
         if not changes:

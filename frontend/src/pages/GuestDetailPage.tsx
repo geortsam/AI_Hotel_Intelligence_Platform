@@ -55,6 +55,13 @@ const UPDATE_FAILURE_COPY = {
     detail: 'The change could not be saved. The record is unchanged.',
     canRetry: true,
   },
+  stale: {
+    title: 'Nothing was saved',
+    detail:
+      'Someone else changed this guest after you opened the form, so your changes were not applied. They are still in the form. Reload to see the current record — reloading replaces your edits.',
+    canRetry: false,
+    canReload: true,
+  },
 } as const
 
 const DELETE_FAILURE_COPY = {
@@ -208,6 +215,21 @@ export function GuestDetailPage() {
           <div>
             <p className={styles.failureTitle}>{mutationFailure.title}</p>
             <p className={styles.failureDetail}>{mutationFailure.detail}</p>
+            {mutationFailure.canReload === true ? (
+              <div className={styles.failureAction}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    // The reader's choice, never automatic: it replaces the draft (Issue H6).
+                    detail.dismiss()
+                    detail.reload()
+                  }}
+                >
+                  Reload the current version
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -218,14 +240,16 @@ export function GuestDetailPage() {
             Edit guest
           </h2>
           <GuestForm
+            // A reloaded record is a new baseline: remounting replaces the draft with it.
+            key={guest.updated_at}
             guest={guest}
             busy={detail.pending === 'update'}
             onDirty={detail.dismiss}
             onCancel={() => {
               setEditing(false)
             }}
-            onUpdate={(payload) => {
-              void detail.update(payload).then((accepted) => {
+            onUpdate={(payload, version) => {
+              void detail.update(payload, version).then((accepted) => {
                 if (accepted) {
                   setEditing(false)
                 }

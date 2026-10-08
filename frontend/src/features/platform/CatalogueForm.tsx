@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from 'react'
 
 import { Button } from '@/components/ui/Button'
 import type { CatalogueRow } from '@/features/platform/useCatalogue'
+import { changedFields } from '@/services/api/preconditions'
 import type { CatalogueKind } from '@/types/platform'
 
 import styles from './PlatformForms.module.css'
@@ -36,6 +37,39 @@ const NOUN: Readonly<Record<CatalogueKind, string>> = {
   amenities: 'amenity',
   'revenue-categories': 'revenue category',
   'expense-categories': 'expense category',
+}
+
+/** What the inputs hold, as strings and booleans. */
+interface Values {
+  readonly name: string
+  readonly group: string
+  readonly flagValue: boolean
+  readonly active: boolean
+}
+
+function valuesOf(entry: CatalogueRow): Values {
+  return {
+    name: entry.name,
+    group: entry.category ?? '',
+    flagValue: entry.flag ?? false,
+    active: entry.isActive ?? true,
+  }
+}
+
+/** Every writable field of this catalogue as a create or an update would send it. */
+function payloadFrom(kind: CatalogueKind, values: Values): Record<string, unknown> {
+  if (kind === 'amenities') {
+    return {
+      name: values.name.trim(),
+      // An emptied optional becomes an explicit null: that is how the API clears a column.
+      category: values.group.trim() === '' ? null : values.group.trim(),
+    }
+  }
+  return {
+    name: values.name.trim(),
+    [FLAG[kind]!.field]: values.flagValue,
+    is_active: values.active,
+  }
 }
 
 /**
@@ -119,22 +153,16 @@ export function CatalogueForm({
     }
     setProblem(null)
 
-    if (kind === 'amenities') {
-      const shared = {
-        name: name.trim(),
-        // An emptied optional becomes an explicit null: that is how the API clears a column.
-        category: group.trim() === '' ? null : group.trim(),
-      }
-      onSubmit(editing ? shared : { ...shared, code: code.trim() })
+    const shared = payloadFrom(kind, { name, group, flagValue, active })
+    if (editing) {
+      // Only what differs from the entry as loaded, both sides normalised alike (Issue H6): a
+      // field this operator did not touch is never sent back over a newer value. No version
+      // goes with it -- these tables carry no `updated_at` -- so two operators changing the
+      // SAME field still leave the later one in place.
+      onSubmit(changedFields(payloadFrom(kind, valuesOf(entry)), shared))
       return
     }
-
-    const shared = {
-      name: name.trim(),
-      [flag!.field]: flagValue,
-      is_active: active,
-    }
-    onSubmit(editing ? shared : { ...shared, code: code.trim() })
+    onSubmit({ ...shared, code: code.trim() })
   }
 
   return (

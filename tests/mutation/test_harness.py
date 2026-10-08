@@ -131,7 +131,7 @@ def test_the_pytest_summary_is_read_per_killer_and_per_parametrised_instance() -
         "t.py::test_b": "failed",
         "t.py::test_c": "failed",  # any instance failing kills a bare killer
         "t.py::test_d": "passed",
-        "t.py::test_e": "failed",  # an error outranks the earlier pass
+        "t.py::test_e": "error",  # a teardown error after a pass is an error, never a failure
         "t.py::test_c[one]": "passed",  # a bracketed killer names exactly one instance
     }
 
@@ -181,6 +181,45 @@ def test_a_mutation_is_killed_only_when_every_killer_fails() -> None:
     survived = judge(both, {"k1": "failed", "k2": "passed"})
     assert survived.verdict is Verdict.SURVIVED
     assert "k2 (passed)" in survived.detail
+
+
+def test_an_error_is_reported_as_an_error_not_a_failure() -> None:
+    """Issue H6. A setup ERROR -- the database fixture falling over -- reached no verdict on
+    the mutation. A FAILED call that a teardown ERROR follows did: the failure stands."""
+    output = "\n".join(
+        [
+            "ERROR t.py::test_setup - sqlalchemy.exc.ProgrammingError",
+            "FAILED t.py::test_call - AssertionError",
+            "ERROR t.py::test_call - teardown",
+            "ERROR t.py::test_p[one] - setup",
+            "PASSED t.py::test_p[two]",
+            "ERROR t.py::test_q[one] - setup",
+            "FAILED t.py::test_q[two] - AssertionError",
+        ]
+    )
+
+    assert parse_pytest_summary(
+        output, ["t.py::test_setup", "t.py::test_call", "t.py::test_p", "t.py::test_q"]
+    ) == {
+        "t.py::test_setup": "error",
+        "t.py::test_call": "failed",
+        "t.py::test_p": "error",  # no instance failed, one errored
+        "t.py::test_q": "failed",  # one instance genuinely failed
+    }
+
+
+def test_a_mutation_whose_killer_errored_is_an_error_never_a_kill() -> None:
+    both = mutation(killers=("k1", "k2"))
+
+    for results in (
+        {"k1": "error", "k2": "error"},
+        {"k1": "failed", "k2": "error"},
+        {"k1": "error", "k2": "passed"},
+    ):
+        outcome = judge(both, results)
+        assert outcome.verdict is Verdict.ERROR, results
+        assert "errored" in outcome.detail
+    assert harness.exit_code([judge(both, {"k1": "error", "k2": "failed"})], require_all=True) == 1
 
 
 def test_a_killer_that_never_ran_is_not_a_kill() -> None:
@@ -374,6 +413,7 @@ RECORDED_PER_STAGE = {
     "H2": 30,
     "H3": 20,
     "H4": 20,
+    "H6": 30,
 }
 
 

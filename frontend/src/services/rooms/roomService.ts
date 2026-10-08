@@ -1,4 +1,5 @@
 import { api } from '@/services/api/client'
+import { ifMatch } from '@/services/api/preconditions'
 import type { Page } from '@/types/api'
 import type { Room, RoomCreateRequest, RoomType, RoomUpdateRequest } from '@/types/room'
 
@@ -131,17 +132,26 @@ export const roomService = {
    *
    * An omitted field is left untouched; an explicit null clears `floor` or `notes`. An empty
    * payload is a 200 that changes nothing. All verified.
+   *
+   * `version` is the `updated_at` of the record as it was loaded. Given, the update is
+   * conditional (Issue H6): **412** `STALE_UPDATE` and nothing saved if the record has been
+   * written since. Omitted, the update is applied as it always was.
    */
   update(
     hotelPublicId: string,
     roomTypeCode: string,
     roomNumber: string,
     payload: RoomUpdateRequest,
+    version?: string,
     signal?: AbortSignal,
   ): Promise<Room> {
     return api.patch<Room>(
       `/hotels/${hotelPublicId}/room-types/${encodeURIComponent(roomTypeCode)}/rooms/${encodeURIComponent(roomNumber)}`,
-      { body: payload, ...(signal ? { signal } : {}) },
+      {
+        body: payload,
+        ...(version === undefined ? {} : { headers: ifMatch(version) }),
+        ...(signal ? { signal } : {}),
+      },
     )
   },
 

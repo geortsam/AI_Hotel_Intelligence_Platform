@@ -860,3 +860,148 @@ describe('accessibility', () => {
     expect(screen.getByText('No consent')).toBeInTheDocument()
   })
 })
+
+/* --- conditional updates (Issue H6) ------------------------------------------------------ */
+
+describe('updating a guest sends only what changed, against the version loaded', () => {
+  const LOADED = guest().updated_at
+  const STALE_COPY = /Someone else changed this guest after you opened the form/
+
+  async function openEdit() {
+    const user = userEvent.setup()
+    renderDetail()
+    await screen.findByRole('heading', { level: 1, name: 'Elena Papadakis' })
+    await user.click(screen.getByRole('button', { name: 'Edit guest' }))
+    return user
+  }
+
+  function stale(message = 'server words, never shown') {
+    fetchStub.on('PATCH', '/guests/', {
+      status: 412,
+      body: { error: { code: 'STALE_UPDATE', message, details: [] } },
+    })
+  }
+
+  it('sends the changed field alone, with the loaded updated_at as If-Match', async () => {
+    const user = await openEdit()
+    fetchStub.on('PATCH', '/guests/', { body: guest({ phone: '+30 210 555 0199' }) })
+
+    await user.clear(screen.getByLabelText('Phone (optional)'))
+    await user.type(screen.getByLabelText('Phone (optional)'), '+30 210 555 0199')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/guests/', 'PATCH')).toHaveLength(1)
+    })
+    const request = requestsFor('/guests/', 'PATCH')[0]!
+    expect(JSON.parse(request.body!)).toEqual({ phone: '+30 210 555 0199' })
+    // Exactly the string the API returned, quoted: no reformatting, no precision lost.
+    expect(request.ifMatch).toBe(`"${LOADED}"`)
+  })
+
+  it('sends an intentionally cleared field as an explicit null, and nothing else', async () => {
+    const user = await openEdit()
+    fetchStub.on('PATCH', '/guests/', { body: guest({ notes: null }) })
+
+    await user.clear(screen.getByLabelText('Notes (optional)'))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/guests/', 'PATCH')).toHaveLength(1)
+    })
+    expect(JSON.parse(requestsFor('/guests/', 'PATCH')[0]!.body!)).toEqual({ notes: null })
+  })
+
+  it('sends a boolean change alone', async () => {
+    const user = await openEdit()
+    fetchStub.on('PATCH', '/guests/', { body: guest({ marketing_opt_in: false }) })
+
+    await user.click(screen.getByRole('checkbox', { name: /consented to marketing/ }))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/guests/', 'PATCH')).toHaveLength(1)
+    })
+    expect(JSON.parse(requestsFor('/guests/', 'PATCH')[0]!.body!)).toEqual({
+      marketing_opt_in: false,
+    })
+  })
+
+  it('sends no field that was typed back to its loaded value', async () => {
+    const user = await openEdit()
+    fetchStub.on('PATCH', '/guests/', { body: guest() })
+
+    await user.clear(screen.getByLabelText('Phone (optional)'))
+    await user.type(screen.getByLabelText('Phone (optional)'), '+30 210 555 0142')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/guests/', 'PATCH')).toHaveLength(1)
+    })
+    const request = requestsFor('/guests/', 'PATCH')[0]!
+    expect(JSON.parse(request.body!)).toEqual({})
+    expect(request.ifMatch).toBe(`"${LOADED}"`)
+  })
+
+  it('keeps the draft on a stale save, retries nothing, and reloads only when asked', async () => {
+    const user = await openEdit()
+    stale()
+    const loads = requestsFor('/guests/', 'GET').length
+
+    await user.clear(screen.getByLabelText('Notes (optional)'))
+    await user.type(screen.getByLabelText('Notes (optional)'), 'Typed by this operator')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText('Nothing was saved')).toBeInTheDocument()
+    expect(within(alert).getByText(STALE_COPY)).toBeInTheDocument()
+    // The draft is intact and the form still open.
+    expect(screen.getByLabelText('Notes (optional)')).toHaveValue('Typed by this operator')
+    // Nothing retried, nothing reloaded behind the reader's back, no server words on screen.
+    expect(requestsFor('/guests/', 'PATCH')).toHaveLength(1)
+    expect(requestsFor('/guests/', 'GET')).toHaveLength(loads)
+    expect(visibleText()).not.toMatch(/server words/)
+
+    // Another operator's save, which the reload is about to fetch.
+    fetchStub.on('GET', '/guests/', {
+      body: guest({ phone: '+30 699 000 0001', updated_at: '2026-09-02T09:00:00.123456+03:00' }),
+    })
+    await user.click(within(alert).getByRole('button', { name: 'Reload the current version' }))
+
+    // The reload replaces the baseline AND the draft: the form now shows the server's record.
+    await waitFor(() => {
+      expect(screen.getByLabelText('Phone (optional)')).toHaveValue('+30 699 000 0001')
+    })
+    expect(screen.getByLabelText('Notes (optional)')).toHaveValue('Prefers a high floor.')
+    expect(requestsFor('/guests/', 'GET')).toHaveLength(loads + 1)
+    expect(screen.queryByText(STALE_COPY)).not.toBeInTheDocument()
+
+    // And the next save is made against the version just loaded.
+    fetchStub.on('PATCH', '/guests/', { body: guest({ notes: 'Second try' }) })
+    await user.clear(screen.getByLabelText('Notes (optional)'))
+    await user.type(screen.getByLabelText('Notes (optional)'), 'Second try')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => {
+      expect(requestsFor('/guests/', 'PATCH')).toHaveLength(2)
+    })
+    const retry = requestsFor('/guests/', 'PATCH')[1]!
+    expect(JSON.parse(retry.body!)).toEqual({ notes: 'Second try' })
+    expect(retry.ifMatch).toBe('"2026-09-02T09:00:00.123456+03:00"')
+  })
+
+  it('recognises a stale save by its code, not its words', async () => {
+    const user = await openEdit()
+    // A 412 with another code, and a 409 that SAYS stale: neither is offered a reload.
+    fetchStub.on('PATCH', '/guests/', {
+      status: 412,
+      body: { error: { code: 'PRECONDITION_FAILED', message: 'Someone else changed this guest' } },
+    })
+    await user.clear(screen.getByLabelText('Notes (optional)'))
+    await user.type(screen.getByLabelText('Notes (optional)'), 'x')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).queryByRole('button', { name: 'Reload the current version' })).toBeNull()
+    expect(within(alert).queryByText(STALE_COPY)).toBeNull()
+  })
+})

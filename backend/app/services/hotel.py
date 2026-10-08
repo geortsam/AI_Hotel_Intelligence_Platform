@@ -12,6 +12,7 @@ and the driver message would carry the constraint name and the failing SQL.
 
 from __future__ import annotations
 
+import datetime as dt
 import logging
 import uuid
 from typing import Any
@@ -36,6 +37,7 @@ from app.repositories.membership import MembershipRepository
 from app.schemas.common import Page
 from app.schemas.hotel import HotelCreate, HotelResponse, HotelUpdate
 from app.services.authorization import HotelAccessPolicy
+from app.services.concurrency import require_unchanged
 
 logger = logging.getLogger(__name__)
 
@@ -123,14 +125,26 @@ class HotelService:
 
         return HotelResponse.model_validate(created)
 
-    def update(self, public_id: uuid.UUID, payload: HotelUpdate) -> HotelResponse:
+    def update(
+        self,
+        public_id: uuid.UUID,
+        payload: HotelUpdate,
+        *,
+        expected_updated_at: dt.datetime | None = None,
+    ) -> HotelResponse:
         """Apply a partial update and commit.
 
         ``exclude_unset`` is what makes this a PATCH rather than a PUT: only fields the
         client actually sent are written, so an omitted field keeps its stored value while
-        an explicit ``null`` still clears a nullable column.
+        an explicit ``null`` still clears a nullable column. With ``expected_updated_at`` -- an
+        ``If-Match`` precondition -- refuse with 412 unless the hotel is still that version.
         """
         hotel = self._require(public_id, required=HotelRole.OWNER)
+        if expected_updated_at is not None:
+            # Issue H6. Lock, then compare -- before anything else this update does, the
+            # empty-update shortcut included. A stale version is refused with nothing written.
+            hotel = self._repository.lock_for_update(hotel)
+            require_unchanged(hotel.updated_at, expected_updated_at)
         changes: dict[str, Any] = payload.model_dump(exclude_unset=True)
 
         if not changes:

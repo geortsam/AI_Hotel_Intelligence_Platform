@@ -29,6 +29,8 @@ export interface RecordedCall {
   readonly method: string
   readonly url: string
   readonly authorization: string | null
+  /** The `If-Match` precondition, if the request carried one (Issue H6). */
+  readonly ifMatch: string | null
   readonly body: string | null
 }
 
@@ -65,6 +67,7 @@ export function installFetchStub(): FetchStub {
       method,
       url,
       authorization: headers.Authorization ?? null,
+      ifMatch: headers['If-Match'] ?? null,
       body: typeof init.body === 'string' ? init.body : null,
     })
 

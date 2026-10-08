@@ -1,4 +1,5 @@
 import { api } from '@/services/api/client'
+import { ifMatch } from '@/services/api/preconditions'
 import type { Page } from '@/types/api'
 import type { Guest, GuestCreateRequest, GuestUpdateRequest } from '@/types/guest'
 
@@ -100,15 +101,21 @@ export const guestService = {
    * Throws `ApiError`: **409** on an email another guest at this hotel already uses,
    * verified; **403** without the staff role; **404** for an unknown guest; **422** for an
    * empty name or an unknown field.
+   *
+   * `version` is the `updated_at` of the record as it was loaded. Given, the update is
+   * conditional (Issue H6): **412** `STALE_UPDATE` and nothing saved if the record has been
+   * written since. Omitted, the update is applied as it always was.
    */
   update(
     hotelPublicId: string,
     guestPublicId: string,
     payload: GuestUpdateRequest,
+    version?: string,
     signal?: AbortSignal,
   ): Promise<Guest> {
     return api.patch<Guest>(`/hotels/${hotelPublicId}/guests/${guestPublicId}`, {
       body: payload,
+      ...(version === undefined ? {} : { headers: ifMatch(version) }),
       ...(signal ? { signal } : {}),
     })
   },

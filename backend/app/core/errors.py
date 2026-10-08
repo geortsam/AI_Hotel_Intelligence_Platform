@@ -165,6 +165,19 @@ class ConflictError(AppError):
     message = "The request conflicts with the current state of the resource."
 
 
+class StaleUpdateError(AppError):
+    """An ``If-Match`` precondition named a version of the record that is no longer current
+    (Issue H6). 412, because the request was well formed and the record exists: what failed is
+    the client's statement about what it was editing. Raised before anything is written."""
+
+    status_code = status.HTTP_412_PRECONDITION_FAILED
+    code = "STALE_UPDATE"
+    message = (
+        "This record was changed by someone else after it was loaded, so this update was not "
+        "applied. Reload it to see the current version."
+    )
+
+
 class ValidationError(AppError):
     status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     code = "VALIDATION_ERROR"
@@ -553,6 +566,7 @@ __all__ = [
     "DatabaseUnavailableError",
     "InternalFaultError",
     "NotFoundError",
+    "StaleUpdateError",
     "ValidationError",
     "constraint_name_of",
     "document_validation_errors",

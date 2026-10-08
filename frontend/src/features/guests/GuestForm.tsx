@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from 'react'
 
 import { Button } from '@/components/ui/Button'
+import { changedFields } from '@/services/api/preconditions'
 import type { Guest, GuestCreateRequest, GuestUpdateRequest } from '@/types/guest'
 
 import styles from './GuestForm.module.css'
@@ -9,7 +10,11 @@ export interface GuestFormProps {
   /** The guest being edited, or absent when creating one. */
   readonly guest?: Guest
   readonly onCreate?: (payload: GuestCreateRequest) => void
-  readonly onUpdate?: (payload: GuestUpdateRequest) => void
+  /**
+   * Only the fields that differ from `guest` as loaded, and that record's `updated_at` --
+   * the version the edit was made against (Issue H6).
+   */
+  readonly onUpdate?: (payload: GuestUpdateRequest, version: string) => void
   readonly onCancel: () => void
   readonly busy: boolean
   /** Clears the previous refusal as soon as a new attempt starts. */
@@ -40,6 +45,23 @@ function draftFrom(guest: Guest | undefined): Draft {
     date_of_birth: guest?.date_of_birth ?? '',
     notes: guest?.notes ?? '',
     marketing_opt_in: guest?.marketing_opt_in ?? false,
+  }
+}
+
+/** Every editable field as an update would write it. Emptied optionals become an explicit
+ * null: that is how the API clears a column. */
+function updateFrom(draft: Draft): GuestUpdateRequest {
+  return {
+    first_name: draft.first_name.trim(),
+    last_name: draft.last_name.trim(),
+    email: draft.email.trim() === '' ? null : draft.email.trim(),
+    phone: draft.phone.trim() === '' ? null : draft.phone.trim(),
+    country_code: draft.country_code.trim() === '' ? null : draft.country_code.trim(),
+    preferred_language:
+      draft.preferred_language.trim() === '' ? null : draft.preferred_language.trim(),
+    date_of_birth: draft.date_of_birth === '' ? null : draft.date_of_birth,
+    notes: draft.notes.trim() === '' ? null : draft.notes.trim(),
+    marketing_opt_in: draft.marketing_opt_in,
   }
 }
 
@@ -85,6 +107,13 @@ function draftFrom(guest: Guest | undefined): Draft {
  * On update, a field emptied by the operator is sent as an **explicit null**, which is how
  * the API clears a column -- an omitted field is left untouched, and those are different
  * requests. On create there is nothing to clear, so an empty field is simply omitted.
+ *
+ * ## An update sends only what changed (Issue H6)
+ *
+ * The payload is the difference between the record as loaded and the draft, each put through
+ * the same `updateFrom`. Sending every field would restore, from this form's stale copy, any
+ * value another operator saved while it was open. The loaded `updated_at` goes with it, and a
+ * record saved since is refused with 412 rather than overwritten.
  */
 export function GuestForm({
   guest,
@@ -155,19 +184,13 @@ export function GuestForm({
     setProblem(null)
 
     if (editing) {
-      // Emptied optionals become an explicit null: that is how the API clears a column.
-      onUpdate?.({
-        first_name: draft.first_name.trim(),
-        last_name: draft.last_name.trim(),
-        email: draft.email.trim() === '' ? null : draft.email.trim(),
-        phone: draft.phone.trim() === '' ? null : draft.phone.trim(),
-        country_code: draft.country_code.trim() === '' ? null : draft.country_code.trim(),
-        preferred_language:
-          draft.preferred_language.trim() === '' ? null : draft.preferred_language.trim(),
-        date_of_birth: draft.date_of_birth === '' ? null : draft.date_of_birth,
-        notes: draft.notes.trim() === '' ? null : draft.notes.trim(),
-        marketing_opt_in: draft.marketing_opt_in,
-      })
+      // Only what differs from the record as loaded, both sides normalised alike (Issue H6):
+      // a field this operator did not touch is never sent, so it cannot overwrite a value
+      // someone else saved in the meantime.
+      onUpdate?.(
+        changedFields(updateFrom(draftFrom(guest)), updateFrom(draft)),
+        guest.updated_at,
+      )
       return
     }
 
