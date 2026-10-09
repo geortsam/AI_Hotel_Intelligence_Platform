@@ -387,8 +387,11 @@ WHERE hotel_id = :hotel_id AND stay_date = :date;
 
 One indexed scan on `(hotel_id, stay_date)` yields occupancy and revenue together — the reason
 `hotel_id` is mirrored onto the night table. `revenue_categories.is_room_revenue` keeps its
-purpose but inverts its role: the metrics job uses it to *exclude* room-revenue rows from
-`other_revenue`, never to include them in `room_revenue`.
+purpose but inverts its role: it *excludes* room-revenue ledger rows, never adds them to room
+revenue. Today on-demand analytics applies it, reporting such rows in their own bucket. A future
+metrics job would use it to keep them out of `other_revenue` and never add them to
+`room_revenue`, but no such job is implemented or approved (Issue H12; see
+[database-design.md](database-design.md) §8).
 
 ---
 
