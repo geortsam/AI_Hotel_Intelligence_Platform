@@ -187,6 +187,8 @@ raceable.
 | Every night of a stay is priced | **deferred constraint trigger** | `trg_booking_room_nights_complete` |
 | Webhook idempotency | **partial UNIQUE** | `uq_payments_provider_transaction_reference WHERE transaction_reference IS NOT NULL` |
 | One review per stay | **partial UNIQUE** | `uq_reviews_booking_id WHERE booking_id IS NOT NULL` |
+| One guest email per hotel, whatever its case | **partial UNIQUE** on an expression | `uq_guests_hotel_id_lower_email` — `(hotel_id, lower(email)) WHERE email IS NOT NULL`; a duplicate is a 409 that never quotes the address |
+| A guest email has the shape a user's has | **CHECK** | `ck_guests_email_format` — the pattern of `ck_users_email_format`, mirrored as a 422 at the edge |
 | One review per platform reference, per hotel | **partial UNIQUE** | `uq_reviews_hotel_source_external_review_id WHERE external_review_id IS NOT NULL` — `(hotel_id, source, external_review_id)`; a duplicate is a 409 `DUPLICATE_EXTERNAL_REVIEW` |
 | Unique hotel slug / room number / booking reference / category code | **UNIQUE** | `uq_hotels_slug`, `uq_rooms_hotel_id_room_number`, `uq_bookings_hotel_id_reference`, `uq_*_categories_code` |
 | Category in use cannot be deleted | **FK ON DELETE RESTRICT** | `fk_revenue_category_id_*`, `fk_expenses_category_id_*` |
@@ -310,8 +312,13 @@ an undeclared RESTRICT recorded here as schema debt until this correction.
 - **Booking status has no history**, so a status count is always "as it stands now".
 - **Forecasting is a seasonal baseline**, with no holidays, events, lead-time curves or
   backtest. See `ml-design.md` §8.
-- **`guests.email` has no format validation** — neither a CHECK in the database nor a pattern
-  in the schema, so a malformed address is stored as written. See §11.
+- **A guest email's format check is basic, not RFC 5322.** Since Issue H7 (migration
+  `0020_guest_email_rules`) it must match `^[^@\s]+@[^@\s]+\.[^@\s]+$` — the rule
+  `users.email` already had — in the schema (a 422) and in the database (`ck_guests_email_format`),
+  and it is stored lower case with a case-insensitive per-hotel key. Nothing verifies that
+  the address exists. `lower()` in the index follows the database's collation, so for a few
+  non-ASCII characters it may fold differently from the API's lower-casing; uniqueness is
+  still enforced, by the database's reading.
 - **Pagination is OFFSET-based.** Deep pages are correspondingly expensive; cursor pagination
   was explicitly out of scope.
 
@@ -327,10 +334,11 @@ In priority order.
    child alone — so authorization slots in above it rather than replacing it: bind an
    authenticated principal to a set of hotel ids and check it in `HotelScopeResolver`. Until
    then this backend is not deployable on a public network.
-2. **Email format validation on guests.** Tightening it rejects requests the API has always
-   accepted, so it is a deliberate contract change rather than hardening. The cost of leaving
-   it: the partial unique index on `(hotel_id, email)` cannot collapse two malformed spellings
-   of one address.
+2. ~~**Email format validation on guests.**~~ Done by Issue H7, as a deliberate contract
+   tightening: a malformed guest email is now a 422 (it was stored as written), every address
+   is stored lower case, and migration `0020_guest_email_rules` adds `ck_guests_email_format`
+   and makes the per-hotel key case-insensitive. Its upgrade refuses, naming hotels and guest
+   ids but never an address, if existing rows would break either rule; it repairs nothing.
 3. ~~**The three `SET NULL` corrections** in §9.~~ Done by migration `0018_composite_set_null_columns` (Issue H3).
 4. ~~**Optimistic concurrency.**~~ Done for the hotel, guest, room type, room and booking
    PATCHes by an optional `If-Match` on `updated_at` (Issue H6, §3). **Remaining:** the three

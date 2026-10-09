@@ -79,10 +79,11 @@ export const guestService = {
    * Create a guest at this hotel.
    *
    * Throws `ApiError`: **409** when another guest at this hotel already uses the email
-   * address -- `uq_guests_hotel_id_email` is partial, so many guests may have none; **403**
-   * without the staff role; **404** for an unknown hotel; **422** for an empty or over-long
-   * name, an email shorter than three characters, a malformed country code or language, or
-   * any field the schema does not have -- `public_id` included, since it is server-assigned.
+   * address, in any letter case -- `uq_guests_hotel_id_lower_email` is partial, so many guests
+   * may have none; **403** without the staff role; **404** for an unknown hotel; **422** for an
+   * empty or over-long name, an email outside 3..254 characters or not shaped like an address
+   * (Issue H7), a malformed country code or language, or any field the schema does not have --
+   * `public_id` included, since it is server-assigned. The address comes back lower case.
    */
   create(hotelPublicId: string, payload: GuestCreateRequest, signal?: AbortSignal): Promise<Guest> {
     return api.post<Guest>(`/hotels/${hotelPublicId}/guests`, {

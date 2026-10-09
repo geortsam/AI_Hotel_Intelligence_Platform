@@ -5,7 +5,8 @@
 > migrations (users, memberships, platform admins, audit events, audit archive, served demand
 > predictions, LLM invocations, knowledge documents, copilot conversations, declared demand
 > observation periods, the LLM-invocation retention rule); the head is now
-> `0019_review_external_id_scope` (Issue H4, the reviews' external-identifier key scoped to the hotel, no table)
+> `0020_guest_email_rules` (Issue H7, a format CHECK and a case-insensitive per-hotel key for guest emails, no
+> table)
 > over 28 application tables. The "design only" status line below
 > describes this document at the time it was written, not the repository today.
 
@@ -340,7 +341,7 @@ across the portfolio and cross-hotel comparison is possible.
 | `hotel_id` | BIGINT | NOT NULL | — | FK → `hotels(id)`. Guests are **hotel-scoped** — Open Decision 2 |
 | `first_name` | TEXT | NOT NULL | — | |
 | `last_name` | TEXT | NOT NULL | — | |
-| `email` | TEXT | NULL | — | Optional: walk-ins and phone bookings genuinely have none |
+| `email` | TEXT | NULL | — | Optional: walk-ins and phone bookings genuinely have none. `CHECK (email IS NULL OR email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$')` — `ck_guests_email_format`, the pattern `users.email` has (`0020`). The API stores it lower case |
 | `phone` | TEXT | NULL | — | Optional, same reason |
 | `country_code` | CHAR(2) | NULL | — | ISO-3166-1 alpha-2 — source-market analytics |
 | `preferred_language` | CHAR(2) | NULL | — | ISO-639-1 |
@@ -362,8 +363,13 @@ If a jurisdiction genuinely requires ID capture, it should be added later as a s
 access-restricted table with an explicit retention policy — not as nullable columns on `guests`
 where it will be selected by every `SELECT *`. Flagged as **Open Decision 7**.
 
-- **Unique:** `(hotel_id, email) WHERE email IS NOT NULL` — partial unique, so many guests may
-  have no email while a given address appears once per property
+- **Unique:** `(hotel_id, lower(email)) WHERE email IS NOT NULL` —
+  `uq_guests_hotel_id_lower_email`, partial unique, so many guests may have no email while a
+  given address appears once per property **whatever its letter case**. Since migration
+  `0020_guest_email_rules` (Issue H7); 0001's `(hotel_id, email)` compared the text exactly, so
+  `Elena@x.test` and `elena@x.test` could both be stored. The API lower-cases an address before
+  writing it, and the index holds the rule on its own for any other writer. Nothing searches
+  or deduplicates guests by email: this index is the only dedupe there is
 - **Indexes:** PK; `UNIQUE(public_id)`; the partial unique above; `(hotel_id, last_name)` for staff search; `(hotel_id, id)` for composite FK from bookings
 - **Cardinality:** 1 hotel → N guests; 1 guest → N bookings; 1 guest → N reviews
 
@@ -1006,7 +1012,7 @@ rows per year.
 | `room_types` | `(id, hotel_id)` | **Composite-FK target** |
 | `rooms` | `(hotel_id, room_number)` | *Room numbers unique within a hotel, not globally* |
 | `rooms` | `(id, hotel_id)` | **Composite-FK target** |
-| `guests` | `(hotel_id, email) WHERE email IS NOT NULL` | Partial: many guests have no email |
+| `guests` | `(hotel_id, lower(email)) WHERE email IS NOT NULL` | Partial: many guests have no email; case-insensitive (`0020`) |
 | `bookings` | `(hotel_id, reference)`, `public_id` | |
 | `payments` | `public_id` (migration `0002`) | Addressability; payments carry no natural key |
 | `bookings` | `(id, check_in_date, check_out_date, status)` | **Composite-FK target for the overlap guarantee** |
@@ -1049,7 +1055,7 @@ cascade needs it.
 | 9 | `rooms` | `UNIQUE (hotel_id, room_number)` | Integrity + staff lookup |
 | 10 | `rooms` | `(hotel_id, room_type_id)` | Inventory counts per type — the `available_rooms` input |
 | 11 | `guests` | `(hotel_id, last_name)` | Front-desk search |
-| 12 | `guests` | `UNIQUE (hotel_id, email) WHERE NOT NULL` | Dedupe on booking creation |
+| 12 | `guests` | `UNIQUE (hotel_id, lower(email)) WHERE NOT NULL` | One address per property, case-insensitive (`0020`) |
 | 13 | `reviews` | `(hotel_id, review_date DESC)` | Dominant read: recent reviews for a property |
 | 14 | `reviews` | `UNIQUE (hotel_id, source, external_review_id) WHERE NOT NULL` | Duplicate guard, per hotel (`0019`) |
 | 15 | `reviews` | `(hotel_id, source)` | Channel-mix reporting |

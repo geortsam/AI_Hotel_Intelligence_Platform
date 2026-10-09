@@ -48,7 +48,7 @@ Do them in either order, or skip 5 entirely if this deployment has no hotels yet
 Before the grant:
 
 - the stack is running and the API answers `GET /health`;
-- migrations completed successfully and Alembic reports revision **`0019_review_external_id_scope`**;
+- migrations completed successfully and Alembic reports revision **`0020_guest_email_rules`**;
 - **the intended administrator has already registered**, so their `users` row exists.
 
 Check the revision from inside the running stack:

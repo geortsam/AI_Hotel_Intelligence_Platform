@@ -662,8 +662,9 @@ def test_the_migration_chain_is_eleven_revisions() -> None:
     # Issue 4 added 0017 (the `llm_invocations` retention rule; no table).
     # Issue H3 added 0018 (three foreign keys recreated; no table).
     # Issue H4 added 0019 (one unique index of `reviews` replaced; no table).
-    assert len(revisions) == 19
-    assert revisions[-1] == "20261007_0019_review_external_id_scope.py"
+    # Issue H7 added 0020 (the guests' email key and format CHECK; no table).
+    assert len(revisions) == 20
+    assert revisions[-1] == "20261009_0020_guest_email_rules.py"
 
 
 # ======================================================================================

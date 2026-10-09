@@ -357,23 +357,71 @@ describe('creating a guest', () => {
     expect(requestsFor('/guests', 'POST')).toHaveLength(0)
   })
 
-  it('accepts an email the backend accepts, rather than inventing a format rule', async () => {
+  /* Issue H7: the server's rule exactly -- something, an @, something, a dot, something, no
+   * whitespace -- refused here before anything is sent, and nothing stricter. */
+  it('refuses a malformed address before sending, as the server would', async () => {
     const user = await openForm()
-    fetchStub.on('POST', '/guests', { status: 201, body: guest() })
 
     await user.type(screen.getByLabelText('First name'), 'Nora')
     await user.type(screen.getByLabelText('Last name'), 'Haddad')
-    // `"not-an-email"` was accepted with a 201 by the real backend: there is no format check
-    // in the schema and no CHECK on the column. The UI must not be stricter than the system.
+    // `"not-an-email"` was stored as written before Issue H7; the server now refuses it.
     await user.type(screen.getByLabelText('Email (optional)'), 'not-an-email')
+    await user.click(screen.getByRole('button', { name: 'Create guest' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('looks like name@example.com')
+    expect(requestsFor('/guests', 'POST')).toHaveLength(0)
+  })
+
+  it.each(['ada@example', '@example.com', 'ada@.', 'ada lovelace@example.com'])(
+    'refuses %s before sending too',
+    async (address) => {
+      const user = await openForm()
+
+      await user.type(screen.getByLabelText('First name'), 'Nora')
+      await user.type(screen.getByLabelText('Last name'), 'Haddad')
+      await user.type(screen.getByLabelText('Email (optional)'), address)
+      await user.click(screen.getByRole('button', { name: 'Create guest' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('looks like name@example.com')
+      expect(requestsFor('/guests', 'POST')).toHaveLength(0)
+    },
+  )
+
+  it('accepts a mixed-case address as typed and shows it as the server stored it', async () => {
+    const user = await openForm()
+    fetchStub.on('POST', '/guests', {
+      status: 201,
+      body: guest({ first_name: 'Nora', last_name: 'Haddad', email: 'nora.haddad@example.test' }),
+    })
+
+    await user.type(screen.getByLabelText('First name'), 'Nora')
+    await user.type(screen.getByLabelText('Last name'), 'Haddad')
+    await user.type(screen.getByLabelText('Email (optional)'), '  Nora.Haddad@Example.TEST ')
     await user.click(screen.getByRole('button', { name: 'Create guest' }))
 
     await waitFor(() => {
       expect(requestsFor('/guests', 'POST')).toHaveLength(1)
     })
+    // Sent as typed, trimmed: lower-casing is the server's, which is what makes the hotel's
+    // one-address rule case-insensitive. Doing it here too would hide which side does it.
     expect(JSON.parse(requestsFor('/guests', 'POST')[0]!.body!)).toMatchObject({
-      email: 'not-an-email',
+      email: 'Nora.Haddad@Example.TEST',
     })
+  })
+
+  it('accepts a minimal address of the right shape', async () => {
+    const user = await openForm()
+    fetchStub.on('POST', '/guests', { status: 201, body: guest() })
+
+    await user.type(screen.getByLabelText('First name'), 'Nora')
+    await user.type(screen.getByLabelText('Last name'), 'Haddad')
+    await user.type(screen.getByLabelText('Email (optional)'), 'a@b.c')
+    await user.click(screen.getByRole('button', { name: 'Create guest' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/guests', 'POST')).toHaveLength(1)
+    })
+    expect(JSON.parse(requestsFor('/guests', 'POST')[0]!.body!)).toMatchObject({ email: 'a@b.c' })
   })
 
   it('refuses an email shorter than the column allows', async () => {

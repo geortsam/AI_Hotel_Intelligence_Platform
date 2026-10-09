@@ -41,8 +41,8 @@ that refuses to construct a production configuration without a `SECRET_KEY`.
 PostgreSQL **18.6**. At the V1 boundary, nine linear Alembic migrations at head
 `0009_audit_booking_deleted`, no branch points. *(Stages 6.8 and 6.11 have since added two more,
 Stage 7.6 a third, Stage 7.7 a fourth, Stage 7.9 a fifth, Stage 7.11 a sixth, Issue 1 a seventh,
-Issue 4 an eighth, Issue H3 a ninth and Issue H4 a tenth: head is now
-`0019_review_external_id_scope` across 19 linear revisions, still with no branch points.)* The schema carries its rules rather than delegating them to application code:
+Issue 4 an eighth, Issue H3 a ninth, Issue H4 a tenth and Issue H7 an eleventh: head is now
+`0020_guest_email_rules` across 20 linear revisions, still with no branch points.)* The schema carries its rules rather than delegating them to application code:
 63 CHECK constraints and 28 foreign keys — 17 `ON DELETE RESTRICT`, 8 `ON DELETE CASCADE`,
 3 `ON DELETE SET NULL` — a GiST exclusion constraint over half-open date ranges for room
 allocation, a deferred trigger asserting night-completeness, a database-level append-only trigger

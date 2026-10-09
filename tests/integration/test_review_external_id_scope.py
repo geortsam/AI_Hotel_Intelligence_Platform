@@ -55,8 +55,10 @@ from tests.integration.test_reviews_api import (
 pytestmark = requires_postgres
 
 SUITE_EMAIL = "external-id-scope@example.test"
-HEAD = "0019_review_external_id_scope"
-MIGRATION = REPO_ROOT / "database" / "migrations" / "versions" / f"20261007_{HEAD}.py"
+#: The revision this suite is about. No longer the head: Issue H7 added 0020 on top of it.
+REVISION = "0019_review_external_id_scope"
+HEAD = "0020_guest_email_rules"
+MIGRATION = REPO_ROOT / "database" / "migrations" / "versions" / f"20261007_{REVISION}.py"
 
 TENANT_INDEX = "uq_reviews_hotel_source_external_review_id"
 GLOBAL_INDEX = "uq_reviews_source_external_review_id"
@@ -271,7 +273,8 @@ def test_the_index_is_exactly_the_approved_definition(engine: Engine) -> None:
     assert EXTERNAL_ID_CONSTRAINT == TENANT_INDEX
 
 
-def test_the_database_is_at_0019(engine: Engine) -> None:
+def test_the_database_is_migrated_past_0019(engine: Engine) -> None:
+    """At the head, which 0019 leads to: 0020 touched `guests` only."""
     with engine.connect() as connection:
         revision = connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar()
     assert revision == HEAD
@@ -359,7 +362,7 @@ def test_a_hotel_learns_nothing_about_another_from_a_reference(api: TestClient) 
 def test_the_migration_is_the_one_on_disk() -> None:
     assert MIGRATION.is_file()
     migration = load_migration()
-    assert migration.revision == HEAD
+    assert migration.revision == REVISION
     assert migration.down_revision == "0018_composite_set_null_columns"
 
 

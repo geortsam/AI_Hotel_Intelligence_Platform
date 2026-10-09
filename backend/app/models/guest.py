@@ -75,13 +75,18 @@ class Guest(TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint("public_id", name="uq_guests_public_id"),
         UniqueConstraint("id", "hotel_id", name="uq_guests_id_hotel_id"),
-        # Partial unique: an address appears once per property, but many guests have none.
+        # Partial unique: an address appears once per property, whatever its letter case, but
+        # many guests have none. Case-insensitive since migration 0020 (Issue H7).
         Index(
-            "uq_guests_hotel_id_email",
+            "uq_guests_hotel_id_lower_email",
             "hotel_id",
-            "email",
+            text("lower(email)"),
             unique=True,
             postgresql_where=text("email IS NOT NULL"),
+        ),
+        # ck_users_email_format's pattern, for guests too (Issue H7, migration 0020).
+        CheckConstraint(
+            r"email IS NULL OR email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'", name="email_format"
         ),
         CheckConstraint(
             "country_code IS NULL OR country_code ~ '^[A-Z]{2}$'", name="country_code_format"

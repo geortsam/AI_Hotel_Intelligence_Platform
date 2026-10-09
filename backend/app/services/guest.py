@@ -9,8 +9,9 @@ first, so a guest of hotel A is not addressable through hotel B.
 Two departures from the pattern established in earlier stages, both deliberate:
 
 1. *No SELECT-then-INSERT on email.* The schema carries
-   ``uq_guests_hotel_id_email (hotel_id, email) WHERE email IS NOT NULL``, and that partial
-   unique index is the sole authority. A pre-check would be both racy and redundant.
+   ``uq_guests_hotel_id_lower_email (hotel_id, lower(email)) WHERE email IS NOT NULL``, and
+   that partial unique index is the sole authority. A pre-check would be both racy and
+   redundant.
 
 2. *No ``exc_info`` on integrity errors.* PostgreSQL renders a unique violation as
    ``DETAIL: Key (hotel_id, email)=(1, someone@example.com) already exists.`` Logging the
@@ -52,9 +53,10 @@ logger = logging.getLogger(__name__)
 MAX_PAGE_SIZE = 100
 DEFAULT_PAGE_SIZE = 20
 
-#: The partial unique index on (hotel_id, email). Named so a conflict can be reported
-#: precisely without quoting the offending address.
-EMAIL_UNIQUE_CONSTRAINT = "uq_guests_hotel_id_email"
+#: The partial unique index on (hotel_id, lower(email)) -- case-insensitive since migration
+#: 0020 (Issue H7). Named so a conflict can be reported precisely without quoting the
+#: offending address.
+EMAIL_UNIQUE_CONSTRAINT = "uq_guests_hotel_id_lower_email"
 
 
 class GuestService:

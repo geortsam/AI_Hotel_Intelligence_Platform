@@ -11,6 +11,12 @@ none and hotel systems commonly having them is not a reason to invent them.
 The fields are personally identifiable information, which shapes two choices made elsewhere:
 the API never echoes an email in a conflict message, and the service never logs a driver
 error whose text carries the value.
+
+**An email is checked and lower-cased (Issue H7).** It must match the rule ``users.email``
+already has -- :data:`EMAIL_PATTERN`, a malformed address being a 422 that names the field --
+and is stored lower case, so ``Elena@x.test`` and ``elena@x.test`` are one address at a
+hotel. The database enforces both on its own since migration ``0020_guest_email_rules``:
+``ck_guests_email_format`` and the unique index on ``(hotel_id, lower(email))``.
 """
 
 from __future__ import annotations
@@ -22,7 +28,11 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 NameField = Annotated[str, Field(min_length=1, max_length=100)]
-EmailField = Annotated[str, Field(min_length=3, max_length=254)]
+#: The basic address shape ``ck_users_email_format`` enforces for staff accounts, and since
+#: migration 0020 ``ck_guests_email_format`` for guests: something, an @, something, a dot,
+#: something, and no whitespace anywhere. Deliberately not an RFC 5322 parser.
+EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+EmailField = Annotated[str, Field(min_length=3, max_length=254, pattern=EMAIL_PATTERN)]
 PhoneField = Annotated[str, Field(min_length=1, max_length=50)]
 #: Mirrors ck_guests_country_code_format.
 CountryCodeField = Annotated[str, Field(min_length=2, max_length=2, pattern=r"^[A-Z]{2}$")]
@@ -45,6 +55,13 @@ class GuestBase(BaseModel):
     @classmethod
     def _lower_language(cls, value: object) -> object:
         """ISO-639-1 is conventionally lower case."""
+        return value.lower() if isinstance(value, str) else value
+
+    @field_validator("email", mode="before", check_fields=False)
+    @classmethod
+    def _lower_email(cls, value: object) -> object:
+        """One address, however it was typed: the hotel's uniqueness is case-insensitive, as
+        ``users.email`` is (Issue H7). ``None`` -- clearing the address -- passes through."""
         return value.lower() if isinstance(value, str) else value
 
 

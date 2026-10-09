@@ -34,6 +34,13 @@ interface Draft {
   marketing_opt_in: boolean
 }
 
+/**
+ * `ck_guests_email_format` and the API's `EmailField`, which are `ck_users_email_format`'s
+ * pattern (Issue H7). JavaScript's `\s` and PostgreSQL's agree on every character an address
+ * plausibly contains.
+ */
+export const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+
 function draftFrom(guest: Guest | undefined): Draft {
   return {
     first_name: guest?.first_name ?? '',
@@ -81,17 +88,17 @@ function updateFrom(draft: Draft): GuestUpdateRequest {
  *
  * ## What is NOT validated here, and why that is deliberate
  *
- * The backend checks: names 1..100 characters, email 3..254 characters, `country_code`
- * `^[A-Z]{2}$`, `preferred_language` `^[a-z]{2}$`. Those are mirrored below so a refusal
- * arrives at the field that caused it rather than as a banner.
+ * The backend checks: names 1..100 characters, email 3..254 characters **and the shape
+ * {@link EMAIL_PATTERN}**, `country_code` `^[A-Z]{2}$`, `preferred_language` `^[a-z]{2}$`. Those
+ * are mirrored below so a refusal arrives at the field that caused it rather than as a banner.
  *
- * It does **not** check that an email looks like an email. `"not-an-email"` was accepted with
- * a 201, verified live -- there is no format rule in the schema and no CHECK on the column.
- * So this form does not impose one either: a client-side rule stricter than the server's
- * would refuse data the system is willing to hold, and would do it in the one place where a
+ * The email rule is the server's exactly, and no stricter (Issue H7): something, an `@`,
+ * something, a dot, something, no whitespace -- the pattern staff accounts have always had,
+ * enforced for guests by the schema and by the column's own CHECK since migration 0020. It is
+ * not an RFC 5322 parser, and this form does not try to be one: a client-side rule stricter
+ * than the server's would refuse data the system is willing to hold, in the one place where a
  * receptionist cannot override it. The field is `type="email"` for the keyboard and autofill
- * it buys on a phone, and the form is `noValidate`, so the browser does not enforce a rule
- * the platform has not adopted.
+ * it buys on a phone, and the form is `noValidate`, so the browser applies no rule of its own.
  *
  * Nor is a date of birth bounded: `2199-01-01` was accepted. Left to the server for the same
  * reason.
@@ -100,7 +107,9 @@ function updateFrom(draft: Draft): GuestUpdateRequest {
  *
  * `gb` is stored as `GB` and `EN` as `en` -- the schema normalises both before the CHECK
  * sees them, verified live. So the codes are sent as typed. Doing it here as well would be a
- * second implementation of a rule that already has one.
+ * second implementation of a rule that already has one. An email is the same: `Ada@Example.COM`
+ * is sent as typed and stored as `ada@example.com`, which is what makes the hotel's one-address
+ * rule case-insensitive (Issue H7).
  *
  * ## An empty optional means "clear it", and only when editing
  *
@@ -152,10 +161,13 @@ export function GuestForm({
     if (draft.first_name.trim().length > 100 || draft.last_name.trim().length > 100) {
       return 'A name can be at most 100 characters.'
     }
-    // Mirrors `EmailField`: a length bound, and nothing about format. See the docstring.
+    // Mirrors `EmailField`: the length bound, then the server's own shape. See the docstring.
     const email = draft.email.trim()
     if (email !== '' && (email.length < 3 || email.length > 254)) {
       return 'An email address is between 3 and 254 characters.'
+    }
+    if (email !== '' && !EMAIL_PATTERN.test(email)) {
+      return 'An email address looks like name@example.com, with no spaces.'
     }
     if (draft.phone.trim().length > 50) {
       return 'A phone number can be at most 50 characters.'

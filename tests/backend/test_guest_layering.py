@@ -138,14 +138,20 @@ def test_the_email_constraint_name_matches_the_frozen_schema() -> None:
     assert EMAIL_UNIQUE_CONSTRAINT in index_names
 
 
-def test_the_email_uniqueness_is_partial_and_per_hotel() -> None:
-    """Guests with no email are unconstrained; two at one hotel cannot share an address."""
+def test_the_email_uniqueness_is_partial_per_hotel_and_case_insensitive() -> None:
+    """Guests with no email are unconstrained; two at one hotel cannot share an address,
+    whatever its letter case (Issue H7, migration 0020)."""
     guests_table = Guest.metadata.tables["guests"]
     index = next(i for i in guests_table.indexes if i.name == EMAIL_UNIQUE_CONSTRAINT)
 
+    assert EMAIL_UNIQUE_CONSTRAINT == "uq_guests_hotel_id_lower_email"
     assert index.unique
-    assert [column.name for column in index.columns] == ["hotel_id", "email"]
-    assert index.dialect_options["postgresql"]["where"] is not None
+    assert [str(expression) for expression in index.expressions] == [
+        "guests.hotel_id",
+        "lower(email)",
+    ]
+    assert str(index.dialect_options["postgresql"]["where"]) == "email IS NOT NULL"
+    assert "uq_guests_hotel_id_email" not in {i.name for i in guests_table.indexes}
 
 
 # --- PII: nothing sensitive is logged or echoed ---------------------------------------------------

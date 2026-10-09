@@ -50,9 +50,10 @@ from tests.integration.test_finance_api import (
 pytestmark = requires_postgres
 
 SUITE_EMAIL = "set-null@example.test"
-#: The revision this suite is about. No longer the head: Issue H4 added 0019 on top of it.
+#: The revision this suite is about. No longer the head: Issues H4 and H7 added 0019 and
+#: 0020 on top of it.
 REVISION = "0018_composite_set_null_columns"
-HEAD = "0019_review_external_id_scope"
+HEAD = "0020_guest_email_rules"
 MIGRATION = REPO_ROOT / "database" / "migrations" / "versions" / f"20261006_{REVISION}.py"
 RANGE = {"date_from": "2026-09-01", "date_to": "2026-09-30"}
 REVIEW = {"rating": "4.50", "review_date": "2026-09-05", "title": "Kept", "body": "Quiet room."}

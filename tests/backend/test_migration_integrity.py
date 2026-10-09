@@ -66,10 +66,11 @@ EXPECTED_FILENAMES = (
     "20261003_0017_llm_invocation_retention.py",
     "20261006_0018_composite_set_null_columns.py",
     "20261007_0019_review_external_id_scope.py",
+    "20261009_0020_guest_email_rules.py",
 )
 
 #: sha256 of the canonicalised concatenation described in this module's docstring. Derived
-#: from the nineteen files above; not a value chosen to make anything pass.
+#: from the twenty files above; not a value chosen to make anything pass.
 #:
 #: Moved on every migration. `0dc2f8b1...` over nine files was the value before Stage 6.8 added
 #: `demand_predictions`; `35162fde...` over ten was the value before Stage 6.11 added
@@ -87,12 +88,14 @@ EXPECTED_FILENAMES = (
 #: the value before 0018 (Issue H3) recreated the three composite SET NULL keys with column
 #: lists, still reproduced by the first seventeen; and `745f856d...` over eighteen was the value
 #: before 0019 (Issue H4) scoped the reviews' external-identifier key to the hotel, still
-#: reproduced by the first eighteen. All ten are recorded rather than discarded,
+#: reproduced by the first eighteen; and `e941eb8d...` over nineteen was the value before
+#: 0020 (Issue H7) gave guest emails a format CHECK and a case-insensitive key, still
+#: reproduced by the first nineteen. All eleven are recorded rather than discarded,
 #: because "the digest changed" should always be answerable with "yes, in that commit, for
 #: that migration".
-CANONICAL_SHA256 = "e941eb8dff069b7a4fd97781e188a4f94d3cbea5c9f56273b5dc2dd41b5913d5"
+CANONICAL_SHA256 = "7074c79d3c4f5975ebbbe09c9d1724b9a6660ea90323dad24e51da4ec3b2dea2"
 
-EXPECTED_HEAD = "0019_review_external_id_scope"
+EXPECTED_HEAD = "0020_guest_email_rules"
 EXPECTED_ROOT = "0001_initial_schema"
 
 REVISION = re.compile(r'^revision: str = "([^"]+)"', re.MULTILINE)
@@ -205,6 +208,17 @@ def test_the_tenant_scope_correction_left_every_earlier_migration_untouched() ->
     earlier = [path.read_bytes() for path in migration_files()[:18]]
 
     assert digest_of(earlier) == "745f856d31b91f78a1204bed47ecf9cbf2177cf895381c40df56672a643f27cf"
+
+
+def test_the_guest_email_rules_left_every_earlier_migration_untouched() -> None:
+    """Adding 0020 moved the digest only because 0020 was added: 0001-0019 are byte-identical.
+
+    0020 replaces the guests' email index 0001 declared and adds a CHECK -- by a new revision,
+    never by editing 0001 -- so 0001's bytes, like every other earlier file's, are unchanged.
+    """
+    earlier = [path.read_bytes() for path in migration_files()[:19]]
+
+    assert digest_of(earlier) == "e941eb8dff069b7a4fd97781e188a4f94d3cbea5c9f56273b5dc2dd41b5913d5"
 
 
 def test_the_digest_does_not_depend_on_how_git_checked_the_files_out() -> None:

@@ -617,26 +617,25 @@ def test_a_rejected_guest_update_changes_nothing(
     assert api.get(detail).json() == original
 
 
-def test_a_malformed_email_is_accepted_as_written(
-    api: TestClient, workflow: tuple[str, str, str]
+def test_a_malformed_email_is_refused_and_changes_nothing(
+    api: TestClient, workflow: tuple[str, str, str], session: Session
 ) -> None:
-    """FINDING, recorded rather than silently changed.
-
-    ``guests.email`` carries no format CHECK in the database and no pattern in the schema,
-    so "not-an-email" is stored as given. Tightening it would reject requests the API has
-    always accepted, which is a contract change rather than hardening -- it is reported in
-    docs/backend-architecture.md as a remaining production requirement instead.
-
-    The gap has a real cost: the partial unique index on (hotel_id, email) cannot collapse
-    two different malformed spellings of one address.
-    """
+    """Issue H7, a deliberate contract tightening: "not-an-email" used to be stored as given.
+    It is now a 422 at the field -- the shape ``users.email`` always had -- and the row, like
+    every table, is untouched. The database's own CHECK refuses it too; see
+    tests/integration/test_guest_email_rules.py."""
     hotel, _, guest = workflow
     detail = f"/api/v1/hotels/{hotel}/guests/{guest}"
+    original = api.get(detail).json()
+    before = counts(session)
 
     response = api.patch(detail, json={"email": "not-an-email"})
 
-    assert response.status_code == 200
-    assert response.json()["email"] == "not-an-email"
+    assert response.status_code == 422
+    assert [d["location"] for d in response.json()["error"]["details"]] == [["body", "email"]]
+    assert "not-an-email" not in response.text
+    assert counts(session) == before
+    assert api.get(detail).json() == original
 
 
 def test_deleting_a_booking_with_dependents_is_refused_and_changes_nothing(

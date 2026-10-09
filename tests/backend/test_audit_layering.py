@@ -814,7 +814,7 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     """
     chain = revisions()
 
-    assert len(chain) == 19
+    assert len(chain) == 20
     roots = [rev for rev, down in chain.items() if down is None]
     heads = [rev for rev in chain if rev not in set(chain.values())]
 
@@ -836,7 +836,9 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     # touches no audit table.
     # Issue H4 added 0019, which replaces one unique index of `reviews` and touches no audit
     # table.
-    assert heads == ["0019_review_external_id_scope"]
+    # Issue H7 added 0020, which replaces one unique index of `guests` and adds a
+    # CHECK; no audit table.
+    assert heads == ["0020_guest_email_rules"]
     assert chain["0007_audit_events"] == "0006_users_password_changed_at"
     assert chain["0008_audit_retention_archive"] == "0007_audit_events"
     assert chain["0009_audit_booking_deleted"] == "0008_audit_retention_archive"
@@ -848,9 +850,10 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     assert chain["0017_llm_invocation_retention"] == "0016_demand_observation_periods"
     assert chain["0018_composite_set_null_columns"] == "0017_llm_invocation_retention"
     assert chain["0019_review_external_id_scope"] == "0018_composite_set_null_columns"
+    assert chain["0020_guest_email_rules"] == "0019_review_external_id_scope"
     # Every other revision is somebody's parent exactly once: no fork.
     parents = [down for down in chain.values() if down is not None]
-    assert len(parents) == len(set(parents)) == 18
+    assert len(parents) == len(set(parents)) == 19
 
 
 def test_the_audit_table_is_created_by_exactly_one_migration() -> None:

@@ -1,7 +1,8 @@
 """Guest domain against real PostgreSQL.
 
-Three things only the database can prove here: that ``uq_guests_hotel_id_email`` is partial
-(unconstrained when the address is null) and per hotel, that ``bookings`` RESTRICTs a guest
+Three things only the database can prove here: that ``uq_guests_hotel_id_lower_email`` is
+partial (unconstrained when the address is null), per hotel and -- since Issue H7 --
+case-insensitive, that ``bookings`` RESTRICTs a guest
 delete while ``reviews`` merely SET NULLs, and that a guest of hotel A is unreachable through
 hotel B. SQLite is not substituted.
 """
@@ -401,7 +402,7 @@ def test_duplicate_email_at_the_same_hotel_returns_409(api: TestClient, hotel_id
 
 
 def test_the_same_email_is_allowed_at_a_different_hotel(api: TestClient, hotel_id: str) -> None:
-    """uq_guests_hotel_id_email is per hotel, not global."""
+    """uq_guests_hotel_id_lower_email is per hotel, not global."""
     other = str(api.post("/api/v1/hotels", json=hotel_payload("hotel-b")).json()["public_id"])
     api.post(guests_url(hotel_id), json=guest_payload(email=EMAIL))
 
@@ -631,6 +632,7 @@ def test_a_conflict_response_leaks_no_sql_or_constraint_internals(
     text = api.post(guests_url(hotel_id), json=guest_payload(email=EMAIL)).text.lower()
 
     for leak in [
+        "uq_guests_hotel_id_lower_email",
         "uq_guests_hotel_id_email",
         "insert",
         "psycopg",

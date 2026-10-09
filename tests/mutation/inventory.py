@@ -1352,7 +1352,7 @@ def runbook(name: str, breaks: str, path: str, old: str, new: str, *tests: str) 
 
 
 STALE = "`0011_demand_prediction_public_id`"
-CURRENT = "`0019_review_external_id_scope`"
+CURRENT = "`0020_guest_email_rules`"
 REVISIONS_IN_BACKUP = "test_every_revision_a_runbook_quotes_is_the_current_head[backup-restore]"
 
 STAGE_M1 = [
@@ -3308,6 +3308,203 @@ STAGE_H6 = [
 ]
 
 
+GUEST_EMAIL_MIGRATION = "database/migrations/versions/20261009_0020_guest_email_rules.py"
+GUEST_EMAIL_UNIT = "tests/backend/test_guest_email.py"
+GUEST_EMAIL_RULES = "tests/integration/test_guest_email_rules.py"
+GUEST_FORM_UI = "src/features/guests/guests.test.tsx"
+MALFORMED_REFUSED = f"{GUEST_EMAIL_UNIT}::test_a_malformed_address_is_refused_at_the_field"
+LOWER_CASED = f"{GUEST_EMAIL_UNIT}::test_an_address_is_trimmed_and_lower_cased_on_create_and_update"
+ONE_PATTERN = (
+    f"{GUEST_EMAIL_UNIT}::test_the_api_the_database_the_frontend_and_users_share_one_pattern"
+)
+EMAIL_KEY_MODEL = (
+    "tests/backend/test_guest_layering.py::"
+    "test_the_email_uniqueness_is_partial_per_hotel_and_case_insensitive"
+)
+CASE_DUPLICATES_REFUSED = (
+    f"{GUEST_EMAIL_RULES}::test_the_upgrade_refuses_case_duplicates_without_naming_the_address"
+)
+
+
+def email_rule_db(
+    number: int, breaks: str, path: str, old: str, new: str, *killers: str
+) -> Mutation:
+    """An H7 mutation whose killers run against PostgreSQL."""
+    return Mutation(
+        f"H7-M{number}", "H7", breaks, one(path, old, new), killers, needs_database=True
+    )
+
+
+def email_rule_static(
+    number: int, breaks: str, path: str, old: str, new: str, *killers: str
+) -> Mutation:
+    """An H7 mutation caught by a test that needs no database."""
+    return Mutation(f"H7-M{number}", "H7", breaks, one(path, old, new), killers)
+
+
+def email_rule_ui(
+    number: int, breaks: str, path: str, old: str, new: str, *killers: str
+) -> Mutation:
+    """An H7 mutation of the guest form, caught by Vitest."""
+    return Mutation(
+        f"H7-M{number}", "H7", breaks, one(path, old, new), killers, runner=Runner.VITEST
+    )
+
+
+STAGE_H7 = [
+    email_rule_static(
+        1,
+        "the API stores a malformed guest email as written again",
+        "backend/app/schemas/guest.py",
+        "EmailField = Annotated[str, Field(min_length=3, max_length=254, pattern=EMAIL_PATTERN)]\n",
+        "EmailField = Annotated[str, Field(min_length=3, max_length=254)]\n",
+        MALFORMED_REFUSED,
+    ),
+    email_rule_static(
+        2,
+        "the API's guest email rule drifts from the users rule",
+        "backend/app/schemas/guest.py",
+        'EMAIL_PATTERN = r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"\n',
+        'EMAIL_PATTERN = r"^[^@\\s]+@[^@\\s]+$"\n',
+        ONE_PATTERN,
+        MALFORMED_REFUSED,
+    ),
+    email_rule_static(
+        3,
+        "a guest email is stored as typed, letter case and all",
+        "backend/app/schemas/guest.py",
+        "        ``users.email`` is (Issue H7). ``None``"
+        ' -- clearing the address -- passes through."""\n'
+        "        return value.lower() if isinstance(value, str) else value\n",
+        "        ``users.email`` is (Issue H7). ``None``"
+        ' -- clearing the address -- passes through."""\n'
+        "        return value\n",
+        LOWER_CASED,
+    ),
+    email_rule_db(
+        4,
+        "the new key compares the text exactly again, so letter case makes two addresses",
+        GUEST_EMAIL_MIGRATION,
+        '        f"ON guests (hotel_id, lower(email)) WHERE {PREDICATE}"\n',
+        '        f"ON guests (hotel_id, email) WHERE {PREDICATE}"\n',
+        f"{GUEST_EMAIL_RULES}::test_direct_sql_cannot_store_one_address_twice_in_another_case",
+        f"{GUEST_EMAIL_RULES}::test_the_index_and_the_check_are_exactly_the_approved_definitions",
+    ),
+    email_rule_db(
+        5,
+        "the database no longer refuses a malformed guest email on its own",
+        GUEST_EMAIL_MIGRATION,
+        '        f"ALTER TABLE guests ADD CONSTRAINT {FORMAT_CHECK} "\n'
+        "        f\"CHECK (email IS NULL OR email ~ '{EMAIL_FORMAT}')\"\n",
+        '        f"ALTER TABLE guests ADD CONSTRAINT {FORMAT_CHECK} "\n'
+        "        f\"CHECK (email IS NULL OR email ~ '.*')\"\n",
+        f"{GUEST_EMAIL_RULES}::test_direct_sql_cannot_store_a_malformed_address",
+    ),
+    email_rule_db(
+        6,
+        "the upgrade no longer looks for addresses that differ only by letter case",
+        GUEST_EMAIL_MIGRATION,
+        "    duplicates = _case_duplicates()\n",
+        "    duplicates: list[tuple[str, list[str]]] = []\n",
+        CASE_DUPLICATES_REFUSED,
+    ),
+    email_rule_db(
+        7,
+        "the upgrade no longer looks for addresses the CHECK would refuse",
+        GUEST_EMAIL_MIGRATION,
+        "    malformed = _malformed()\n",
+        "    malformed: list[tuple[str, list[str]]] = []\n",
+        f"{GUEST_EMAIL_RULES}::test_the_upgrade_refuses_malformed_addresses_without_naming_them",
+    ),
+    email_rule_db(
+        8,
+        "the upgrade's refusal names the addresses instead of the guests",
+        GUEST_EMAIL_MIGRATION,
+        '        "SELECT h.slug, array_agg(g.public_id::text ORDER BY g.id) "\n'
+        '        "FROM guests g JOIN hotels h ON h.id = g.hotel_id "\n'
+        '        f"WHERE g.{PREDICATE} "\n',
+        '        "SELECT h.slug, array_agg(g.email ORDER BY g.id) "\n'
+        '        "FROM guests g JOIN hotels h ON h.id = g.hotel_id "\n'
+        '        f"WHERE g.{PREDICATE} "\n',
+        CASE_DUPLICATES_REFUSED,
+    ),
+    email_rule_db(
+        9,
+        "the downgrade rebuilds the case-insensitive key instead of 0001's",
+        GUEST_EMAIL_MIGRATION,
+        '        f"CREATE UNIQUE INDEX {CASE_SENSITIVE_INDEX}'
+        ' ON guests (hotel_id, email) WHERE {PREDICATE}"\n',
+        '        f"CREATE UNIQUE INDEX {CASE_SENSITIVE_INDEX}'
+        ' ON guests (hotel_id, lower(email)) "\n'
+        '        f"WHERE {PREDICATE}"\n',
+        f"{GUEST_EMAIL_RULES}::test_the_downgrade_restores_0001s_index_and_keeps_every_row",
+    ),
+    email_rule_static(
+        10,
+        "the model declares 0001's case-sensitive key",
+        "backend/app/models/guest.py",
+        '            "uq_guests_hotel_id_lower_email",\n'
+        '            "hotel_id",\n'
+        '            text("lower(email)"),\n',
+        '            "uq_guests_hotel_id_lower_email",\n'
+        '            "hotel_id",\n'
+        '            "email",\n',
+        EMAIL_KEY_MODEL,
+    ),
+    email_rule_static(
+        11,
+        "the model's email CHECK drifts from the users rule",
+        "backend/app/models/guest.py",
+        '            r"email IS NULL OR email ~'
+        ' \'^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$\'", name="email_format"\n',
+        '            r"email IS NULL OR email ~ \'^.+$\'", name="email_format"\n',
+        ONE_PATTERN,
+    ),
+    email_rule_db(
+        12,
+        "the service listens for 0001's index name, so a duplicate address is a generic 409",
+        "backend/app/services/guest.py",
+        'EMAIL_UNIQUE_CONSTRAINT = "uq_guests_hotel_id_lower_email"\n',
+        'EMAIL_UNIQUE_CONSTRAINT = "uq_guests_hotel_id_email"\n',
+        f"{GUEST_EMAIL_RULES}::test_one_hotel_cannot_hold_an_address_twice_in_any_case",
+    ),
+    email_rule_ui(
+        13,
+        "the guest form sends a malformed address to the server",
+        "frontend/src/features/guests/GuestForm.tsx",
+        "    if (email !== '' && !EMAIL_PATTERN.test(email)) {\n",
+        "    if (email !== '' && false) {\n",
+        f"{GUEST_FORM_UI}::refuses a malformed address before sending, as the server would",
+    ),
+    email_rule_static(
+        14,
+        "the guest form's rule drifts from the server's",
+        "frontend/src/features/guests/GuestForm.tsx",
+        "export const EMAIL_PATTERN = /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/\n",
+        "export const EMAIL_PATTERN = /^[^@\\s]+@[^@\\s]+$/\n",
+        ONE_PATTERN,
+    ),
+    email_rule_ui(
+        15,
+        "the guest form lower-cases the address itself, hiding which side does it",
+        "frontend/src/features/guests/GuestForm.tsx",
+        "      ...(draft.email.trim() !== '' ? { email: draft.email.trim() } : {}),\n",
+        "      ...(draft.email.trim() !== '' ?"
+        " { email: draft.email.trim().toLowerCase() } : {}),\n",
+        f"{GUEST_FORM_UI}::accepts a mixed-case address"
+        " as typed and shows it as the server stored it",
+    ),
+    email_rule_db(
+        16,
+        "the downgrade leaves the format CHECK behind",
+        GUEST_EMAIL_MIGRATION,
+        '    op.execute(f"ALTER TABLE guests DROP CONSTRAINT {FORMAT_CHECK}")\n',
+        "    pass\n",
+        f"{GUEST_EMAIL_RULES}::test_the_downgrade_restores_0001s_index_and_keeps_every_row",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -3334,4 +3531,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_H3,
     *STAGE_H4,
     *STAGE_H6,
+    *STAGE_H7,
 )
