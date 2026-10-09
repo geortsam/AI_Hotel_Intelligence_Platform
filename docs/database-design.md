@@ -1059,8 +1059,8 @@ cascade needs it.
 | 13 | `reviews` | `(hotel_id, review_date DESC)` | Dominant read: recent reviews for a property |
 | 14 | `reviews` | `UNIQUE (hotel_id, source, external_review_id) WHERE NOT NULL` | Duplicate guard, per hotel (`0019`) |
 | 15 | `reviews` | `(hotel_id, source)` | Channel-mix reporting |
-| 16 | `daily_hotel_metrics` | `UNIQUE (hotel_id, metric_date)` | **The forecasting range scan.** Serves `WHERE hotel_id=? AND metric_date BETWEEN ? AND ?` and guarantees one row per day |
-| 17 | `revenue` | `(hotel_id, revenue_date, category_id)` | Daily rollup by category — the metrics job's main read |
+| 16 | `daily_hotel_metrics` | `UNIQUE (hotel_id, metric_date)` | **The intended forecasting range scan** — no reader yet, the table is empty (§8). Would serve `WHERE hotel_id=? AND metric_date BETWEEN ? AND ?`; already enforces at most one row per hotel per day |
+| 17 | `revenue` | `(hotel_id, revenue_date, category_id)` | Daily rollup by category — read today by on-demand analytics; also the intended main read of a future metrics job (§8), which does not exist |
 | 18 | `revenue` | `(booking_id) WHERE NOT NULL` | Folio assembly; partial because most rows may be null |
 | 19 | `expenses` | `(hotel_id, expense_date, category_id)` | Daily/period cost rollup |
 | 20 | `payments` | `(booking_id)` | Balance calculation |
