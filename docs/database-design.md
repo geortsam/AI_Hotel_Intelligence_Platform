@@ -1430,6 +1430,15 @@ above — the schema earns ML-readiness by recording facts well, not by anticipa
 | 6 | **Anomaly detection** | Daily metrics give the baseline series for occupancy/ADR/RevPAR/expense outliers; `payments` and `revenue` support transaction-level checks; `computed_at` distinguishes "the world changed" from "the job re-ran" |
 | 7 | **AI hotel manager** | Consumes all of the above. Because every fact carries `hotel_id`, a business date and a currency, an agent can be scoped to one property without ambiguity, and its recommendations are traceable to the rows that produced them |
 
+> **Status (Issue H10): rows 1, 2 and 6, and the per-day counters in row 3, describe design
+> intent, not what the schema provides today.** `daily_hotel_metrics` is empty and unused (§8),
+> so it supplies no series and no job re-runs it. Forecasting reads the transactional tables
+> instead: the statistical forecasts are computed on demand from the same queries as analytics,
+> and the served demand model's features come from `booking_room_nights`. The model and the
+> stay-date series (occupancy, room revenue) treat a day outside every declared span of
+> `demand_observation_periods` as unknown, not zero. A population job remains unimplemented and
+> unapproved; §8 lists what it would have to decide first.
+
 **Why per-night pricing matters for ML specifically.** Before revision 2, a four-night stay booked
 at a blended rate carried one number. Any attempt to learn seasonality, day-of-week effects or
 lead-time response would first have to *invent* a per-night split — almost always an even one —
