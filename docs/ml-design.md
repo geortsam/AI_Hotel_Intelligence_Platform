@@ -344,3 +344,10 @@ returned; nothing is persisted, so nothing needed storing.
 `daily_hotel_metrics` remains empty and untouched — this stage did not quietly become its
 population job. A test asserts the table still holds zero rows after every endpoint is
 exercised.
+
+> **Status (Issue H9):** unchanged since. No forecasting, ML or copilot path reads the table.
+> The ML dataset pipeline (Stage 6.1 onward) builds its series from `booking_room_nights` and
+> the declared observation periods of `demand_observation_periods` (Issue 1), where a day outside
+> every declared span is unknown rather than zero. The table is reserved for a future
+> population job that no roadmap stage approves; see `database-design.md` §8 for the approved
+> design and the decisions still open.

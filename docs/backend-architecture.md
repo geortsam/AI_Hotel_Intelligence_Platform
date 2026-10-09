@@ -344,8 +344,31 @@ In priority order.
    PATCHes by an optional `If-Match` on `updated_at` (Issue H6, §3). **Remaining:** the three
    global catalogues have no `updated_at`, so same-field edits there are still last-write-wins;
    giving them one is a migration. Creation races were always decided by the database (§6).
-5. **A `daily_hotel_metrics` population job**, which is also what would make forecast
-   backtesting reproducible.
+5. **A `daily_hotel_metrics` population job — reserved, not approved (Issue H9).** The table
+   exists and stays empty; no job is implemented and no roadmap stage schedules one. Analytics
+   computes on demand and the ML dataset pipeline reads its own approved sources (the booking
+   tables and the declared observation periods), so nothing depends on it. Forecast evaluation
+   relies instead on the accuracy protocol's settlement lag (which reports when a scored window
+   was not yet settled) and on committed, versioned training datasets, not on snapshots. The 30-day recompute window (approved decision 13) is a design
+   decision for a future job. Before one is built, these must be decided:
+   - **Currency.** The row has one `currency` column; a hotel can record several currencies on
+     one day (the ledger stores currency per line, and approved decision 14 adds no FX). Skip
+     the day, report the base currency only, refuse, or change the shape (a migration)?
+   - **Historical availability.** `available_rooms` has no point-in-time source (there is no
+     room-status history), and analytics divides past occupancy by the rooms active *today*,
+     uncapped. On that basis a past day can exceed `available_rooms`, which
+     `ck_daily_hotel_metrics_occupied_rooms_within_available` refuses. Which basis, and does the
+     constraint stay?
+   - **Undeclared days versus zero.** Step 5 of the approved derivation (`database-design.md`
+     §8) writes a row for every date, zeros included. The later observation contract (Issue 1,
+     `demand_observation_periods`) says a day outside every declared span is *unknown*, not
+     zero. Which rule governs this table?
+   - **Column definitions.** `out_of_order_rooms` has no source data; `no_shows`, `arrivals` and
+     `departures` have no settled date basis or status rule for this table.
+   - **Trigger and backfill.** The application schedules nothing (every existing purge is an
+     operator command), so how the job runs, and how far back it may backfill, are both open.
+
+   The full list, and what is already approved, is in `database-design.md` §8.
 6. **Rate limiting and request size limits.** `page_size` is capped at 100 and analytics ranges
    at 366 days, but nothing bounds request volume.
 7. **Structured request logging with correlation ids.** Errors are logged, but a request cannot

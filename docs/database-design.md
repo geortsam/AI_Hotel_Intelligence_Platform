@@ -1196,6 +1196,17 @@ the planner enforces for free.
 
 ## 8. Daily metrics strategy
 
+> **Status (Issue H9): reserved, not populated, not scheduled.** `daily_hotel_metrics` exists
+> (migration `0001`) but holds no rows, and nothing in the application writes or reads it. No
+> population job is implemented, and no roadmap stage approves one. Analytics computes every
+> figure on demand from the transactional tables (`analytics-design.md` §1); the ML dataset
+> pipeline reads `booking_room_nights` and the declared observation periods
+> (`ml-dataset-design.md`), not this table. Everything below is the design as approved for a
+> *future* job: the recommendation of option C and approved decision 13 (a 30-day trailing
+> recompute window) still stand as design decisions, and neither means a job exists or is
+> scheduled. The questions a future implementation must settle first are listed at the end of
+> this section.
+
 ### The three options
 
 | | **A — compute on demand** | **B — stored snapshots** | **C — snapshots from a defined derivation** |
@@ -1268,6 +1279,29 @@ Ratios that are pure functions of stored columns — `occupancy_rate`, `adr`, `r
 `total_revenue` — are `GENERATED ALWAYS ... STORED`, so they are physically present for fast reads
 but cannot disagree with their inputs. This is the one place where a "denormalized" value carries
 zero drift risk.
+
+### Unresolved before any population job (Issue H9)
+
+Approved, and unchanged: option C as the strategy, `booking_room_nights` as the only source of
+room revenue (decision 21), and a 30-day trailing recompute window (decision 13). **Not decided**,
+and each must be decided explicitly before a job writes a row — later contracts and real data
+conflict with the shape above:
+
+- **Currency.** The row has one `currency` column; a hotel can record several currencies on
+  one day (the ledger stores currency per line, and approved decision 14 adds no FX). Skip
+  the day, report the base currency only, refuse, or change the shape (a migration)?
+- **Historical availability.** `available_rooms` has no point-in-time source (there is no
+  room-status history), and analytics divides past occupancy by the rooms active *today*,
+  uncapped. On that basis a past day can exceed `available_rooms`, which
+  `ck_daily_hotel_metrics_occupied_rooms_within_available` refuses. Which basis, and does the
+  constraint stay?
+- **Undeclared days versus zero.** Step 5 above writes a row for every date, zeros included. The
+  later observation contract (Issue 1, `demand_observation_periods`) says a day outside every
+  declared span is *unknown*, not zero. Which rule governs this table?
+- **Column definitions.** `out_of_order_rooms` has no source data; `no_shows`, `arrivals` and
+  `departures` have no settled date basis or status rule for this table.
+- **Trigger and backfill.** The application schedules nothing (every existing purge is an
+  operator command), so how the job runs, and how far back it may backfill, are both open.
 
 ---
 

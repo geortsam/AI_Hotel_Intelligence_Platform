@@ -156,7 +156,9 @@ To refresh the demo, for example to move it to a new reference date:
 
 The seed does not populate these tables, which it leaves empty:
 
-- `daily_hotel_metrics`: nothing in the application writes it.
+- `daily_hotel_metrics`: nothing in the application writes or reads it. It is reserved for a
+  future population job that is neither implemented nor approved by a roadmap stage (Issue H9;
+  see `docs/database-design.md` §8).
 - the audit trail
 - demand predictions
 - hotel documents

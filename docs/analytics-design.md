@@ -55,6 +55,14 @@ One shape note for whoever writes the population job: `daily_hotel_metrics` has 
 `currency` column per hotel-day**, so it can only represent a single-currency day. The live
 API cannot make that assumption (§4), which is a gap the job will have to resolve explicitly.
 
+> **Status (Issue H9, re-verified):** still reserved and unused — zero rows, no writer, no
+> reader. No population job is implemented or approved by a roadmap stage, and analytics keeps
+> computing every figure on demand; nothing in this section changes. Currency is one of
+> several decisions a future job needs first, alongside historical room availability against
+> `occupied_rooms <= available_rooms`, undeclared days versus zero days, the definitions of
+> `out_of_order_rooms`, `no_shows`, `arrivals` and `departures`, and how the job is triggered
+> and how far it backfills. See `database-design.md` §8.
+
 ---
 
 ## 2. Metric definitions
