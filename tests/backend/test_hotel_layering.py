@@ -202,12 +202,21 @@ class _StubMemberships:
         return []
 
 
+class _StubPredictions:
+    """Issue H8: the hotel service also removes a hotel's stored predictions on delete. These
+    tests never delete."""
+
+    def delete_for_hotel(self, hotel_id: int) -> None:
+        raise AssertionError("not reached")
+
+
 def test_get_missing_hotel_raises_not_found() -> None:
     service = HotelService(
         _StubSession(),  # type: ignore[arg-type]
         _StubRepository(),  # type: ignore[arg-type]
         _StubMemberships(),  # type: ignore[arg-type]
         AllowAllPolicy(),
+        _StubPredictions(),  # type: ignore[arg-type]
     )
 
     with pytest.raises(NotFoundError, match=r"Hotel not found\."):
@@ -221,6 +230,7 @@ def test_duplicate_slug_raises_conflict_before_touching_the_database() -> None:
         _StubRepository(),  # type: ignore[arg-type]
         _StubMemberships(),  # type: ignore[arg-type]
         AllowAllPolicy(),
+        _StubPredictions(),  # type: ignore[arg-type]
     )
 
     with pytest.raises(ConflictError, match="already exists"):

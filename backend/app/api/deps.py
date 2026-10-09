@@ -51,6 +51,7 @@ from app.repositories.llm_invocation import LlmInvocationRepository
 from app.repositories.membership import MembershipRepository
 from app.repositories.ml_demand import MlDemandRepository
 from app.repositories.ml_prediction import MlPredictionRepository
+from app.repositories.ml_prediction_removal import MlPredictionRemovalRepository
 from app.repositories.payment import PaymentRepository
 from app.repositories.platform_admin import PlatformAdminRepository
 from app.repositories.pricing import PricingRepository
@@ -181,7 +182,13 @@ def get_hotel_service(db: DbSession, policy: HotelAccessPolicyDep) -> HotelServi
     The session is passed to the service as well as to the repository: the service owns the
     unit of work and must be able to commit and roll back it, which the repository must not.
     """
-    return HotelService(db, HotelRepository(db), MembershipRepository(db), policy)
+    return HotelService(
+        db,
+        HotelRepository(db),
+        MembershipRepository(db),
+        policy,
+        MlPredictionRemovalRepository(db),
+    )
 
 
 HotelServiceDep = Annotated[HotelService, Depends(get_hotel_service)]

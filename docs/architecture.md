@@ -143,7 +143,8 @@ registration, login and the two health probes — the same five as at V1.
 All seventeen are hotel-scoped and authenticated. Stages 7.13 and 7.14 and the V2 closure changed
 no route: the copilot screen is front-end only, the multi-horizon models are offline, and the
 conversation purge is an operator command (`python -m app.jobs.purge_conversations`), not an
-endpoint; so is Issue 4's accounting-record purge (`python -m app.jobs.purge_llm_invocations`).
+endpoint; so is Issue 4's accounting-record purge (`python -m app.jobs.purge_llm_invocations`)
+and Issue H8's stored-prediction purge (`python -m app.jobs.purge_demand_predictions`).
 
 Of the four `/ml` routes, **only the serving route loads the model**: it declares a `503` for an
 unavailable artifact and the other three declare none, because they load none. The copilot's

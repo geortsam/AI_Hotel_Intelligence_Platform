@@ -34,6 +34,7 @@ from app.models.hotel import Hotel
 from app.models.membership import UserHotel
 from app.repositories.hotel import HotelRepository
 from app.repositories.membership import MembershipRepository
+from app.repositories.ml_prediction_removal import MlPredictionRemovalRepository
 from app.schemas.common import Page
 from app.schemas.hotel import HotelCreate, HotelResponse, HotelUpdate
 from app.services.authorization import HotelAccessPolicy
@@ -43,6 +44,15 @@ logger = logging.getLogger(__name__)
 
 MAX_PAGE_SIZE = 100
 DEFAULT_PAGE_SIZE = 20
+
+#: Why a hotel could not be deleted (Issue H8). Deliberately no list of record kinds: the old
+#: one named six and the database refuses for more than six, so an owner whose hotel had none
+#: of them was told to remove records that did not exist. Which constraint refused is not
+#: disclosed; deactivation is the remedy that always works.
+UNDELETABLE_HOTEL_MESSAGE = (
+    "This hotel cannot be deleted while other records are still linked to it. "
+    "Deactivate the hotel instead; deactivation keeps those records."
+)
 
 
 class HotelService:
@@ -54,10 +64,12 @@ class HotelService:
         repository: HotelRepository,
         memberships: MembershipRepository,
         policy: HotelAccessPolicy,
+        predictions: MlPredictionRemovalRepository,
     ) -> None:
         self._session = session
         self._repository = repository
         self._memberships = memberships
+        self._predictions = predictions
         # This is the ONE domain that resolves its own hotel rather than going through
         # HotelScopeResolver -- it IS the hotel resource. It therefore consults the same
         # policy object directly, so there is still exactly one authorization decision in
@@ -165,9 +177,15 @@ class HotelService:
         """Delete a hotel and commit, honouring the database's RESTRICT policy.
 
         No cascade is invented here. The schema deliberately protects room types, rooms,
-        guests, bookings, revenue and expenses with ``ON DELETE RESTRICT``: deleting a hotel
-        that has operating history must fail loudly rather than silently erase it. That
-        refusal is translated into a 409 explaining why.
+        guests, bookings, revenue, expenses and the hotel's recorded history with ``ON DELETE
+        RESTRICT``: deleting a hotel that has operating history must fail loudly rather than
+        silently erase it. That refusal is translated into a 409 explaining why.
+
+        Two kinds of row are removed first, in the same transaction, because neither is
+        operating history and either alone would make a hotel undeletable: its memberships, and
+        its stored demand predictions (Issue H8) -- machine output that any member, a viewer
+        included, writes just by reading a forecast. If anything else still refuses, the
+        rollback restores both.
         """
         hotel = self._require(public_id, required=HotelRole.OWNER)
         try:
@@ -175,16 +193,13 @@ class HotelService:
             # memberships are ON DELETE RESTRICT, so leaving them would make every hotel
             # permanently undeletable -- including by the owner who just created it.
             self._memberships.delete_for_hotel(hotel.id)
+            self._predictions.delete_for_hotel(hotel.id)
             self._repository.delete(hotel)
             self._session.commit()
         except IntegrityError as exc:
             self._session.rollback()
             if sqlstate_of(exc) in SQLSTATE_DEPENDENCY_VIOLATIONS:
-                raise ConflictError(
-                    "This hotel cannot be deleted because other records still reference it. "
-                    "Remove its room types, rooms, guests, bookings, revenue and expenses "
-                    "first, or deactivate the hotel instead."
-                ) from exc
+                raise ConflictError(UNDELETABLE_HOTEL_MESSAGE) from exc
             raise self._translate(exc) from exc
 
     # --- internals ----------------------------------------------------------------------

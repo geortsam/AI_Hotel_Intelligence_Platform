@@ -325,6 +325,11 @@ under a declared protocol is not certifying a model.
 - **No persistence.** Results are computed and returned. Two runs at different `as_of_date`
   values are two independent measurements and nothing records that the first happened.
 - **No read path for stored predictions**, no retention policy for them, and no frontend.
+  (Stage record. The read path came in Stage 6.11; Issue H8 set retention: predictions whose
+  target date is older than `DEMAND_PREDICTION_RETENTION_DAYS`, 730 by default, are deleted by
+  the operator's purge, whole target dates at a time, so a retained window's selection is
+  unchanged and a purged one has nothing to score. See
+  [ml-prediction-retention.md](ml-prediction-retention.md).)
 
 ---
 

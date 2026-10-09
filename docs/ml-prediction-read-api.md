@@ -218,9 +218,11 @@ captured records, not from the source.
 ## 12. Limitations
 
 - **The backfill is a real table operation**, not a catalogue change. §7.
-- **Prediction rows grow without bound.** Retention is deliberately out of scope for this stage
-  and remains a separate future capability; this endpoint makes the growth visible without
-  bounding it.
+- ~~**Prediction rows grow without bound.**~~ Bounded by Issue H8: a prediction is kept while
+  its target date is within `DEMAND_PREDICTION_RETENTION_DAYS` (730 by default) of its hotel's
+  today, then deleted by `python -m app.jobs.purge_demand_predictions`. A window older than that
+  returns an empty page, indistinguishable from a window in which nothing was served. See
+  [ml-prediction-retention.md](ml-prediction-retention.md).
 - **This exposes the known-weak small-hotel regime.** Anything whose recent demand sits at or
   below forty room nights a night receives ≈165.83 regardless of its actual demand — measured in
   Stage 6.6 and unchanged since. Those numbers are now readable by exactly the properties they

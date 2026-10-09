@@ -245,6 +245,10 @@ CONVERSATION_POLICY_MODULES = {"api/deps.py", "services/copilot_conversation.py"
 #: by its own purge; never the audit policy, and never the conversation one.
 INVOCATION_POLICY_MODULES = {"services/llm_invocation_retention.py"}
 
+#: Issue H8 added a fourth: stored demand predictions. Its own setting, read once, by its own
+#: purge; never the audit, conversation or invocation policy.
+PREDICTION_POLICY_MODULES = {"services/demand_prediction_retention.py"}
+
 
 def test_the_policy_is_built_from_settings_and_nowhere_else() -> None:
     """No module may decide retention locally. A second definition is a second answer to "is
@@ -258,7 +262,10 @@ def test_the_policy_is_built_from_settings_and_nowhere_else() -> None:
             "audit_retention_days" in source
             or (
                 "retention_days=" in source
-                and name not in CONVERSATION_POLICY_MODULES | INVOCATION_POLICY_MODULES
+                and name
+                not in CONVERSATION_POLICY_MODULES
+                | INVOCATION_POLICY_MODULES
+                | PREDICTION_POLICY_MODULES
             )
         )
     ]
@@ -301,6 +308,26 @@ def test_the_invocation_policy_is_its_own_and_read_in_one_place() -> None:
     for name in INVOCATION_POLICY_MODULES:
         assert "audit_retention_days" not in sources()[name], name
         assert "copilot_conversation_retention_days" not in sources()[name], name
+
+
+def test_the_prediction_policy_is_its_own_and_read_in_one_place() -> None:
+    """Issue H8. `demand_prediction_retention_days` is read only by the purge's entry point; the
+    operator command passes settings through and never reads the number. The purge never reads
+    another retention policy."""
+    readers = sorted(
+        name
+        for name, source in sources().items()
+        if "demand_prediction_retention_days" in source and name != "core/config.py"
+    )
+    assert readers == ["services/demand_prediction_retention.py"]
+    assert "demand_prediction_retention_days" not in sources()["jobs/purge_demand_predictions.py"]
+    for name in PREDICTION_POLICY_MODULES:
+        for other in (
+            "audit_retention_days",
+            "copilot_conversation_retention_days",
+            "llm_invocation_retention_days",
+        ):
+            assert other not in sources()[name], (name, other)
 
 
 def test_the_default_retention_is_conservative() -> None:

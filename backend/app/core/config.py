@@ -221,6 +221,17 @@ class Settings(BaseSettings):
     # 0017). See `app.services.llm_invocation_retention`.
     llm_invocation_retention_days: int = Field(default=365, ge=1, le=3650)
 
+    # --- Demand prediction retention (Issue H8) ---------------------------------------------
+    #
+    # A stored demand prediction is kept while its target date is no more than this many days
+    # before its hotel's own today, and is then physically deleted by
+    # `python -m app.jobs.purge_demand_predictions` when an operator (or the deployment's
+    # scheduler) runs it. 730 keeps a 366-day forecast-performance window and a baseline a year
+    # before it. The lower bound is the accuracy protocol's settlement lag (28 days): anything
+    # shorter would delete a prediction before its first day of being scorable. The upper bound
+    # is a technical guard. See `app.services.demand_prediction_retention`.
+    demand_prediction_retention_days: int = Field(default=730, ge=28, le=3650)
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:

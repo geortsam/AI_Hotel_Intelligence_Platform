@@ -5,8 +5,11 @@ served it. Until this stage a prediction was computed, returned and forgotten; t
 to ask what the platform told a hotel last Tuesday, and no data on which any later drift or
 accuracy work could be built.
 
-**Append-only in practice, though not by trigger.** There is no update method, no delete method
-and no endpoint for either. Unlike ``audit_events`` this table carries no database trigger
+**Append-only in practice, though not by trigger.** There is no update method and no endpoint
+that edits or deletes a row. Issue H8 added the only two deletions, both whole rows and neither
+reachable over HTTP: the operator's retention purge (target dates older than
+``demand_prediction_retention_days``) and a hotel's own delete, which removes its predictions in
+the same transaction. Unlike ``audit_events`` this table carries no database trigger
 enforcing that, and the reason is the deliberate difference between the two: an audit row is
 evidence about a person's action and must survive a determined edit, while a prediction is a
 machine's output whose integrity is already pinned by ``feature_digest`` -- a row edited in
@@ -20,7 +23,9 @@ no moment of last update, which is the same reasoning ``audit_events`` records.
 
 **One tenant per row, never null.** ``hotel_id`` is ``ON DELETE RESTRICT``, the policy this
 schema already uses for historical records -- ``bookings -> hotels``, ``payments -> bookings``
--- so a property with predictions cannot be deleted out from under them.
+-- so a property with predictions cannot be deleted out from under them by a direct ``DELETE``.
+Since Issue H8 the hotel service's delete removes them first, in its own transaction, because a
+viewer reading one forecast would otherwise make a hotel undeletable by its owner.
 """
 
 from __future__ import annotations

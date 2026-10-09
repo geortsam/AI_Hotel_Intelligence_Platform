@@ -238,6 +238,12 @@ Both are bounds on the **HTTP surface**, not protocol values. Neither frozen pro
 field, both checksums are unchanged, and a programmatic caller of `DemandAccuracyService` is as
 unbounded as it was before this stage.
 
+> **Issue H8 — retention.** Stored predictions are kept while their target date is within
+> `DEMAND_PREDICTION_RETENTION_DAYS` (730 by default) of the hotel's today. The default keeps a
+> full 366-day window and a baseline a year before it; a window or baseline reaching further back
+> is measured over what is left, possibly nothing, and nothing in the response says the rows were
+> purged. See [ml-prediction-retention.md](ml-prediction-retention.md).
+
 ---
 
 ## 9. Layering

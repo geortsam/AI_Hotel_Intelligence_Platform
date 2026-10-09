@@ -320,6 +320,12 @@ No existing table is altered. No existing column changes type. Retention and arc
 in scope — `audit_events` needed an archive eventually and this table may too, but that is a
 decision for when its growth rate is a measured fact rather than a guess.
 
+> **Issue H8.** Decided once the growth was measured (about 550 bytes a row, roughly one row per
+> hotel per forecast target date and input change): 730 days by target date, then physical
+> deletion by an operator command, no archive and no migration. Hotel deletion now removes a
+> hotel's predictions in its own transaction; the foreign key stays `ON DELETE RESTRICT`. See
+> [ml-prediction-retention.md](ml-prediction-retention.md).
+
 ---
 
 ## 14. Security
@@ -463,7 +469,7 @@ Explicitly **not** in Stage 6.8. Each is either a separate backlog capability or
 | **Accuracy measurement** or any production accuracy claim | a later stage — §10 |
 | A **metrics exporter**, time-series store or dashboard | later; §8 is log and table only |
 | ~~A **read API** for stored predictions~~ | not defined here; would add its own endpoint and `public_id` — **done in Stage 6.11**, which added both |
-| **Retention / archival** of predictions | later, once the growth rate is measured |
+| ~~**Retention / archival** of predictions~~ | later, once the growth rate is measured — **done in Issue H8**: retention by target date and an operator purge, no archive ([ml-prediction-retention.md](ml-prediction-retention.md)) |
 | **Richer feature pipeline** | separate backlog capability |
 | **Multi-model registry** | separate backlog capability |
 | **Review sentiment** | separate backlog capability |

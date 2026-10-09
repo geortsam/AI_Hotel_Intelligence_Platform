@@ -753,6 +753,14 @@ is recommended; the application schedules nothing). The database still refuses e
 and every DELETE except of a record older than the period the purge declares. See
 [docs/copilot-accounting-retention.md](docs/copilot-accounting-retention.md).
 
+**Prediction retention (Issue H8).** A stored demand prediction is kept while its target date is
+within 730 days (`DEMAND_PREDICTION_RETENTION_DAYS`) of its hotel's today, and is then physically
+deleted by `python -m app.jobs.purge_demand_predictions`, which an operator should schedule (daily
+is recommended). A window older than that reads as empty in the prediction, accuracy, drift and
+performance endpoints. Deleting a hotel removes its predictions in the same transaction; if
+anything else still blocks the delete, nothing is removed. See
+[docs/ml-prediction-retention.md](docs/ml-prediction-retention.md).
+
 **The attention list (Stage 7.12).** `…/intelligence/priorities` ranks one hotel's upcoming days by
 the seasonal forecast and lists the busiest three, the strongest anomalies the window saw and a
 moving demand trend -- each item with its figures, their source, a comparison and a limitation,

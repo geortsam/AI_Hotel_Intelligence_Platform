@@ -3505,6 +3505,269 @@ STAGE_H7 = [
 ]
 
 
+PREDICTION_RETENTION = "backend/app/services/demand_prediction_retention.py"
+PREDICTION_REMOVAL = "backend/app/repositories/ml_prediction_removal.py"
+HOTEL_SERVICE = "backend/app/services/hotel.py"
+PREDICTION_STATIC = "tests/backend/test_demand_prediction_retention.py"
+PREDICTION_PURGE = "tests/integration/test_demand_prediction_purge.py"
+BATCHES_COMMITTED = (
+    f"{PREDICTION_STATIC}::test_batches_run_until_one_is_short_and_each_is_committed"
+)
+DELETE_ORDER = (
+    f"{PREDICTION_STATIC}::test_a_hotels_predictions_go_in_the_delete_transaction_before_the_hotel"
+)
+ONLY_DEPENDENTS = (
+    f"{PREDICTION_PURGE}::test_a_hotel_whose_only_dependents_are_predictions_is_deleted_with_them"
+)
+
+
+def retention_db(number: int, breaks: str, edits: tuple[Edit, ...], *killers: str) -> Mutation:
+    """An H8 mutation whose killers run against PostgreSQL."""
+    return Mutation(f"H8-M{number}", "H8", breaks, edits, killers, needs_database=True)
+
+
+def retention_static(
+    number: int, breaks: str, path: str, old: str, new: str, *killers: str
+) -> Mutation:
+    """An H8 mutation caught by a test that needs no database."""
+    return Mutation(f"H8-M{number}", "H8", breaks, one(path, old, new), killers)
+
+
+STAGE_H8 = [
+    retention_static(
+        1,
+        "the default retention is a year, not the approved two",
+        CONFIG,
+        "    demand_prediction_retention_days: int = Field(default=730, ge=28, le=3650)\n",
+        "    demand_prediction_retention_days: int = Field(default=365, ge=28, le=3650)\n",
+        f"{PREDICTION_STATIC}::test_the_default_retention_is_730_days",
+    ),
+    retention_static(
+        2,
+        "a retention shorter than the settlement lag is accepted",
+        CONFIG,
+        "    demand_prediction_retention_days: int = Field(default=730, ge=28, le=3650)\n",
+        "    demand_prediction_retention_days: int = Field(default=730, ge=1, le=3650)\n",
+        f"{PREDICTION_STATIC}::test_the_lower_bound_is_the_accuracy_protocols_settlement_lag",
+        f"{PREDICTION_STATIC}::test_the_retention_is_bounded_at_both_ends",
+    ),
+    retention_static(
+        3,
+        "the cutoff keeps one day fewer than the retention",
+        PREDICTION_RETENTION,
+        "    return today - dt.timedelta(days=retention_days)\n",
+        "    return today - dt.timedelta(days=retention_days - 1)\n",
+        f"{PREDICTION_STATIC}::test_the_cutoff_is_today_minus_the_retention_in_calendar_days",
+        f"{PREDICTION_STATIC}::test_each_hotel_is_purged_up_to_its_own_cutoff",
+    ),
+    retention_static(
+        4,
+        "a hotel whose oldest prediction is the cutoff day is purged anyway",
+        PREDICTION_RETENTION,
+        "            if oldest < (cutoff := ",
+        "            if oldest <= (cutoff := ",
+        f"{PREDICTION_STATIC}::test_a_hotel_whose_oldest_prediction_is_the_cutoff_is_not_touched",
+    ),
+    retention_static(
+        5,
+        "every hotel's cutoff is taken in UTC rather than in its own calendar",
+        PREDICTION_RETENTION,
+        "retention_cutoff(hotel_today(hotel, at_start), retention_days)",
+        "retention_cutoff(at_start().date(), retention_days)",
+        f"{PREDICTION_STATIC}::test_the_cutoff_is_taken_in_the_hotels_own_calendar",
+    ),
+    retention_static(
+        6,
+        "each hotel reads the clock again, so one run judges hotels at different instants",
+        PREDICTION_RETENTION,
+        "    def at_start() -> dt.datetime:\n        return now\n",
+        "    def at_start() -> dt.datetime:\n        return clock()\n",
+        f"{PREDICTION_STATIC}::test_the_clock_is_read_once_for_every_hotel",
+    ),
+    retention_static(
+        7,
+        "a hotel gets one batch and the rest of its expired predictions are left",
+        PREDICTION_RETENTION,
+        "            if purged < batch_size:\n",
+        "            if True:\n",
+        BATCHES_COMMITTED,
+    ),
+    retention_static(
+        8,
+        "the batches share one transaction",
+        PREDICTION_RETENTION,
+        "                purged = repository.purge_expired(hotel_id, cutoff, limit=batch_size)\n"
+        "                session.commit()\n",
+        "                purged = repository.purge_expired(hotel_id, cutoff, limit=batch_size)\n",
+        BATCHES_COMMITTED,
+    ),
+    retention_static(
+        9,
+        "a failed batch is left for the caller to roll back",
+        PREDICTION_RETENTION,
+        "            except Exception:\n                session.rollback()\n                raise\n"
+        "            deleted += purged\n",
+        "            except Exception:\n                raise\n            deleted += purged\n",
+        f"{PREDICTION_STATIC}::test_a_failed_batch_is_rolled_back_and_raised",
+    ),
+    retention_static(
+        10,
+        "the purge's log event names the hotels it purged",
+        PREDICTION_RETENTION,
+        '            "purge_batches": batches,\n        },\n',
+        '            "purge_batches": batches,\n'
+        '            "purge_hotel_ids": [hotel_id for hotel_id, _ in work],\n        },\n',
+        f"{PREDICTION_STATIC}::test_the_log_event_is_counts_only",
+    ),
+    retention_static(
+        11,
+        "deleting a hotel leaves its predictions to block it again",
+        HOTEL_SERVICE,
+        "            self._predictions.delete_for_hotel(hotel.id)\n",
+        "",
+        DELETE_ORDER,
+    ),
+    retention_static(
+        12,
+        "the hotel row goes before its predictions, so RESTRICT refuses every such delete",
+        HOTEL_SERVICE,
+        "            self._predictions.delete_for_hotel(hotel.id)\n"
+        "            self._repository.delete(hotel)\n",
+        "            self._repository.delete(hotel)\n"
+        "            self._predictions.delete_for_hotel(hotel.id)\n",
+        DELETE_ORDER,
+    ),
+    retention_static(
+        13,
+        "the refusal lists six kinds of record again, as if they were all",
+        HOTEL_SERVICE,
+        '    "This hotel cannot be deleted while other records are still linked to it. "\n'
+        '    "Deactivate the hotel instead; deactivation keeps those records."\n',
+        '    "This hotel cannot be deleted because other records still reference it. "\n'
+        '    "Remove its room types, rooms, guests, bookings, revenue and expenses "\n'
+        '    "first, or deactivate the hotel instead."\n',
+        f"{PREDICTION_STATIC}::test_the_message_no_longer_presents_a_list_of_record_kinds",
+    ),
+    retention_static(
+        14,
+        "the request's hotel service is not given the prediction remover",
+        "backend/app/api/deps.py",
+        "        MlPredictionRemovalRepository(db),\n",
+        "        MembershipRepository(db),  # type: ignore[arg-type]\n",
+        f"{PREDICTION_STATIC}::test_the_dependency_gives_the_hotel_service_the_removal_repository",
+    ),
+    retention_db(
+        15,
+        "the purge goes by when a prediction was made, not by its target date",
+        one(
+            PREDICTION_REMOVAL,
+            "DemandPrediction.hotel_id == hotel_id, DemandPrediction.target_date < before)",
+            "DemandPrediction.hotel_id == hotel_id, "
+            "func.date(DemandPrediction.generated_at) < before)",
+        ),
+        f"{PREDICTION_PURGE}::test_generation_time_never_decides",
+    ),
+    retention_db(
+        16,
+        "the cutoff day itself is purged",
+        one(
+            PREDICTION_REMOVAL,
+            "DemandPrediction.hotel_id == hotel_id, DemandPrediction.target_date < before)",
+            "DemandPrediction.hotel_id == hotel_id, DemandPrediction.target_date <= before)",
+        ),
+        f"{PREDICTION_PURGE}::"
+        "test_a_target_date_one_day_before_the_cutoff_is_deleted_and_the_cutoff_day_is_kept",
+    ),
+    retention_db(
+        17,
+        "one hotel's purge deletes every hotel's expired predictions",
+        (
+            Edit(
+                PREDICTION_REMOVAL,
+                "            .where(DemandPrediction.hotel_id == hotel_id, "
+                "DemandPrediction.target_date < before)\n",
+                "            .where(DemandPrediction.target_date < before)\n",
+            ),
+            Edit(
+                PREDICTION_REMOVAL,
+                "                DemandPrediction.hotel_id == hotel_id, "
+                "DemandPrediction.id.in_(batch)\n",
+                "                DemandPrediction.id.in_(batch)\n",
+            ),
+        ),
+        f"{PREDICTION_PURGE}::test_one_hotels_purge_never_touches_another_hotel",
+    ),
+    retention_db(
+        18,
+        "within a target date the earliest prediction goes first, so a cut-short purge "
+        "changes what accuracy selects",
+        one(
+            PREDICTION_REMOVAL,
+            "                DemandPrediction.generated_at.desc(),\n"
+            "                DemandPrediction.id.desc(),\n",
+            "                DemandPrediction.generated_at.asc(),\n"
+            "                DemandPrediction.id.asc(),\n",
+        ),
+        f"{PREDICTION_PURGE}::"
+        "test_an_interrupted_purge_never_changes_which_prediction_accuracy_selects",
+    ),
+    retention_db(
+        19,
+        "a batch takes the newest expired target dates first",
+        one(
+            PREDICTION_REMOVAL,
+            "                DemandPrediction.target_date.asc(),\n",
+            "                DemandPrediction.target_date.desc(),\n",
+        ),
+        f"{PREDICTION_PURGE}::test_a_batch_deletes_the_oldest_target_dates_first",
+    ),
+    retention_db(
+        20,
+        "a hotel's delete removes none of its predictions",
+        one(
+            PREDICTION_REMOVAL,
+            "        self._session.execute(delete(DemandPrediction).where("
+            "DemandPrediction.hotel_id == hotel_id))\n",
+            "        pass\n",
+        ),
+        ONLY_DEPENDENTS,
+        f"{PREDICTION_PURGE}::test_a_viewers_forecast_no_longer_makes_the_hotel_undeletable",
+    ),
+    retention_db(
+        21,
+        "a hotel's delete removes every hotel's predictions",
+        one(
+            PREDICTION_REMOVAL,
+            "        self._session.execute(delete(DemandPrediction).where("
+            "DemandPrediction.hotel_id == hotel_id))\n",
+            "        self._session.execute(delete(DemandPrediction))\n",
+        ),
+        ONLY_DEPENDENTS,
+    ),
+    retention_db(
+        22,
+        "the predictions are committed away before the hotel delete is known to succeed",
+        one(
+            HOTEL_SERVICE,
+            "            self._predictions.delete_for_hotel(hotel.id)\n",
+            "            self._predictions.delete_for_hotel(hotel.id)\n"
+            "            self._session.commit()\n",
+        ),
+        f"{PREDICTION_PURGE}::test_a_refused_delete_restores_every_prediction",
+    ),
+    retention_db(
+        23,
+        "the purge ignores the configured retention",
+        one(
+            PREDICTION_RETENTION,
+            "    retention_days = settings.demand_prediction_retention_days\n",
+            "    retention_days = 730\n",
+        ),
+        f"{PREDICTION_PURGE}::test_the_configured_period_decides_what_is_deleted",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -3532,4 +3795,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_H4,
     *STAGE_H6,
     *STAGE_H7,
+    *STAGE_H8,
 )

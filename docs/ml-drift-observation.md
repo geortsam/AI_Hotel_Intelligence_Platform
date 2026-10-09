@@ -236,6 +236,10 @@ has drifted.
 - **Calendar features move by construction.** `month`, `week_of_year` and `day_of_year` differ
   between any two windows that cover different dates. That is arithmetic, not drift, and reading
   it as drift would be the clearest example of the mistake §2 warns about.
+- **Issue H8: retention.** Predictions whose target date is older than
+  `DEMAND_PREDICTION_RETENTION_DAYS` (730 by default) are deleted by the operator's purge; a
+  window there summarises nothing, exactly as if nothing had been served. See
+  [ml-prediction-retention.md](ml-prediction-retention.md).
 
 ## 14. Acceptance criteria
 

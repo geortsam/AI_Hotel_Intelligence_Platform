@@ -66,6 +66,9 @@ APP_LOGGERS = [
     "app.services.copilot",
     # Stage 7.11. Purge counts and integrity-error SQLSTATEs -- never a question or an answer.
     "app.services.copilot_conversation",
+    # Issue H8. The prediction purge: counts of predictions, hotels and batches -- never a
+    # hotel, a prediction, a value or a date.
+    "app.services.demand_prediction_retention",
     "app.services.finance",
     "app.services.guest",
     "app.services.health",

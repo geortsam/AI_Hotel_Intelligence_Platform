@@ -254,7 +254,9 @@ decide in §9. The same holds for copilot accounting records (`llm_invocations`)
 (`python -m app.jobs.purge_llm_invocations`, see
 [../copilot-accounting-retention.md](../copilot-accounting-retention.md)) deletes them from the
 live database after their retention period and never from an archive, and a restored archive can
-hold records the next purge run will delete. Treat the archive with the same care as the database
+hold records the next purge run will delete. Stored demand predictions are the same
+(`python -m app.jobs.purge_demand_predictions`, see
+[../ml-prediction-retention.md](../ml-prediction-retention.md)). Treat the archive with the same care as the database
 itself:
 
 - store it where the database's own credentials would be acceptable;
