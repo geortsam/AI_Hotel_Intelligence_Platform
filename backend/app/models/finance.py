@@ -45,8 +45,9 @@ class RevenueCategory(Base):
     id: Mapped[int] = pk_column()
     code: Mapped[str] = mapped_column(Text, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    # Gives the metrics job a data-driven way to EXCLUDE room-revenue rows from
-    # `other_revenue`, rather than hard-coding a string comparison.
+    # A data-driven way to EXCLUDE room-revenue ledger rows, rather than hard-coding a string
+    # comparison. On-demand analytics applies it today (such rows get their own bucket); a
+    # future daily_hotel_metrics job, which does not exist, would apply it to `other_revenue`.
     is_room_revenue: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )

@@ -59,7 +59,8 @@ class Hotel(TimestampMixin, Base):
     website: Mapped[str | None] = mapped_column(Text)
 
     # IANA name, e.g. "Europe/Athens". Required: it is what converts an event timestamp into
-    # a business date, which the daily metrics job cannot do without.
+    # a business date -- analytics' booking days and every hotel-local "today" rule use it, and
+    # a future daily metrics job (not implemented) would need it too.
     timezone: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'UTC'"))
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     star_rating: Mapped[int | None] = mapped_column(SmallInteger)

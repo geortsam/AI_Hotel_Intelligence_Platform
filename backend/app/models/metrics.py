@@ -99,8 +99,8 @@ class DailyHotelMetric(TimestampMixin, Base):
     hotel: Mapped[Hotel] = relationship(back_populates="daily_metrics")
 
     __table_args__ = (
-        # The identity of the row, the guard against double-computation, and the index that
-        # serves every forecasting range scan.
+        # The identity of the row, the guard against double-computation, and the index a
+        # forecasting range scan would use. Nothing reads this table yet (it is empty).
         UniqueConstraint(
             "hotel_id", "metric_date", name="uq_daily_hotel_metrics_hotel_id_metric_date"
         ),
