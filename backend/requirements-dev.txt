@@ -1,4 +1,8 @@
 # Everything needed to run the tests, the linter and the type checker.
+#
+# Every package this file pulls in -- transitive ones included -- is pinned with sha256 hashes in
+# backend/requirements-dev-lock.txt, generated from this file. After changing a pin here, regenerate the
+# locks: docs/deployment/reproducibility.md section 4 (R0.4).
 
 -r requirements.txt
 

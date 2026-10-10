@@ -1,4 +1,8 @@
 # Stage 1 runtime dependencies.
+#
+# Every package this file pulls in -- transitive ones included -- is pinned with sha256 hashes in
+# backend/requirements-lock.txt, generated from this file. After changing a pin here, regenerate the
+# locks: docs/deployment/reproducibility.md section 4 (R0.4).
 # Versions pinned to a set verified to install and run on Python 3.14.6.
 #
 # SQLAlchemy and psycopg are declared because they are part of the chosen stack, but nothing

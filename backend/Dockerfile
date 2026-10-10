@@ -137,12 +137,19 @@ ENV PYTHONPATH=/app
 # The site-packages path is asked of the interpreter rather than written out, so bumping the
 # Python pin cannot silently leave this compiling nothing.
 #
-# Still deliberately NOT here: `--require-hashes`, which needs a hash for every transitive
-# package and therefore a second lock file to maintain beside requirements.txt. That gap is real,
-# and it is recorded in docs/deployment/reproducibility.md rather than papered over.
-COPY backend/requirements.txt ./
+# ## The locked graph, with hashes (R0.4)
+#
+# requirements.txt declares the direct pins; requirements-lock.txt is generated from it (by
+# `uv pip compile --universal --generate-hashes`, command in its header) and pins EVERY package
+# the image installs -- NumPy, SciPy and the rest of the transitive graph included -- each with
+# its sha256 hashes. `--require-hashes` makes pip refuse any package, or any download, the lock
+# does not name, so two builds of one commit can no longer resolve different transitive
+# versions on different days. `pip check` then proves the installed set is consistent.
+# uv only generates the lock; pip installs it, as before. See docs/deployment/reproducibility.md.
+COPY backend/requirements-lock.txt ./
 RUN PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_ROOT_USER_ACTION=ignore \
-        pip install --no-cache-dir --no-compile -r requirements.txt \
+        pip install --no-cache-dir --no-compile --require-hashes -r requirements-lock.txt \
+ && pip check \
  && python -m compileall -q --invalidation-mode unchecked-hash \
         "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
 

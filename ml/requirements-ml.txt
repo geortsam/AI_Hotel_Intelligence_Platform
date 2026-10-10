@@ -12,7 +12,9 @@
 # Stage 6.3 pins scikit-learn and removes the pandas and NumPy declarations that had been here
 # since Stage 1 and were installed by nothing. Nothing imports either directly; NumPy and SciPy
 # arrive as scikit-learn's own requirements, which is the repository's usual policy -- direct
-# dependencies pinned, their dependencies resolved at install time.
+# dependencies pinned here. Since R0.4 their dependencies are pinned too, with hashes, in
+# backend/requirements-dev-lock.txt, which is compiled from this file; regenerate it after
+# changing the pin (docs/deployment/reproducibility.md section 4).
 #
 # scikit-learn is here for exactly one estimator, HistGradientBoostingRegressor: the smallest
 # conventional learned regressor for a small tabular panel. No gradient-boosting library, no
