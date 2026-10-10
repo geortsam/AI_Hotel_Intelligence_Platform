@@ -16,8 +16,8 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-6866%20backend%20%C2%B7%201263%20frontend-success)
-![API](https://img.shields.io/badge/API-64%20paths%20%C2%B7%2099%20operations-informational)
+![Tests](https://img.shields.io/badge/tests-7984%20backend%20%C2%B7%201346%20frontend-success)
+![API](https://img.shields.io/badge/API-65%20paths%20%C2%B7%20101%20operations-informational)
 
 </div>
 
@@ -29,11 +29,12 @@ more than one currency and the platform never converts between them.</sub></div>
 
 > ### Current state: **V1 complete and verified; V2 complete through Stage 7.14**
 >
-> Eleven domains over a 27-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
+> Eleven domains over a 28-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
 > guests, bookings, payments, reviews, the financial ledger, analytics and intelligence, plus the
 > stored demand predictions the served model writes and the measurements taken over them, and
-> V2's copilot accounting records, hotel knowledge documents and copilot conversations —
-> reachable as **64 API paths / 99 operations**, of which **94 require authentication**.
+> V2's copilot accounting records, hotel knowledge documents and copilot conversations, and the
+> declared demand observation periods —
+> reachable as **65 API paths / 101 operations**, of which **96 require authentication**.
 > Authentication is Argon2id plus HS256
 > access tokens; authorization is a four-level hotel role hierarchy with a separate
 > platform-administrator capability. There is a complete React front end — all thirteen
@@ -41,7 +42,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **6866 backend tests and 1263 frontend tests pass in CI.** Schema head is
+> **7984 backend tests and 1346 frontend tests pass in CI.** Schema head is
 > `0020_guest_email_rules` across 20 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
@@ -446,7 +447,7 @@ Start the API:
 |---|---|
 | http://localhost:8000/health | `{"status":"ok", ...}` |
 | http://localhost:8000/health/db | `{"status":"ok","database":"reachable", ...}`, or 503 when it is not |
-| http://localhost:8000/docs | Swagger UI — 64 paths, 99 operations. Disabled when `ENVIRONMENT=production` |
+| http://localhost:8000/docs | Swagger UI — 65 paths, 101 operations. Disabled when `ENVIRONMENT=production` |
 
 ### Frontend
 
