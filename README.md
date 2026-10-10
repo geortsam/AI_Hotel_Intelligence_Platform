@@ -14,7 +14,7 @@ and readable.
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.141.1-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18.6-4169E1?logo=postgresql&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-7984%20backend%20%C2%B7%201346%20frontend-success)
 ![API](https://img.shields.io/badge/API-65%20paths%20%C2%B7%20101%20operations-informational)
@@ -325,7 +325,7 @@ Full detail, including the rules later stages must follow:
 | Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
 | Migrations | Alembic | 20 linear revisions, head `0020_guest_email_rules` |
 | Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
-| Frontend | React 18, TypeScript 5.7, Vite 6 | Dashboard SPA, route-level code splitting |
+| Frontend | React 18, TypeScript 5.9, Vite 6 | Dashboard SPA, route-level code splitting |
 | Intelligence (V1) | Python standard library | Deterministic statistical baseline — no NumPy or pandas on its path |
 | Demand model (Stage 6.1–6.11) | scikit-learn 1.9.1 | One offline-fitted artifact, packaged into the API image and served behind one hotel-scoped endpoint |
 | Infrastructure | Docker, Docker Compose, nginx | Single-host stack; nginx terminates TLS and is the only published service |
