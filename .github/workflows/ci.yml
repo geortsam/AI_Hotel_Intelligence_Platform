@@ -2112,17 +2112,28 @@ jobs:
           #
           # Named after the run id and attached to this project's network; no global name is
           # used, so nothing here can collide with another run or with a developer's Docker.
-          network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' \
-            "$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=db" | head -n1)")"
+          db_container="$(docker ps -aq --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --filter "label=com.docker.compose.service=db" | head -n1)"
+          if [ -z "$db_container" ]; then
+            echo "::error::no db container found for project $COMPOSE_PROJECT"
+            exit 1
+          fi
+          network="$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}' "$db_container")"
           echo "  attaching to network: $network"
+
+          # The db service's own image, by local image id: the build docker-compose.yml pins by
+          # digest, already on this runner, so no second pull (R0.2). A bare
+          # `postgres:18.6-alpine` was pulled from Docker Hub on every run -- one more registry
+          # request to fail, and whatever build the tag pointed at that day, not the pinned one.
+          db_image="$(docker inspect -f '{{.Image}}' "$db_container")"
+          echo "  restore image: $db_image (the db service's)"
 
           restore_password="$(openssl rand -hex 24)"
           echo "::add-mask::$restore_password"
 
-          docker run -d --name "$RESTORE_CONTAINER" --network "$network" \
+          docker run -d --pull never --name "$RESTORE_CONTAINER" --network "$network" \
             -e POSTGRES_PASSWORD="$restore_password" \
             -e POSTGRES_DB=hotel_restore \
-            postgres:18.6-alpine > /dev/null
+            "$db_image" > /dev/null
           echo "  started $RESTORE_CONTAINER"
 
           ready=no
