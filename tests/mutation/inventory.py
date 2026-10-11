@@ -3868,6 +3868,78 @@ STAGE_R2_2 = [
 ]
 
 
+# --- R2.2b: same-hotel controls for the cross-hotel experiment --------------------------------
+#
+# New in R2.2b: each mutation breaks one rule of the pre-registered ``hotel_transfer_v1``
+# diagnostics, and a synthetic-fixture test in tests/ml/test_hotel_transfer.py must notice.
+
+HOTEL_TRANSFER = "ml/hotel_transfer.py"
+HOTEL_TRANSFER_TESTS = "tests/ml/test_hotel_transfer.py"
+
+
+def hotel_transfer(number: int, breaks: str, old: str, new: str, killer: str) -> Mutation:
+    return Mutation(
+        f"R2.2b-M{number}",
+        "R2.2b",
+        breaks,
+        one(HOTEL_TRANSFER, old, new),
+        (f"{HOTEL_TRANSFER_TESTS}::{killer}",),
+    )
+
+
+STAGE_R2_2B = [
+    hotel_transfer(
+        1,
+        "the signed error is actual minus prediction",
+        "        out.append(prediction - float(s.row.target_room_nights))\n",
+        "        out.append(float(s.row.target_room_nights) - prediction)\n",
+        "test_signed_error_is_prediction_minus_actual",
+    ),
+    hotel_transfer(
+        2,
+        "a prediction equal to the training minimum counts as outside",
+        "    below = sum(1 for p in values if p < train_min)\n",
+        "    below = sum(1 for p in values if p <= train_min)\n",
+        "test_predictions_outside_the_training_range_are_counted_strictly",
+    ),
+    hotel_transfer(
+        3,
+        "predictions above the training range are not counted",
+        "    above = sum(1 for p in values if p > train_max)\n",
+        "    above = 0\n",
+        "test_predictions_outside_the_training_range_are_counted_strictly",
+    ),
+    hotel_transfer(
+        4,
+        "a lag range includes its upper bound",
+        "        if value >= low and (high is None or value < high):\n",
+        "        if value >= low and (high is None or value <= high):\n",
+        "test_lag_ranges_are_half_open",
+    ),
+    hotel_transfer(
+        5,
+        "a group below the minimum still reports a metric",
+        "    if paired < MINIMUM_OBSERVATIONS_FOR_GROUP_METRIC:\n",
+        "    if paired < 1:\n",
+        "test_every_lag_range_is_reported_and_small_ones_carry_no_metric",
+    ),
+    hotel_transfer(
+        6,
+        "a cross-hotel experiment fits on the evaluated hotel",
+        "    training = cross_hotel_training_rows(dataset, experiment.train_hotel)\n",
+        "    training = cross_hotel_training_rows(dataset, experiment.evaluate_hotel)\n",
+        "test_a_cross_hotel_experiment_never_fits_on_the_evaluated_hotel",
+    ),
+    hotel_transfer(
+        7,
+        "an experiment is scored on both hotels",
+        "            if row.hotel_key == experiment.evaluate_hotel\n",
+        "            if True\n",
+        "test_a_same_hotel_control_trains_and_evaluates_on_one_hotel",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -3897,4 +3969,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_H7,
     *STAGE_H8,
     *STAGE_R2_2,
+    *STAGE_R2_2B,
 )
