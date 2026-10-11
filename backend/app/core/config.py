@@ -87,6 +87,19 @@ class Settings(BaseSettings):
     #: `_secret_required_in_production` below refuses to start a production app without it.
     secret_key: str | None = None
 
+    # --- Request body size ----------------------------------------------------
+    #: The most bytes a request body may carry; more is `413 REQUEST_TOO_LARGE`, refused before
+    #: the body is buffered (`app.middleware.request_size`). Every field also has its own
+    #: schema bound, but a schema runs only after the whole body has been read.
+    #:
+    #: Sized from the largest legitimate body, a knowledge-document upload: at most 100,000
+    #: characters of content (`app.schemas.knowledge.MAX_CONTENT_LENGTH`). JSON-encoded with
+    #: ASCII escaping, a character outside the Basic Multilingual Plane is a 12-byte surrogate
+    #: pair (`\ud83d\ude00`), so the worst case is about 1.2 MB plus the small title and source
+    #: fields. 2 MiB covers it with room to spare and still stops an unbounded body. A test pins
+    #: that the worst-case upload fits.
+    max_request_body_bytes: int = Field(default=2 * 1024 * 1024, ge=1024)
+
     # --- Authentication rate limiting (Stage 4.5.3) ------------------------
     #: Requests per window, per client address, per endpoint. Centralised here rather than
     #: written into a route decorator so the policy is one thing to read and one thing to

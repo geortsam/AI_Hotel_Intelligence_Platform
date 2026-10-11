@@ -32,6 +32,10 @@ logger = logging.getLogger(__name__)
 #: Returned instead of the real reason whenever the real reason is not the client's business.
 GENERIC_SERVER_MESSAGE = "An internal error occurred. The incident has been logged."
 GENERIC_DATABASE_MESSAGE = "The service is temporarily unable to reach its database."
+#: The refusal `app.middleware.request_size` sends for a body over `max_request_body_bytes`.
+#: It names no limit: the number is configuration, and a client needs only to send less.
+REQUEST_TOO_LARGE_CODE = "REQUEST_TOO_LARGE"
+REQUEST_TOO_LARGE_MESSAGE = "The request body is too large."
 
 #: What a service says when it cannot honestly account for an integrity failure.
 #:
@@ -434,6 +438,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         code = {
             status.HTTP_404_NOT_FOUND: "NOT_FOUND",
             status.HTTP_405_METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
+            status.HTTP_413_CONTENT_TOO_LARGE: REQUEST_TOO_LARGE_CODE,
         }.get(exc.status_code, "HTTP_ERROR")
         return error_response(exc.status_code, code, str(exc.detail))
 

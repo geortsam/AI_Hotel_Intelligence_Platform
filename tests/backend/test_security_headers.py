@@ -40,6 +40,7 @@ from app.core.security_headers import (
 )
 from app.main import create_app
 from app.middleware.request_id import RequestIdMiddleware
+from app.middleware.request_size import RequestSizeLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 
 SECRET = "security-header-suite-secret"
@@ -380,11 +381,14 @@ def test_the_middleware_order_is_the_one_that_makes_the_tests_above_pass(app: Fa
     """Asserted explicitly, because the ordering is load-bearing rather than incidental.
 
     ``add_middleware`` inserts at the FRONT, so index 0 is outermost. Security headers must be
-    outside CORS to reach a preflight; the request-id middleware stays innermost, exactly
-    where Stage 4.5.4.1 left it.
+    outside CORS to reach a preflight; the request-id middleware stays inside CORS, exactly
+    where Stage 4.5.4.1 left it. The request-body cap is innermost of all, so its 413 passes
+    out through the request id, CORS and these headers like any other response
+    (tests/backend/test_request_size.py).
     """
     assert [m.cls for m in app.user_middleware] == [
         SecurityHeadersMiddleware,
         CORSMiddleware,
         RequestIdMiddleware,
+        RequestSizeLimitMiddleware,
     ]

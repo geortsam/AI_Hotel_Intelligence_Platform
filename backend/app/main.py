@@ -27,6 +27,7 @@ from app.core.logging import configure_logging
 from app.core.rate_limit import FixedWindowRateLimiter
 from app.db.session import dispose_engine
 from app.middleware.request_id import RequestIdMiddleware
+from app.middleware.request_size import RequestSizeLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 
 
@@ -76,6 +77,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # between them; per-PROCESS in production, which is the documented limitation --
     # see app.core.rate_limit.
     app.state.rate_limiter = FixedWindowRateLimiter()
+
+    # Added FIRST, which makes it the INNERMOST middleware: its 413 still passes out through
+    # CORS, X-Request-ID and the security headers below, like any other response. It runs
+    # before routing, so an oversized body is refused before it is buffered or parsed.
+    app.add_middleware(RequestSizeLimitMiddleware, max_body_bytes=settings.max_request_body_bytes)
 
     # Origins come from configuration; nothing is hard-coded, so a production deployment is
     # locked down by its environment rather than by editing this file.

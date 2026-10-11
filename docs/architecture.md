@@ -101,8 +101,8 @@ layout is not automatically a public API change.
 
 `core/` holds cross-cutting concerns: configuration, logging, the error taxonomy, password
 hashing and tokens, rate limiting, request-id propagation, security headers and the
-trusted-proxy client-address rules. `middleware/` carries the two ASGI middlewares that apply
-the last two per request.
+trusted-proxy client-address rules. `middleware/` carries the ASGI middlewares that apply the
+last two per request, and the request-body size cap.
 
 **Transaction ownership, which is the layering rule with teeth.** A repository never commits.
 `grep` for `.commit()` under `backend/app/repositories/` returns nothing, and it is meant to
@@ -228,18 +228,22 @@ the migration rather than later in the API.
 
 1. A request ID is assigned and bound to the logging context (`middleware/request_id.py`).
 2. CORS middleware admits or rejects the browser origin.
-3. FastAPI validates the request against a Pydantic schema.
-4. Dependencies resolve the database session and the authenticated user, and — for every
+3. A body larger than `MAX_REQUEST_BODY_BYTES` (default 2 MiB) is refused `413
+   REQUEST_TOO_LARGE` before it is buffered: at once when its `Content-Length` says so, or as
+   the bytes arrive when it declares none (`middleware/request_size.py`). Every field also has
+   a schema bound, but a schema only runs after the whole body has been read.
+4. FastAPI validates the request against a Pydantic schema.
+5. Dependencies resolve the database session and the authenticated user, and — for every
    hotel-scoped route — the caller's membership of that hotel.
-5. The endpoint calls a service.
-6. The service applies business rules and calls repositories.
-7. The response is serialised through a response schema.
-8. Domain errors map to one uniform error envelope (`core/errors.py`). Request-validation
+6. The endpoint calls a service.
+7. The service applies business rules and calls repositories.
+8. The response is serialised through a response schema.
+9. Domain errors map to one uniform error envelope (`core/errors.py`). Request-validation
    failures use it too, and `/openapi.json` documents every 422 as that envelope rather
    than FastAPI's default `HTTPValidationError` body, which the server never sends.
-9. Security headers are applied on the way out (`middleware/security_headers.py`).
+10. Security headers are applied on the way out (`middleware/security_headers.py`).
 
-All nine steps exist. Step 8 is worth reading in full before changing anything near it: the
+All ten steps exist. Step 9 is worth reading in full before changing anything near it: the
 envelope is deliberately uninformative about internals, and 500-class faults carry one fixed
 sentence so that a client cannot learn a constraint name, a relation or a SQLSTATE from an
 error response. The detail goes to the logs, correlated by the request id from step 1.
