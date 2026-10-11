@@ -796,6 +796,9 @@ was never fitted on, under a protocol committed before any score was computed; p
 labelled two-way cross-hotel experiment. Same source, same two hotels: no generalisation or
 production accuracy is claimed. See
 [docs/ml-frozen-holdout-evaluation.md](docs/ml-frozen-holdout-evaluation.md).
+R2.2b adds same-hotel controls for that cross-hotel experiment, with signed errors and
+prediction ranges, under its own pre-registered protocol; the served model is not involved. See
+[docs/ml-hotel-transfer-diagnostic.md](docs/ml-hotel-transfer-diagnostic.md).
 
 ### V2 — NOT IMPLEMENTED
 
