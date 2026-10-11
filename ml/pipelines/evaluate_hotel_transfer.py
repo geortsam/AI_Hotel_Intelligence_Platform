@@ -44,6 +44,9 @@ from ml.loading import (
 from ml.manifests import content_checksum, serialise, stamp_content_checksum
 
 DEFAULT_RECORD = REPOSITORY_ROOT / "ml" / "evaluations" / f"{PROTOCOL_VERSION}.json"
+#: The commit that put ``hotel_transfer_v1`` and its checksum on ``main``, pushed before the
+#: first experiment metric was computed.
+PROTOCOL_COMMIT = "2dc0807b27347800756489c958998f8585a8ec95"
 
 
 def _git(*args: str) -> str | None:
@@ -85,6 +88,9 @@ def evaluate(
         raise HotelTransferError("the served artifact's files changed during the experiment")
 
     record = dict(first)
+    protocol = record["protocol"]
+    assert isinstance(protocol, dict)
+    record["protocol"] = {**protocol, "committed_in": PROTOCOL_COMMIT}
     record["generation"] = {
         "note": "Wall-clock, revision and machine metadata, outside the content checksum.",
         "generated_at": (generated_at or dt.datetime.now(dt.UTC)).isoformat(),
