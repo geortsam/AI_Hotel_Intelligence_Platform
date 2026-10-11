@@ -3768,6 +3768,106 @@ STAGE_H8 = [
 ]
 
 
+# --- R2.2: the frozen served model on its never-fitted partitions -----------------------------
+#
+# New in R2.2 rather than recorded from an earlier report: each mutation removes one rule the
+# pre-registered ``frozen_holdout_v1`` protocol depends on, and a synthetic-fixture test in
+# tests/ml/test_frozen_holdout.py must notice. None changes the protocol settings themselves --
+# those are guarded by the pinned checksum instead.
+
+FROZEN_HOLDOUT = "ml/frozen_holdout.py"
+FROZEN_HOLDOUT_PIPELINE = "ml/pipelines/evaluate_frozen_holdout.py"
+FROZEN_HOLDOUT_TESTS = "tests/ml/test_frozen_holdout.py"
+
+
+def frozen_holdout(
+    number: int, breaks: str, path: str, old: str, new: str, killer: str
+) -> Mutation:
+    return Mutation(
+        f"R2.2-M{number}",
+        "R2.2",
+        breaks,
+        one(path, old, new),
+        (f"{FROZEN_HOLDOUT_TESTS}::{killer}",),
+    )
+
+
+STAGE_R2_2 = [
+    frozen_holdout(
+        1,
+        "a lag is not compared with the realised target it names",
+        FROZEN_HOLDOUT,
+        "            if value != float(expected):\n",
+        "            if False:\n",
+        "test_a_lag_that_is_not_the_realised_target_it_names_stops_the_evaluation",
+    ),
+    frozen_holdout(
+        2,
+        "a calendar feature is not recomputed from its date",
+        FROZEN_HOLDOUT,
+        "            if row.features.get(name) != expected_value:\n",
+        "            if False:\n",
+        "test_a_calendar_feature_that_disagrees_with_its_date_stops_the_evaluation",
+    ),
+    frozen_holdout(
+        3,
+        "a period's declared date range is not enforced",
+        FROZEN_HOLDOUT,
+        "    if outside:\n",
+        "    if False:\n",
+        "test_a_period_row_outside_its_declared_dates_is_refused",
+    ),
+    frozen_holdout(
+        4,
+        "a tie is counted as a win for the learned model",
+        FROZEN_HOLDOUT,
+        "        if learned_error < baseline_error:\n",
+        "        if learned_error <= baseline_error:\n",
+        "test_wins_losses_and_ties_are_counted_on_absolute_errors",
+    ),
+    frozen_holdout(
+        5,
+        "a skipped row is not counted",
+        FROZEN_HOLDOUT,
+        "            skipped=len(scored) - len(learned_rows),\n",
+        "            skipped=0,\n",
+        "test_a_row_one_method_cannot_forecast_is_counted_skipped_and_left_out_of_the_pair",
+    ),
+    frozen_holdout(
+        6,
+        "a group below the minimum still reports a metric",
+        FROZEN_HOLDOUT,
+        "    if paired < MINIMUM_OBSERVATIONS_FOR_GROUP_METRIC:\n",
+        "    if paired < 1:\n",
+        "test_a_group_below_the_minimum_reports_counts_and_no_metric",
+    ),
+    frozen_holdout(
+        7,
+        "the weak range is selected by the forecast instead of the actual",
+        FROZEN_HOLDOUT,
+        "    weak = [s for s in scored if s.row.target_room_nights < WEAK_RANGE_BELOW]\n",
+        "    weak = [s for s in scored if (s.learned or 0.0) < WEAK_RANGE_BELOW]\n",
+        "test_the_weak_range_is_selected_by_the_actual_target",
+    ),
+    frozen_holdout(
+        8,
+        "a cross-hotel training set reaches into the held-out partitions",
+        FROZEN_HOLDOUT,
+        "                if row.hotel_key == hotel and row.partition == TRAINING_PARTITION\n",
+        "                if row.hotel_key == hotel\n",
+        "test_cross_hotel_training_rows_are_one_hotels_train_partition_only",
+    ),
+    frozen_holdout(
+        9,
+        "the pipeline accepts a payload that is not the pinned one",
+        FROZEN_HOLDOUT_PIPELINE,
+        "    if require_pinned_payload and payload_before != FROZEN_PAYLOAD_SHA256:\n",
+        "    if False:\n",
+        "test_the_pipeline_refuses_a_payload_that_is_not_the_pinned_one_before_unpickling",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -3796,4 +3896,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_H6,
     *STAGE_H7,
     *STAGE_H8,
+    *STAGE_R2_2,
 )
