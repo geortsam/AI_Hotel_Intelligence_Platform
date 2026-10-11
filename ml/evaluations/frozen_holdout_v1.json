@@ -1,0 +1,2045 @@
+{
+  "artifact_identity_check": {
+    "canonical_model_digest_after": "436bf6b3cc5f1a2cc1a2e7fa5e971cedcd0405aa5b7f07a84967b293118a8f70",
+    "canonical_model_digest_before": "436bf6b3cc5f1a2cc1a2e7fa5e971cedcd0405aa5b7f07a84967b293118a8f70",
+    "unchanged": true
+  },
+  "claims": {
+    "business_value_established": false,
+    "cross_hotel_generalisation_established": false,
+    "model_superior_to_baseline": false,
+    "production_accuracy_established": false,
+    "production_ready": false,
+    "unbiased_generalisation_estimate": false
+  },
+  "comparison_rule": "Learned model and baseline are compared on the paired set: the held-out rows where BOTH produced a forecast. On each paired row the learned model 'wins' when |actual - learned| < |actual - baseline|, 'loses' when it is greater, and the row is a 'tie' when they are equal. win_proportion = wins / paired. Differences are learned - baseline (negative = smaller learned error). No threshold is applied, no winner is declared, and no number is a verdict.",
+  "cross_hotel": {
+    "directions": [
+      {
+        "evaluate_hotel": "resort_hotel",
+        "periods": {
+          "test": {
+            "breakdowns": {
+              "actual_below_40": {
+                "minimum_required": 30,
+                "paired_observations": 0,
+                "reason": "insufficient coverage; no metric is reported",
+                "rows": 0,
+                "sufficient_coverage": false
+              },
+              "by_hotel": {
+                "resort_hotel": {
+                  "baseline": {
+                    "mae": 8.662162,
+                    "observations": 148,
+                    "rmse": 13.42547,
+                    "skipped": 0,
+                    "smape": 5.166151
+                  },
+                  "learned": {
+                    "mae": 32.941315,
+                    "observations": 148,
+                    "rmse": 35.568332,
+                    "skipped": 0,
+                    "smape": 17.144727
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 8.662162,
+                      "observations": 148,
+                      "rmse": 13.42547,
+                      "skipped": 0,
+                      "smape": 5.166151
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 24.279152,
+                      "rmse": 22.142862,
+                      "smape": 11.978575
+                    },
+                    "learned": {
+                      "mae": 32.941315,
+                      "observations": 148,
+                      "rmse": 35.568332,
+                      "skipped": 0,
+                      "smape": 17.144727
+                    },
+                    "losses": 139,
+                    "observations": 148,
+                    "ties": 0,
+                    "win_proportion": 0.060811,
+                    "wins": 9
+                  },
+                  "rows": 148,
+                  "sufficient_coverage": true
+                }
+              },
+              "by_month": {
+                "2017-04": {
+                  "minimum_required": 30,
+                  "paired_observations": 25,
+                  "reason": "insufficient coverage; no metric is reported",
+                  "rows": 25,
+                  "sufficient_coverage": false
+                },
+                "2017-05": {
+                  "baseline": {
+                    "mae": 10.483871,
+                    "observations": 31,
+                    "rmse": 15.392709,
+                    "skipped": 0,
+                    "smape": 6.303929
+                  },
+                  "learned": {
+                    "mae": 27.354207,
+                    "observations": 31,
+                    "rmse": 30.072838,
+                    "skipped": 0,
+                    "smape": 14.661005
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 10.483871,
+                      "observations": 31,
+                      "rmse": 15.392709,
+                      "skipped": 0,
+                      "smape": 6.303929
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 16.870336,
+                      "rmse": 14.68013,
+                      "smape": 8.357077
+                    },
+                    "learned": {
+                      "mae": 27.354207,
+                      "observations": 31,
+                      "rmse": 30.072838,
+                      "skipped": 0,
+                      "smape": 14.661005
+                    },
+                    "losses": 29,
+                    "observations": 31,
+                    "ties": 0,
+                    "win_proportion": 0.064516,
+                    "wins": 2
+                  },
+                  "rows": 31,
+                  "sufficient_coverage": true
+                },
+                "2017-06": {
+                  "baseline": {
+                    "mae": 5.9,
+                    "observations": 30,
+                    "rmse": 7.665942,
+                    "skipped": 0,
+                    "smape": 3.408057
+                  },
+                  "learned": {
+                    "mae": 24.880488,
+                    "observations": 30,
+                    "rmse": 26.094531,
+                    "skipped": 0,
+                    "smape": 13.261642
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 5.9,
+                      "observations": 30,
+                      "rmse": 7.665942,
+                      "skipped": 0,
+                      "smape": 3.408057
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 18.980488,
+                      "rmse": 18.428589,
+                      "smape": 9.853585
+                    },
+                    "learned": {
+                      "mae": 24.880488,
+                      "observations": 30,
+                      "rmse": 26.094531,
+                      "skipped": 0,
+                      "smape": 13.261642
+                    },
+                    "losses": 30,
+                    "observations": 30,
+                    "ties": 0,
+                    "win_proportion": 0.0,
+                    "wins": 0
+                  },
+                  "rows": 30,
+                  "sufficient_coverage": true
+                },
+                "2017-07": {
+                  "baseline": {
+                    "mae": 5.419355,
+                    "observations": 31,
+                    "rmse": 7.084741,
+                    "skipped": 0,
+                    "smape": 3.053377
+                  },
+                  "learned": {
+                    "mae": 39.391185,
+                    "observations": 31,
+                    "rmse": 41.179051,
+                    "skipped": 0,
+                    "smape": 19.681558
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 5.419355,
+                      "observations": 31,
+                      "rmse": 7.084741,
+                      "skipped": 0,
+                      "smape": 3.053377
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 33.97183,
+                      "rmse": 34.09431,
+                      "smape": 16.628181
+                    },
+                    "learned": {
+                      "mae": 39.391185,
+                      "observations": 31,
+                      "rmse": 41.179051,
+                      "skipped": 0,
+                      "smape": 19.681558
+                    },
+                    "losses": 30,
+                    "observations": 31,
+                    "ties": 0,
+                    "win_proportion": 0.032258,
+                    "wins": 1
+                  },
+                  "rows": 31,
+                  "sufficient_coverage": true
+                },
+                "2017-08": {
+                  "baseline": {
+                    "mae": 3.451613,
+                    "observations": 31,
+                    "rmse": 5.53872,
+                    "skipped": 0,
+                    "smape": 1.930065
+                  },
+                  "learned": {
+                    "mae": 38.120254,
+                    "observations": 31,
+                    "rmse": 38.875868,
+                    "skipped": 0,
+                    "smape": 19.026195
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 3.451613,
+                      "observations": 31,
+                      "rmse": 5.53872,
+                      "skipped": 0,
+                      "smape": 1.930065
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 34.668641,
+                      "rmse": 33.337148,
+                      "smape": 17.096129
+                    },
+                    "learned": {
+                      "mae": 38.120254,
+                      "observations": 31,
+                      "rmse": 38.875868,
+                      "skipped": 0,
+                      "smape": 19.026195
+                    },
+                    "losses": 31,
+                    "observations": 31,
+                    "ties": 0,
+                    "win_proportion": 0.0,
+                    "wins": 0
+                  },
+                  "rows": 31,
+                  "sufficient_coverage": true
+                }
+              }
+            },
+            "coverage": {
+              "dates": 148,
+              "first_date": "2017-04-06",
+              "hotels": [
+                "resort_hotel"
+              ],
+              "last_date": "2017-08-31",
+              "rows": 148
+            },
+            "feature_checks": {
+              "calendar_checked": 888,
+              "lags_checked": 444,
+              "rows": 148
+            },
+            "overall": {
+              "baseline": {
+                "mae": 8.662162,
+                "observations": 148,
+                "rmse": 13.42547,
+                "skipped": 0,
+                "smape": 5.166151
+              },
+              "learned": {
+                "mae": 32.941315,
+                "observations": 148,
+                "rmse": 35.568332,
+                "skipped": 0,
+                "smape": 17.144727
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 8.662162,
+                  "observations": 148,
+                  "rmse": 13.42547,
+                  "skipped": 0,
+                  "smape": 5.166151
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": 24.279152,
+                  "rmse": 22.142862,
+                  "smape": 11.978575
+                },
+                "learned": {
+                  "mae": 32.941315,
+                  "observations": 148,
+                  "rmse": 35.568332,
+                  "skipped": 0,
+                  "smape": 17.144727
+                },
+                "losses": 139,
+                "observations": 148,
+                "ties": 0,
+                "win_proportion": 0.060811,
+                "wins": 9
+              },
+              "rows": 148
+            },
+            "period": {
+              "end": "2017-08-31",
+              "partition": "test",
+              "start": "2017-04-06"
+            }
+          },
+          "validation": {
+            "breakdowns": {
+              "actual_below_40": {
+                "minimum_required": 30,
+                "paired_observations": 0,
+                "reason": "insufficient coverage; no metric is reported",
+                "rows": 0,
+                "sufficient_coverage": false
+              },
+              "by_hotel": {
+                "resort_hotel": {
+                  "baseline": {
+                    "mae": 28.782313,
+                    "observations": 147,
+                    "rmse": 35.962849,
+                    "skipped": 0,
+                    "smape": 24.668796
+                  },
+                  "learned": {
+                    "mae": 29.994019,
+                    "observations": 147,
+                    "rmse": 36.860751,
+                    "skipped": 0,
+                    "smape": 27.390243
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 28.782313,
+                      "observations": 147,
+                      "rmse": 35.962849,
+                      "skipped": 0,
+                      "smape": 24.668796
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 1.211706,
+                      "rmse": 0.897901,
+                      "smape": 2.721447
+                    },
+                    "learned": {
+                      "mae": 29.994019,
+                      "observations": 147,
+                      "rmse": 36.860751,
+                      "skipped": 0,
+                      "smape": 27.390243
+                    },
+                    "losses": 76,
+                    "observations": 147,
+                    "ties": 0,
+                    "win_proportion": 0.482993,
+                    "wins": 71
+                  },
+                  "rows": 147,
+                  "sufficient_coverage": true
+                }
+              },
+              "by_month": {
+                "2016-11": {
+                  "minimum_required": 30,
+                  "paired_observations": 21,
+                  "reason": "insufficient coverage; no metric is reported",
+                  "rows": 21,
+                  "sufficient_coverage": false
+                },
+                "2016-12": {
+                  "baseline": {
+                    "mae": 33.645161,
+                    "observations": 31,
+                    "rmse": 41.297895,
+                    "skipped": 0,
+                    "smape": 33.824365
+                  },
+                  "learned": {
+                    "mae": 34.47038,
+                    "observations": 31,
+                    "rmse": 42.51852,
+                    "skipped": 0,
+                    "smape": 38.134935
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 33.645161,
+                      "observations": 31,
+                      "rmse": 41.297895,
+                      "skipped": 0,
+                      "smape": 33.824365
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 0.825218,
+                      "rmse": 1.220625,
+                      "smape": 4.31057
+                    },
+                    "learned": {
+                      "mae": 34.47038,
+                      "observations": 31,
+                      "rmse": 42.51852,
+                      "skipped": 0,
+                      "smape": 38.134935
+                    },
+                    "losses": 12,
+                    "observations": 31,
+                    "ties": 0,
+                    "win_proportion": 0.612903,
+                    "wins": 19
+                  },
+                  "rows": 31,
+                  "sufficient_coverage": true
+                },
+                "2017-01": {
+                  "baseline": {
+                    "mae": 36.419355,
+                    "observations": 31,
+                    "rmse": 44.359601,
+                    "skipped": 0,
+                    "smape": 32.393524
+                  },
+                  "learned": {
+                    "mae": 33.790079,
+                    "observations": 31,
+                    "rmse": 42.525136,
+                    "skipped": 0,
+                    "smape": 39.71167
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 36.419355,
+                      "observations": 31,
+                      "rmse": 44.359601,
+                      "skipped": 0,
+                      "smape": 32.393524
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": -2.629276,
+                      "rmse": -1.834465,
+                      "smape": 7.318146
+                    },
+                    "learned": {
+                      "mae": 33.790079,
+                      "observations": 31,
+                      "rmse": 42.525136,
+                      "skipped": 0,
+                      "smape": 39.71167
+                    },
+                    "losses": 16,
+                    "observations": 31,
+                    "ties": 0,
+                    "win_proportion": 0.483871,
+                    "wins": 15
+                  },
+                  "rows": 31,
+                  "sufficient_coverage": true
+                },
+                "2017-02": {
+                  "minimum_required": 30,
+                  "paired_observations": 28,
+                  "reason": "insufficient coverage; no metric is reported",
+                  "rows": 28,
+                  "sufficient_coverage": false
+                },
+                "2017-03": {
+                  "baseline": {
+                    "mae": 18.290323,
+                    "observations": 31,
+                    "rmse": 21.671298,
+                    "skipped": 0,
+                    "smape": 11.790068
+                  },
+                  "learned": {
+                    "mae": 27.811233,
+                    "observations": 31,
+                    "rmse": 34.144874,
+                    "skipped": 0,
+                    "smape": 16.215655
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 18.290323,
+                      "observations": 31,
+                      "rmse": 21.671298,
+                      "skipped": 0,
+                      "smape": 11.790068
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 9.52091,
+                      "rmse": 12.473576,
+                      "smape": 4.425587
+                    },
+                    "learned": {
+                      "mae": 27.811233,
+                      "observations": 31,
+                      "rmse": 34.144874,
+                      "skipped": 0,
+                      "smape": 16.215655
+                    },
+                    "losses": 23,
+                    "observations": 31,
+                    "ties": 0,
+                    "win_proportion": 0.258065,
+                    "wins": 8
+                  },
+                  "rows": 31,
+                  "sufficient_coverage": true
+                },
+                "2017-04": {
+                  "minimum_required": 30,
+                  "paired_observations": 5,
+                  "reason": "insufficient coverage; no metric is reported",
+                  "rows": 5,
+                  "sufficient_coverage": false
+                }
+              }
+            },
+            "coverage": {
+              "dates": 147,
+              "first_date": "2016-11-10",
+              "hotels": [
+                "resort_hotel"
+              ],
+              "last_date": "2017-04-05",
+              "rows": 147
+            },
+            "feature_checks": {
+              "calendar_checked": 882,
+              "lags_checked": 441,
+              "rows": 147
+            },
+            "overall": {
+              "baseline": {
+                "mae": 28.782313,
+                "observations": 147,
+                "rmse": 35.962849,
+                "skipped": 0,
+                "smape": 24.668796
+              },
+              "learned": {
+                "mae": 29.994019,
+                "observations": 147,
+                "rmse": 36.860751,
+                "skipped": 0,
+                "smape": 27.390243
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 28.782313,
+                  "observations": 147,
+                  "rmse": 35.962849,
+                  "skipped": 0,
+                  "smape": 24.668796
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": 1.211706,
+                  "rmse": 0.897901,
+                  "smape": 2.721447
+                },
+                "learned": {
+                  "mae": 29.994019,
+                  "observations": 147,
+                  "rmse": 36.860751,
+                  "skipped": 0,
+                  "smape": 27.390243
+                },
+                "losses": 76,
+                "observations": 147,
+                "ties": 0,
+                "win_proportion": 0.482993,
+                "wins": 71
+              },
+              "rows": 147
+            },
+            "period": {
+              "end": "2017-04-05",
+              "partition": "validation",
+              "start": "2016-11-10"
+            }
+          }
+        },
+        "train_hotel": "city_hotel",
+        "training": {
+          "first_date": "2015-09-23",
+          "fitted_rows": 414,
+          "last_date": "2016-11-09",
+          "partition_rows": 442
+        }
+      },
+      {
+        "evaluate_hotel": "city_hotel",
+        "periods": {
+          "test": {
+            "breakdowns": {
+              "actual_below_40": {
+                "minimum_required": 30,
+                "paired_observations": 0,
+                "reason": "insufficient coverage; no metric is reported",
+                "rows": 0,
+                "sufficient_coverage": false
+              },
+              "by_hotel": {
+                "city_hotel": {
+                  "baseline": {
+                    "mae": 8.891892,
+                    "observations": 148,
+                    "rmse": 12.46346,
+                    "skipped": 0,
+                    "smape": 4.23125
+                  },
+                  "learned": {
+                    "mae": 40.318602,
+                    "observations": 148,
+                    "rmse": 41.919341,
+                    "skipped": 0,
+                    "smape": 20.680893
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 8.891892,
+                      "observations": 148,
+                      "rmse": 12.46346,
+                      "skipped": 0,
+                      "smape": 4.23125
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 31.42671,
+                      "rmse": 29.455881,
+                      "smape": 16.449643
+                    },
+                    "learned": {
+                      "mae": 40.318602,
+                      "observations": 148,
+                      "rmse": 41.919341,
+                      "skipped": 0,
+                      "smape": 20.680893
+                    },
+                    "losses": 140,
+                    "observations": 148,
+                    "ties": 0,
+                    "win_proportion": 0.054054,
+                    "wins": 8
+                  },
+                  "rows": 148,
+                  "sufficient_coverage": true
+                }
+              },
+              "by_month": {
+                "2017-04": {
+                  "minimum_required": 30,
+                  "paired_observations": 25,
+                  "reason": "insufficient coverage; no metric is reported",
+                  "rows": 25,
+                  "sufficient_coverage": false
+                },
+                "2017-05": {
+                  "baseline": {
+                    "mae": 10.419355,
+                    "observations": 31,
+                    "rmse": 14.724349,
+                    "skipped": 0,
+                    "smape": 4.978903
+                  },
+                  "learned": {
+                    "mae": 39.860787,
+                    "observations": 31,
+                    "rmse": 41.319437,
+                    "skipped": 0,
+                    "smape": 20.558347
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 10.419355,
+                      "observations": 31,
+                      "rmse": 14.724349,
+                      "skipped": 0,
+                      "smape": 4.978903
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 29.441433,
+                      "rmse": 26.595088,
+                      "smape": 15.579444
+                    },
+                    "learned": {
+                      "mae": 39.860787,
+                      "observations": 31,
+                      "rmse": 41.319437,
+                      "skipped": 0,
+                      "smape": 20.558347
+                    },
+                    "losses": 28,
+                    "observations": 31,
+                    "ties": 0,
+                    "win_proportion": 0.096774,
+                    "wins": 3
+                  },
+                  "rows": 31,
+                  "sufficient_coverage": true
+                },
+                "2017-06": {
+                  "baseline": {
+                    "mae": 11.033333,
+                    "observations": 30,
+                    "rmse": 14.729788,
+                    "skipped": 0,
+                    "smape": 5.339552
+                  },
+                  "learned": {
+                    "mae": 32.197461,
+                    "observations": 30,
+                    "rmse": 33.391543,
+                    "skipped": 0,
+                    "smape": 16.451218
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 11.033333,
+                      "observations": 30,
+                      "rmse": 14.729788,
+                      "skipped": 0,
+                      "smape": 5.339552
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 21.164127,
+                      "rmse": 18.661755,
+                      "smape": 11.111666
+                    },
+                    "learned": {
+                      "mae": 32.197461,
+                      "observations": 30,
+                      "rmse": 33.391543,
+                      "skipped": 0,
+                      "smape": 16.451218
+                    },
+                    "losses": 27,
+                    "observations": 30,
+                    "ties": 0,
+                    "win_proportion": 0.1,
+                    "wins": 3
+                  },
+                  "rows": 30,
+                  "sufficient_coverage": true
+                },
+                "2017-07": {
+                  "baseline": {
+                    "mae": 7.258065,
+                    "observations": 31,
+                    "rmse": 9.799605,
+                    "skipped": 0,
+                    "smape": 3.395511
+                  },
+                  "learned": {
+                    "mae": 38.283612,
+                    "observations": 31,
+                    "rmse": 38.87918,
+                    "skipped": 0,
+                    "smape": 19.21789
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 7.258065,
+                      "observations": 31,
+                      "rmse": 9.799605,
+                      "skipped": 0,
+                      "smape": 3.395511
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 31.025547,
+                      "rmse": 29.079575,
+                      "smape": 15.822379
+                    },
+                    "learned": {
+                      "mae": 38.283612,
+                      "observations": 31,
+                      "rmse": 38.87918,
+                      "skipped": 0,
+                      "smape": 19.21789
+                    },
+                    "losses": 30,
+                    "observations": 31,
+                    "ties": 0,
+                    "win_proportion": 0.032258,
+                    "wins": 1
+                  },
+                  "rows": 31,
+                  "sufficient_coverage": true
+                },
+                "2017-08": {
+                  "baseline": {
+                    "mae": 6.806452,
+                    "observations": 31,
+                    "rmse": 9.901124,
+                    "skipped": 0,
+                    "smape": 3.17848
+                  },
+                  "learned": {
+                    "mae": 37.554611,
+                    "observations": 31,
+                    "rmse": 38.043308,
+                    "skipped": 0,
+                    "smape": 18.771636
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 6.806452,
+                      "observations": 31,
+                      "rmse": 9.901124,
+                      "skipped": 0,
+                      "smape": 3.17848
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 30.748159,
+                      "rmse": 28.142183,
+                      "smape": 15.593156
+                    },
+                    "learned": {
+                      "mae": 37.554611,
+                      "observations": 31,
+                      "rmse": 38.043308,
+                      "skipped": 0,
+                      "smape": 18.771636
+                    },
+                    "losses": 30,
+                    "observations": 31,
+                    "ties": 0,
+                    "win_proportion": 0.032258,
+                    "wins": 1
+                  },
+                  "rows": 31,
+                  "sufficient_coverage": true
+                }
+              }
+            },
+            "coverage": {
+              "dates": 148,
+              "first_date": "2017-04-06",
+              "hotels": [
+                "city_hotel"
+              ],
+              "last_date": "2017-08-31",
+              "rows": 148
+            },
+            "feature_checks": {
+              "calendar_checked": 888,
+              "lags_checked": 444,
+              "rows": 148
+            },
+            "overall": {
+              "baseline": {
+                "mae": 8.891892,
+                "observations": 148,
+                "rmse": 12.46346,
+                "skipped": 0,
+                "smape": 4.23125
+              },
+              "learned": {
+                "mae": 40.318602,
+                "observations": 148,
+                "rmse": 41.919341,
+                "skipped": 0,
+                "smape": 20.680893
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 8.891892,
+                  "observations": 148,
+                  "rmse": 12.46346,
+                  "skipped": 0,
+                  "smape": 4.23125
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": 31.42671,
+                  "rmse": 29.455881,
+                  "smape": 16.449643
+                },
+                "learned": {
+                  "mae": 40.318602,
+                  "observations": 148,
+                  "rmse": 41.919341,
+                  "skipped": 0,
+                  "smape": 20.680893
+                },
+                "losses": 140,
+                "observations": 148,
+                "ties": 0,
+                "win_proportion": 0.054054,
+                "wins": 8
+              },
+              "rows": 148
+            },
+            "period": {
+              "end": "2017-08-31",
+              "partition": "test",
+              "start": "2017-04-06"
+            }
+          },
+          "validation": {
+            "breakdowns": {
+              "actual_below_40": {
+                "minimum_required": 30,
+                "paired_observations": 0,
+                "reason": "insufficient coverage; no metric is reported",
+                "rows": 0,
+                "sufficient_coverage": false
+              },
+              "by_hotel": {
+                "city_hotel": {
+                  "baseline": {
+                    "mae": 36.394558,
+                    "observations": 147,
+                    "rmse": 46.519106,
+                    "skipped": 0,
+                    "smape": 24.618977
+                  },
+                  "learned": {
+                    "mae": 51.934746,
+                    "observations": 147,
+                    "rmse": 60.55061,
+                    "skipped": 0,
+                    "smape": 36.539745
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 36.394558,
+                      "observations": 147,
+                      "rmse": 46.519106,
+                      "skipped": 0,
+                      "smape": 24.618977
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 15.540188,
+                      "rmse": 14.031504,
+                      "smape": 11.920768
+                    },
+                    "learned": {
+                      "mae": 51.934746,
+                      "observations": 147,
+                      "rmse": 60.55061,
+                      "skipped": 0,
+                      "smape": 36.539745
+                    },
+                    "losses": 104,
+                    "observations": 147,
+                    "ties": 0,
+                    "win_proportion": 0.292517,
+                    "wins": 43
+                  },
+                  "rows": 147,
+                  "sufficient_coverage": true
+                }
+              },
+              "by_month": {
+                "2016-11": {
+                  "minimum_required": 30,
+                  "paired_observations": 21,
+                  "reason": "insufficient coverage; no metric is reported",
+                  "rows": 21,
+                  "sufficient_coverage": false
+                },
+                "2016-12": {
+                  "baseline": {
+                    "mae": 56.0,
+                    "observations": 31,
+                    "rmse": 66.621705,
+                    "skipped": 0,
+                    "smape": 43.617748
+                  },
+                  "learned": {
+                    "mae": 53.465965,
+                    "observations": 31,
+                    "rmse": 66.932763,
+                    "skipped": 0,
+                    "smape": 44.252678
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 56.0,
+                      "observations": 31,
+                      "rmse": 66.621705,
+                      "skipped": 0,
+                      "smape": 43.617748
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": -2.534035,
+                      "rmse": 0.311057,
+                      "smape": 0.634929
+                    },
+                    "learned": {
+                      "mae": 53.465965,
+                      "observations": 31,
+                      "rmse": 66.932763,
+                      "skipped": 0,
+                      "smape": 44.252678
+                    },
+                    "losses": 20,
+                    "observations": 31,
+                    "ties": 0,
+                    "win_proportion": 0.354839,
+                    "wins": 11
+                  },
+                  "rows": 31,
+                  "sufficient_coverage": true
+                },
+                "2017-01": {
+                  "baseline": {
+                    "mae": 44.709677,
+                    "observations": 31,
+                    "rmse": 51.750643,
+                    "skipped": 0,
+                    "smape": 30.335069
+                  },
+                  "learned": {
+                    "mae": 41.784488,
+                    "observations": 31,
+                    "rmse": 51.827155,
+                    "skipped": 0,
+                    "smape": 35.309942
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 44.709677,
+                      "observations": 31,
+                      "rmse": 51.750643,
+                      "skipped": 0,
+                      "smape": 30.335069
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": -2.925189,
+                      "rmse": 0.076512,
+                      "smape": 4.974873
+                    },
+                    "learned": {
+                      "mae": 41.784488,
+                      "observations": 31,
+                      "rmse": 51.827155,
+                      "skipped": 0,
+                      "smape": 35.309942
+                    },
+                    "losses": 17,
+                    "observations": 31,
+                    "ties": 0,
+                    "win_proportion": 0.451613,
+                    "wins": 14
+                  },
+                  "rows": 31,
+                  "sufficient_coverage": true
+                },
+                "2017-02": {
+                  "minimum_required": 30,
+                  "paired_observations": 28,
+                  "reason": "insufficient coverage; no metric is reported",
+                  "rows": 28,
+                  "sufficient_coverage": false
+                },
+                "2017-03": {
+                  "baseline": {
+                    "mae": 20.258065,
+                    "observations": 31,
+                    "rmse": 27.262168,
+                    "skipped": 0,
+                    "smape": 10.288616
+                  },
+                  "learned": {
+                    "mae": 53.118206,
+                    "observations": 31,
+                    "rmse": 55.945904,
+                    "skipped": 0,
+                    "smape": 29.563252
+                  },
+                  "paired": {
+                    "baseline": {
+                      "mae": 20.258065,
+                      "observations": 31,
+                      "rmse": 27.262168,
+                      "skipped": 0,
+                      "smape": 10.288616
+                    },
+                    "difference_learned_minus_baseline": {
+                      "mae": 32.860141,
+                      "rmse": 28.683736,
+                      "smape": 19.274636
+                    },
+                    "learned": {
+                      "mae": 53.118206,
+                      "observations": 31,
+                      "rmse": 55.945904,
+                      "skipped": 0,
+                      "smape": 29.563252
+                    },
+                    "losses": 27,
+                    "observations": 31,
+                    "ties": 0,
+                    "win_proportion": 0.129032,
+                    "wins": 4
+                  },
+                  "rows": 31,
+                  "sufficient_coverage": true
+                },
+                "2017-04": {
+                  "minimum_required": 30,
+                  "paired_observations": 5,
+                  "reason": "insufficient coverage; no metric is reported",
+                  "rows": 5,
+                  "sufficient_coverage": false
+                }
+              }
+            },
+            "coverage": {
+              "dates": 147,
+              "first_date": "2016-11-10",
+              "hotels": [
+                "city_hotel"
+              ],
+              "last_date": "2017-04-05",
+              "rows": 147
+            },
+            "feature_checks": {
+              "calendar_checked": 882,
+              "lags_checked": 441,
+              "rows": 147
+            },
+            "overall": {
+              "baseline": {
+                "mae": 36.394558,
+                "observations": 147,
+                "rmse": 46.519106,
+                "skipped": 0,
+                "smape": 24.618977
+              },
+              "learned": {
+                "mae": 51.934746,
+                "observations": 147,
+                "rmse": 60.55061,
+                "skipped": 0,
+                "smape": 36.539745
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 36.394558,
+                  "observations": 147,
+                  "rmse": 46.519106,
+                  "skipped": 0,
+                  "smape": 24.618977
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": 15.540188,
+                  "rmse": 14.031504,
+                  "smape": 11.920768
+                },
+                "learned": {
+                  "mae": 51.934746,
+                  "observations": 147,
+                  "rmse": 60.55061,
+                  "skipped": 0,
+                  "smape": 36.539745
+                },
+                "losses": 104,
+                "observations": 147,
+                "ties": 0,
+                "win_proportion": 0.292517,
+                "wins": 43
+              },
+              "rows": 147
+            },
+            "period": {
+              "end": "2017-04-05",
+              "partition": "validation",
+              "start": "2016-11-10"
+            }
+          }
+        },
+        "train_hotel": "resort_hotel",
+        "training": {
+          "first_date": "2015-10-05",
+          "fitted_rows": 402,
+          "last_date": "2016-11-09",
+          "partition_rows": 430
+        }
+      }
+    ],
+    "label": "a separate experiment: the same configuration refitted on one hotel's train partition, scored on the other hotel; these models are not the served artifact"
+  },
+  "dataset": {
+    "dataset_version": "v1",
+    "feature_version": "v1",
+    "rows": 1462,
+    "sha256": "904b819f84f252350ad3387db60fa8fb18f56771447b2c369f3741f65f57095d"
+  },
+  "frozen_holdout": {
+    "label": "the served artifact, unrefitted, on the partitions it was never fitted on; not a pristine hold-out (see limitations)",
+    "periods": {
+      "test": {
+        "breakdowns": {
+          "actual_below_40": {
+            "minimum_required": 30,
+            "paired_observations": 0,
+            "reason": "insufficient coverage; no metric is reported",
+            "rows": 0,
+            "sufficient_coverage": false
+          },
+          "by_hotel": {
+            "city_hotel": {
+              "baseline": {
+                "mae": 8.891892,
+                "observations": 148,
+                "rmse": 12.46346,
+                "skipped": 0,
+                "smape": 4.23125
+              },
+              "learned": {
+                "mae": 8.945943,
+                "observations": 148,
+                "rmse": 11.509847,
+                "skipped": 0,
+                "smape": 4.282242
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 8.891892,
+                  "observations": 148,
+                  "rmse": 12.46346,
+                  "skipped": 0,
+                  "smape": 4.23125
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": 0.054051,
+                  "rmse": -0.953613,
+                  "smape": 0.050993
+                },
+                "learned": {
+                  "mae": 8.945943,
+                  "observations": 148,
+                  "rmse": 11.509847,
+                  "skipped": 0,
+                  "smape": 4.282242
+                },
+                "losses": 77,
+                "observations": 148,
+                "ties": 0,
+                "win_proportion": 0.47973,
+                "wins": 71
+              },
+              "rows": 148,
+              "sufficient_coverage": true
+            },
+            "resort_hotel": {
+              "baseline": {
+                "mae": 8.662162,
+                "observations": 148,
+                "rmse": 13.42547,
+                "skipped": 0,
+                "smape": 5.166151
+              },
+              "learned": {
+                "mae": 7.053337,
+                "observations": 148,
+                "rmse": 10.010302,
+                "skipped": 0,
+                "smape": 4.120418
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 8.662162,
+                  "observations": 148,
+                  "rmse": 13.42547,
+                  "skipped": 0,
+                  "smape": 5.166151
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": -1.608825,
+                  "rmse": -3.415168,
+                  "smape": -1.045734
+                },
+                "learned": {
+                  "mae": 7.053337,
+                  "observations": 148,
+                  "rmse": 10.010302,
+                  "skipped": 0,
+                  "smape": 4.120418
+                },
+                "losses": 71,
+                "observations": 148,
+                "ties": 0,
+                "win_proportion": 0.52027,
+                "wins": 77
+              },
+              "rows": 148,
+              "sufficient_coverage": true
+            }
+          },
+          "by_month": {
+            "2017-04": {
+              "baseline": {
+                "mae": 14.62,
+                "observations": 50,
+                "rmse": 19.393298,
+                "skipped": 0,
+                "smape": 8.406778
+              },
+              "learned": {
+                "mae": 12.693801,
+                "observations": 50,
+                "rmse": 15.190995,
+                "skipped": 0,
+                "smape": 6.951277
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 14.62,
+                  "observations": 50,
+                  "rmse": 19.393298,
+                  "skipped": 0,
+                  "smape": 8.406778
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": -1.926199,
+                  "rmse": -4.202303,
+                  "smape": -1.455501
+                },
+                "learned": {
+                  "mae": 12.693801,
+                  "observations": 50,
+                  "rmse": 15.190995,
+                  "skipped": 0,
+                  "smape": 6.951277
+                },
+                "losses": 24,
+                "observations": 50,
+                "ties": 0,
+                "win_proportion": 0.52,
+                "wins": 26
+              },
+              "rows": 50,
+              "sufficient_coverage": true
+            },
+            "2017-05": {
+              "baseline": {
+                "mae": 10.451613,
+                "observations": 62,
+                "rmse": 15.062236,
+                "skipped": 0,
+                "smape": 5.641416
+              },
+              "learned": {
+                "mae": 8.36779,
+                "observations": 62,
+                "rmse": 11.177088,
+                "skipped": 0,
+                "smape": 4.456594
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 10.451613,
+                  "observations": 62,
+                  "rmse": 15.062236,
+                  "skipped": 0,
+                  "smape": 5.641416
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": -2.083823,
+                  "rmse": -3.885148,
+                  "smape": -1.184821
+                },
+                "learned": {
+                  "mae": 8.36779,
+                  "observations": 62,
+                  "rmse": 11.177088,
+                  "skipped": 0,
+                  "smape": 4.456594
+                },
+                "losses": 25,
+                "observations": 62,
+                "ties": 0,
+                "win_proportion": 0.596774,
+                "wins": 37
+              },
+              "rows": 62,
+              "sufficient_coverage": true
+            },
+            "2017-06": {
+              "baseline": {
+                "mae": 8.466667,
+                "observations": 60,
+                "rmse": 11.741664,
+                "skipped": 0,
+                "smape": 4.373804
+              },
+              "learned": {
+                "mae": 9.499949,
+                "observations": 60,
+                "rmse": 12.406038,
+                "skipped": 0,
+                "smape": 4.93484
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 8.466667,
+                  "observations": 60,
+                  "rmse": 11.741664,
+                  "skipped": 0,
+                  "smape": 4.373804
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": 1.033283,
+                  "rmse": 0.664374,
+                  "smape": 0.561036
+                },
+                "learned": {
+                  "mae": 9.499949,
+                  "observations": 60,
+                  "rmse": 12.406038,
+                  "skipped": 0,
+                  "smape": 4.93484
+                },
+                "losses": 33,
+                "observations": 60,
+                "ties": 0,
+                "win_proportion": 0.45,
+                "wins": 27
+              },
+              "rows": 60,
+              "sufficient_coverage": true
+            },
+            "2017-07": {
+              "baseline": {
+                "mae": 6.33871,
+                "observations": 62,
+                "rmse": 8.550608,
+                "skipped": 0,
+                "smape": 3.224444
+              },
+              "learned": {
+                "mae": 5.975944,
+                "observations": 62,
+                "rmse": 7.609243,
+                "skipped": 0,
+                "smape": 3.021233
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 6.33871,
+                  "observations": 62,
+                  "rmse": 8.550608,
+                  "skipped": 0,
+                  "smape": 3.224444
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": -0.362765,
+                  "rmse": -0.941366,
+                  "smape": -0.203212
+                },
+                "learned": {
+                  "mae": 5.975944,
+                  "observations": 62,
+                  "rmse": 7.609243,
+                  "skipped": 0,
+                  "smape": 3.021233
+                },
+                "losses": 30,
+                "observations": 62,
+                "ties": 0,
+                "win_proportion": 0.516129,
+                "wins": 32
+              },
+              "rows": 62,
+              "sufficient_coverage": true
+            },
+            "2017-08": {
+              "baseline": {
+                "mae": 5.129032,
+                "observations": 62,
+                "rmse": 8.022147,
+                "skipped": 0,
+                "smape": 2.554273
+              },
+              "learned": {
+                "mae": 4.417659,
+                "observations": 62,
+                "rmse": 6.12874,
+                "skipped": 0,
+                "smape": 2.198615
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 5.129032,
+                  "observations": 62,
+                  "rmse": 8.022147,
+                  "skipped": 0,
+                  "smape": 2.554273
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": -0.711373,
+                  "rmse": -1.893407,
+                  "smape": -0.355658
+                },
+                "learned": {
+                  "mae": 4.417659,
+                  "observations": 62,
+                  "rmse": 6.12874,
+                  "skipped": 0,
+                  "smape": 2.198615
+                },
+                "losses": 36,
+                "observations": 62,
+                "ties": 0,
+                "win_proportion": 0.419355,
+                "wins": 26
+              },
+              "rows": 62,
+              "sufficient_coverage": true
+            }
+          }
+        },
+        "coverage": {
+          "dates": 148,
+          "first_date": "2017-04-06",
+          "hotels": [
+            "city_hotel",
+            "resort_hotel"
+          ],
+          "last_date": "2017-08-31",
+          "rows": 296
+        },
+        "feature_checks": {
+          "calendar_checked": 1776,
+          "lags_checked": 888,
+          "rows": 296
+        },
+        "overall": {
+          "baseline": {
+            "mae": 8.777027,
+            "observations": 296,
+            "rmse": 12.953399,
+            "skipped": 0,
+            "smape": 4.698701
+          },
+          "learned": {
+            "mae": 7.99964,
+            "observations": 296,
+            "rmse": 10.786165,
+            "skipped": 0,
+            "smape": 4.20133
+          },
+          "paired": {
+            "baseline": {
+              "mae": 8.777027,
+              "observations": 296,
+              "rmse": 12.953399,
+              "skipped": 0,
+              "smape": 4.698701
+            },
+            "difference_learned_minus_baseline": {
+              "mae": -0.777387,
+              "rmse": -2.167234,
+              "smape": -0.497371
+            },
+            "learned": {
+              "mae": 7.99964,
+              "observations": 296,
+              "rmse": 10.786165,
+              "skipped": 0,
+              "smape": 4.20133
+            },
+            "losses": 148,
+            "observations": 296,
+            "ties": 0,
+            "win_proportion": 0.5,
+            "wins": 148
+          },
+          "rows": 296
+        },
+        "period": {
+          "end": "2017-08-31",
+          "partition": "test",
+          "start": "2017-04-06"
+        }
+      },
+      "validation": {
+        "breakdowns": {
+          "actual_below_40": {
+            "minimum_required": 30,
+            "paired_observations": 0,
+            "reason": "insufficient coverage; no metric is reported",
+            "rows": 0,
+            "sufficient_coverage": false
+          },
+          "by_hotel": {
+            "city_hotel": {
+              "baseline": {
+                "mae": 36.394558,
+                "observations": 147,
+                "rmse": 46.519106,
+                "skipped": 0,
+                "smape": 24.618977
+              },
+              "learned": {
+                "mae": 36.77572,
+                "observations": 147,
+                "rmse": 45.969439,
+                "skipped": 0,
+                "smape": 28.0703
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 36.394558,
+                  "observations": 147,
+                  "rmse": 46.519106,
+                  "skipped": 0,
+                  "smape": 24.618977
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": 0.381162,
+                  "rmse": -0.549667,
+                  "smape": 3.451323
+                },
+                "learned": {
+                  "mae": 36.77572,
+                  "observations": 147,
+                  "rmse": 45.969439,
+                  "skipped": 0,
+                  "smape": 28.0703
+                },
+                "losses": 85,
+                "observations": 147,
+                "ties": 0,
+                "win_proportion": 0.421769,
+                "wins": 62
+              },
+              "rows": 147,
+              "sufficient_coverage": true
+            },
+            "resort_hotel": {
+              "baseline": {
+                "mae": 28.782313,
+                "observations": 147,
+                "rmse": 35.962849,
+                "skipped": 0,
+                "smape": 24.668796
+              },
+              "learned": {
+                "mae": 25.632514,
+                "observations": 147,
+                "rmse": 32.289914,
+                "skipped": 0,
+                "smape": 24.575892
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 28.782313,
+                  "observations": 147,
+                  "rmse": 35.962849,
+                  "skipped": 0,
+                  "smape": 24.668796
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": -3.149799,
+                  "rmse": -3.672935,
+                  "smape": -0.092904
+                },
+                "learned": {
+                  "mae": 25.632514,
+                  "observations": 147,
+                  "rmse": 32.289914,
+                  "skipped": 0,
+                  "smape": 24.575892
+                },
+                "losses": 69,
+                "observations": 147,
+                "ties": 0,
+                "win_proportion": 0.530612,
+                "wins": 78
+              },
+              "rows": 147,
+              "sufficient_coverage": true
+            }
+          },
+          "by_month": {
+            "2016-11": {
+              "baseline": {
+                "mae": 30.714286,
+                "observations": 42,
+                "rmse": 37.93227,
+                "skipped": 0,
+                "smape": 21.561247
+              },
+              "learned": {
+                "mae": 32.801439,
+                "observations": 42,
+                "rmse": 39.236903,
+                "skipped": 0,
+                "smape": 23.52471
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 30.714286,
+                  "observations": 42,
+                  "rmse": 37.93227,
+                  "skipped": 0,
+                  "smape": 21.561247
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": 2.087153,
+                  "rmse": 1.304632,
+                  "smape": 1.963463
+                },
+                "learned": {
+                  "mae": 32.801439,
+                  "observations": 42,
+                  "rmse": 39.236903,
+                  "skipped": 0,
+                  "smape": 23.52471
+                },
+                "losses": 21,
+                "observations": 42,
+                "ties": 0,
+                "win_proportion": 0.5,
+                "wins": 21
+              },
+              "rows": 42,
+              "sufficient_coverage": true
+            },
+            "2016-12": {
+              "baseline": {
+                "mae": 44.822581,
+                "observations": 62,
+                "rmse": 55.42548,
+                "skipped": 0,
+                "smape": 38.721057
+              },
+              "learned": {
+                "mae": 39.561242,
+                "observations": 62,
+                "rmse": 48.075668,
+                "skipped": 0,
+                "smape": 39.699749
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 44.822581,
+                  "observations": 62,
+                  "rmse": 55.42548,
+                  "skipped": 0,
+                  "smape": 38.721057
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": -5.261339,
+                  "rmse": -7.349813,
+                  "smape": 0.978693
+                },
+                "learned": {
+                  "mae": 39.561242,
+                  "observations": 62,
+                  "rmse": 48.075668,
+                  "skipped": 0,
+                  "smape": 39.699749
+                },
+                "losses": 31,
+                "observations": 62,
+                "ties": 0,
+                "win_proportion": 0.5,
+                "wins": 31
+              },
+              "rows": 62,
+              "sufficient_coverage": true
+            },
+            "2017-01": {
+              "baseline": {
+                "mae": 40.564516,
+                "observations": 62,
+                "rmse": 48.197008,
+                "skipped": 0,
+                "smape": 31.364297
+              },
+              "learned": {
+                "mae": 39.246538,
+                "observations": 62,
+                "rmse": 49.489799,
+                "skipped": 0,
+                "smape": 39.293377
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 40.564516,
+                  "observations": 62,
+                  "rmse": 48.197008,
+                  "skipped": 0,
+                  "smape": 31.364297
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": -1.317978,
+                  "rmse": 1.29279,
+                  "smape": 7.929081
+                },
+                "learned": {
+                  "mae": 39.246538,
+                  "observations": 62,
+                  "rmse": 49.489799,
+                  "skipped": 0,
+                  "smape": 39.293377
+                },
+                "losses": 35,
+                "observations": 62,
+                "ties": 0,
+                "win_proportion": 0.435484,
+                "wins": 27
+              },
+              "rows": 62,
+              "sufficient_coverage": true
+            },
+            "2017-02": {
+              "baseline": {
+                "mae": 29.892857,
+                "observations": 56,
+                "rmse": 36.292955,
+                "skipped": 0,
+                "smape": 22.086615
+              },
+              "learned": {
+                "mae": 29.606814,
+                "observations": 56,
+                "rmse": 36.053887,
+                "skipped": 0,
+                "smape": 20.689674
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 29.892857,
+                  "observations": 56,
+                  "rmse": 36.292955,
+                  "skipped": 0,
+                  "smape": 22.086615
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": -0.286043,
+                  "rmse": -0.239068,
+                  "smape": -1.396941
+                },
+                "learned": {
+                  "mae": 29.606814,
+                  "observations": 56,
+                  "rmse": 36.053887,
+                  "skipped": 0,
+                  "smape": 20.689674
+                },
+                "losses": 29,
+                "observations": 56,
+                "ties": 0,
+                "win_proportion": 0.482143,
+                "wins": 27
+              },
+              "rows": 56,
+              "sufficient_coverage": true
+            },
+            "2017-03": {
+              "baseline": {
+                "mae": 19.274194,
+                "observations": 62,
+                "rmse": 24.625911,
+                "skipped": 0,
+                "smape": 11.039342
+              },
+              "learned": {
+                "mae": 17.368668,
+                "observations": 62,
+                "rmse": 21.007113,
+                "skipped": 0,
+                "smape": 9.650129
+              },
+              "paired": {
+                "baseline": {
+                  "mae": 19.274194,
+                  "observations": 62,
+                  "rmse": 24.625911,
+                  "skipped": 0,
+                  "smape": 11.039342
+                },
+                "difference_learned_minus_baseline": {
+                  "mae": -1.905526,
+                  "rmse": -3.618798,
+                  "smape": -1.389213
+                },
+                "learned": {
+                  "mae": 17.368668,
+                  "observations": 62,
+                  "rmse": 21.007113,
+                  "skipped": 0,
+                  "smape": 9.650129
+                },
+                "losses": 30,
+                "observations": 62,
+                "ties": 0,
+                "win_proportion": 0.516129,
+                "wins": 32
+              },
+              "rows": 62,
+              "sufficient_coverage": true
+            },
+            "2017-04": {
+              "minimum_required": 30,
+              "paired_observations": 10,
+              "reason": "insufficient coverage; no metric is reported",
+              "rows": 10,
+              "sufficient_coverage": false
+            }
+          }
+        },
+        "coverage": {
+          "dates": 147,
+          "first_date": "2016-11-10",
+          "hotels": [
+            "city_hotel",
+            "resort_hotel"
+          ],
+          "last_date": "2017-04-05",
+          "rows": 294
+        },
+        "feature_checks": {
+          "calendar_checked": 1764,
+          "lags_checked": 882,
+          "rows": 294
+        },
+        "overall": {
+          "baseline": {
+            "mae": 32.588435,
+            "observations": 294,
+            "rmse": 41.57736,
+            "skipped": 0,
+            "smape": 24.643886
+          },
+          "learned": {
+            "mae": 31.204117,
+            "observations": 294,
+            "rmse": 39.722965,
+            "skipped": 0,
+            "smape": 26.323096
+          },
+          "paired": {
+            "baseline": {
+              "mae": 32.588435,
+              "observations": 294,
+              "rmse": 41.57736,
+              "skipped": 0,
+              "smape": 24.643886
+            },
+            "difference_learned_minus_baseline": {
+              "mae": -1.384318,
+              "rmse": -1.854395,
+              "smape": 1.679209
+            },
+            "learned": {
+              "mae": 31.204117,
+              "observations": 294,
+              "rmse": 39.722965,
+              "skipped": 0,
+              "smape": 26.323096
+            },
+            "losses": 154,
+            "observations": 294,
+            "ties": 0,
+            "win_proportion": 0.47619,
+            "wins": 140
+          },
+          "rows": 294
+        },
+        "period": {
+          "end": "2017-04-05",
+          "partition": "validation",
+          "start": "2016-11-10"
+        }
+      }
+    }
+  },
+  "frozen_model": {
+    "canonical_model_digest": "436bf6b3cc5f1a2cc1a2e7fa5e971cedcd0405aa5b7f07a84967b293118a8f70",
+    "feature_columns": [
+      "day_of_week",
+      "day_of_month",
+      "month",
+      "week_of_year",
+      "day_of_year",
+      "is_weekend",
+      "demand_lag_7",
+      "demand_lag_14",
+      "demand_lag_28"
+    ],
+    "forecast_horizon_days": 7,
+    "model_version": "demand_baseline_v1",
+    "refitted": false
+  },
+  "generation": {
+    "artifact_json_sha256": "e17dec907ede4f940ae54949d5b0c259bc25d771c138b75880c0c667afd4e592",
+    "code_revision": "ecf705aa68914130f33a5319040e9d90f2d55dc5",
+    "content_sha256": "031b3e7768595a5ac2b2fbd59f7eaad79b572994e8f62995b339ad2bb42228a2",
+    "environment": {
+      "numpy": "2.5.3",
+      "platform": "Windows",
+      "python": "3.14.6",
+      "scikit_learn": "1.9.1",
+      "scipy": "1.18.1"
+    },
+    "generated_at": "2026-10-11T11:44:15.739082+00:00",
+    "note": "Wall-clock, revision and machine metadata, outside the content checksum: the payload bytes vary with the OpenMP thread count, the canonical digest does not.",
+    "payload": {
+      "path": "model.pkl",
+      "pinned": true,
+      "sha256_after": "bdfeb3b81b05a1884dba6b3cc687174204fe7dd13ebb26a0c65161e710fb140b",
+      "sha256_before": "bdfeb3b81b05a1884dba6b3cc687174204fe7dd13ebb26a0c65161e710fb140b"
+    },
+    "pipeline": "ml/pipelines/evaluate_frozen_holdout.py",
+    "runs_compared": 2,
+    "working_tree_clean": true
+  },
+  "limitations": [
+    "Same source: the held-out months come from the same two Portuguese hotels (2015-2017) whose earlier months the model was fitted on. Nothing here establishes generalisation to other hotels or production accuracy.",
+    "Not pristine: the Stage 6.3 backtest refitted the same method across these months and its results are published. No setting was tuned on them, but they are not unseen.",
+    "Seasonal mismatch: validation is November-April and test is April-August; the two are reported separately and are not interchangeable.",
+    "Two hotels: the cross-hotel experiment has two directions and no third hotel; it measures transfer between these two, not to hotels in general.",
+    "Weak range untested: no validation or test target is below forty room nights (0 of 590 rows; counted from the targets before any scoring), so the served model's known weak range (about 165.83 for small histories) is not exercised here and its breakdown reports no metric.",
+    "Duplicates: 31,994 duplicate source rows retained by Stage 6.2 inflate demand consistently; every figure inherits that uncertainty.",
+    "Point forecasts only: no interval, no uncertainty quantification, no capacity cap."
+  ],
+  "protocol": {
+    "committed_in": "7f1e40f88db69748cb0576fc2c9689eb96287b93",
+    "sha256": "27e6c8a4873c0aa5d99516e15d2df6ed663fc3ccd538d8b2dad487f9516f0bd5",
+    "version": "frozen_holdout_v1"
+  }
+}

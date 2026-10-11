@@ -110,6 +110,93 @@ It needs the local payload `ml/models/demand_baseline_v1/model.pkl` (generated, 
 pinned one. It writes `ml/evaluations/frozen_holdout_v1.json`; `--check` re-evaluates and compares
 content checksums without writing.
 
+CI does not have the payload, so `tests/ml/test_frozen_holdout_record.py` rebuilds the approved
+artifact from the committed dataset, proves its measured canonical digest is the frozen one, re-runs
+the evaluation and requires the committed record's content checksum exactly.
+
 ## 5. Results
 
-*Not yet computed.* This section is written only after the protocol commit is on `main`.
+Written after the protocol commit was on `main`. The record is
+[`ml/evaluations/frozen_holdout_v1.json`](../ml/evaluations/frozen_holdout_v1.json).
+
+| Provenance | Value |
+|---|---|
+| Protocol | `frozen_holdout_v1`, SHA-256 `27e6c8a4873c0aa5d99516e15d2df6ed663fc3ccd538d8b2dad487f9516f0bd5`, committed in `7f1e40f88db69748cb0576fc2c9689eb96287b93` |
+| Code revision of the run | `ecf705aa68914130f33a5319040e9d90f2d55dc5` (clean tree; adds only the protocol-commit reference to the pipeline) |
+| Dataset | `demand_daily_v1`, SHA-256 `904b819f…5d`, 1,462 rows, verified against its manifest |
+| Model | canonical digest `436bf6b3…8f70` measured **before and after** the run, unchanged; payload SHA-256 `bdfeb3b8…140b` before and after, the pinned one; `refitted: false` |
+| Record | content SHA-256 `031b3e7768595a5ac2b2fbd59f7eaad79b572994e8f62995b339ad2bb42228a2`; built twice in one process, and reproduced by a second, separate process with the same checksum |
+| Files outside the record | `model.pkl`, `artifact.json`, `metrics.json`, `registry.json`, `validation.json`, the dataset and its manifest hashed before and after: unchanged |
+
+Every row in both periods had every feature present, so no row was skipped by either method and
+every row is paired. "Diff." is learned − baseline; negative means a smaller learned error.
+
+### 5.1 The frozen served artifact
+
+| Period | Rows | Learned MAE / RMSE / sMAPE | `seasonal_naive_7` MAE / RMSE / sMAPE | Diff. MAE | Wins / losses / ties | Win proportion |
+|---|---|---|---|---|---|---|
+| validation (Nov–Apr) | 294 | 31.204 / 39.723 / 26.323 | 32.588 / 41.577 / 24.644 | −1.384 | 140 / 154 / 0 | 0.476 |
+| test (Apr–Aug) | 296 | 8.000 / 10.786 / 4.201 | 8.777 / 12.953 / 4.699 | −0.777 | 148 / 148 / 0 | 0.500 |
+
+By hotel:
+
+| Period | Hotel | Rows | Learned MAE | Baseline MAE | Diff. MAE | Win proportion |
+|---|---|---|---|---|---|---|
+| validation | city_hotel | 147 | 36.776 | 36.395 | +0.381 | 0.422 |
+| validation | resort_hotel | 147 | 25.633 | 28.782 | −3.150 | 0.531 |
+| test | city_hotel | 148 | 8.946 | 8.892 | +0.054 | 0.480 |
+| test | resort_hotel | 148 | 7.053 | 8.662 | −1.609 | 0.520 |
+
+By calendar month (both hotels; April 2017's five validation days, 10 rows, are below the 30-row
+minimum and report no metric):
+
+| Month | Period | Rows | Learned MAE | Baseline MAE | Diff. MAE | Win proportion |
+|---|---|---|---|---|---|---|
+| 2016-11 | validation | 42 | 32.801 | 30.714 | +2.087 | 0.500 |
+| 2016-12 | validation | 62 | 39.561 | 44.823 | −5.261 | 0.500 |
+| 2017-01 | validation | 62 | 39.247 | 40.565 | −1.318 | 0.435 |
+| 2017-02 | validation | 56 | 29.607 | 29.893 | −0.286 | 0.482 |
+| 2017-03 | validation | 62 | 17.369 | 19.274 | −1.906 | 0.516 |
+| 2017-04 | test | 50 | 12.694 | 14.620 | −1.926 | 0.520 |
+| 2017-05 | test | 62 | 8.368 | 10.452 | −2.084 | 0.597 |
+| 2017-06 | test | 60 | 9.500 | 8.467 | +1.033 | 0.450 |
+| 2017-07 | test | 62 | 5.976 | 6.339 | −0.363 | 0.516 |
+| 2017-08 | test | 62 | 4.418 | 5.129 | −0.711 | 0.419 |
+
+Weak range (actual < 40 room nights): **0 rows in either period**; no metric is reported, as
+pre-registered.
+
+### 5.2 Cross-hotel experiment (separate; not the served artifact)
+
+The Stage 6.3 configuration, unchanged, fitted on one hotel's train partition and scored on the
+other hotel's held-out rows. The baseline column is the evaluated hotel's own `seasonal_naive_7`.
+
+| Trained on → scored on | Fitted rows | Period | Rows | Learned MAE / RMSE / sMAPE | Baseline MAE / RMSE / sMAPE | Diff. MAE | Win proportion |
+|---|---|---|---|---|---|---|---|
+| city_hotel → resort_hotel | 414 (2015-09-23 .. 2016-11-09) | validation | 147 | 29.994 / 36.861 / 27.390 | 28.782 / 35.963 / 24.669 | +1.212 | 0.483 |
+| city_hotel → resort_hotel | 414 | test | 148 | 32.941 / 35.568 / 17.145 | 8.662 / 13.425 / 5.166 | +24.279 | 0.061 |
+| resort_hotel → city_hotel | 402 (2015-10-05 .. 2016-11-09) | validation | 147 | 51.935 / 60.551 / 36.540 | 36.395 / 46.519 / 24.619 | +15.540 | 0.293 |
+| resort_hotel → city_hotel | 402 | test | 148 | 40.319 / 41.919 / 20.681 | 8.892 / 12.463 / 4.231 | +31.427 | 0.054 |
+
+### 5.3 What the numbers say, and what they do not
+
+* **Frozen model vs baseline: no consistent separation.** Pooled MAE and RMSE are slightly lower
+  for the learned model in both periods, but its win proportion is 0.476 and 0.500. Its validation
+  sMAPE is *higher* than the baseline's, and on `city_hotel` its MAE is higher in both periods. The
+  direction matches the Stage 6.3 backtest (MAE 17.502 vs 18.371), and the size is small beside the
+  errors themselves. No significance test was pre-registered, so none is reported, and no winner
+  is declared.
+* **The two periods are not alike.** Validation (winter) errors are roughly four times the test
+  (summer) errors for *both* methods. That is a property of the months, not of either method, and
+  is why the protocol never pools the two.
+* **Transfer between the two hotels failed against the evaluated hotel's own baseline**, sharply
+  in the test period (win proportions 0.061 and 0.054). A model fitted on one hotel's history does
+  not carry over to the other here. Why — for example, a tree ensemble cannot predict outside the
+  range of targets it was fitted on, and the two hotels run at different levels — was **not
+  tested** and is only a hypothesis.
+* **Untested:** the weak range (no rows), any third hotel, live data, and uncertainty.
+
+**Same source, no generalisation.** Every number above comes from the same published dataset and
+the same two hotels the model was fitted on. Generalisation to other hotels is not established,
+production accuracy is not established, and business value is not established. The record's
+claims are all `false`.

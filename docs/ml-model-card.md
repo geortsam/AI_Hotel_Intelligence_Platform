@@ -475,3 +475,18 @@ What that means for this model:
 * **The one shared-code change** is a defaulted `dataset_horizon_days` parameter in
   `ml/models.py`, `ml/evaluation.py` and `ml/validation.py`; with its default the code computes
   exactly what produced this card's numbers, and every record in §16 still reproduces.
+
+---
+
+## 18. Addendum — R2.2: this model, frozen, on its never-fitted partitions
+
+R2.2 scored **this artifact, unrefitted** — canonical digest `436bf6b3…` measured before and
+after — on the `validation` and `test` partitions it was never fitted on, beside
+`seasonal_naive_7`, under the pre-registered `frozen_holdout_v1` protocol (committed before any
+score was computed). Learned vs baseline MAE: validation 31.204 vs 32.588, test 8.000 vs 8.777;
+win proportions 0.476 and 0.500. No winner is declared. A separate experiment refitted the same
+configuration on one hotel and scored the other; it did worse than the evaluated hotel's own
+baseline in both directions. The months come from the same two hotels as the training data, so
+§15's answers do not move: generalisation and production accuracy remain not established. See
+[ml-frozen-holdout-evaluation.md](ml-frozen-holdout-evaluation.md) and
+`ml/evaluations/frozen_holdout_v1.json`.

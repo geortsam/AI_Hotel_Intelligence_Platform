@@ -790,6 +790,13 @@ model, their forecasts are uncapped, and their on-the-books feature is an offlin
 No production accuracy, generalisation or business value is claimed. See
 [docs/ml-multi-horizon.md](docs/ml-multi-horizon.md).
 
+**Frozen hold-out evaluation of the served model (R2.2).** `demand_baseline_v1`, unrefitted and
+identified by its canonical digest before and after, scored on the validation and test months it
+was never fitted on, under a protocol committed before any score was computed; plus a separately
+labelled two-way cross-hotel experiment. Same source, same two hotels: no generalisation or
+production accuracy is claimed. See
+[docs/ml-frozen-holdout-evaluation.md](docs/ml-frozen-holdout-evaluation.md).
+
 ### V2 — NOT IMPLEMENTED
 
 None of these exists. Each would be built as its own stage, with its dependencies in

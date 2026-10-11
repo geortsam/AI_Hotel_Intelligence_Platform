@@ -89,6 +89,12 @@ ranks the horizons or picks one. Their `acceptance_v2` PASS says each measuremen
 protocol, not that any of them is accurate. See
 [`../docs/ml-multi-horizon.md`](../docs/ml-multi-horizon.md).
 
+**R2.2** scores the served artifact, unrefitted, on its never-fitted validation and test
+partitions under the pre-registered `frozen_holdout_v1` protocol (`frozen_holdout.py`,
+`pipelines/evaluate_frozen_holdout.py`), and writes one record, `evaluations/frozen_holdout_v1.json`.
+Nothing under `models/` is written. See
+[`../docs/ml-frozen-holdout-evaluation.md`](../docs/ml-frozen-holdout-evaluation.md).
+
 `requirements-ml.txt` pins scikit-learn and nothing else; CI's quality-gates job installs it (so
 Python 3.14 compatibility is verified rather than assumed), and since Stage 6.7
 `backend/requirements.txt` pins the same version so the API image can deserialise and score the
