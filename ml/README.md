@@ -98,6 +98,8 @@ Nothing under `models/` is written. See
 for R2.2's cross-hotel experiment under the pre-registered `hotel_transfer_v1` protocol and
 writes `evaluations/hotel_transfer_v1.json`; it never loads the served artifact. See
 [`../docs/ml-hotel-transfer-diagnostic.md`](../docs/ml-hotel-transfer-diagnostic.md).
+**R2.4** (research only) audits public hotel-demand datasets against those limitations and finds
+no suitable public candidate verified yet: [`../docs/ml-public-dataset-feasibility.md`](../docs/ml-public-dataset-feasibility.md).
 
 `requirements-ml.txt` pins scikit-learn and nothing else; CI's quality-gates job installs it (so
 Python 3.14 compatibility is verified rather than assumed), and since Stage 6.7
