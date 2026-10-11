@@ -7,6 +7,9 @@
     POST /hotels/{h}/documents/{d}/withdrawal           withdraw current      manager   200
     GET  /hotels/{h}/knowledge/search?q=&limit=         full-text search      member
 
+Every route is rate limited per caller, after authorization: reads share one allowance and
+writes another (`app.api.deps.actor_rate_limited`; the numbers are settings).
+
 Thin routes: each declares who may call it and delegates. The hotel is always the path segment
 the caller was authorized for -- no body field and no query parameter names a hotel, and the
 search takes only a query and a bound. The design, the versioning policy and the deletion
@@ -20,8 +23,12 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Path, Query, status
 
-from app.api.deps import KnowledgeServiceDep, require_role
-from app.models.enums import HotelRole
+from app.api.deps import (
+    KnowledgeServiceDep,
+    knowledge_read_rate_limit,
+    knowledge_write_rate_limit,
+    require_knowledge_manager,
+)
 from app.schemas.common import ErrorResponse, Page
 from app.schemas.knowledge import (
     DEFAULT_SEARCH_RESULTS,
@@ -62,6 +69,15 @@ UNPROCESSABLE: dict[int | str, dict[str, Any]] = {
         "description": "The request is malformed, out of bounds, or omits the attestation.",
     }
 }
+TOO_MANY_REQUESTS: dict[int | str, dict[str, Any]] = {
+    status.HTTP_429_TOO_MANY_REQUESTS: {
+        "model": ErrorResponse,
+        "description": (
+            "The caller has used up its allowance for this kind of request (`RATE_LIMITED`). "
+            "`Retry-After` gives the seconds until the window ends."
+        ),
+    }
+}
 CONFLICT: dict[int | str, dict[str, Any]] = {
     status.HTTP_409_CONFLICT: {
         "model": ErrorResponse,
@@ -88,8 +104,8 @@ UPLOAD_RULES = (
         "Stores the text as version 1 of a new document, split into citable chunks and indexed "
         f"for full-text search under the chosen language. Manager role. {UPLOAD_RULES}"
     ),
-    dependencies=[Depends(require_role(HotelRole.MANAGER))],
-    responses={**NOT_FOUND, **FORBIDDEN, **UNPROCESSABLE},
+    dependencies=[Depends(require_knowledge_manager), Depends(knowledge_write_rate_limit)],
+    responses={**NOT_FOUND, **FORBIDDEN, **UNPROCESSABLE, **TOO_MANY_REQUESTS},
 )
 def upload_document(
     hotel_public_id: HotelPath, payload: DocumentCreate, service: KnowledgeServiceDep
@@ -106,7 +122,8 @@ def upload_document(
         "Superseded and withdrawn versions are listed too: they remain addressable so a past "
         "citation can be explained. Any member."
     ),
-    responses={**NOT_FOUND, **UNPROCESSABLE},
+    dependencies=[Depends(knowledge_read_rate_limit)],
+    responses={**NOT_FOUND, **UNPROCESSABLE, **TOO_MANY_REQUESTS},
 )
 def list_documents(
     hotel_public_id: HotelPath,
@@ -135,7 +152,8 @@ def list_documents(
         "One version with every chunk in order, whatever its status. Any member. Chunk text is "
         "returned verbatim, as data."
     ),
-    responses={**NOT_FOUND, **UNPROCESSABLE},
+    dependencies=[Depends(knowledge_read_rate_limit)],
+    responses={**NOT_FOUND, **UNPROCESSABLE, **TOO_MANY_REQUESTS},
 )
 def get_document(
     hotel_public_id: HotelPath, document_public_id: DocumentPath, service: KnowledgeServiceDep
@@ -153,8 +171,8 @@ def get_document(
         "be the current, active one. The superseded version and its chunks stay addressable but "
         f"leave search. Manager role. {UPLOAD_RULES}"
     ),
-    dependencies=[Depends(require_role(HotelRole.MANAGER))],
-    responses={**NOT_FOUND, **FORBIDDEN, **UNPROCESSABLE, **CONFLICT},
+    dependencies=[Depends(require_knowledge_manager), Depends(knowledge_write_rate_limit)],
+    responses={**NOT_FOUND, **FORBIDDEN, **UNPROCESSABLE, **CONFLICT, **TOO_MANY_REQUESTS},
 )
 def upload_version(
     hotel_public_id: HotelPath,
@@ -174,8 +192,8 @@ def upload_version(
         "Takes the version out of search. Nothing is deleted: the version and its chunks keep "
         "their identifiers so a past citation can still be explained. Manager role."
     ),
-    dependencies=[Depends(require_role(HotelRole.MANAGER))],
-    responses={**NOT_FOUND, **FORBIDDEN, **UNPROCESSABLE, **CONFLICT},
+    dependencies=[Depends(require_knowledge_manager), Depends(knowledge_write_rate_limit)],
+    responses={**NOT_FOUND, **FORBIDDEN, **UNPROCESSABLE, **CONFLICT, **TOO_MANY_REQUESTS},
 )
 def withdraw_document(
     hotel_public_id: HotelPath, document_public_id: DocumentPath, service: KnowledgeServiceDep
@@ -195,7 +213,8 @@ def withdraw_document(
         "documents can match: the hotel is applied in the query itself. Any member. Result "
         "text is untrusted document content, returned as data."
     ),
-    responses={**NOT_FOUND, **UNPROCESSABLE},
+    dependencies=[Depends(knowledge_read_rate_limit)],
+    responses={**NOT_FOUND, **UNPROCESSABLE, **TOO_MANY_REQUESTS},
 )
 def search_knowledge(
     hotel_public_id: HotelPath,

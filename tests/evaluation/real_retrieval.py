@@ -532,7 +532,14 @@ def run(spec: Spec, database_url: str) -> dict[str, Any]:
             hotel = make_hotel(session, slug=f"real-retrieval-{uuid.uuid4().hex[:8]}")
             session.commit()
             hotel_public_id = str(hotel.public_id)
-        app = create_test_app(engine, auth_login_rate_limit=100)
+        # One manager uploads the whole corpus and runs every query: the per-caller knowledge
+        # limits are for interactive use, and a measurement must not be cut short by them.
+        app = create_test_app(
+            engine,
+            auth_login_rate_limit=100,
+            knowledge_read_rate_limit=1_000_000,
+            knowledge_write_rate_limit=1_000_000,
+        )
         email = f"real-retrieval-{uuid.uuid4().hex[:8]}@example.test"
         token = register_and_login(TestClient(app), email)
         grant_membership(engine, email, hotel_public_id, "manager")

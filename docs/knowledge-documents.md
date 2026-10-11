@@ -108,6 +108,27 @@ Limits: 100,000 characters per upload; at most 1,000 chunks; a chunk of at most 
   without a `hotel_id`, and no result is filtered in Python. Tests compile the real statement and
   run two hotels holding identical documents.
 
+### Rate limits
+
+Every knowledge route is rate limited **per caller**: the bucket is keyed by the caller's
+public identifier, not by address. Each limit is charged only **after** authorization, because
+the limit dependency depends on the route's own role check (`app.api.deps.actor_rate_limited`).
+A non-member therefore gets the hotel's 404, and a viewer attempting a write gets 403, without
+spending anything. Neither can learn from a 429 that a hotel exists.
+
+| Bucket | Routes | Default | Setting |
+|---|---|---|---|
+| reads | list, read one version, search | 120 per 60 s | `KNOWLEDGE_READ_RATE_LIMIT`, `KNOWLEDGE_READ_RATE_LIMIT_WINDOW_SECONDS` |
+| writes | upload, new version, withdraw | 30 per 3,600 s | `KNOWLEDGE_WRITE_RATE_LIMIT`, `KNOWLEDGE_WRITE_RATE_LIMIT_WINDOW_SECONDS` |
+
+A refusal is `429 RATE_LIMITED` with `Retry-After`. The windows are the two the limiter already
+used (login's and the copilot's), so no third window can shorten another policy's window when the
+limiter prunes. Like every limit here, the counters live in one process
+(`app.core.rate_limit`). The copilot's own `search_hotel_knowledge` tool calls the service
+directly and is bounded by the copilot budget instead. The operator measurement harness
+(`tests/evaluation/real_retrieval.py`) raises both limits, because it uploads a whole corpus as
+one caller.
+
 ## 6. Content is untrusted data
 
 Document text is stored, indexed and returned **verbatim**. Nothing interprets it: a document that

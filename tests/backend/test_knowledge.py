@@ -381,3 +381,76 @@ def test_the_knowledge_tool_arrived_with_stage_7_10_over_this_service() -> None:
     assert len(registry.names()) == 7  # Stage 7.12 added `get_hotel_priorities`
     contract = registry.get("search_hotel_knowledge").contract
     assert contract.delegates_to == "KnowledgeService.search"
+
+
+# ======================================================================================
+# Rate limits: every route, per caller, after authorization
+# ======================================================================================
+
+
+def route_dependencies() -> dict[tuple[str, str], list[object]]:
+    routes = [cast(APIRoute, route) for route in endpoints.router.routes]
+    return {
+        (sorted(route.methods or ())[0], route.path): [d.dependency for d in route.dependencies]
+        for route in routes
+    }
+
+
+def test_every_write_is_limited_after_its_manager_check_and_every_read_after_membership() -> None:
+    from app.api import deps
+
+    prefix = "/hotels/{hotel_public_id}"
+    write = [deps.require_knowledge_manager, deps.knowledge_write_rate_limit]
+    read = [deps.knowledge_read_rate_limit]
+    assert route_dependencies() == {
+        ("POST", f"{prefix}/documents"): write,
+        ("GET", f"{prefix}/documents"): read,
+        ("GET", f"{prefix}/documents/{{document_public_id}}"): read,
+        ("POST", f"{prefix}/documents/{{document_public_id}}/versions"): write,
+        ("POST", f"{prefix}/documents/{{document_public_id}}/withdrawal"): write,
+        ("GET", f"{prefix}/knowledge/search"): read,
+    }
+
+
+@pytest.mark.parametrize(
+    ("limit_name", "role_name", "role"),
+    [
+        ("knowledge_write_rate_limit", "require_knowledge_manager", "manager"),
+        ("knowledge_read_rate_limit", "require_knowledge_member", "viewer"),
+    ],
+)
+def test_a_limit_cannot_be_charged_before_its_role_check(
+    limit_name: str, role_name: str, role: str
+) -> None:
+    """Structural, as `copilot_budget` is: the limit DEPENDS on the role check, so FastAPI cannot
+    count a request from a non-member (404) or an under-ranked member (403)."""
+    from app.api import deps
+
+    limit = getattr(deps, limit_name)
+    role_check = getattr(deps, role_name)
+    assert inspect.signature(limit).parameters["_authorized"].default.dependency is role_check
+    assert role_check.__qualname__.startswith("require_role.")
+    cells = [cell.cell_contents for cell in (role_check.__closure__ or ())]
+    assert str(next(cell for cell in cells if hasattr(cell, "value")).value) == role
+
+
+def test_every_knowledge_route_documents_its_429() -> None:
+    for route in endpoints.router.routes:
+        assert 429 in cast(APIRoute, route).responses, cast(APIRoute, route).path
+
+
+def test_the_knowledge_limits_reuse_the_limiters_existing_windows() -> None:
+    """A third window would be a third way for one policy's prune to cut another's short."""
+    from app.core.config import Settings
+
+    fields = Settings.model_fields
+    assert fields["knowledge_read_rate_limit"].default == 120
+    assert fields["knowledge_write_rate_limit"].default == 30
+    assert (
+        fields["knowledge_read_rate_limit_window_seconds"].default
+        == fields["auth_login_rate_limit_window_seconds"].default
+    )
+    assert (
+        fields["knowledge_write_rate_limit_window_seconds"].default
+        == fields["copilot_rate_limit_window_seconds"].default
+    )

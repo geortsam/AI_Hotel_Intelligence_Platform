@@ -743,6 +743,57 @@ InsightServiceDep = Annotated[InsightService, Depends(get_insight_service)]
 #: the dependency graph rather than of the order a decorator lists its dependencies in.
 require_copilot_member = require_role(HotelRole.VIEWER)
 
+
+def actor_rate_limited(
+    scope: str,
+    authorized: Callable[..., None],
+    policy_of: Callable[[Settings], RateLimit],
+) -> Callable[..., None]:
+    """Declare a per-caller rate limit on a hotel-scoped route, charged after authorization.
+
+    :func:`rate_limited` keys by client address, which is right for a route anyone can call.
+    These routes need a token, so the bucket is the CALLER's ``public_id``: one member cannot
+    exhaust another's allowance by sharing an address, and rotating addresses does not reset it.
+
+    **Authorization first, structurally** -- the `copilot_budget` rule. *authorized* is the
+    route's own role dependency and this one depends on it, so FastAPI cannot charge a counter
+    before the caller is proved a member: a non-member gets the hotel's 404, spends nothing,
+    and cannot learn from a 429 that the property exists. FastAPI resolves a dependency once
+    per request, so a route that also lists *authorized* checks the role once.
+
+    A refusal is the ordinary `429 RATE_LIMITED` with `Retry-After`.
+    """
+
+    def dependency(
+        request: Request,
+        settings: SettingsDep,
+        current_user: CurrentUserDep,
+        _authorized: None = Depends(authorized),
+    ) -> None:
+        limiter: FixedWindowRateLimiter = request.app.state.rate_limiter
+        verdict = limiter.check(f"{scope}:{current_user.public_id}", policy_of(settings))
+        if not verdict.allowed:
+            raise RateLimitExceededError(verdict.retry_after)
+
+    return dependency
+
+
+#: Hotel knowledge documents (Stage 7.9). Reads -- list, read, search -- are open to any
+#: member; writes -- upload, new version, withdrawal -- need a manager and index up to 100,000
+#: characters each, so they get the smaller, slower allowance.
+require_knowledge_member = require_role(HotelRole.VIEWER)
+require_knowledge_manager = require_role(HotelRole.MANAGER)
+knowledge_read_rate_limit = actor_rate_limited(
+    "knowledge:read",
+    require_knowledge_member,
+    lambda s: RateLimit(s.knowledge_read_rate_limit, s.knowledge_read_rate_limit_window_seconds),
+)
+knowledge_write_rate_limit = actor_rate_limited(
+    "knowledge:write",
+    require_knowledge_manager,
+    lambda s: RateLimit(s.knowledge_write_rate_limit, s.knowledge_write_rate_limit_window_seconds),
+)
+
 #: The one sentence both budget refusals share. It does not say which allowance was spent: the
 #: caller learns to wait, and `Retry-After` says for how long.
 COPILOT_BUDGET_MESSAGE = "The assistant's usage limit has been reached. Please try again later."

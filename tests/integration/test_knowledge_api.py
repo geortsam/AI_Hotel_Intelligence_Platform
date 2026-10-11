@@ -96,18 +96,22 @@ class World:
         )
 
 
-@pytest.fixture
-def world(engine: Engine, session: Session) -> World:
+def build_world(engine: Engine, session: Session, **settings: Any) -> World:
     a = make_hotel(session, slug="knowledge-a")
     b = make_hotel(session, slug="knowledge-b")
     session.commit()
-    app = create_test_app(engine, auth_login_rate_limit=100)
+    app = create_test_app(engine, auth_login_rate_limit=100, **settings)
     bootstrap = TestClient(app)
     tokens = {name: register_and_login(bootstrap, email(name)) for name in USERS}
     grant_membership(engine, email("manager_a"), str(a.public_id), "manager")
     grant_membership(engine, email("viewer_a"), str(a.public_id), "viewer")
     grant_membership(engine, email("manager_b"), str(b.public_id), "manager")
     return World(session, a, b, app, tokens)
+
+
+@pytest.fixture
+def world(engine: Engine, session: Session) -> World:
+    return build_world(engine, session)
 
 
 def rows(session: Session, sql: str, **params: Any) -> list[dict[str, Any]]:
@@ -564,3 +568,87 @@ def test_the_retrieval_index_exists_and_is_gin(session: Session) -> None:
 def test_the_schema_is_at_the_new_head(session: Session) -> None:
     revision = session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
     assert revision == "0020_guest_email_rules"
+
+
+# --- rate limits: per caller, after authorization -----------------------------------------------
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 5000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def limited_world(engine: Engine, session: Session, **settings: Any) -> tuple[World, Clock]:
+    from app.core.rate_limit import FixedWindowRateLimiter
+
+    world = build_world(engine, session, **settings)
+    clock = Clock()
+    world.app.state.rate_limiter = FixedWindowRateLimiter(clock=clock)
+    return world, clock
+
+
+def assert_rate_limited(response: httpx.Response) -> None:
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "RATE_LIMITED"
+    assert int(response.headers["Retry-After"]) >= 1
+
+
+def test_reads_share_one_allowance_that_ends_with_its_window(
+    engine: Engine, session: Session
+) -> None:
+    world, clock = limited_world(engine, session, knowledge_read_rate_limit=3)
+    viewer = world.client("viewer_a")
+    base = f"/api/v1/hotels/{world.a.public_id}"
+
+    assert viewer.get(f"{base}/documents").status_code == 200
+    assert world.search("viewer_a", world.a, "pool").status_code == 200
+    assert viewer.get(f"{base}/documents").status_code == 200
+    refused = world.search("viewer_a", world.a, "pool")
+    assert_rate_limited(refused)
+    assert refused.headers["Retry-After"] == "60"
+
+    clock.now += 60
+    assert world.search("viewer_a", world.a, "pool").status_code == 200
+
+
+def test_writes_have_their_own_allowance(engine: Engine, session: Session) -> None:
+    world, _ = limited_world(engine, session, knowledge_write_rate_limit=2)
+
+    first = world.upload("manager_a", world.a)
+    assert first.status_code == 201
+    document = first.json()["public_id"]
+    assert world.new_version("manager_a", world.a, document, BREAKFAST).status_code == 201
+    assert_rate_limited(world.upload("manager_a", world.a, content=BREAKFAST))
+
+    # The read allowance is a different bucket, and is untouched.
+    assert world.search("manager_a", world.a, "breakfast").status_code == 200
+
+
+def test_each_caller_has_its_own_allowance(engine: Engine, session: Session) -> None:
+    world, _ = limited_world(engine, session, knowledge_read_rate_limit=1)
+
+    assert world.search("viewer_a", world.a, "pool").status_code == 200
+    assert_rate_limited(world.search("viewer_a", world.a, "pool"))
+    assert world.search("manager_a", world.a, "pool").status_code == 200
+
+
+def test_a_non_member_never_spends_an_allowance(engine: Engine, session: Session) -> None:
+    """404 before any counter: a refused outsider learns nothing from a 429 and spends nothing."""
+    world, _ = limited_world(engine, session, knowledge_read_rate_limit=1)
+
+    for _ in range(4):
+        assert world.search("outsider", world.a, "pool").status_code == 404
+        assert world.search("manager_b", world.a, "pool").status_code == 404
+
+    assert world.search("manager_b", world.b, "pool").status_code == 200
+
+
+def test_a_viewer_cannot_spend_the_write_allowance(engine: Engine, session: Session) -> None:
+    world, _ = limited_world(engine, session, knowledge_write_rate_limit=1)
+
+    for _ in range(3):
+        assert world.upload("viewer_a", world.a).status_code == 403
+    assert world.upload("manager_a", world.a).status_code == 201

@@ -201,6 +201,20 @@ class Settings(BaseSettings):
     copilot_hotel_rate_limit: int = Field(default=100, ge=1)
     copilot_rate_limit_window_seconds: int = Field(default=3600, ge=1)
 
+    # --- Knowledge document limits ------------------------------------------------
+    #
+    # Per caller, keyed by the caller's PUBLIC identifier and charged only after the caller's
+    # membership (or manager role) is established -- see `app.api.deps.actor_rate_limited`.
+    # Reads (list, read, search) and writes (upload, new version, withdrawal) are separate
+    # buckets. The windows are the two the limiter already uses (the login window and the
+    # copilot window) on purpose: the limiter prunes with the window of whichever call triggers
+    # a prune, so adding a third window would add a third way to cut another policy's window
+    # short. A refusal is `429 RATE_LIMITED` with `Retry-After`.
+    knowledge_read_rate_limit: int = Field(default=120, ge=1)
+    knowledge_read_rate_limit_window_seconds: int = Field(default=60, ge=1)
+    knowledge_write_rate_limit: int = Field(default=30, ge=1)
+    knowledge_write_rate_limit_window_seconds: int = Field(default=3600, ge=1)
+
     # --- Copilot conversation retention (Stage 7.11) --------------------------------------
     #
     # A conversation, and every turn in it, expires this many days after its last activity.
