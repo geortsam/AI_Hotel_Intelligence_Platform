@@ -59,6 +59,9 @@ from ml.loading import (
 from ml.manifests import content_checksum, serialise, stamp_content_checksum
 
 DEFAULT_RECORD = REPOSITORY_ROOT / "ml" / "evaluations" / f"{PROTOCOL_VERSION}.json"
+#: The commit that put ``frozen_holdout_v1`` and its checksum on ``main``, pushed before the
+#: first held-out score was computed.
+PROTOCOL_COMMIT = "7f1e40f88db69748cb0576fc2c9689eb96287b93"
 
 
 def _sha256_file(path: Path) -> str:
@@ -125,6 +128,9 @@ def evaluate(
         raise FrozenHoldoutError("the artifact files changed during the evaluation")
 
     record = dict(first)
+    protocol = record["protocol"]
+    assert isinstance(protocol, dict)
+    record["protocol"] = {**protocol, "committed_in": PROTOCOL_COMMIT}
     record["artifact_identity_check"] = {
         "canonical_model_digest_before": digest_before,
         "canonical_model_digest_after": digest_after,
