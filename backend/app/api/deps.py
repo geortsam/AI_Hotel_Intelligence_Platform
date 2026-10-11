@@ -816,7 +816,7 @@ def copilot_budget(
     **Keys are public identifiers only** -- the caller's `public_id` and the path's hotel UUID --
     never an internal BIGINT. The existing `FixedWindowRateLimiter` is used exactly as it is: an
     opaque key and a policy in, a verdict out. Both policies share one window (settings), so
-    neither can prune the other's live counters.
+    the two allowances reset together; the limiter prunes each bucket by its own window.
 
     **The actor is charged first, and the hotel only if the actor was allowed.** The limiter
     counts refused requests too; checking the hotel after an actor refusal would let one caller's

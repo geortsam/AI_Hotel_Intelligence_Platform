@@ -121,9 +121,9 @@ spending anything. Neither can learn from a 429 that a hotel exists.
 | reads | list, read one version, search | 120 per 60 s | `KNOWLEDGE_READ_RATE_LIMIT`, `KNOWLEDGE_READ_RATE_LIMIT_WINDOW_SECONDS` |
 | writes | upload, new version, withdraw | 30 per 3,600 s | `KNOWLEDGE_WRITE_RATE_LIMIT`, `KNOWLEDGE_WRITE_RATE_LIMIT_WINDOW_SECONDS` |
 
-A refusal is `429 RATE_LIMITED` with `Retry-After`. The windows are the two the limiter already
-used (login's and the copilot's), so no third window can shorten another policy's window when the
-limiter prunes. Like every limit here, the counters live in one process
+A refusal is `429 RATE_LIMITED` with `Retry-After`. The limiter prunes every bucket by its own
+window, so policies with different windows cannot shorten each other's. Like every limit here,
+the counters live in one process
 (`app.core.rate_limit`). The copilot's own `search_hotel_knowledge` tool calls the service
 directly and is bounded by the copilot budget instead. The operator measurement harness
 (`tests/evaluation/real_retrieval.py`) raises both limits, because it uploads a whole corpus as

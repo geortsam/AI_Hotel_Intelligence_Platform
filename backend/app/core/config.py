@@ -191,9 +191,9 @@ class Settings(BaseSettings):
     # §4.5: "per-actor and per-hotel call limits". Counted by the existing
     # `FixedWindowRateLimiter`, keyed by the caller's and the hotel's PUBLIC identifiers, and
     # charged only after the caller's membership has been established -- see
-    # `app.api.deps.copilot_budget`. One window for both, deliberately: the limiter prunes
-    # expired buckets using the window of the call that triggered the prune, and two policies
-    # sharing one window cannot prune each other's live counters.
+    # `app.api.deps.copilot_budget`. One window for both, so the two allowances reset together.
+    # (The limiter prunes each bucket by its own window, so differing windows would also be
+    # safe; until the mixed-window prune fix they were not.)
     #
     # A refusal is `429 LLM_BUDGET_EXHAUSTED` with `Retry-After`, not `RATE_LIMITED`: the
     # caller spent an allowance, it did not flood an endpoint.
@@ -206,10 +206,9 @@ class Settings(BaseSettings):
     # Per caller, keyed by the caller's PUBLIC identifier and charged only after the caller's
     # membership (or manager role) is established -- see `app.api.deps.actor_rate_limited`.
     # Reads (list, read, search) and writes (upload, new version, withdrawal) are separate
-    # buckets. The windows are the two the limiter already uses (the login window and the
-    # copilot window) on purpose: the limiter prunes with the window of whichever call triggers
-    # a prune, so adding a third window would add a third way to cut another policy's window
-    # short. A refusal is `429 RATE_LIMITED` with `Retry-After`.
+    # buckets, with their own windows: the limiter prunes every bucket by its own window, so
+    # policies with different windows cannot cut each other's counters short. A refusal is
+    # `429 RATE_LIMITED` with `Retry-After`.
     knowledge_read_rate_limit: int = Field(default=120, ge=1)
     knowledge_read_rate_limit_window_seconds: int = Field(default=60, ge=1)
     knowledge_write_rate_limit: int = Field(default=30, ge=1)

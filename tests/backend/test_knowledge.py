@@ -439,18 +439,13 @@ def test_every_knowledge_route_documents_its_429() -> None:
         assert 429 in cast(APIRoute, route).responses, cast(APIRoute, route).path
 
 
-def test_the_knowledge_limits_reuse_the_limiters_existing_windows() -> None:
-    """A third window would be a third way for one policy's prune to cut another's short."""
+def test_the_knowledge_limit_defaults() -> None:
+    """120 reads a minute, 30 writes an hour. Different windows are safe: the limiter prunes each
+    bucket by its own window (tests/backend/test_rate_limit.py)."""
     from app.core.config import Settings
 
     fields = Settings.model_fields
     assert fields["knowledge_read_rate_limit"].default == 120
+    assert fields["knowledge_read_rate_limit_window_seconds"].default == 60
     assert fields["knowledge_write_rate_limit"].default == 30
-    assert (
-        fields["knowledge_read_rate_limit_window_seconds"].default
-        == fields["auth_login_rate_limit_window_seconds"].default
-    )
-    assert (
-        fields["knowledge_write_rate_limit_window_seconds"].default
-        == fields["copilot_rate_limit_window_seconds"].default
-    )
+    assert fields["knowledge_write_rate_limit_window_seconds"].default == 3600

@@ -362,6 +362,8 @@ a silent degradation).
 > it: **20 questions per actor** and **100 per hotel** (`copilot_actor_rate_limit`,
 > `copilot_hotel_rate_limit`), over **one shared 3600-second window**
 > (`copilot_rate_limit_window_seconds`) so neither policy can prune the other's live counters.
+> *(Later: the limiter now prunes each bucket by its own window, so this no longer depends on
+> the windows being equal; they still are, so both allowances reset together.)*
 > Keys are the caller's `public_id` and the path's hotel UUID -- never an internal key. The
 > caller's membership is established first, so a non-member gets the hotel's 404 and never
 > touches its counter; the actor is charged before the hotel, and a refused actor does not charge

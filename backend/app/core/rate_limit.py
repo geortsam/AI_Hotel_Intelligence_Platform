@@ -76,7 +76,10 @@ class FixedWindowRateLimiter:
         #: a real minute. Nothing else in the application passes it.
         self._clock = clock
         self._max_keys = max_keys
-        self._buckets: dict[str, tuple[float, int]] = {}
+        #: key -> (window start, count, that bucket's own window length). The window is stored
+        #: with the bucket because one limiter serves policies with different windows -- login's
+        #: minute and the copilot's hour -- and only the bucket knows which one it is counting.
+        self._buckets: dict[str, tuple[float, int, float]] = {}
         self._lock = threading.Lock()
 
     def check(self, key: str, policy: RateLimit) -> Verdict:
@@ -89,13 +92,13 @@ class FixedWindowRateLimiter:
         now = self._clock()
         with self._lock:
             if len(self._buckets) >= self._max_keys:
-                self._prune(now, policy.window_seconds)
+                self._prune(now)
 
-            started, count = self._buckets.get(key, (now, 0))
+            started, count, _ = self._buckets.get(key, (now, 0, policy.window_seconds))
             if now - started >= policy.window_seconds:
                 started, count = now, 0
             count += 1
-            self._buckets[key] = (started, count)
+            self._buckets[key] = (started, count, policy.window_seconds)
 
         if count <= policy.limit:
             return Verdict(allowed=True, retry_after=0)
@@ -108,10 +111,17 @@ class FixedWindowRateLimiter:
         with self._lock:
             self._buckets.clear()
 
-    def _prune(self, now: float, window_seconds: float) -> None:
-        """Drop windows that have already expired. Caller holds the lock."""
+    def _prune(self, now: float) -> None:
+        """Drop windows that have already expired, each by ITS OWN length. Caller holds the lock.
+
+        Judging every bucket by the window of the call that happened to trigger the prune would
+        let a flood against a one-minute route (login) reset live one-hour counters (the copilot
+        budget) -- exactly when the table is full because someone is abusing the limiter.
+        """
         expired = [
-            key for key, (started, _) in self._buckets.items() if now - started >= window_seconds
+            key
+            for key, (started, _, window_seconds) in self._buckets.items()
+            if now - started >= window_seconds
         ]
         for key in expired:
             del self._buckets[key]
