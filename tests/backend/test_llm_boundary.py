@@ -791,6 +791,115 @@ def test_a_missing_sdk_at_call_time_is_a_declared_failure_not_an_import_error() 
         AnthropicChatModel(api_key="k", model="m").complete(request_for())
 
 
+# --- R2.6B: the SDK's retries, and which model answered ------------------------------------
+
+
+class RecordingSdk:
+    """A stand-in for the `anthropic` module that records how its client was constructed."""
+
+    def __init__(self) -> None:
+        self.constructed: list[dict[str, object]] = []
+
+    def Anthropic(self, **kwargs: object) -> object:  # noqa: N802 - the SDK's own spelling
+        self.constructed.append(kwargs)
+        return FakeClient(FakeMessage())
+
+
+@pytest.mark.parametrize("base_url", [None, "https://proxy.example.test"])
+def test_the_sdk_client_is_built_with_its_own_retries_explicitly_off(
+    monkeypatch: pytest.MonkeyPatch, base_url: str | None
+) -> None:
+    """One attempt is one HTTP request; the boundary's policy is the only retry."""
+    import sys
+
+    from app.llm.providers import anthropic_provider
+
+    sdk = RecordingSdk()
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+
+    AnthropicChatModel(api_key="k", model="m", base_url=base_url).complete(request_for())
+
+    assert anthropic_provider.SDK_MAX_RETRIES == 0
+    [kwargs] = sdk.constructed
+    assert kwargs["max_retries"] == 0
+    assert ("base_url" in kwargs) is (base_url is not None)
+
+
+def test_the_returned_model_id_is_kept_apart_from_the_configured_one() -> None:
+    message = FakeMessage()
+    message.model = "provider-returned-id"
+
+    response = AnthropicChatModel(
+        api_key="k", model="configured-id", client=FakeClient(message)
+    ).complete(request_for())
+
+    assert response.diagnostics == {"response_model": "provider-returned-id"}
+
+
+@pytest.mark.parametrize("missing", [None, ""])
+def test_a_response_naming_no_model_records_none_rather_than_the_configured_name(
+    missing: str | None,
+) -> None:
+    message = FakeMessage()
+    message.model = missing  # type: ignore[assignment]
+
+    response = AnthropicChatModel(
+        api_key="k", model="configured-id", client=FakeClient(message)
+    ).complete(request_for())
+
+    assert "response_model" not in response.diagnostics
+    # `.model` keeps its application meaning, unchanged: the configured name as a fallback.
+    assert response.model == "configured-id"
+
+
+def test_a_response_without_a_model_attribute_at_all_records_none() -> None:
+    class Bare:
+        def __init__(self) -> None:
+            self.content = [FakeBlock("hi")]
+            self.usage = FakeUsage()
+            self.stop_reason = "end_turn"
+
+    response = AnthropicChatModel(
+        api_key="k", model="configured-id", client=FakeClient(Bare())
+    ).complete(request_for())
+
+    assert response.diagnostics == {}
+
+
+def test_the_returned_model_id_survives_the_boundary() -> None:
+    """`_stamp` uses `replace`, so the adapter's diagnostics reach the caller intact."""
+    message = FakeMessage()
+    message.model = "provider-returned-id"
+    inner = AnthropicChatModel(api_key="secret-key-value", model="m", client=FakeClient(message))
+
+    response = guard(inner).complete(request_for())
+
+    assert response.diagnostics == {"response_model": "provider-returned-id"}
+    assert "secret-key-value" not in repr(response)
+
+
+def test_the_sdk_version_comes_from_package_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+    import importlib.metadata
+
+    from app.llm.providers import anthropic_provider
+
+    def absent(name: str) -> str:
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(importlib.metadata, "version", absent)
+    assert anthropic_provider.installed_sdk_version() is None
+
+    asked: list[str] = []
+
+    def version(name: str) -> str:
+        asked.append(name)
+        return "9.9.9"
+
+    monkeypatch.setattr(importlib.metadata, "version", version)
+    assert anthropic_provider.installed_sdk_version() == "9.9.9"
+    assert asked == [anthropic_provider.SDK_DISTRIBUTION]
+
+
 # ======================================================================================
 # G. The factory and settings
 # ======================================================================================

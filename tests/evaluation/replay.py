@@ -28,7 +28,11 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from app.llm.base import ChatModel, ChatRequest, ChatResponse, TokenUsage, ToolCall
+from app.llm.providers.anthropic_provider import RESPONSE_MODEL_KEY
 from app.services.copilot import PROMPT
+
+#: Recorded wherever a live run could not establish a value. Never replaced by a guess.
+UNKNOWN = "UNKNOWN"
 
 
 class _Case(Protocol):
@@ -105,9 +109,14 @@ class Replays:
     prompt: str
     prompt_checksum: str
     cases: Mapping[str, tuple[Turn, ...]] = field(default_factory=dict)
+    #: R2.6B. What a LIVE capture knows that a hand-written reference does not: the cases
+    #: selected, the configured and returned model ids, the SDK version. Written only when set,
+    #: and never read back -- `load_replays` binds a file by the fields above, so a capture
+    #: carrying this block replays exactly like one without it.
+    live_provenance: Mapping[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        recorded: dict[str, Any] = {
             "format": REPLAY_FORMAT,
             "provider": self.provider,
             "model": self.model,
@@ -121,6 +130,9 @@ class Replays:
                 for case_id, turns in sorted(self.cases.items())
             },
         }
+        if self.live_provenance is not None:
+            recorded["live_provenance"] = dict(self.live_provenance)
+        return recorded
 
 
 def load_replays(path: Path, question_set: ReplayableSet) -> Replays:
@@ -215,10 +227,23 @@ class RecordingModel:
             for response in self.responses
         )
 
+    def returned_models(self) -> tuple[str, ...]:
+        """Per recorded response, the model id the PROVIDER returned -- or `UNKNOWN`.
+
+        Read from the adapter's `diagnostics`, never from `ChatResponse.model`: that field falls
+        back to the configured name when a response names none, and copying the configuration
+        into a record of what answered is exactly the substitution this must not make.
+        """
+        return tuple(
+            str(response.diagnostics.get(RESPONSE_MODEL_KEY) or UNKNOWN)
+            for response in self.responses
+        )
+
 
 __all__ = [
     "REFERENCE_PROVIDER",
     "REPLAY_FORMAT",
+    "UNKNOWN",
     "RecordingModel",
     "ReplayError",
     "ReplayModel",

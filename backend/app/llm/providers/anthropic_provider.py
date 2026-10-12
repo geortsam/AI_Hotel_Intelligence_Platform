@@ -28,6 +28,21 @@ applies once for every provider — an adapter that implemented them too would b
 keep in step. Its whole job is: build the vendor's request, make the call, map the vendor's
 failures onto the declared taxonomy, and return a `ChatResponse`.
 
+**The SDK's own retries are switched off** (`SDK_MAX_RETRIES = 0`, R2.6B). The client used to be
+built without the setting, so the SDK's default retry policy -- not verified in this repository,
+which never installs the SDK -- could turn one `complete` into several billed HTTP requests that
+nothing here counted. Now one attempt is one HTTP request, and the boundary's §5.7 policy is the
+only retry. That does not make a failed call free: a request the provider received may still be
+billed, and a timed-out attempt is abandoned rather than cancelled (see the boundary).
+
+## Which model answered
+
+`ChatResponse.model` keeps its long-standing meaning for the application -- the provider's
+model id, or the configured one when the response names none. The id the provider ACTUALLY
+returned is also put in `diagnostics["response_model"]`, and only when the response carried
+one, so an evaluation can tell the configured name from the served model and record a missing
+one as unknown instead of copying the configuration.
+
 ## The key is read once and never travels
 
 The API key is read from settings at construction and handed to the client. It is never logged,
@@ -62,6 +77,7 @@ argument object is exactly the coerced guess §5.5 forbids, so it is the invalid
 
 from __future__ import annotations
 
+import importlib.metadata
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -77,6 +93,15 @@ if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime
 
 #: The provider's own name for itself, reported on every response for attribution.
 PROVIDER_NAME = "anthropic"
+
+#: The installed distribution whose version an evaluation records (`installed_sdk_version`).
+SDK_DISTRIBUTION = "anthropic"
+
+#: Passed to the client explicitly. Zero: the boundary owns retries (see the module docstring).
+SDK_MAX_RETRIES = 0
+
+#: The `diagnostics` key holding the model id the provider returned, when it returned one.
+RESPONSE_MODEL_KEY = "response_model"
 
 #: How the vendor's stop reasons map onto this seam's normalised vocabulary.
 #:
@@ -134,7 +159,7 @@ class AnthropicChatModel:
                 # Not an `ImportError` escaping to a caller: a runtime without the SDK is a
                 # runtime where the assistant is unavailable, which is a declared failure.
                 raise LlmUnavailableError() from missing
-            kwargs: dict[str, Any] = {"api_key": self._api_key}
+            kwargs: dict[str, Any] = {"api_key": self._api_key, "max_retries": SDK_MAX_RETRIES}
             if self._base_url is not None:
                 kwargs["base_url"] = self._base_url
             self._built = anthropic.Anthropic(**kwargs)
@@ -172,6 +197,8 @@ class AnthropicChatModel:
         elapsed_ms = (time.perf_counter() - started) * 1000
 
         stop_reason = getattr(message, "stop_reason", "") or ""
+        returned_model = getattr(message, "model", None)
+        named = returned_model if isinstance(returned_model, str) and returned_model else None
         calls = self._calls_of(message)
         if calls and stop_reason == "max_tokens":
             # Cut off while writing a call: the arguments may be truncated. See module docstring.
@@ -183,11 +210,12 @@ class AnthropicChatModel:
             usage=self._usage_of(message),
             latency_ms=elapsed_ms,
             provider=PROVIDER_NAME,
-            model=getattr(message, "model", self._model),
+            model=named or self._model,
             finish_reason=_FINISH_REASONS.get(stop_reason, "unknown"),
             prompt_id=request.prompt_id,
             prompt_version=request.prompt_version,
             tool_calls=calls,
+            diagnostics={} if named is None else {RESPONSE_MODEL_KEY: named},
         )
 
     # --- translation --------------------------------------------------------------------------
@@ -323,4 +351,23 @@ class AnthropicChatModel:
         return LlmUnavailableError()
 
 
-__all__ = ["PROVIDER_NAME", "AnthropicChatModel"]
+def installed_sdk_version() -> str | None:
+    """The installed SDK's version, from package metadata, or `None` when it is not installed.
+
+    Read from metadata rather than by importing the SDK, so it answers in a runtime without the
+    dependency -- which is every runtime this repository ships.
+    """
+    try:
+        return importlib.metadata.version(SDK_DISTRIBUTION)
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
+__all__ = [
+    "PROVIDER_NAME",
+    "RESPONSE_MODEL_KEY",
+    "SDK_DISTRIBUTION",
+    "SDK_MAX_RETRIES",
+    "AnthropicChatModel",
+    "installed_sdk_version",
+]

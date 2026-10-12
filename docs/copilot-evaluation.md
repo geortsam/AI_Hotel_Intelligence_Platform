@@ -127,15 +127,65 @@ python -m pytest tests/evaluation
 # Regenerate the pinned reference report after an INTENDED change -- then review the diff
 python -m tests.evaluation.harness --write-reference
 
-# Live capture (paid; needs the optional SDK and your key in the environment)
+# Live capture (paid; needs the optional SDK and your key in the environment, not on the
+# command line). A pilot of one case first, into a NEW directory outside the repository:
 pip install -r backend/requirements-llm.txt
-LLM_ENABLED=true LLM_API_KEY=... python scripts/copilot_live_eval.py \
-    --out eval-output --confirm-paid-api-call
+LLM_ENABLED=true LLM_MODEL=<verified model id> python scripts/copilot_live_eval.py \
+    --out ../copilot-eval/pilot-1 --confirm-paid-api-call --case kpis_may_occupancy
 ```
 
 The live script reads configuration only through `Settings`, never prints or writes the key, and
 writes the questions and answers about the fictional hotel to the directory you name. Nothing is
-committed automatically. `--set copilot_knowledge_eval_v1` runs §8's document set instead.
+committed automatically. `--set copilot_knowledge_eval_v1` runs §8's document set instead, and
+`--case ID` (repeatable) runs only those cases.
+
+### Safeguards (R2.6B)
+
+Each of these is checked **before a provider client exists**, so a refusal costs nothing, and
+each is pinned by `tests/evaluation/test_live_eval_script.py`, which runs the script end to end
+with a stand-in model and sockets disabled:
+
+- `--confirm-paid-api-call` is required; `LLM_ENABLED` must be true and a key set.
+- An `--out` **inside the Git repository is refused**: paths are resolved, and compared
+  case-insensitively where the platform is. A capture must be reviewed for secrets, sensitive
+  data and needless content before any of it is committed.
+- **Nothing is overwritten.** If `replays-<date>.json` or `report-<date>.json` already exists,
+  the run stops and asks for a new `--out`; files are also created exclusively, so one that
+  appears mid-run is not replaced either.
+- **One identity for the cases run.** Both files carry the checksum of the cases actually
+  selected, and a `live_provenance.selection` block: the case ids, the selected-set checksum and
+  the full set's identity, checksum and size. A one-case capture can therefore never pass as a
+  recording of the whole set -- `load_replays` refuses it against the full set.
+- **What answered is recorded, not assumed.** `live_provenance` holds the configured model id,
+  the model ids the provider **returned** per turn (`UNKNOWN` where a response named none --
+  never the configured name), and the installed SDK version from package metadata (`UNKNOWN`
+  if absent).
+
+### Request bounds
+
+The SDK's own retries are **off** (`SDK_MAX_RETRIES = 0` in the adapter), so one boundary attempt
+is one HTTP request and the boundary's policy is the only retry.
+
+| Quantity | Bound | Where it is fixed |
+|---|---|---|
+| Cases selected | *n*: 24 (`copilot_eval_v1`), 11 (`copilot_knowledge_eval_v1`), or the `--case` ids | the script |
+| Logical model calls per case | at most 4 (3 tool rounds and a final answer) | `MAX_TOOL_ROUNDS` in `app/copilot/loop.py` |
+| Attempts per logical call | at most 2 -- one retry, on a timeout or an invalid structured answer only; a rate limit, connection error or server error is not retried | `MAX_ATTEMPTS` in `app/llm/boundary.py` |
+| SDK retries per attempt | 0 | `SDK_MAX_RETRIES` in the adapter |
+| HTTP requests | at most *n* x 4 x 2 x (1 + 0) = **8*n*** (one case: 8; `copilot_eval_v1`: 192; both sets: 280); at least *n* | |
+| Output tokens | at most 1,024 per request (`LLM_MAX_OUTPUT_TOKENS`) | settings |
+
+**Billed requests the report does not show.** The report's token counts come from responses the
+copilot received. Not in them: an attempt that timed out -- it is abandoned, not cancelled, so
+its request may still complete and be billed while the retry runs -- and any failed request the
+provider bills. Zero SDK retries removes the hidden retries; it does not make a failed call free.
+The circuit breaker (5 availability failures in 60 s opens it for 30 s) stops a run from
+hammering a failing provider.
+
+**No monetary estimate is given.** It needs the provider's current per-token prices for the exact
+model id and the real input-token count per request (system prompt, tool catalogue and the growing
+exchange), which only a live run measures. A spending limit set at the provider is the safeguard
+this repository cannot supply.
 
 ---
 
