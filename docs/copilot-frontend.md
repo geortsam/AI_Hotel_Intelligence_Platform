@@ -92,6 +92,11 @@ around them was not checked. That is exactly what the server checks and no more.
 | `404` | hotel not available, or conversation not available | offered |
 | `504` or a non-JSON body | the answer did not arrive; it may still have been answered and counted | offered |
 
+`503 LLM_UNAVAILABLE` arrives on the **first** connection error or provider 5xx: the server does
+not retry those (provider SDK retries are disabled and the boundary retries only timeouts and
+malformed output -- [v2-architecture.md](v2-architecture.md) §5.7, Amendment A10), and a 429 is
+never retried. Asking again is the retry, which is why the input stays offered.
+
 ## 5. Conversations
 
 - The list shows the caller's own live conversations at this hotel (first page, 20 most recently

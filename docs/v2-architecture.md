@@ -29,6 +29,7 @@
 > | A7 | 7.12 — Attention list | 2026-09-26 | §5.5, §7.2 |
 > | A8 | 7.13 — Copilot front end | 2026-09-26 | §8 |
 > | A9 | V2 closure — audit F2 and documentation | 2026-09-27 | banner, §2.1, §4.4 (A6 retention), §7.2, §9.2, §10 |
+> | A10 | R2.6B/R2.6D — Provider retry ownership | 2026-10-12 | §5.7 |
 
 ---
 
@@ -488,6 +489,30 @@ Specified once, here, so no stage improvises it:
 
 In every case the response uses the existing `ErrorResponse` envelope and leaks no provider
 detail, no prompt and no stack.
+
+> **Amendment A10 (R2.6B, R2.6D) — who retries, and what is never retried.** The boundary
+> (`GuardedChatModel`) is the **only** retrier. Provider SDK-level retries are disabled: the
+> Anthropic adapter builds its client with `max_retries=0` (`SDK_MAX_RETRIES`, since `7726cf3`).
+> Before that the SDK's default retry policy applied, unexamined and uncounted, and could retry
+> a 429 inside one call, against row 2. Every failure now follows exactly one row:
+>
+> | Failure, as the adapter translates it | Attempts | Result | Circuit breaker (§5.8) |
+> |---|---|---|---|
+> | Timeout (the boundary's own deadline) | 2: one retry with jitter | `503 LLM_UNAVAILABLE` | one failure per call |
+> | Rate limited, HTTP 429 (`LlmRateLimitedError`) | 1: **never retried** | `429 LLM_RATE_LIMITED` | not a failure |
+> | Malformed structured output (fails the request's schema) | 2: one retry | `502 LLM_INVALID_RESPONSE` | not a failure |
+> | A response the adapter itself rejects (`LlmInvalidResponseError`) | 1 | `502 LLM_INVALID_RESPONSE` | not a failure |
+> | Connection error, provider 5xx, or an unrecognised provider error (`LlmUnavailableError`) | 1: **no boundary retry** | `503 LLM_UNAVAILABLE` | one failure per call |
+>
+> So connection errors and 5xx **fail fast**: a transient provider fault reaches the caller as a
+> 503 the first time it happens, and the copilot screen offers the question again
+> ([copilot-frontend.md](copilot-frontend.md) §4). A visible, counted boundary retry for them
+> was considered (R2.6C, option C) and not adopted. The production copilot
+> (`app.api.deps.get_chat_model`) and the live evaluation (`scripts/copilot_live_eval.py`) both
+> build their model through `app.llm.factory.build_chat_model`, so they share this policy
+> exactly, and a live evaluation's bound is at most 4 logical calls x 2 attempts x 1 HTTP
+> request = 8 per case ([copilot-evaluation.md](copilot-evaluation.md) §7). Tests in
+> `tests/backend/test_llm_boundary.py` hold each row and the shared construction path.
 
 > **Amendment A2 (Stage 7.7) — how the copilot endpoint presents each outcome.**
 >

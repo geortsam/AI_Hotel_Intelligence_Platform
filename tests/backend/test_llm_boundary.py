@@ -27,6 +27,7 @@ import ast
 import datetime as dt
 import hashlib
 import importlib
+import inspect
 import json
 import re
 from pathlib import Path
@@ -1216,3 +1217,190 @@ def test_no_test_in_this_module_can_reach_a_network(monkeypatch: pytest.MonkeyPa
         AnthropicChatModel(api_key="k", model="m").complete(request_for())
 
     assert adapter(FakeMessage("still offline")).complete(request_for()).text == "still offline"
+
+
+# ======================================================================================
+# R2.6D. Retry ownership, as §5.7 Amendment A10 states it -- held, not just described
+# ======================================================================================
+
+ARCHITECTURE = REPOSITORY_ROOT / "docs" / "v2-architecture.md"
+EVALUATION_DOC = REPOSITORY_ROOT / "docs" / "copilot-evaluation.md"
+LIVE_EVAL_SCRIPT = REPOSITORY_ROOT / "scripts" / "copilot_live_eval.py"
+FACTORY = LLM_PACKAGE / "factory.py"
+
+
+class StubClock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def calls_named(tree: ast.AST, name: str) -> list[ast.Call]:
+    """Every call to *name*, whether written `name(...)` or `module.name(...)`."""
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and (
+            (isinstance(node.func, ast.Name) and node.func.id == name)
+            or (isinstance(node.func, ast.Attribute) and node.func.attr == name)
+        )
+    ]
+
+
+def test_the_factory_builds_the_production_client_with_sdk_retries_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Through `build_chat_model`, the path the copilot and the live evaluation both take."""
+    import sys
+
+    sdk = RecordingSdk()
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        llm_enabled=True,
+        llm_api_key="test-key-not-real",
+        llm_model="r26d-factory-probe",
+    )
+
+    response = build_chat_model(settings).complete(request_for())
+
+    assert response.text == "hi"
+    [constructed] = sdk.constructed
+    assert set(constructed) == {"api_key", "max_retries"}
+    assert constructed["max_retries"] == 0
+
+
+def test_production_and_the_live_evaluation_build_through_the_shared_factory() -> None:
+    """One construction path, so the evaluation measures the client production uses."""
+    from app.api import deps
+
+    production = ast.parse(inspect.getsource(deps.get_chat_model))
+    assert len(calls_named(production, "build_chat_model")) == 1
+
+    script = ast.parse(LIVE_EVAL_SCRIPT.read_text(encoding="utf-8"))
+    assert len(calls_named(script, "build_chat_model")) == 1
+    assert any(
+        isinstance(node, ast.ImportFrom)
+        and node.module == "app.llm.factory"
+        and [alias.name for alias in node.names] == ["build_chat_model"]
+        for node in ast.walk(script)
+    )
+
+    builders = sorted(
+        path.relative_to(REPOSITORY_ROOT).as_posix()
+        for path in [*APP.rglob("*.py"), *(REPOSITORY_ROOT / "scripts").rglob("*.py")]
+        if calls_named(ast.parse(path.read_text(encoding="utf-8")), "AnthropicChatModel")
+    )
+    assert builders == [FACTORY.relative_to(REPOSITORY_ROOT).as_posix()]
+
+
+def test_an_unavailable_provider_is_not_retried_by_the_boundary() -> None:
+    failing = FailingModel(LlmUnavailableError)
+
+    with pytest.raises(LlmUnavailableError):
+        guard(failing).complete(request_for())
+
+    assert len(failing.calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("vendor_error", "expected"),
+    [
+        ("APIConnectionError", LlmUnavailableError),
+        ("InternalServerError", LlmUnavailableError),
+        ("SomethingNobodyHasSeen", LlmUnavailableError),
+        ("RateLimitError", LlmRateLimitedError),
+    ],
+)
+def test_a_vendor_failure_through_adapter_and_boundary_is_one_request(
+    vendor_error: str, expected: type[LlmError]
+) -> None:
+    """The real adapter under the real boundary: one HTTP-shaped call, whatever failed."""
+    client = FakeClient(type(vendor_error, (Exception,), {})())
+    model = guard(AnthropicChatModel(api_key="k", model="m", client=client))
+
+    with pytest.raises(expected):
+        model.complete(request_for())
+
+    assert len(client.messages.calls) == 1
+
+
+def test_each_unavailable_call_is_one_breaker_failure_and_the_threshold_opens_it() -> None:
+    """§5.8: one call is one failure; the fifth opens the breaker; then the provider is spared."""
+    from app.llm.circuit import FAILURE_THRESHOLD, CircuitBreaker
+    from app.llm.errors import LlmCircuitOpenError
+
+    breaker = CircuitBreaker(monotonic=StubClock())
+    failing = FailingModel(LlmUnavailableError)
+    model = guard(failing, breaker=breaker)
+
+    for call in range(1, FAILURE_THRESHOLD + 1):
+        with pytest.raises(LlmUnavailableError):
+            model.complete(request_for())
+        assert len(failing.calls) == call
+        assert breaker.state == ("open" if call == FAILURE_THRESHOLD else "closed")
+
+    with pytest.raises(LlmCircuitOpenError):
+        model.complete(request_for())
+    assert len(failing.calls) == FAILURE_THRESHOLD
+
+
+@pytest.mark.parametrize("error", [LlmRateLimitedError, LlmInvalidResponseError])
+def test_a_rate_limit_or_a_rejected_response_is_neither_retried_nor_a_breaker_failure(
+    error: type[LlmError],
+) -> None:
+    from app.llm.circuit import FAILURE_THRESHOLD, CircuitBreaker
+
+    breaker = CircuitBreaker(monotonic=StubClock())
+    failing = FailingModel(error)
+    model = guard(failing, breaker=breaker)
+
+    for _ in range(FAILURE_THRESHOLD * 2):
+        with pytest.raises(error):
+            model.complete(request_for())
+
+    assert len(failing.calls) == FAILURE_THRESHOLD * 2
+    assert breaker.state == "closed"
+
+
+def test_the_documented_evaluation_bound_is_the_configured_one() -> None:
+    """4 logical calls x 2 attempts x (1 + SDK retries) = 8 HTTP requests per case.
+
+    Each factor is read from where it is set: the loop bound from the `ToolLoop` the copilot
+    actually constructs (no override, so the parameter's default), the attempts from the
+    boundary, the SDK retries from the adapter.
+    """
+    from app.copilot.loop import ToolLoop
+    from app.llm.providers.anthropic_provider import SDK_MAX_RETRIES
+    from app.services import copilot as copilot_service
+
+    [construction] = calls_named(ast.parse(inspect.getsource(copilot_service)), "ToolLoop")
+    assert [keyword.arg for keyword in construction.keywords] == []
+    max_rounds = inspect.signature(ToolLoop.__init__).parameters["max_rounds"].default
+
+    per_case = (max_rounds + 1) * MAX_ATTEMPTS * (1 + SDK_MAX_RETRIES)
+
+    assert per_case == 8
+    assert "8 per case" in ARCHITECTURE.read_text(encoding="utf-8")
+    assert "**8*n***" in EVALUATION_DOC.read_text(encoding="utf-8")
+    assert "at most 8 HTTP requests per case" in LIVE_EVAL_SCRIPT.read_text(encoding="utf-8")
+
+
+def test_amendment_a10_states_the_policy_these_tests_hold() -> None:
+    document = ARCHITECTURE.read_text(encoding="utf-8")
+    amendment = document[document.index("**Amendment A10") :]
+    amendment = amendment[: amendment.index("### 5.8")]
+    for phrase in [
+        "`max_retries=0`",
+        "the **only** retrier",
+        "**never retried**",
+        "**no boundary retry**",
+        "one failure per call",
+        "app.llm.factory.build_chat_model",
+    ]:
+        assert phrase in amendment, phrase
+    assert "| A10 |" in document
