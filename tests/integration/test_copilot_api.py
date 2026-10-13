@@ -498,8 +498,18 @@ def test_a_disabled_deployment_answers_503_and_still_accounts(
     assert rows(world.session)[0]["error_code"] == "LLM_DISABLED"
 
 
-def test_no_credential_or_provider_detail_leaks(engine: Engine, session: Session) -> None:
-    """An enabled deployment whose SDK is absent: the real adapter's declared 503, nothing more."""
+def test_no_credential_or_provider_detail_leaks(
+    engine: Engine, session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An enabled deployment whose SDK is absent: the real adapter's declared 503, nothing more.
+
+    The SDK is SIMULATED absent (`None` in `sys.modules` makes `import anthropic` raise), so the
+    real factory and adapter run but no provider client can be built -- and no request can leave
+    the process -- whether or not the SDK is installed on this machine (R2.7A).
+    """
+    import sys
+
+    monkeypatch.setitem(sys.modules, "anthropic", None)
     key = "sk-copilot-sentinel-key-0001"
     world = build_world(
         engine, session, llm_enabled=True, llm_api_key=key, llm_model="leak-probe-model"
@@ -508,6 +518,7 @@ def test_no_credential_or_provider_detail_leaks(engine: Engine, session: Session
 
     response = world.ask("viewer", world.a)
 
+    assert sys.modules["anthropic"] is None  # nothing imported a real SDK during the request
     assert response.status_code == 503
     for secret in [key, "anthropic", "leak-probe-model", "Traceback"]:
         assert secret not in response.text

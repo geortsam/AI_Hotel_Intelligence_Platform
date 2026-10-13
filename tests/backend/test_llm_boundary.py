@@ -26,10 +26,10 @@ from __future__ import annotations
 import ast
 import datetime as dt
 import hashlib
-import importlib
 import inspect
 import json
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -77,6 +77,42 @@ PERMITTED_SDK_MODULE = "app/llm/providers/anthropic_provider.py"
 
 #: Vendor SDKs no module outside that one may import.
 VENDOR_SDKS = ("anthropic", "openai", "cohere", "google.generativeai", "mistralai", "langchain")
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Every test in this module runs with sockets disabled (R2.7A).
+
+    Whether the vendor SDK is installed is a property of the machine, not of this suite: since
+    R2.7 a developer's environment may carry it. A test that reached a real client would then
+    try the provider. Each attempt is refused AND recorded, and the test fails at teardown if
+    any was made -- so an HTTP client that catches the refusal and reports a connection error
+    cannot hide the attempt.
+    """
+    import socket
+
+    attempts: list[str] = []
+
+    def refuse(*args: object, **kwargs: object) -> None:
+        attempts.append(repr(args[:1]))
+        raise AssertionError("a test attempted to open a socket")
+
+    monkeypatch.setattr(socket, "socket", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
+    yield
+    assert attempts == [], f"a test attempted to open a socket: {attempts}"
+
+
+@pytest.fixture
+def sdk_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Simulate the vendor SDK not being installed, whatever is actually installed.
+
+    `None` in `sys.modules` makes `import anthropic` raise `ImportError` -- exactly what the
+    adapter's deferred import meets in a runtime without the dependency.
+    """
+    import sys
+
+    monkeypatch.setitem(sys.modules, "anthropic", None)
 
 
 def prompt() -> PromptRecord:
@@ -698,17 +734,28 @@ def adapter(result: object) -> AnthropicChatModel:
     return AnthropicChatModel(api_key="secret-key-value", model="m", client=FakeClient(result))
 
 
-def test_the_adapter_module_imports_without_the_sdk_installed() -> None:
+def test_the_adapter_module_imports_without_the_sdk_installed(sdk_absent: None) -> None:
     """The whole dependency-isolation claim, asserted rather than asserted about.
 
-    `anthropic` is genuinely absent here — it is in `requirements-llm.txt`, which neither CI nor
-    the image installs — so this import succeeding is the proof that the deferred import works.
+    The SDK is made unimportable for the duration (`sdk_absent`) -- it is in
+    `requirements-llm.txt`, which neither CI nor the image installs, but a developer's machine
+    may have it. A FRESH copy of the adapter is then executed from its file, under a private
+    name, so the shared module the rest of the suite uses is untouched: if the module imported
+    the SDK at module scope, this execution would raise.
     """
+    import importlib.util
+    import sys
+
     with pytest.raises(ImportError):
         importlib.import_module("anthropic")
 
-    module = importlib.import_module("app.llm.providers.anthropic_provider")
+    spec = importlib.util.spec_from_file_location("_adapter_without_sdk", ADAPTER)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
     assert module.PROVIDER_NAME == "anthropic"
+    assert sys.modules["anthropic"] is None  # still unimportable: nothing loaded it
 
 
 def test_the_adapter_translates_a_successful_message() -> None:
@@ -786,10 +833,18 @@ def test_the_api_key_never_appears_in_an_answer_or_an_error() -> None:
     assert "secret-key-value" not in repr(raised.value)
 
 
-def test_a_missing_sdk_at_call_time_is_a_declared_failure_not_an_import_error() -> None:
-    """A runtime without the dependency serves a 503, it does not crash the process."""
+def test_a_missing_sdk_at_call_time_is_a_declared_failure_not_an_import_error(
+    sdk_absent: None,
+) -> None:
+    """A runtime without the dependency serves a 503, it does not crash the process.
+
+    The SDK is simulated absent, so no real client is ever built -- installed or not.
+    """
+    model = AnthropicChatModel(api_key="k", model="m")
+
     with pytest.raises(LlmUnavailableError):
-        AnthropicChatModel(api_key="k", model="m").complete(request_for())
+        model.complete(request_for())
+    assert model._built is None
 
 
 # --- R2.6B: the SDK's retries, and which model answered ------------------------------------
@@ -1195,12 +1250,16 @@ def test_the_ml_requirements_claim_about_llm_clients_is_still_true() -> None:
 # ======================================================================================
 
 
-def test_no_test_in_this_module_can_reach_a_network(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_test_in_this_module_can_reach_a_network(
+    monkeypatch: pytest.MonkeyPatch, sdk_absent: None
+) -> None:
     """§5.6: "no test in CI ever makes a network call". Asserted by removing the ability.
 
-    Sockets are disabled for the duration, and the whole seam is exercised underneath: if any
-    path here opened one, this test would fail rather than quietly succeeding on a machine that
-    happens to be online.
+    Sockets are disabled for the duration (as they are for every test here -- `no_network`), and
+    the whole seam is exercised underneath: if any path here opened one, this test would fail
+    rather than quietly succeeding on a machine that happens to be online. The real adapter is
+    exercised with the SDK simulated absent, so it meets its declared failure without building
+    a client, whatever is installed.
     """
     import socket
 
@@ -1213,8 +1272,10 @@ def test_no_test_in_this_module_can_reach_a_network(monkeypatch: pytest.MonkeyPa
     response = guard(ScriptedModel("offline")).complete(request_for())
     assert response.text == "offline"
 
+    real = AnthropicChatModel(api_key="k", model="m")
     with pytest.raises(LlmUnavailableError):
-        AnthropicChatModel(api_key="k", model="m").complete(request_for())
+        real.complete(request_for())
+    assert real._built is None
 
     assert adapter(FakeMessage("still offline")).complete(request_for()).text == "still offline"
 
