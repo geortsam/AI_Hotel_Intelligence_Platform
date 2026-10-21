@@ -12,6 +12,7 @@ never built. ``secret_key`` signs and verifies authentication tokens
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Annotated, Literal
 
@@ -21,6 +22,19 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from app.core.client_address import parse_trusted_proxy
 
 Environment = Literal["development", "test", "staging", "production"]
+
+#: A variable the provider SDK reads from the process environment on its own, whatever the
+#: application passes, and merges into the headers of EVERY request -- after, and so over, the
+#: application's own, the API key included. An enabled copilot refuses to load while it is set
+#: (`Settings._no_provider_headers_from_the_environment`, R2.7I).
+PROVIDER_HEADERS_VARIABLE = "ANTHROPIC_CUSTOM_HEADERS"
+
+#: The refusal. Fixed text: the variable is checked for presence only, its value never read.
+PROVIDER_HEADERS_REFUSAL = (
+    "ANTHROPIC_CUSTOM_HEADERS is set in the environment. The provider SDK would add its headers "
+    "to every provider request, so the copilot will not start with it set. Unset it, or set "
+    "LLM_ENABLED=false to run without a provider."
+)
 
 
 class Settings(BaseSettings):
@@ -188,8 +202,18 @@ class Settings(BaseSettings):
     #: names a vendor, so the name is resolved here and nowhere above `app.llm`.
     llm_provider: Literal["anthropic"] = "anthropic"
     llm_model: str = "claude-sonnet-5"
-    #: Optional override for a gateway or a regional endpoint. None means the SDK's default.
+    #: Optional override for a gateway or a regional endpoint: an absolute https:// URL, passed
+    #: through unchanged. None means https://api.anthropic.com -- never the SDK's
+    #: ANTHROPIC_BASE_URL environment fallback (app.llm.providers.anthropic_provider, R2.7D).
     llm_base_url: str | None = None
+    #: The provider's extended-thinking setting (R2.7F; default since R2.7I). `disabled` -- the
+    #: default -- sends `thinking={"type": "disabled"}` on every request. The adapter does not
+    #: replay thinking blocks, which the provider requires within a tool-use turn, so the default
+    #: must not ask for any. `provider_default` sends no `thinking` parameter and leaves the
+    #: model's own default in force: an explicit opt-in whose tool-use replay is NOT supported or
+    #: verified (v2-architecture.md §5.2, A12 and A13). Anything else is refused when the
+    #: settings load.
+    llm_thinking: Literal["disabled", "provider_default"] = "disabled"
     #: Read from the environment and never logged, never placed in an error and never returned
     #: in a response. Tests assert all three.
     llm_api_key: str | None = None
@@ -316,6 +340,22 @@ class Settings(BaseSettings):
                 "LLM_ENABLED is true but LLM_API_KEY is not set. Set the key, or set "
                 "LLM_ENABLED=false to run without a provider."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _no_provider_headers_from_the_environment(self) -> Settings:
+        """Refuse an enabled copilot while `ANTHROPIC_CUSTOM_HEADERS` is in the environment.
+
+        The SDK reads that variable itself and adds its headers to every request, overriding the
+        application's own -- so another tool's setting in the same shell could change what is
+        sent, or under whose credential. Refused rather than stripped: a request this application
+        did not shape must not be sent at all. Only PRESENCE is checked; the value is never read,
+        so it cannot reach this message or a log. The process environment is what the SDK reads,
+        so that is what is checked -- a `.env` entry never reaches the SDK. A disabled copilot
+        builds no client, so it is not refused. The adapter checks again when it builds a client.
+        """
+        if self.llm_enabled and PROVIDER_HEADERS_VARIABLE in os.environ:
+            raise ValueError(PROVIDER_HEADERS_REFUSAL)
         return self
 
     @model_validator(mode="after")

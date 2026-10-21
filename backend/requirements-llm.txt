@@ -23,8 +23,21 @@
 # asserts both: that the import is absent from every other module, and that the adapter imports
 # cleanly with the SDK uninstalled.
 #
-# No test in CI installs this file and no test makes a network call. The adapter's translation
-# is tested against a stand-in with the SDK's shape; whether the live endpoint behaves as
-# documented is not something this repository's tests can establish.
+# No test in CI installs this file and no test makes a network call. CI tests the adapter's
+# translation against a stand-in with the SDK's shape. Where this file IS installed -- a
+# developer machine -- tests/backend/test_anthropic_sdk_compat.py also runs the real SDK over an
+# in-memory transport; CI skips it. Whether the live endpoint behaves as documented is not
+# something this repository's tests can establish.
+#
+# NOT HASH-LOCKED (R2.7I). The other dependency files have uv-generated, hashed locks installed
+# with `--require-hashes` (backend/requirements-lock.txt, backend/requirements-dev-lock.txt).
+# This file is only an exact top-level pin: `pip install -r` resolves the SDK's own dependencies
+# (httpx, anyio, pydantic, jiter, distro, sniffio, docstring-parser, typing-extensions)
+# without hashes. A lock needs package-index access and was not produced offline. Proposed
+# follow-up, in the existing locks' style and NOT yet run or verified:
+#
+#   uv pip compile backend/requirements-llm.txt --universal --python-version 3.14 \
+#       --generate-hashes --constraint backend/requirements-dev-lock.txt \
+#       --exclude-newer <timestamp> -o backend/requirements-llm-lock.txt
 
-anthropic==0.42.0
+anthropic==0.125.0

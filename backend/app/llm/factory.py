@@ -122,6 +122,7 @@ def _build_provider(settings: Settings) -> ChatModel:
             api_key=settings.llm_api_key or "",
             model=settings.llm_model,
             base_url=settings.llm_base_url,
+            thinking=settings.llm_thinking,
         )
     raise ValueError(f"No adapter is built for provider {settings.llm_provider!r}.")
 

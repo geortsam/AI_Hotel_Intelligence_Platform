@@ -69,6 +69,8 @@ class World:
         self.out = out
         self.built: list[StandInModel] = []
         self.returned: str | None = RETURNED
+        #: None: `LLM_THINKING` not configured, so the settings default applies.
+        self.thinking: str | None = None
 
     def run(self, *extra: str) -> int:
         return int(
@@ -98,17 +100,20 @@ def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> World:
 
     script = load_script()
     state = World(script, tmp_path / "run-1")
-    monkeypatch.setattr(
-        script,
-        "load_settings",
-        lambda: Settings(
+    monkeypatch.delenv("LLM_THINKING", raising=False)  # the parent shell must not decide it
+
+    def configured() -> Settings:
+        extra: dict[str, Any] = {} if state.thinking is None else {"llm_thinking": state.thinking}
+        return Settings(
             _env_file=None,
             environment="test",
             llm_enabled=True,
             llm_api_key=SENTINEL_KEY,
             llm_model=CONFIGURED,
-        ),
-    )
+            **extra,
+        )
+
+    monkeypatch.setattr(script, "load_settings", configured)
 
     def build(_settings: Settings) -> StandInModel:
         model = StandInModel(state.returned)
@@ -213,6 +218,70 @@ def test_the_sdk_version_is_recorded_from_metadata_or_as_unknown(
     assert world.run("--case", "kpis_may_occupancy") == 0
     _, report = world.files()
     assert report["live_provenance"]["sdk_version"] == "0.42.0"
+
+
+def test_the_actually_installed_sdk_version_is_recorded(world: World) -> None:
+    """Unpatched: whatever package metadata says is installed here, or `UNKNOWN` (R2.7F)."""
+    import importlib.metadata
+
+    try:
+        expected = importlib.metadata.version("anthropic")
+    except importlib.metadata.PackageNotFoundError:
+        expected = "UNKNOWN"
+
+    assert world.run("--case", "kpis_may_occupancy") == 0
+    replays, report = world.files()
+    assert replays["live_provenance"]["sdk_version"] == expected
+    assert report["live_provenance"]["sdk_version"] == expected
+
+
+def test_an_unconfigured_run_records_the_safe_default(world: World) -> None:
+    """R2.7I: with `LLM_THINKING` unset, the capture records `disabled` -- what was sent."""
+    assert world.run("--case", "kpis_may_occupancy") == 0
+
+    replays, report = world.files()
+    assert replays["live_provenance"]["thinking"] == "disabled"
+    assert report["live_provenance"]["thinking"] == "disabled"
+
+
+def test_custom_headers_in_the_environment_refuse_the_run_before_a_client_exists(
+    world: World,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The script's REAL `load_settings`, run from an empty directory so no `.env` is read."""
+    from app.core.config import PROVIDER_HEADERS_REFUSAL
+
+    script = load_script()  # unpatched: the world fixture replaced the other copy's loader
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    monkeypatch.setenv("LLM_API_KEY", SENTINEL_KEY)
+    monkeypatch.setenv("ANTHROPIC_CUSTOM_HEADERS", "X-Probe-R27i: SENTINEL-HEADER-VALUE-9f3")
+
+    code = script.main(
+        ["--out", str(tmp_path / "out"), "--confirm-paid-api-call", "--case", "kpis_may_occupancy"],
+        today=lambda: TODAY,
+    )
+
+    printed = capsys.readouterr()
+    assert code == 2
+    assert world.built == []
+    assert PROVIDER_HEADERS_REFUSAL in printed.err
+    for leaked in ("SENTINEL-HEADER-VALUE-9f3", "X-Probe-R27i", SENTINEL_KEY):
+        assert leaked not in printed.err
+        assert leaked not in printed.out
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("mode", ["provider_default", "disabled"])
+def test_the_effective_thinking_setting_is_recorded_in_both_files(world: World, mode: str) -> None:
+    world.thinking = mode
+    assert world.run("--case", "kpis_may_occupancy") == 0
+
+    replays, report = world.files()
+    assert replays["live_provenance"]["thinking"] == mode
+    assert report["live_provenance"]["thinking"] == mode
 
 
 # --- never overwrite --------------------------------------------------------------------------

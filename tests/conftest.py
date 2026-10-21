@@ -11,8 +11,19 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.config import Settings
+from app.core.config import PROVIDER_HEADERS_VARIABLE, Settings
 from app.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_provider_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every test starts without `ANTHROPIC_CUSTOM_HEADERS` (R2.7I).
+
+    An enabled copilot refuses to load while it is set, so an ambient value -- another tool in
+    the developer's shell -- would fail every test that builds an enabled configuration, for a
+    reason unrelated to the test. Removed unread; a test of the refusal sets its own.
+    """
+    monkeypatch.delenv(PROVIDER_HEADERS_VARIABLE, raising=False)
 
 
 @pytest.fixture

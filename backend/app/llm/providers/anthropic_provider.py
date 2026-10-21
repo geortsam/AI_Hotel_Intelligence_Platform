@@ -29,11 +29,11 @@ keep in step. Its whole job is: build the vendor's request, make the call, map t
 failures onto the declared taxonomy, and return a `ChatResponse`.
 
 **The SDK's own retries are switched off** (`SDK_MAX_RETRIES = 0`, R2.6B). The client used to be
-built without the setting, so the SDK's default retry policy -- not verified in this repository,
-which never installs the SDK -- could turn one `complete` into several billed HTTP requests that
-nothing here counted. Now one attempt is one HTTP request, and the boundary's §5.7 policy is the
-only retry. That does not make a failed call free: a request the provider received may still be
-billed, and a timed-out attempt is abandoned rather than cancelled (see the boundary).
+built without the setting, so the SDK's default retry policy -- unexamined then, because neither
+CI nor the image installs the SDK -- could turn one `complete` into several billed HTTP requests
+that nothing here counted. Now one attempt is one HTTP request, and the boundary's §5.7 policy is
+the only retry. That does not make a failed call free: a request the provider received may still
+be billed, and a timed-out attempt is abandoned rather than cancelled (see the boundary).
 
 ## Which model answered
 
@@ -54,8 +54,11 @@ test asserts the string does not appear in any raised error or returned object.
 No test here makes a network call, and none requires a credential — §5.6 and the Stage 7.5
 acceptance criteria both say so. What the tests cover is the translation: that a vendor error of
 each kind becomes the right declared failure, that the request is shaped as the SDK expects, and
-that nothing vendor-specific escapes. Whether the live endpoint behaves as its documentation says
-is not something a test in this repository can establish, and this module does not claim it.
+that nothing vendor-specific escapes. Where the optional SDK is installed -- a developer machine,
+not CI or the image -- `tests/backend/test_anthropic_sdk_compat.py` also runs the real SDK's
+request building and response parsing over an in-memory transport; CI skips it. Whether the live
+endpoint behaves as its documentation says is not something a test in this repository can
+establish, and this module does not claim it.
 
 ## Tool use (Stage 7.6)
 
@@ -73,6 +76,46 @@ format is." Translation only, in both directions:
 An answer that asked for tools may carry no text, which is not malformed. An answer cut off at
 the token limit **while** asking for a tool is: its arguments may be truncated, and a partial
 argument object is exactly the coerced guess §5.5 forbids, so it is the invalid-response failure.
+
+## The endpoint is chosen here, never by the environment (R2.7D)
+
+The client is **always** built with an explicit `base_url`: the configured `LLM_BASE_URL` when
+one is set, otherwise `DEFAULT_BASE_URL`. Left unset, the SDK would read `ANTHROPIC_BASE_URL`
+from the process environment -- a variable this application does not own, which another tool in
+the same shell may have set -- and send the API key to whatever it names. That fallback is
+never reached.
+
+A configured `LLM_BASE_URL` must be an absolute `https://` URL with a host, and no credentials,
+query, fragment or surrounding whitespace; a path prefix and a port are allowed. It is passed to
+the SDK exactly as written -- never trimmed, lower-cased or otherwise rewritten -- and anything
+else is refused when the adapter is constructed, before a client exists, with a message that does
+not echo the value (a URL can carry credentials).
+
+## Extended thinking is a setting, off by default, and never replayed (R2.7F, R2.7I)
+
+`LLM_THINKING` is one of `THINKING_MODES`. `disabled` -- the default since R2.7I -- sends
+`thinking={"type": "disabled"}` on every request. `provider_default` sends no `thinking`
+parameter, so the model's own default applies; it is an explicit opt-in only. Anything else is
+refused at construction, before a client exists.
+
+Thinking blocks in an answer are never text: `_text_of` reads only `text` blocks and `_calls_of`
+only `tool_use` blocks, so a `thinking` or `redacted_thinking` block reaches no caller. Nor are
+they kept: an assistant turn that made calls is replayed as its text and its `tool_use` blocks
+only. The provider documents that thinking blocks within a tool-use turn must be passed back
+complete and unmodified, so **tool use with thinking on is not supported here**: under
+`provider_default`, a model that thinks by default would have its turns replayed without them.
+That combination is neither implemented nor verified, and must not be described as supported.
+`disabled` asks for no thinking blocks, which is why it is the default. What the live API does
+with it is not verified by this repository either -- the tests establish only what is sent.
+
+## Headers from the environment are refused (R2.7I)
+
+The SDK reads `ANTHROPIC_CUSTOM_HEADERS` from the process environment itself and merges those
+headers into every request, after the application's own. This adapter passes no headers of its
+own, so a built client that carries any came from the environment; it is discarded and the call
+is refused with a fixed message that names no header and no value. `Settings` refuses an enabled
+copilot with the variable set before this is reached; this is the second check, at the moment
+the SDK actually reads it. The adapter itself never reads the environment.
 """
 
 from __future__ import annotations
@@ -80,6 +123,7 @@ from __future__ import annotations
 import importlib.metadata
 import time
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 from app.llm.base import ChatRequest, ChatResponse, FinishReason, TokenUsage, ToolCall
 from app.llm.errors import (
@@ -102,6 +146,69 @@ SDK_MAX_RETRIES = 0
 
 #: The `diagnostics` key holding the model id the provider returned, when it returned one.
 RESPONSE_MODEL_KEY = "response_model"
+
+#: The endpoint used when `LLM_BASE_URL` is not configured. Passed explicitly, so the SDK's own
+#: `ANTHROPIC_BASE_URL` environment fallback can never select one (module docstring).
+DEFAULT_BASE_URL = "https://api.anthropic.com"
+
+#: Why a configured `LLM_BASE_URL` was refused. Fixed text: the value itself is never echoed.
+INVALID_BASE_URL_MESSAGE = (
+    "LLM_BASE_URL must be an absolute https:// URL with a host and no credentials, query, "
+    "fragment or surrounding whitespace."
+)
+
+#: The supported `LLM_THINKING` values. The first is the default (R2.7I); the second sends no
+#: `thinking` parameter at all.
+THINKING_MODES = ("disabled", "provider_default")
+
+#: Why a thinking mode was refused. Fixed text, naming only the supported values.
+INVALID_THINKING_MESSAGE = "LLM_THINKING must be one of: disabled, provider_default."
+
+#: Why a built client was discarded. Fixed text: no header name or value is ever included.
+ENVIRONMENT_HEADERS_MESSAGE = (
+    "The provider client carries headers this application did not set, taken from "
+    "ANTHROPIC_CUSTOM_HEADERS in the environment. Unset it; no request was sent."
+)
+
+#: What `disabled` sends, verbatim, as the SDK's `thinking` parameter.
+THINKING_DISABLED = {"type": "disabled"}
+
+
+def resolve_base_url(configured: str | None) -> str:
+    """The endpoint the client is built with: the configured one if valid, else the default.
+
+    `None` -- nothing configured -- is the default. Every other value is checked and returned
+    unchanged, or refused with `ValueError`. An empty string is refused rather than read as
+    "unset": it is a configured value that names no endpoint.
+    """
+    if configured is None:
+        return DEFAULT_BASE_URL
+    if not _is_absolute_https_url(configured):
+        raise ValueError(INVALID_BASE_URL_MESSAGE)
+    return configured
+
+
+def _is_absolute_https_url(value: str) -> bool:
+    if not isinstance(value, str) or not value or value != value.strip():
+        return False
+    if any(character.isspace() or ord(character) < 0x20 for character in value):
+        return False
+    try:
+        parts = urlsplit(value)
+        _ = parts.port  # raises ValueError for a malformed or out-of-range port
+    except ValueError:
+        return False
+    return (
+        parts.scheme == "https"
+        and bool(parts.hostname)
+        and parts.username is None
+        and parts.password is None
+        and not parts.query
+        and not parts.fragment
+        and "?" not in value
+        and "#" not in value
+    )
+
 
 #: How the vendor's stop reasons map onto this seam's normalised vocabulary.
 #:
@@ -131,11 +238,18 @@ class AnthropicChatModel:
         api_key: str,
         model: str,
         base_url: str | None = None,
+        thinking: str = "disabled",
         client: Any | None = None,
     ) -> None:
         self._api_key = api_key
         self._model = model
-        self._base_url = base_url
+        #: Resolved and validated now, so an invalid endpoint is refused before any client
+        #: exists, and the client is never built without one.
+        self._base_url = resolve_base_url(base_url)
+        #: Checked now for the same reason. See the module docstring.
+        if thinking not in THINKING_MODES:
+            raise ValueError(INVALID_THINKING_MESSAGE)
+        self._thinking = thinking
         #: Injectable so a test can supply a stand-in with the SDK's shape and never import the
         #: SDK. When None, `_client` builds a real one on first use.
         self._injected = client
@@ -159,10 +273,15 @@ class AnthropicChatModel:
                 # Not an `ImportError` escaping to a caller: a runtime without the SDK is a
                 # runtime where the assistant is unavailable, which is a declared failure.
                 raise LlmUnavailableError() from missing
-            kwargs: dict[str, Any] = {"api_key": self._api_key, "max_retries": SDK_MAX_RETRIES}
-            if self._base_url is not None:
-                kwargs["base_url"] = self._base_url
-            self._built = anthropic.Anthropic(**kwargs)
+            # `base_url` is always passed: never let the SDK fall back to ANTHROPIC_BASE_URL.
+            built = anthropic.Anthropic(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                max_retries=SDK_MAX_RETRIES,
+            )
+            if _carries_environment_headers(built):
+                raise ValueError(ENVIRONMENT_HEADERS_MESSAGE)
+            self._built = built
         return self._built
 
     # --- the protocol -------------------------------------------------------------------------
@@ -179,6 +298,9 @@ class AnthropicChatModel:
             "messages": turns,
             "timeout": request.budget.timeout_seconds,
         }
+        if self._thinking == "disabled":
+            # A fresh copy per request: nothing downstream can alter the constant.
+            kwargs["thinking"] = dict(THINKING_DISABLED)
         if request.tools:
             kwargs["tools"] = [
                 {
@@ -351,6 +473,18 @@ class AnthropicChatModel:
         return LlmUnavailableError()
 
 
+def _carries_environment_headers(client: Any) -> bool:
+    """Whether a built client holds custom headers -- which, since this adapter passes none,
+    can only have come from `ANTHROPIC_CUSTOM_HEADERS`.
+
+    The SDK stores them in `_custom_headers` (pinned `anthropic==0.125.0`). Fail-closed: a
+    client without that attribute -- an SDK that moved it -- counts as carrying them, so the
+    check cannot silently stop checking. Only emptiness is examined; nothing is read out.
+    """
+    custom = getattr(client, "_custom_headers", None)
+    return not isinstance(custom, dict) or bool(custom)
+
+
 def installed_sdk_version() -> str | None:
     """The installed SDK's version, from package metadata, or `None` when it is not installed.
 
@@ -364,10 +498,17 @@ def installed_sdk_version() -> str | None:
 
 
 __all__ = [
+    "DEFAULT_BASE_URL",
+    "ENVIRONMENT_HEADERS_MESSAGE",
+    "INVALID_BASE_URL_MESSAGE",
+    "INVALID_THINKING_MESSAGE",
     "PROVIDER_NAME",
     "RESPONSE_MODEL_KEY",
     "SDK_DISTRIBUTION",
     "SDK_MAX_RETRIES",
+    "THINKING_DISABLED",
+    "THINKING_MODES",
     "AnthropicChatModel",
     "installed_sdk_version",
+    "resolve_base_url",
 ]

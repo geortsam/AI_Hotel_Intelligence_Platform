@@ -30,6 +30,9 @@
 > | A8 | 7.13 — Copilot front end | 2026-09-26 | §8 |
 > | A9 | V2 closure — audit F2 and documentation | 2026-09-27 | banner, §2.1, §4.4 (A6 retention), §7.2, §9.2, §10 |
 > | A10 | R2.6B/R2.6D — Provider retry ownership | 2026-10-12 | §5.7 |
+> | A11 | R2.7D — Provider endpoint pinning | 2026-10-13 | §5.2 |
+> | A12 | R2.7F — Provider SDK 0.125.0 and the thinking setting | 2026-10-13 | §5.2 |
+> | A13 | R2.7I — Thinking off by default; environment headers refused | 2026-10-21 | §5.2 |
 
 ---
 
@@ -415,6 +418,94 @@ answer a clean `503` with a documented error code** — the same posture `ml/dem
 when the artifact is unavailable. `llm_enabled` true **without** an API key is refused when the
 settings load, so that misconfiguration stops the process from starting instead of answering
 every question with a failure.
+
+> **Amendment A11 (R2.7D) — the endpoint URL is chosen by configuration, never by the
+> environment.** The provider client is always built with an explicit base URL: `LLM_BASE_URL`
+> when it is configured, otherwise `https://api.anthropic.com` (`DEFAULT_BASE_URL` in
+> `app.llm.providers.anthropic_provider`). The vendor SDK's own fallback -- reading
+> `ANTHROPIC_BASE_URL` from the process environment, a variable this application does not own
+> -- is therefore never reached: a value another tool sets in the same shell cannot change the
+> URL the API key is sent to.
+>
+> **Accepted `LLM_BASE_URL`:** an absolute `https://` URL with a host; a port and a path prefix
+> (e.g. `https://gateway.example.com/anthropic`) are allowed. **Refused:** any other scheme
+> (including `http://`), a missing host, credentials (`user:password@`), a query or fragment
+> (even an empty `?` or `#`), a malformed port, surrounding or embedded whitespace, and the
+> empty string -- which names no endpoint, so it is not read as "unset". The value is passed
+> through exactly as written, never trimmed or rewritten. A refused value raises when the adapter
+> is constructed, before any client exists, with a fixed message that does not echo the value.
+> Because the factory builds the adapter per request, a bad `LLM_BASE_URL` fails every copilot
+> request rather than stopping the process at start-up; refusing it when the settings load is a
+> possible follow-up. Tests in `tests/backend/test_llm_boundary.py` hold each rule.
+>
+> **What the pin does not cover (corrected in R2.7K).** Pinning fixes the URL the SDK
+> addresses, not the network path to it or the certificates trusted on the way. The SDK's HTTP
+> client (httpx) still honours proxy and certificate variables from the process environment:
+> `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` send requests through the proxy they name, and
+> `SSL_CERT_FILE` and `SSL_CERT_DIR` replace the certificate authorities it trusts. A proxy on
+> its own relays the encrypted connection and sees the destination host; a proxy whose
+> certificate authority is also trusted through those variables can decrypt the requests -- the
+> API key included. So endpoint pinning alone does **not** guarantee that provider traffic or
+> the key cannot be exposed through a proxy and trusted CA, configured on purpose or by accident.
+> This application leaves that behaviour as the SDK ships it. Wherever the copilot is enabled,
+> those variables must be unset, or deliberately configured with a proxy and CA that are
+> trusted; for the live pilot this is an operator precondition
+> ([copilot-evaluation.md](copilot-evaluation.md) §7), not something the script checks.
+
+> **Amendment A12 (R2.7F) — the provider SDK is `anthropic==0.125.0`, and extended thinking is
+> a setting.** The optional pin (`backend/requirements-llm.txt`, still installed by neither CI
+> nor the image) moved from `0.42.0`, whose response parser raised `AttributeError` on Python
+> 3.14 when an answer carried a `thinking` or `redacted_thinking` block -- after the request
+> was billed. `0.125.0` types both blocks and carries the upstream 3.14 fix for blocks it does
+> not know; `tests/backend/test_anthropic_sdk_compat.py` parses real response bodies with the
+> installed SDK over an in-memory transport, with sockets disabled.
+>
+> **`LLM_THINKING`** takes exactly two values. **`provider_default`**, the default A12 set, sends
+> no `thinking` parameter, so every request is what it was before the setting existed and the
+> model's own default applies. **`disabled`** sends `thinking={"type": "disabled"}`; A12
+> reserved it for a live-evaluation pilot, because the adapter replays an assistant turn that
+> made calls as its text and `tool_use` blocks only, while the provider documents that thinking
+> blocks within a tool-use turn must be passed back complete and unmodified -- so a model that
+> thinks by default is not replayed faithfully, and `disabled` removes the blocks there would be
+> to lose. *(Superseded by A13: `disabled` is now the default for every deployment, not only a
+> pilot, and `provider_default` is an explicit opt-in.)* Any other value is refused when the
+> settings load. Thinking blocks are never answer text, and an answer that is only thinking,
+> cut off at the token limit, is the existing `502 LLM_INVALID_RESPONSE`. Each live-evaluation
+> report records the effective setting (`live_provenance.thinking`) beside the installed SDK
+> version. The default model id is unchanged. Preserving thinking blocks on replay, so that
+> `provider_default` is safe with tool use, is not done.
+
+> **Amendment A13 (R2.7I) — thinking is off by default, and headers from the environment are
+> refused.** **`LLM_THINKING=disabled` is now the default** (A12 made it `provider_default`), so
+> a deployment that configures nothing sends `thinking={"type": "disabled"}` and asks for no
+> thinking blocks. The reason is A12's: the adapter replays a tool-use turn without its thinking
+> blocks, so **tool use with thinking on is not supported** -- not implemented, not verified,
+> and not to be described as supported. `provider_default` remains as an explicit opt-in that
+> sends no `thinking` parameter and leaves the model's own default in force; with a model that
+> thinks by default, its tool-use turns would be replayed incompletely. Neither mode has been
+> exercised against the live API: the tests establish what is sent, not what the provider does
+> with it.
+>
+> **`ANTHROPIC_CUSTOM_HEADERS` must be unset wherever the copilot is enabled.** The SDK reads it
+> from the process environment on its own and merges its headers into every request after the
+> application's -- over the API key header included. An enabled configuration refuses to load
+> while the variable is present, even empty, with a fixed message; only its presence is
+> checked, so its value reaches no message and no log. The adapter checks again where the SDK
+> reads it: a built client that carries custom headers, or whose headers cannot be inspected,
+> is discarded before any request, as a fixed-message configuration error that is neither
+> retried nor counted by the circuit breaker. A `.env` entry is not refused, because the SDK
+> never sees it. `scripts/copilot_live_eval.py` prints the same fixed refusal. The endpoint pin
+> of A11 is unchanged, and so is what it does not cover: proxy and certificate variables are
+> still honoured by the SDK's HTTP client (A11, as corrected in R2.7K).
+>
+> **Scope, unchanged.** The copilot stays off by default (`LLM_ENABLED=false`), which builds no
+> client and is unaffected by either rule; a paid live run, the one-case pilot included, remains
+> a separate operation that needs explicit authorisation. The optional SDK is installed on
+> developer machines, not in CI or the image, so `tests/backend/test_anthropic_sdk_compat.py`
+> runs the real SDK only where it is installed and is **skipped in CI**: a green CI run does not
+> cover it. `backend/requirements-llm.txt` is an exact pin, but unlike the other dependency
+> files it is not hash-locked; a lock needs package-index access and was not produced offline
+> (the proposed command is in that file).
 
 ### 5.3 Prompts as versioned records
 

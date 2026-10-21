@@ -1,8 +1,10 @@
 """Stage 7.5: the language-model seam, its failure taxonomy, and the walls around it.
 
 No network, no credential, no database, no endpoint. Everything below runs against the doubles in
-`app.llm.testing` or against a stand-in with the vendor SDK's shape, and the vendor SDK is not
-installed in this environment at all — which is itself one of the things asserted here.
+`app.llm.testing` or against a stand-in with the vendor SDK's shape. The optional SDK is not
+installed in CI or the image, and nothing here needs it; a developer machine may carry it, which
+is why sockets are refused for every test (`no_network`) and why `sdk_absent` simulates its
+absence where that matters. The few tests that use the real SDK skip without it.
 
 What this module is responsible for:
 
@@ -31,9 +33,10 @@ import json
 import re
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.core.config import Settings
 from app.core.errors import AppError
@@ -724,10 +727,12 @@ class FakeMessages:
 
 
 class FakeClient:
-    """A stand-in with the SDK's shape. The SDK itself is not installed in this environment."""
+    """A stand-in with the SDK's shape, so these tests need no SDK -- CI does not install it."""
 
     def __init__(self, result: object) -> None:
         self.messages = FakeMessages(result)
+        #: Where the real client keeps custom headers: empty, as with no ANTHROPIC_CUSTOM_HEADERS.
+        self._custom_headers: dict[str, str] = {}
 
 
 def adapter(result: object) -> AnthropicChatModel:
@@ -855,10 +860,12 @@ class RecordingSdk:
 
     def __init__(self) -> None:
         self.constructed: list[dict[str, object]] = []
+        self.clients: list[FakeClient] = []
 
     def Anthropic(self, **kwargs: object) -> object:  # noqa: N802 - the SDK's own spelling
         self.constructed.append(kwargs)
-        return FakeClient(FakeMessage())
+        self.clients.append(FakeClient(FakeMessage()))
+        return self.clients[-1]
 
 
 @pytest.mark.parametrize("base_url", [None, "https://proxy.example.test"])
@@ -878,7 +885,156 @@ def test_the_sdk_client_is_built_with_its_own_retries_explicitly_off(
     assert anthropic_provider.SDK_MAX_RETRIES == 0
     [kwargs] = sdk.constructed
     assert kwargs["max_retries"] == 0
-    assert ("base_url" in kwargs) is (base_url is not None)
+    # R2.7D: the endpoint is always explicit -- configured, or the pinned default.
+    assert kwargs["base_url"] == (base_url or anthropic_provider.DEFAULT_BASE_URL)
+
+
+# --- R2.7D: the endpoint is pinned; the environment cannot choose it -----------------------
+
+#: A stand-in for a value some other tool might export. Never a real endpoint, never printed.
+REDIRECT = "https://redirect.invalid"
+
+
+def test_the_environment_cannot_choose_the_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`ANTHROPIC_BASE_URL` set, `LLM_BASE_URL` unset: the client gets the pinned default."""
+    import sys
+
+    from app.llm.providers.anthropic_provider import DEFAULT_BASE_URL
+
+    sdk = RecordingSdk()
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", REDIRECT)
+
+    AnthropicChatModel(api_key="k", model="m").complete(request_for())
+
+    [kwargs] = sdk.constructed
+    assert DEFAULT_BASE_URL == "https://api.anthropic.com"
+    assert kwargs["base_url"] == DEFAULT_BASE_URL
+
+
+def test_the_factory_path_ignores_the_environment_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
+    sdk = RecordingSdk()
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", REDIRECT)
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        llm_enabled=True,
+        llm_api_key="test-key-not-real",
+        llm_model="r27d-endpoint-probe",
+    )
+
+    build_chat_model(settings).complete(request_for())
+
+    [kwargs] = sdk.constructed
+    assert kwargs["base_url"] == "https://api.anthropic.com"
+
+
+def test_the_real_sdk_would_follow_the_environment_and_the_adapter_does_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With the SDK actually installed, the threat and the fix side by side. Building a client
+    opens no connection (and `no_network` would record one if it did). Skipped where the SDK is
+    absent -- which is CI and the image."""
+    anthropic = pytest.importorskip("anthropic")
+    from urllib.parse import urlsplit
+
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", REDIRECT)
+
+    bare = anthropic.Anthropic(api_key="k", max_retries=0)
+    assert urlsplit(str(bare.base_url)).hostname == "redirect.invalid"  # the SDK's own fallback
+
+    pinned = AnthropicChatModel(api_key="k", model="m")._client()
+    assert urlsplit(str(pinned.base_url)).hostname == "api.anthropic.com"
+
+
+@pytest.mark.parametrize(
+    "configured",
+    [
+        "https://gateway.example.test",
+        "https://gateway.example.test/anthropic",
+        "https://gateway.example.test/anthropic/",
+        "https://gateway.example.test:8443/v1",
+        "HTTPS://Gateway.Example.Test",
+    ],
+)
+def test_a_configured_https_endpoint_is_passed_through_unchanged(
+    monkeypatch: pytest.MonkeyPatch, configured: str
+) -> None:
+    import sys
+
+    sdk = RecordingSdk()
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", REDIRECT)
+
+    AnthropicChatModel(api_key="k", model="m", base_url=configured).complete(request_for())
+
+    [kwargs] = sdk.constructed
+    assert kwargs["base_url"] == configured  # exactly as written: not trimmed, not lower-cased
+
+
+@pytest.mark.parametrize(
+    "configured",
+    [
+        "",
+        "http://gateway.example.test",
+        "ftp://gateway.example.test",
+        "gateway.example.test",
+        "//gateway.example.test",
+        "https://",
+        "https:///path-without-host",
+        "https://user:secret-in-url@gateway.example.test",
+        "https://user@gateway.example.test",
+        "https://gateway.example.test/?region=eu",
+        "https://gateway.example.test/?",
+        "https://gateway.example.test/#fragment",
+        "https://gateway.example.test#",
+        "https://gateway.example.test:99999",
+        "https://gateway.example.test:port",
+        " https://gateway.example.test",
+        "https://gateway.example.test ",
+        "https://gateway.example.test/a path",
+        "https://gateway.example.test/\nX-Injected: 1",
+    ],
+)
+def test_an_invalid_endpoint_is_refused_before_any_client_exists(
+    monkeypatch: pytest.MonkeyPatch, configured: str
+) -> None:
+    import sys
+
+    from app.llm.providers.anthropic_provider import INVALID_BASE_URL_MESSAGE
+
+    sdk = RecordingSdk()
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+
+    with pytest.raises(ValueError) as refused:
+        AnthropicChatModel(api_key="k", model="m", base_url=configured)
+
+    assert str(refused.value) == INVALID_BASE_URL_MESSAGE  # a fixed sentence, never the value
+    assert "secret-in-url" not in str(refused.value)
+    assert sdk.constructed == []
+
+
+def test_the_factory_refuses_an_invalid_endpoint_before_any_client_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+
+    sdk = RecordingSdk()
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        llm_enabled=True,
+        llm_api_key="test-key-not-real",
+        llm_base_url="http://gateway.example.test",
+    )
+
+    with pytest.raises(ValueError, match="LLM_BASE_URL must be an absolute https:// URL"):
+        build_chat_model(settings)
+    assert sdk.constructed == []
 
 
 def test_the_returned_model_id_is_kept_apart_from_the_configured_one() -> None:
@@ -932,6 +1088,367 @@ def test_the_returned_model_id_survives_the_boundary() -> None:
 
     assert response.diagnostics == {"response_model": "provider-returned-id"}
     assert "secret-key-value" not in repr(response)
+
+
+# --- R2.7F: the thinking setting, and thinking blocks in an answer ---------------------------
+
+
+def message_of(*blocks: object, stop_reason: str = "end_turn") -> FakeMessage:
+    message = FakeMessage(stop_reason=stop_reason)
+    message.content = list(blocks)  # type: ignore[arg-type]
+    return message
+
+
+def block(**fields: object) -> SimpleNamespace:
+    return SimpleNamespace(**fields)
+
+
+#: Shaped as the SDK's blocks. The thinking ones also carry a `text` attribute, so an adapter
+#: that read every block's text, instead of only `text` blocks', would leak them.
+THINKING_BLOCK = block(type="thinking", thinking="PRIVATE-REASONING", signature="sig", text="LEAK")
+REDACTED_BLOCK = block(type="redacted_thinking", data="PRIVATE-DATA", text="LEAK")
+TOOL_USE_BLOCK = block(type="tool_use", id="toolu_1", name="get_hotel_kpis", input={"m": "05"})
+
+
+def test_thinking_defaults_to_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """R2.7I. Deterministic whatever the parent shell exports: the variable is removed first."""
+    monkeypatch.delenv("LLM_THINKING", raising=False)
+
+    assert Settings(_env_file=None, environment="test").llm_thinking == "disabled"
+    assert inspect.signature(AnthropicChatModel).parameters["thinking"].default == "disabled"
+
+
+@pytest.mark.parametrize(
+    "unsupported", ["enabled", "adaptive", "DISABLED", "provider-default", "", "none"]
+)
+def test_an_unsupported_thinking_setting_is_refused_when_the_settings_load(
+    unsupported: str,
+) -> None:
+    with pytest.raises(ValidationError) as refused:
+        Settings(
+            _env_file=None,
+            environment="test",
+            llm_enabled=True,
+            llm_api_key="test-key-not-real",
+            llm_thinking=unsupported,
+        )
+    assert "llm_thinking" in str(refused.value)
+    assert "test-key-not-real" not in str(refused.value)
+
+
+@pytest.mark.parametrize("unsupported", ["enabled", "adaptive", "Disabled", ""])
+def test_the_adapter_refuses_an_unsupported_thinking_mode_before_any_client_exists(
+    monkeypatch: pytest.MonkeyPatch, unsupported: str
+) -> None:
+    import sys
+
+    from app.llm.providers.anthropic_provider import INVALID_THINKING_MESSAGE
+
+    sdk = RecordingSdk()
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+
+    with pytest.raises(ValueError) as refused:
+        AnthropicChatModel(api_key="k", model="m", thinking=unsupported)
+
+    assert str(refused.value) == INVALID_THINKING_MESSAGE
+    assert sdk.constructed == []
+
+
+def test_provider_default_sends_no_thinking_parameter() -> None:
+    """Explicit opt-in only: the request is exactly what it was before the setting existed."""
+    model = AnthropicChatModel(
+        api_key="k", model="m", thinking="provider_default", client=FakeClient(FakeMessage())
+    )
+    model.complete(request_for())
+
+    sent = model._client().messages.calls[0]
+    assert "thinking" not in sent
+    assert set(sent) == {"model", "max_tokens", "system", "messages", "timeout"}
+
+
+def test_disabled_sends_thinking_disabled_and_nothing_else_changes() -> None:
+    from app.llm.providers.anthropic_provider import THINKING_DISABLED
+
+    model = AnthropicChatModel(
+        api_key="k", model="m", thinking="disabled", client=FakeClient(FakeMessage())
+    )
+    model.complete(request_for())
+    model.complete(request_for())
+
+    first, second = model._client().messages.calls
+    assert first["thinking"] == {"type": "disabled"}
+    assert set(first) == {"model", "max_tokens", "system", "messages", "timeout", "thinking"}
+    first["thinking"]["type"] = "tampered"
+    assert second["thinking"] == THINKING_DISABLED == {"type": "disabled"}
+
+
+@pytest.mark.parametrize("mode", ["provider_default", "disabled"])
+def test_the_factory_passes_the_thinking_setting_through(
+    monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    import sys
+
+    sdk = RecordingSdk()
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        llm_enabled=True,
+        llm_api_key="test-key-not-real",
+        llm_model="r27f-thinking-probe",
+        llm_thinking=mode,
+    )
+
+    build_chat_model(settings).complete(request_for())
+
+    [client] = sdk.clients
+    [sent] = client.messages.calls
+    assert sent.get("thinking") == ({"type": "disabled"} if mode == "disabled" else None)
+    assert sent["model"] == "r27f-thinking-probe"  # the model id is untouched
+
+
+def test_thinking_blocks_are_never_answer_text_and_calls_are_still_read() -> None:
+    message = message_of(
+        THINKING_BLOCK, FakeBlock("the answer"), TOOL_USE_BLOCK, stop_reason="tool_use"
+    )
+
+    response = adapter(message).complete(request_for())
+
+    assert response.text == "the answer"
+    assert [(call.id, call.name, dict(call.arguments)) for call in response.tool_calls] == [
+        ("toolu_1", "get_hotel_kpis", {"m": "05"})
+    ]
+    for private in ("PRIVATE-REASONING", "LEAK", "sig"):
+        assert private not in response.text
+
+
+def test_redacted_thinking_is_never_answer_text() -> None:
+    response = adapter(message_of(REDACTED_BLOCK, FakeBlock("the answer"))).complete(request_for())
+
+    assert response.text == "the answer"
+    assert "PRIVATE-DATA" not in repr(response)
+
+
+@pytest.mark.parametrize("blocks", [[THINKING_BLOCK], [REDACTED_BLOCK], []])
+def test_no_text_and_no_call_at_the_token_limit_is_the_declared_invalid_response(
+    blocks: list[object],
+) -> None:
+    """Thinking alone, cut off by `max_tokens`, is no answer: `LLM_INVALID_RESPONSE`, a 502,
+    exactly as an empty answer always was -- and not retried by the boundary (A10)."""
+    client = FakeClient(message_of(*blocks, stop_reason="max_tokens"))
+
+    with pytest.raises(LlmInvalidResponseError) as raised:
+        guard(AnthropicChatModel(api_key="k", model="m", client=client)).complete(request_for())
+
+    assert raised.value.status_code == 502
+    assert len(client.messages.calls) == 1
+
+
+def test_amendment_a12_documents_the_setting() -> None:
+    document = (REPOSITORY_ROOT / "docs" / "v2-architecture.md").read_text(encoding="utf-8")
+    amendment = document[document.index("**Amendment A12") :]
+    amendment = amendment[: amendment.index("\n\n")]
+    for phrase in [
+        "`LLM_THINKING`",
+        "`provider_default`",
+        "`disabled`",
+        '`thinking={"type": "disabled"}`',
+        "`anthropic==0.125.0`",
+    ]:
+        assert phrase in amendment, phrase
+    assert "| A12 |" in document
+
+
+# --- R2.7I: the safe thinking default, and headers from the environment ---------------------
+
+
+def test_disabled_is_the_default_everywhere_it_can_be_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Settings, adapter and mode list agree: the default asks for no thinking blocks."""
+    from app.llm.providers.anthropic_provider import THINKING_MODES
+
+    monkeypatch.delenv("LLM_THINKING", raising=False)
+
+    assert Settings(_env_file=None, environment="test").llm_thinking == "disabled"
+    assert inspect.signature(AnthropicChatModel).parameters["thinking"].default == "disabled"
+    assert THINKING_MODES[0] == "disabled"
+
+
+def test_the_default_adapter_sends_thinking_disabled() -> None:
+    model = adapter(FakeMessage())
+    model.complete(request_for())
+
+    [sent] = model._client().messages.calls
+    assert sent["thinking"] == {"type": "disabled"}
+
+
+def test_a_default_deployment_sends_thinking_disabled_through_the_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The production path with nothing about thinking configured."""
+    import sys
+
+    monkeypatch.delenv("LLM_THINKING", raising=False)
+    sdk = RecordingSdk()
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    settings = Settings(
+        _env_file=None, environment="test", llm_enabled=True, llm_api_key="test-key-not-real"
+    )
+
+    build_chat_model(settings).complete(request_for())
+
+    [client] = sdk.clients
+    [sent] = client.messages.calls
+    assert sent["thinking"] == {"type": "disabled"}
+
+
+@pytest.mark.parametrize(
+    ("variable", "expected"),
+    [("disabled", {"type": "disabled"}), ("provider_default", None)],
+)
+def test_the_environment_variable_reaches_the_request(
+    monkeypatch: pytest.MonkeyPatch, variable: str, expected: dict[str, str] | None
+) -> None:
+    """`LLM_THINKING` as a deployment sets it, through settings, factory and adapter."""
+    import sys
+
+    monkeypatch.setenv("LLM_THINKING", variable)
+    sdk = RecordingSdk()
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    settings = Settings(
+        _env_file=None, environment="test", llm_enabled=True, llm_api_key="test-key-not-real"
+    )
+
+    build_chat_model(settings).complete(request_for())
+
+    [client] = sdk.clients
+    [sent] = client.messages.calls
+    assert settings.llm_thinking == variable
+    assert sent.get("thinking") == expected
+
+
+#: A header line some other tool might export. Never a real header; must never be echoed.
+INJECTED = "X-Probe-R27i: SENTINEL-HEADER-VALUE-9f3"
+
+
+@pytest.mark.parametrize("value", [INJECTED, "", "Authorization: Bearer SENTINEL-HEADER-VALUE-9f3"])
+def test_an_enabled_copilot_refuses_to_load_with_custom_headers_in_the_environment(
+    monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    """Presence is enough -- even empty -- and the refusal repeats neither name nor value."""
+    from app.core.config import PROVIDER_HEADERS_REFUSAL
+
+    monkeypatch.setenv("ANTHROPIC_CUSTOM_HEADERS", value)
+
+    with pytest.raises(ValueError) as refused:
+        Settings(_env_file=None, llm_enabled=True, llm_api_key="test-key-not-real")
+
+    assert PROVIDER_HEADERS_REFUSAL in str(refused.value)
+    for leaked in ("SENTINEL-HEADER-VALUE-9f3", "X-Probe-R27i", "test-key-not-real"):
+        assert leaked not in str(refused.value)
+
+
+def test_a_disabled_copilot_is_not_refused_because_it_builds_no_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_CUSTOM_HEADERS", INJECTED)
+
+    assert Settings(_env_file=None, llm_enabled=False).llm_enabled is False
+
+
+def test_a_dotenv_entry_is_not_refused_because_the_sdk_never_reads_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The SDK reads the PROCESS environment; `.env` reaches `Settings` only."""
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(f"ANTHROPIC_CUSTOM_HEADERS={INJECTED}\n", encoding="utf-8")
+
+    settings = Settings(_env_file=dotenv, llm_enabled=True, llm_api_key="test-key-not-real")
+
+    assert settings.llm_enabled is True
+
+
+class HeaderCarryingSdk(RecordingSdk):
+    """A stand-in for an SDK whose client picked headers up from the environment."""
+
+    def __init__(self, custom_headers: object) -> None:
+        super().__init__()
+        self.custom_headers = custom_headers
+
+    def Anthropic(self, **kwargs: object) -> object:  # noqa: N802 - the SDK's own spelling
+        client = super().Anthropic(**kwargs)
+        if self.custom_headers is _ABSENT:
+            del client._custom_headers  # type: ignore[attr-defined]
+        else:
+            client._custom_headers = self.custom_headers  # type: ignore[attr-defined]
+        return client
+
+
+_ABSENT = object()
+
+
+@pytest.mark.parametrize(
+    "custom_headers",
+    [{"X-Probe-R27i": "SENTINEL-HEADER-VALUE-9f3"}, _ABSENT, None],
+    ids=["headers-present", "attribute-missing", "attribute-not-a-dict"],
+)
+def test_the_adapter_discards_a_client_carrying_headers_and_sends_nothing(
+    monkeypatch: pytest.MonkeyPatch, custom_headers: object
+) -> None:
+    """The second check, where the SDK reads the variable. Fail-closed: a client whose headers
+    cannot be inspected counts as carrying some."""
+    import sys
+
+    from app.llm.providers.anthropic_provider import ENVIRONMENT_HEADERS_MESSAGE
+
+    sdk = HeaderCarryingSdk(custom_headers)
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    model = AnthropicChatModel(api_key="test-key-not-real", model="m")
+
+    with pytest.raises(ValueError) as refused:
+        model.complete(request_for())
+
+    assert str(refused.value) == ENVIRONMENT_HEADERS_MESSAGE
+    assert "SENTINEL-HEADER-VALUE-9f3" not in str(refused.value)
+    assert "X-Probe-R27i" not in str(refused.value)
+    [client] = sdk.clients
+    assert client.messages.calls == []  # no request left the adapter
+    assert model._built is None  # and the client was not kept
+
+
+def test_a_header_refusal_is_one_attempt_and_not_a_breaker_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A misconfiguration, not an outage: no retry, and the breaker does not count it."""
+    import sys
+
+    from app.llm.circuit import CircuitBreaker
+
+    sdk = HeaderCarryingSdk({"X-Probe-R27i": "SENTINEL-HEADER-VALUE-9f3"})
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    breaker = CircuitBreaker(monotonic=StubClock())
+    model = guard(AnthropicChatModel(api_key="k", model="m"), breaker=breaker)
+
+    with pytest.raises(ValueError):
+        model.complete(request_for())
+
+    assert len(sdk.constructed) == 1
+    assert breaker.state == "closed"
+
+
+def test_amendment_a13_documents_the_default_and_the_header_policy() -> None:
+    document = (REPOSITORY_ROOT / "docs" / "v2-architecture.md").read_text(encoding="utf-8")
+    amendment = document[document.index("**Amendment A13") :]
+    amendment = amendment[: amendment.index("\n\n")]
+    for phrase in [
+        "`LLM_THINKING=disabled`",
+        "**tool use with thinking on is not supported**",
+        "not verified",
+        "`ANTHROPIC_CUSTOM_HEADERS`",
+        "`LLM_ENABLED=false`",
+        "hash-locked",
+    ]:
+        assert phrase in amendment, phrase
+    assert "| A13 |" in document
 
 
 def test_the_sdk_version_comes_from_package_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1216,7 +1733,8 @@ def test_the_provider_sdk_is_declared_and_pinned_in_its_own_file() -> None:
         if line.strip() and not line.strip().startswith("#")
     ]
 
-    assert pins == ["anthropic==0.42.0"]
+    # R2.7F. The upstream Python 3.14 parser fix shipped in 0.72.1; this pin includes it.
+    assert pins == ["anthropic==0.125.0"]
 
 
 def test_the_image_installs_only_the_base_requirements() -> None:
@@ -1331,8 +1849,9 @@ def test_the_factory_builds_the_production_client_with_sdk_retries_off(
 
     assert response.text == "hi"
     [constructed] = sdk.constructed
-    assert set(constructed) == {"api_key", "max_retries"}
+    assert set(constructed) == {"api_key", "base_url", "max_retries"}
     assert constructed["max_retries"] == 0
+    assert constructed["base_url"] == "https://api.anthropic.com"
 
 
 def test_production_and_the_live_evaluation_build_through_the_shared_factory() -> None:

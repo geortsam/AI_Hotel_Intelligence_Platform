@@ -130,7 +130,8 @@ python -m tests.evaluation.harness --write-reference
 # Live capture (paid; needs the optional SDK and your key in the environment, not on the
 # command line). A pilot of one case first, into a NEW directory outside the repository:
 pip install -r backend/requirements-llm.txt
-LLM_ENABLED=true LLM_MODEL=<verified model id> python scripts/copilot_live_eval.py \
+LLM_ENABLED=true LLM_MODEL=<verified model id> LLM_THINKING=disabled \
+    python scripts/copilot_live_eval.py \
     --out ../copilot-eval/pilot-1 --confirm-paid-api-call --case kpis_may_occupancy
 ```
 
@@ -158,8 +159,28 @@ with a stand-in model and sockets disabled:
   recording of the whole set -- `load_replays` refuses it against the full set.
 - **What answered is recorded, not assumed.** `live_provenance` holds the configured model id,
   the model ids the provider **returned** per turn (`UNKNOWN` where a response named none --
-  never the configured name), and the installed SDK version from package metadata (`UNKNOWN`
-  if absent).
+  never the configured name), the installed SDK version from package metadata (`UNKNOWN`
+  if absent), and the effective `LLM_THINKING` setting (`thinking`): `disabled` unless
+  `provider_default` was set explicitly. The adapter does not replay thinking blocks, which the
+  provider requires within a tool-use turn, so tool use with thinking on is not supported
+  ([v2-architecture.md](v2-architecture.md) §5.2, Amendments A12 and A13). The pilot command
+  states `LLM_THINKING=disabled` although it is the default, so the intent is in the command.
+- **No headers from the environment.** With `ANTHROPIC_CUSTOM_HEADERS` set, the settings refuse
+  to load and the run stops with a fixed sentence before a client exists; the value is never
+  read or printed (A13). Unset it in the shell that runs the capture.
+
+### Before a live run: operator preconditions (not checked by the script)
+
+The safeguards above are enforced. These are not -- the operator confirms them in the shell that
+runs the capture:
+
+- **Proxy and certificate variables** -- `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`,
+  `SSL_CERT_FILE`, `SSL_CERT_DIR` -- are either unset, or deliberately configured with a proxy
+  and certificate authority that are trusted. The SDK's HTTP client honours them whatever the
+  endpoint pin says: a proxy can carry the requests, and one whose certificate authority is
+  trusted can read them, the API key included ([v2-architecture.md](v2-architecture.md) §5.2,
+  Amendment A11). Check by name only; nothing here requires printing a value.
+- `LLM_BASE_URL` is unset, unless a gateway is intended -- the official endpoint is then used.
 
 ### Request bounds
 

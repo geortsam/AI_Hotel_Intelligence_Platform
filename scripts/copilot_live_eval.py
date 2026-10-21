@@ -25,6 +25,8 @@ docs/copilot-evaluation.md section 7.
 Everything below is checked BEFORE a provider client exists, so a refusal costs nothing:
 
 - `LLM_ENABLED` not true, or no `LLM_API_KEY`;
+- `ANTHROPIC_CUSTOM_HEADERS` set in the environment (R2.7I) -- the SDK would add its headers to
+  every request, so the settings refuse to load; the reason is printed as a fixed sentence;
 - an unknown `--case` id;
 - an `--out` inside this Git repository -- a capture must be reviewed before anything of it is
   committed, so it is written where `git add` cannot sweep it up;
@@ -40,8 +42,9 @@ Two files in `--out`, both naming the exact cases selected and the same checksum
 
 `live_provenance` records the configured model id, the model ids the provider RETURNED per turn
 (`UNKNOWN` where a response named none -- never the configured name), the installed SDK version
-(`UNKNOWN` if absent), and the selection: case ids, selected-set checksum, and the full set's
-checksum and size. The key is never printed, logged or written.
+(`UNKNOWN` if absent), the effective `LLM_THINKING` setting (R2.7F), and the selection: case ids,
+selected-set checksum, and the full set's checksum and size. The key is never printed, logged or
+written.
 
 The files contain the evaluation questions and the model's answers about a FICTIONAL hotel -- no
 production data -- and are not committed automatically.
@@ -105,13 +108,16 @@ def load_settings() -> Any:
 
     `LLM_ENABLED=true` without a key is refused as the settings load; the caller reports both
     cases with the same sentence. The exception is not printed: a settings error must not become
-    a way to echo configuration.
+    a way to echo configuration. One refusal has its own fixed sentence, because the usual one
+    would mislead: `ANTHROPIC_CUSTOM_HEADERS` set in the environment (R2.7I).
     """
-    from app.core.config import Settings
+    from app.core.config import PROVIDER_HEADERS_REFUSAL, Settings
 
     try:
         return Settings()
-    except ValueError:
+    except ValueError as refused:
+        if PROVIDER_HEADERS_REFUSAL in str(refused):
+            raise RunRefusedError(PROVIDER_HEADERS_REFUSAL) from None
         return None
 
 
@@ -169,6 +175,7 @@ def live_provenance(
     selected: Any,
     provider: str,
     configured_model: str,
+    thinking: str,
     returned_models: dict[str, tuple[str, ...]],
     sdk: tuple[str, str],
 ) -> dict[str, Any]:
@@ -177,6 +184,7 @@ def live_provenance(
     return {
         "provider": provider,
         "configured_model": configured_model,
+        "thinking": thinking,
         "returned_models": distinct,
         "returned_models_by_case": {case: list(models) for case, models in returned_models.items()},
         "sdk_distribution": sdk[0],
@@ -213,7 +221,11 @@ def main(
     from tests.evaluation.questions import COPILOT_EVAL_V1
     from tests.evaluation.replay import RecordingModel, Replays
 
-    settings = load_settings()
+    try:
+        settings = load_settings()
+    except RunRefusedError as refused:
+        print(str(refused), file=sys.stderr)
+        return 2
     if settings is None or not settings.llm_enabled or not settings.llm_api_key:
         print("LLM_ENABLED must be true and LLM_API_KEY set.", file=sys.stderr)
         return 2
@@ -263,6 +275,7 @@ def main(
         selected=selected,
         provider=settings.llm_provider,
         configured_model=settings.llm_model,
+        thinking=settings.llm_thinking,
         returned_models={case: rec.returned_models() for case, rec in recordings.items()},
         sdk=sdk_identity(),
     )
