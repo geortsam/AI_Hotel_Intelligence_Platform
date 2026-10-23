@@ -30,7 +30,7 @@ from app.llm.base import ChatRequest, ToolCall
 from tests.evaluation.fixture_documents import chunk_by_id
 from tests.evaluation.fixture_hotel import EVAL_HOTEL
 from tests.evaluation.knowledge_questions import KnowledgeCase
-from tests.evaluation.scorers import figures_in, traceable, values_in
+from tests.evaluation.scorers import figures_in, states_figure, traceable, values_in
 
 #: The fixed sentence the copilot serves when the documents do not support an answer. Restated
 #: here rather than imported, so a change to it is a visible change to what this harness expects.
@@ -141,9 +141,11 @@ def expected_sources(case: KnowledgeCase, citations: Sequence[Mapping[str, Any]]
 
 
 def expected_figures(case: KnowledgeCase, answer: str) -> bool:
+    """The served answer STATES each expected figure -- `scorers.states_figure`, not the looser
+    grounding rule, under which the `1` of a date or of `[S1]` "stated" 0.7000 (R2.7ZA)."""
     written = figures_in(answer)
     return all(
-        any(traceable(text, value, [Decimal(figure)]) for text, value in written)
+        any(states_figure(text, value, Decimal(figure)) for text, value in written)
         for figure in case.figures
     )
 

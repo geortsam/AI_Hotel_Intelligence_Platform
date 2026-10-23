@@ -460,10 +460,17 @@ def test_the_factory_shares_one_breaker_per_upstream() -> None:
     assert breaker_for("anthropic", "model-a") is breaker_for("anthropic", "model-a")
     assert breaker_for("anthropic", "model-a") is not breaker_for("anthropic", "model-b")
 
-    settings = Settings(environment="test", llm_enabled=True, llm_api_key="not-a-real-key")
-    first = cast(GuardedChatModel, build_chat_model(settings))
-    second = cast(GuardedChatModel, build_chat_model(settings))
-    assert first._breaker is second._breaker is breaker_for("anthropic", settings.llm_model)
+    for provider in ("anthropic", "ollama"):
+        settings = Settings(
+            environment="test",
+            llm_enabled=True,
+            llm_provider=provider,
+            llm_api_key="not-a-real-key" if provider == "anthropic" else None,
+        )
+        first = cast(GuardedChatModel, build_chat_model(settings))
+        second = cast(GuardedChatModel, build_chat_model(settings))
+        assert first._breaker is second._breaker
+        assert first._breaker is breaker_for(provider, settings.effective_llm_model)
 
 
 def test_a_disabled_deployment_gets_no_breaker() -> None:

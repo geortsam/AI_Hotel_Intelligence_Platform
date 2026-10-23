@@ -224,9 +224,12 @@ def test_provider_and_model_are_attributed_on_the_row_and_absent_from_the_respon
     response = world.ask("viewer", world.a)
 
     [row] = rows(world.session)
-    assert (row["provider"], row["model"]) == (settings.llm_provider, settings.llm_model)
+    assert (row["provider"], row["model"]) == (
+        settings.llm_provider,
+        settings.effective_llm_model,
+    )
     assert settings.llm_provider not in response.text
-    assert settings.llm_model not in response.text
+    assert settings.effective_llm_model not in response.text
 
 
 def test_the_invocation_and_its_tool_events_share_the_request_id(world: World) -> None:
@@ -512,7 +515,14 @@ def test_no_credential_or_provider_detail_leaks(
     monkeypatch.setitem(sys.modules, "anthropic", None)
     key = "sk-copilot-sentinel-key-0001"
     world = build_world(
-        engine, session, llm_enabled=True, llm_api_key=key, llm_model="leak-probe-model"
+        engine,
+        session,
+        llm_enabled=True,
+        # Pinned: this probes the ANTHROPIC adapter with its SDK absent. Under the ollama default
+        # the real factory would build the local adapter and try 127.0.0.1:11434 (R2.7O).
+        llm_provider="anthropic",
+        llm_api_key=key,
+        llm_model="leak-probe-model",
     )
     world.app.dependency_overrides.pop(get_chat_model)  # the real factory and adapter
 

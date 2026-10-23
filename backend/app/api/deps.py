@@ -932,7 +932,7 @@ def get_copilot_service(
             max_output_tokens=settings.llm_max_output_tokens,
         ),
         provider_name=settings.llm_provider,
-        model_name=settings.llm_model,
+        model_name=settings.effective_llm_model,
     )
 
 

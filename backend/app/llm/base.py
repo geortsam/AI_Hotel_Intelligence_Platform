@@ -80,6 +80,11 @@ Role = Literal["system", "user", "assistant", "tool"]
 #: (Stage 7.6) means the model stopped to ask for one or more tools to be run.
 FinishReason = Literal["stop", "length", "content_filter", "tool_use", "unknown"]
 
+#: The `ChatResponse.diagnostics` key holding the model id the provider RETURNED, when it
+#: returned one. Every adapter uses this key, so an evaluation reads it without naming a
+#: provider (moved here from the Anthropic adapter in R2.7O, which re-exports it).
+RESPONSE_MODEL_KEY = "response_model"
+
 
 @dataclass(frozen=True, slots=True)
 class ToolSpec:
@@ -249,6 +254,7 @@ class ChatModel(Protocol):
 
 
 __all__ = [
+    "RESPONSE_MODEL_KEY",
     "Budget",
     "ChatModel",
     "ChatRequest",

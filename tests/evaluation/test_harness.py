@@ -475,6 +475,7 @@ def test_the_live_script_explains_a_missing_key_instead_of_crashing() -> None:
     its usual message and exit status 2 -- before any model is built, so nothing is called."""
     env = {k: v for k, v in os.environ.items() if not k.upper().startswith("LLM_")}
     env["LLM_ENABLED"] = "true"
+    env["LLM_PROVIDER"] = "anthropic"  # the key rule is the paid provider's (R2.7O)
     result = subprocess.run(
         [sys.executable, str(SCRIPT), "--out", "unused", "--confirm-paid-api-call"],
         capture_output=True,

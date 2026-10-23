@@ -20,6 +20,15 @@ did not write**, and it called **no tool outside the case's tolerated set**. It 
 polite decline from an empty non-answer: both state no figure. That limitation is documented in
 `docs/copilot-evaluation.md` rather than papered over with a phrase list, which would be
 judgement dressed as a rule.
+
+## Stating an expected figure, stated exactly (R2.7Z)
+
+Grounding asks whether a written number COULD have come from a tool, so any rounding is allowed.
+`expected_figures` asks whether the answer STATES a figure, which is stricter: rounding it to
+nothing is not stating it. Under the grounding rule alone, the `1` of "1 May 2026" rounds from
+0.7000, so every answer that repeated its dates "stated" an occupancy rate. A written number now
+states a figure when it equals it -- or the figure as a percentage -- exactly, trailing zeros
+aside, or rounds half-up from it while keeping at least `MIN_SIGNIFICANT_DIGITS` of its digits.
 """
 
 from __future__ import annotations
@@ -35,6 +44,8 @@ from tests.evaluation.questions import EvalCase
 #: A number as written: digits, optional thousands groups, optional decimals. Signs are ignored.
 NUMBER = re.compile(r"\d+(?:,\d{3})*(?:\.\d+)?")
 HUNDRED = Decimal(100)
+#: The fewest of an expected figure's significant digits a ROUNDED statement of it must keep.
+MIN_SIGNIFICANT_DIGITS = 2
 
 
 def figures_in(text: str) -> list[tuple[str, Decimal]]:
@@ -79,6 +90,25 @@ def traceable(written: str, value: Decimal, sources: Iterable[Decimal]) -> bool:
     )
 
 
+def states_figure(written: str, value: Decimal, figure: Decimal) -> bool:
+    """Does the number *written* in an answer state the expected *figure*?
+
+    Yes when it equals the figure, or the figure as a percentage, exactly (`0.70` and `70.00` both
+    state 0.7000). Otherwise only when it rounds half-up from it AND the written precision keeps
+    at least `MIN_SIGNIFICANT_DIGITS` of the figure's significant digits: `15` and `15.4` state
+    15.43, but `1` does not state 0.7000 and `2` does not state 2.41. See the module docstring.
+    """
+    target = abs(value)
+    places = len(written.split(".", 1)[1]) if "." in written else 0
+    for candidate in (abs(figure), abs(figure) * HUNDRED):
+        if target == candidate:
+            return True
+        kept = candidate.adjusted() + places + 1  # significant digits left at that precision
+        if kept >= MIN_SIGNIFICANT_DIGITS and rounds_to(candidate, written, target):
+            return True
+    return False
+
+
 def ungrounded(answer: str, *, tool_outputs: Iterable[Any], question: str) -> tuple[str, ...]:
     """The figures in *answer*, as written, that neither a tool output nor the question grounds."""
     sources = {value for output in tool_outputs for value in values_in(output)}
@@ -109,12 +139,12 @@ def tool_selection(case: EvalCase, calls: Sequence[ToolCall]) -> bool:
 
 
 def missing_figures(case: EvalCase, answer: str) -> tuple[str, ...]:
-    """The case's expected figures that the answer does not state, in any accepted form."""
+    """The case's expected figures that the answer does not state (`states_figure`)."""
     written = figures_in(answer)
     return tuple(
         figure
         for figure in case.figures
-        if not any(traceable(text, value, [Decimal(figure)]) for text, value in written)
+        if not any(states_figure(text, value, Decimal(figure)) for text, value in written)
     )
 
 
@@ -135,6 +165,7 @@ __all__ = [
     "missing_figures",
     "refusal_correct",
     "rounds_to",
+    "states_figure",
     "tool_selection",
     "traceable",
     "ungrounded",

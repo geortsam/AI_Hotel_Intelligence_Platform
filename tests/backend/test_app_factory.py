@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -449,7 +450,25 @@ def test_api_meta_reports_the_copilot_disabled_by_default() -> None:
 
 
 def test_api_meta_reports_the_copilot_enabled_when_the_switch_is_on() -> None:
-    assert meta_for(llm_enabled=True, llm_api_key=FAKE_LLM_KEY)["copilot_enabled"] is True
+    # The provider is named: a key beside a provider left to its default is refused (R2.7V).
+    meta = meta_for(llm_enabled=True, llm_provider="anthropic", llm_api_key=FAKE_LLM_KEY)
+    assert meta["copilot_enabled"] is True
+
+
+def test_a_foreign_ollama_url_in_the_environment_does_not_stop_the_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R2.7T (H1). Another tool's `OLLAMA_BASE_URL` (an Open WebUI container, say) must not keep
+    this API from starting when the copilot is off: settings load from the environment as a
+    deployment's do, and the API answers."""
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+    monkeypatch.delenv("LLM_ENABLED", raising=False)
+
+    with TestClient(create_app(Settings(_env_file=None, environment="test"))) as client:
+        response = client.get("/api/v1/")
+
+    assert response.status_code == 200
+    assert response.json()["copilot_enabled"] is False
 
 
 def test_api_meta_reads_the_switch_not_the_presence_of_a_key() -> None:
@@ -464,6 +483,7 @@ def test_api_meta_exposes_exactly_its_five_fields_and_no_llm_configuration() -> 
             Settings(
                 environment="test",
                 llm_enabled=True,
+                llm_provider="anthropic",  # LLM_BASE_URL is the anthropic provider's setting
                 llm_api_key=FAKE_LLM_KEY,
                 llm_model="model-name-that-must-not-appear",
                 llm_base_url="https://gateway.invalid/v1",

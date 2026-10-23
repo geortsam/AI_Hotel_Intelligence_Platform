@@ -1,15 +1,24 @@
 """Run an evaluation set against the REAL configured language model, and record it (Stage 7.8).
 
 This is the only way this repository evaluates an actual model, and it is never run by CI. It
-makes paid API calls, so it refuses to start without `--confirm-paid-api-call`.
+calls the provider `LLM_PROVIDER` selects, and refuses to start without the flag that names what
+that costs (R2.7O):
 
-    LLM_ENABLED=true LLM_MODEL=<model id> \\
-        python scripts/copilot_live_eval.py --out ../copilot-eval/run-1 --confirm-paid-api-call
+- `ollama` (the default) runs the LOCAL model on this machine -- `--confirm-local-model-call`;
+- `anthropic` makes PAID API calls -- `--confirm-paid-api-call`, and `LLM_API_KEY` must be set.
 
-The key is read from the environment (`LLM_API_KEY`) or the local `.env`, never from the command
-line. `--set copilot_knowledge_eval_v1` (Stage 7.10) runs the document questions instead of the
-default `copilot_eval_v1`; `--case ID` (repeatable) runs only those cases. Either way the
-recording names the prompt the copilot actually renders -- `app.services.copilot.PROMPT`.
+Exactly one flag is accepted, and it must match the provider: a run never falls back from one
+provider to the other.
+
+    LLM_ENABLED=true LLM_PROVIDER=ollama python scripts/copilot_live_eval.py \\
+        --out ../copilot-eval/local-1 --confirm-local-model-call --case kpis_may_occupancy
+
+The key (anthropic only) is read from the environment (`LLM_API_KEY`) or the local `.env`, never
+from the command line. `--set copilot_knowledge_eval_v1` (Stage 7.10) runs the document
+questions instead of the default `copilot_eval_v1`; `--set copilot_eval_v2` (R2.7R) runs v1's
+cases with four questions reworded to ask for every figure they are scored on -- prefer it
+for a new live run; `--case ID` (repeatable) runs only those cases. Either way the recording
+names the set and the prompt the copilot actually renders -- `app.services.copilot.PROMPT`.
 
 ## Request bounds (R2.6B)
 
@@ -24,7 +33,11 @@ docs/copilot-evaluation.md section 7.
 
 Everything below is checked BEFORE a provider client exists, so a refusal costs nothing:
 
-- `LLM_ENABLED` not true, or no `LLM_API_KEY`;
+- `LLM_ENABLED` not true, or (anthropic) no `LLM_API_KEY`;
+- `LLM_API_KEY` set but `LLM_PROVIDER` not set explicitly (R2.7V) -- before R2.7O that meant the
+  paid provider, now the default is `ollama`; the settings refuse to load, with a fixed sentence;
+- a confirmation flag that does not match the selected provider;
+- an `OLLAMA_BASE_URL` that is not on this machine, or `LLM_BASE_URL` set beside `ollama`;
 - `ANTHROPIC_CUSTOM_HEADERS` set in the environment (R2.7I) -- the SDK would add its headers to
   every request, so the settings refuse to load; the reason is printed as a fixed sentence;
 - an unknown `--case` id;
@@ -66,7 +79,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
-QUESTION_SETS = ("copilot_eval_v1", "copilot_knowledge_eval_v1")
+QUESTION_SETS = ("copilot_eval_v1", "copilot_eval_v2", "copilot_knowledge_eval_v1")
 
 
 class RunRefusedError(Exception):
@@ -81,11 +94,16 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="A NEW directory outside this repository to write results to.",
     )
-    parser.add_argument(
+    consent = parser.add_mutually_exclusive_group(required=True)
+    consent.add_argument(
         "--confirm-paid-api-call",
-        required=True,
         action="store_true",
-        help="Required. Acknowledges that this calls the configured provider and costs money.",
+        help="With LLM_PROVIDER=anthropic: acknowledges paid API calls.",
+    )
+    consent.add_argument(
+        "--confirm-local-model-call",
+        action="store_true",
+        help="With LLM_PROVIDER=ollama: acknowledges calls to the local model on this machine.",
     )
     parser.add_argument(
         "--set",
@@ -108,17 +126,50 @@ def load_settings() -> Any:
 
     `LLM_ENABLED=true` without a key is refused as the settings load; the caller reports both
     cases with the same sentence. The exception is not printed: a settings error must not become
-    a way to echo configuration. One refusal has its own fixed sentence, because the usual one
-    would mislead: `ANTHROPIC_CUSTOM_HEADERS` set in the environment (R2.7I).
+    a way to echo configuration. Refusals with their own fixed sentence are reported by that
+    sentence, because the usual one would mislead: `ANTHROPIC_CUSTOM_HEADERS` set in the
+    environment (R2.7I), an off-machine `OLLAMA_BASE_URL` or `LLM_BASE_URL` beside `ollama`
+    (R2.7O), and a key beside an `LLM_PROVIDER` that was not set explicitly (R2.7V).
     """
-    from app.core.config import PROVIDER_HEADERS_REFUSAL, Settings
+    from app.core.config import (
+        IMPLICIT_PROVIDER_REFUSAL,
+        INVALID_OLLAMA_URL_MESSAGE,
+        LLM_BASE_URL_WITH_OLLAMA_REFUSAL,
+        PROVIDER_HEADERS_REFUSAL,
+        Settings,
+    )
 
     try:
         return Settings()
     except ValueError as refused:
-        if PROVIDER_HEADERS_REFUSAL in str(refused):
-            raise RunRefusedError(PROVIDER_HEADERS_REFUSAL) from None
+        for fixed in (
+            PROVIDER_HEADERS_REFUSAL,
+            IMPLICIT_PROVIDER_REFUSAL,
+            INVALID_OLLAMA_URL_MESSAGE,
+            LLM_BASE_URL_WITH_OLLAMA_REFUSAL,
+        ):
+            if fixed in str(refused):
+                raise RunRefusedError(fixed) from None
         return None
+
+
+def check_consent(settings: Any, options: argparse.Namespace) -> None:
+    """Refuse unless the confirmation flag names the selected provider (R2.7O).
+
+    Never a fallback: a flag for the other provider is a refusal, not a reason to switch.
+    """
+    if settings.llm_provider == "anthropic":
+        if not options.confirm_paid_api_call:
+            raise RunRefusedError(
+                "LLM_PROVIDER=anthropic makes paid API calls: pass --confirm-paid-api-call."
+            )
+        if not settings.llm_api_key:
+            raise RunRefusedError("LLM_ENABLED must be true and LLM_API_KEY set.")
+    elif not options.confirm_local_model_call:
+        raise RunRefusedError(
+            "LLM_PROVIDER=ollama calls the local model: pass --confirm-local-model-call "
+            "(--confirm-paid-api-call is for the anthropic provider)."
+        )
 
 
 def select_cases(full: Any, case_ids: Sequence[str]) -> Any:
@@ -161,12 +212,39 @@ def check_output(out: Path, paths: Iterable[Path], root: Path = REPO_ROOT) -> No
         )
 
 
-def sdk_identity() -> tuple[str, str]:
-    """The provider SDK's distribution name and installed version (`UNKNOWN` if absent)."""
+#: What `sdk_identity` records for a provider reached without an SDK (R2.7O).
+NO_SDK = "none"
+
+
+def sdk_identity(provider: str = "anthropic") -> tuple[str, str]:
+    """The provider SDK's distribution name and installed version (`UNKNOWN` if absent).
+
+    The local `ollama` provider uses no SDK -- the standard library's `urllib` -- so it records
+    `none` for both, and the Anthropic adapter is not imported to find that out.
+    """
+    if provider != "anthropic":
+        return NO_SDK, NO_SDK
     from app.llm.providers.anthropic_provider import SDK_DISTRIBUTION, installed_sdk_version
     from tests.evaluation.replay import UNKNOWN
 
     return SDK_DISTRIBUTION, installed_sdk_version() or UNKNOWN
+
+
+def ollama_options(settings: Any) -> dict[str, Any] | None:
+    """The effective local-model options, recorded with the run; None for another provider."""
+    if settings.llm_provider != "ollama":
+        return None
+    from app.llm.providers.ollama_provider import PRESENCE_PENALTY
+
+    return {
+        "base_url": settings.ollama_base_url,
+        "num_ctx": settings.ollama_num_ctx,
+        "num_predict": settings.llm_max_output_tokens,
+        "temperature": settings.ollama_temperature,
+        "seed": settings.ollama_seed,
+        "presence_penalty": PRESENCE_PENALTY,
+        "think": False if settings.llm_thinking == "disabled" else "provider_default",
+    }
 
 
 def live_provenance(
@@ -178,6 +256,7 @@ def live_provenance(
     thinking: str,
     returned_models: dict[str, tuple[str, ...]],
     sdk: tuple[str, str],
+    model_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The block both output files carry. Built from public values only; never the settings."""
     distinct = sorted({model for models in returned_models.values() for model in models})
@@ -189,6 +268,7 @@ def live_provenance(
         "returned_models_by_case": {case: list(models) for case, models in returned_models.items()},
         "sdk_distribution": sdk[0],
         "sdk_version": sdk[1],
+        "ollama_options": model_options,
         "selection": {
             "subset": len(selected.cases) != len(full.cases),
             "case_ids": [case.case_id for case in selected.cases],
@@ -219,6 +299,7 @@ def main(
     from tests.evaluation import harness, knowledge_harness
     from tests.evaluation.knowledge_questions import COPILOT_KNOWLEDGE_EVAL_V1
     from tests.evaluation.questions import COPILOT_EVAL_V1
+    from tests.evaluation.questions_v2 import COPILOT_EVAL_V2
     from tests.evaluation.replay import RecordingModel, Replays
 
     try:
@@ -226,15 +307,19 @@ def main(
     except RunRefusedError as refused:
         print(str(refused), file=sys.stderr)
         return 2
-    if settings is None or not settings.llm_enabled or not settings.llm_api_key:
+    if settings is None or not settings.llm_enabled:
         print("LLM_ENABLED must be true and LLM_API_KEY set.", file=sys.stderr)
         return 2
+    try:
+        check_consent(settings, options)
+    except RunRefusedError as refused:
+        print(str(refused), file=sys.stderr)
+        return 2
 
-    full: Any = (
-        COPILOT_KNOWLEDGE_EVAL_V1
-        if options.question_set == "copilot_knowledge_eval_v1"
-        else COPILOT_EVAL_V1
-    )
+    full: Any = {
+        "copilot_knowledge_eval_v1": COPILOT_KNOWLEDGE_EVAL_V1,
+        "copilot_eval_v2": COPILOT_EVAL_V2,
+    }.get(options.question_set, COPILOT_EVAL_V1)
     runner: Any = knowledge_harness.run if full is COPILOT_KNOWLEDGE_EVAL_V1 else harness.run
     recorded_on = today().isoformat()
     replay_path, report_path = output_paths(options.out, recorded_on)
@@ -262,7 +347,7 @@ def main(
         model_for,
         mode="live",
         provider=settings.llm_provider,
-        model=settings.llm_model,
+        model=settings.effective_llm_model,
         recorded_on=recorded_on,
         budget=Budget(
             timeout_seconds=settings.llm_timeout_seconds,
@@ -274,15 +359,16 @@ def main(
         full=full,
         selected=selected,
         provider=settings.llm_provider,
-        configured_model=settings.llm_model,
+        configured_model=settings.effective_llm_model,
         thinking=settings.llm_thinking,
         returned_models={case: rec.returned_models() for case, rec in recordings.items()},
-        sdk=sdk_identity(),
+        sdk=sdk_identity(settings.llm_provider),
+        model_options=ollama_options(settings),
     )
     report["live_provenance"] = provenance
     replays = Replays(
         provider=settings.llm_provider,
-        model=settings.llm_model,
+        model=settings.effective_llm_model,
         recorded_on=recorded_on,
         question_set=selected.identity,
         question_set_checksum=selected.checksum,

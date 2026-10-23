@@ -71,12 +71,13 @@ class World:
         self.returned: str | None = RETURNED
         #: None: `LLM_THINKING` not configured, so the settings default applies.
         self.thinking: str | None = None
+        #: The provider the settings select, and the consent flag a run passes (R2.7O).
+        self.provider = "anthropic"
+        self.consent = "--confirm-paid-api-call"
 
     def run(self, *extra: str) -> int:
         return int(
-            self.script.main(
-                ["--out", str(self.out), "--confirm-paid-api-call", *extra], today=lambda: TODAY
-            )
+            self.script.main(["--out", str(self.out), self.consent, *extra], today=lambda: TODAY)
         )
 
     def files(self) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -104,12 +105,14 @@ def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> World:
 
     def configured() -> Settings:
         extra: dict[str, Any] = {} if state.thinking is None else {"llm_thinking": state.thinking}
+        if state.provider == "anthropic":
+            # Most tests here exercise the paid path; the local one has its own below.
+            extra.update(llm_api_key=SENTINEL_KEY, llm_model=CONFIGURED)
         return Settings(
             _env_file=None,
             environment="test",
             llm_enabled=True,
-            llm_api_key=SENTINEL_KEY,
-            llm_model=CONFIGURED,
+            llm_provider=state.provider,
             **extra,
         )
 
@@ -256,6 +259,7 @@ def test_custom_headers_in_the_environment_refuse_the_run_before_a_client_exists
     script = load_script()  # unpatched: the world fixture replaced the other copy's loader
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("LLM_ENABLED", "true")
+    monkeypatch.setenv("LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("LLM_API_KEY", SENTINEL_KEY)
     monkeypatch.setenv("ANTHROPIC_CUSTOM_HEADERS", "X-Probe-R27i: SENTINEL-HEADER-VALUE-9f3")
 
@@ -271,6 +275,38 @@ def test_custom_headers_in_the_environment_refuse_the_run_before_a_client_exists
     for leaked in ("SENTINEL-HEADER-VALUE-9f3", "X-Probe-R27i", SENTINEL_KEY):
         assert leaked not in printed.err
         assert leaked not in printed.out
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("consent", ["--confirm-paid-api-call", "--confirm-local-model-call"])
+def test_a_key_beside_an_implicit_provider_refuses_the_run_before_a_client_exists(
+    world: World,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    consent: str,
+) -> None:
+    """R2.7V. The script's REAL `load_settings`, from an empty directory so no `.env` is read:
+    the fixed sentence is printed -- not the generic key sentence -- whichever flag is passed."""
+    from app.core.config import IMPLICIT_PROVIDER_REFUSAL
+
+    script = load_script()  # unpatched loader
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    monkeypatch.setenv("LLM_API_KEY", SENTINEL_KEY)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+
+    code = script.main(
+        ["--out", str(tmp_path / "out"), consent, "--case", "kpis_may_occupancy"],
+        today=lambda: TODAY,
+    )
+
+    printed = capsys.readouterr()
+    assert code == 2
+    assert world.built == []
+    assert IMPLICIT_PROVIDER_REFUSAL in printed.err
+    assert "LLM_ENABLED must be true and LLM_API_KEY set." not in printed.err
+    assert SENTINEL_KEY not in printed.err + printed.out
     assert not (tmp_path / "out").exists()
 
 
@@ -396,3 +432,137 @@ def test_a_subset_capture_cannot_pass_as_a_recording_of_the_full_set(world: Worl
 
     with pytest.raises(ValueError, match="another question set"):
         load_replays(world.out / f"replays-{TODAY}.json", COPILOT_EVAL_V1)
+
+
+# --- R2.7O: the local provider -------------------------------------------------------------------
+
+
+def local(world: World) -> World:
+    world.provider = "ollama"
+    world.consent = "--confirm-local-model-call"
+    return world
+
+
+def test_a_local_run_records_the_provider_model_and_every_effective_option(world: World) -> None:
+    """The stand-in answers; nothing reaches a model. What matters is what the files record."""
+    assert local(world).run("--case", "kpis_may_occupancy") == 0
+
+    replays, report = world.files()
+    assert len(world.built) == 1
+    assert replays["provider"] == "ollama"
+    assert replays["model"] == "qwen3.5:4b"
+    for provenance in (replays["live_provenance"], report["live_provenance"]):
+        assert provenance["provider"] == "ollama"
+        assert provenance["configured_model"] == "qwen3.5:4b"
+        assert provenance["thinking"] == "disabled"
+        assert (provenance["sdk_distribution"], provenance["sdk_version"]) == ("none", "none")
+        assert provenance["ollama_options"] == {
+            "base_url": "http://127.0.0.1:11434",
+            "num_ctx": 16_384,
+            "num_predict": 1024,
+            "temperature": 0.0,
+            "seed": 7151,
+            "presence_penalty": 0,
+            "think": False,
+        }
+
+
+def test_a_paid_run_records_no_local_options(world: World) -> None:
+    assert world.run("--case", "kpis_may_occupancy") == 0
+
+    _, report = world.files()
+    assert report["live_provenance"]["provider"] == "anthropic"
+    assert report["live_provenance"]["ollama_options"] is None
+
+
+def test_the_paid_flag_is_refused_for_the_local_provider_before_a_client_exists(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    local(world).consent = "--confirm-paid-api-call"
+
+    assert world.run("--case", "kpis_may_occupancy") == 2
+
+    assert world.built == []
+    assert "--confirm-local-model-call" in capsys.readouterr().err
+    assert not world.out.exists()
+
+
+def test_the_local_flag_is_refused_for_the_paid_provider_before_a_client_exists(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    world.consent = "--confirm-local-model-call"  # provider stays anthropic
+
+    assert world.run("--case", "kpis_may_occupancy") == 2
+
+    assert world.built == []
+    assert "--confirm-paid-api-call" in capsys.readouterr().err
+
+
+def test_exactly_one_consent_flag_is_accepted() -> None:
+    script = load_script()
+    with pytest.raises(SystemExit):
+        script.parse_arguments(
+            ["--out", "x", "--confirm-paid-api-call", "--confirm-local-model-call"]
+        )
+    assert script.parse_arguments(["--out", "x", "--confirm-local-model-call"])
+
+
+@pytest.mark.parametrize(
+    ("variable", "value", "fixed"),
+    [
+        ("OLLAMA_BASE_URL", "http://attacker.invalid:11434", "INVALID_OLLAMA_URL_MESSAGE"),
+        ("LLM_BASE_URL", "https://attacker.invalid/v1", "LLM_BASE_URL_WITH_OLLAMA_REFUSAL"),
+    ],
+)
+def test_a_local_misconfiguration_is_refused_by_its_fixed_sentence_before_a_client_exists(
+    world: World,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    variable: str,
+    value: str,
+    fixed: str,
+) -> None:
+    """The script's REAL `load_settings`, from an empty directory so no `.env` is read."""
+    import app.core.config as config
+
+    script = load_script()  # unpatched loader
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)  # the default: ollama
+    monkeypatch.setenv(variable, value)
+
+    code = script.main(
+        ["--out", str(tmp_path / "out"), "--confirm-local-model-call"], today=lambda: TODAY
+    )
+
+    printed = capsys.readouterr()
+    assert code == 2
+    assert world.built == []
+    assert getattr(config, fixed) in printed.err
+    assert "attacker" not in printed.err + printed.out
+
+
+# --- R2.7R: the versioned set ---------------------------------------------------------------------
+
+
+def test_a_v2_run_records_v2_as_the_set_it_ran(world: World) -> None:
+    from tests.evaluation.questions_v2 import COPILOT_EVAL_V2
+
+    assert local(world).run("--set", "copilot_eval_v2", "--case", "kpis_may_occupancy") == 0
+
+    replays, report = world.files()
+    selection = replays["live_provenance"]["selection"]
+    assert replays["question_set"] == "copilot_eval_v2"
+    assert selection["full_set_identity"] == "copilot_eval_v2"
+    assert selection["full_set_checksum"] == COPILOT_EVAL_V2.checksum
+    assert selection["case_ids"] == ["kpis_may_occupancy"]
+    assert report["question_set"]["identity"] == "copilot_eval_v2"
+    assert "copilot_eval_v2" in report["statement"]
+    assert "copilot_eval_v1" not in report["statement"]
+
+
+def test_the_default_set_is_still_v1() -> None:
+    assert load_script().parse_arguments(
+        ["--out", "x", "--confirm-local-model-call"]
+    ).question_set == ("copilot_eval_v1")

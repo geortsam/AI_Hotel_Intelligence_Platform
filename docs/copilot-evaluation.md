@@ -65,6 +65,39 @@ measure moved. Its own ranking is measured separately, under `insight_ranking_v1
 | injection | 3 | decline: another hotel's data, a tool that does not exist, "just estimate" |
 | role_limited | 2 | decline: a viewer is never offered the manager-only tool, even by name |
 
+### `copilot_eval_v2` (R2.7R): every expected figure is asked for
+
+`figures` are values a correct answer must state. The first real local run (R2.7P,
+`qwen3.5:4b`) answered v1's `kpis_may_occupancy` -- *"What was our occupancy rate…?"* -- with
+the rate alone, correctly and concisely, and failed: the case also expects the occupied room
+nights, which the question never asks for. An audit of all 24 cases against their fixture data
+found the same mismatch in four of the 14 answer cases. Every expected figure is correct; four
+questions did not ask for what they were scored on.
+
+| Case | Unrequested figure(s) | v2 question |
+|---|---|---|
+| `kpis_may_occupancy` | `434` (occupied room nights) | *What was our occupancy rate from 1 May 2026 to 31 May 2026, and how many room nights were occupied?* |
+| `daily_busiest_day` | `0.9000`, `18` (that day's rate and occupied room nights; v1 asked only *which day*) | *Which day between 1 May 2026 and 7 May 2026 had the highest occupancy rate, and what were that day's occupancy rate and number of occupied room nights?* |
+| `accuracy_manager` | `2.41`, `18.74` (MAE, sMAPE: the tool returns RMSE `3.12` on an equal footing, and *"how accurate"* named none) | *What were the MAE and sMAPE of our demand forecasts for target dates from 1 April 2026 to 31 May 2026, measured as of 30 June 2026?* |
+| `may_occupancy_and_busiest_day` | `0.9000` (the busiest day's rate; *busiest* was also ambiguous -- by arrivals it is 1 May) | *Give our occupancy rate for 1-31 May 2026, and the day between 1 and 7 May 2026 with the highest occupancy rate, with that day's occupancy rate.* |
+
+v2 is derived from v1 (`tests/evaluation/questions_v2.py`): every case id, order, role, call,
+tolerated tool and expected figure is v1's, and only those four questions change -- no figure
+was removed and the scorer did not change. It has its own checksum (`6e9b755c…228b`), its own
+reference exchanges (`fixtures/reference_replays_v2.json`: v1's hand-written turns, verbatim,
+so synthetic -- no model wrote them) and its own pinned report (`reference_report_v2.json`,
+regenerated with `python -m tests.evaluation.harness --set copilot_eval_v2 --write-reference`).
+**v1 is unchanged**: its checksum, `reference_replays.json` and `reference_report.json` are
+pinned byte for byte, and results recorded against v1 stay comparable only with v1.
+`tests/evaluation/test_question_consistency.py` keeps v2 honest: an explicit table names, for
+every expected figure, the words in the question that ask for it and the fixture field it
+comes from; on v1 the same table flags exactly the four cases above.
+
+Not changed, and noted: *room revenue* is scored as the stay-based `room_revenue` (52080.00 in
+May), while the tool also returns `ledger_room_revenue` (51800.00); and *how many guests
+arrived* is scored as `arrivals`, a count of bookings. Both figures are asked for; only the
+label could be read another way.
+
 ## 4. The measures
 
 Each is reported as `passed` of `scored`, **separately**. There is no combined score.
@@ -81,6 +114,16 @@ Each is reported as `passed` of `scored`, **separately**. There is no combined s
 A figure "is" a tool figure when it equals one, rounded half-up at the precision it is written
 at, or when it is a fraction the tool returned, written as a percentage. A sum, a difference, a
 recalled number or another property's number is not — and the harness's negative tests plant each.
+
+That is the **grounding** rule: it asks whether a number could have come from a tool, so any
+half-up rounding counts. **`expected_figures`** asks a stricter question — does the answer
+*state* each expected figure? — and uses a stricter rule (`scorers.states_figure`, R2.7Z; the
+document set's `expected_figures` uses the same since R2.7ZA). A written number states a figure
+when it equals it, or the figure as a percentage, exactly — `0.7`, `0.70`, `70%` and `70.00%`
+all state 0.7000 — or when it rounds half-up from it while keeping at least two significant
+digits: `15` and `15.4` state 15.43, `2` does not state 2.41. So the `1` in "1 May 2026", in
+`2026-05-01` or in a citation label `[S1]` does not state an occupancy rate of 0.7000, although
+grounding would still accept a `1` traced to that rate.
 
 ### Measured mechanically, never by judgement
 
@@ -127,17 +170,25 @@ python -m pytest tests/evaluation
 # Regenerate the pinned reference report after an INTENDED change -- then review the diff
 python -m tests.evaluation.harness --write-reference
 
-# Live capture (paid; needs the optional SDK and your key in the environment, not on the
-# command line). A pilot of one case first, into a NEW directory outside the repository:
+# Live capture with the LOCAL model (the default provider, R2.7O): no key, no API cost --
+# but a real call to the Ollama server on this machine. One case first, into a NEW directory
+# outside the repository:
+LLM_ENABLED=true LLM_PROVIDER=ollama python scripts/copilot_live_eval.py --set copilot_eval_v2 \
+    --out ../copilot-eval/local-1 --confirm-local-model-call --case kpis_may_occupancy
+
+# Live capture with the PAID provider (needs the optional SDK and your key in the
+# environment, not on the command line):
 pip install -r backend/requirements-llm.txt
-LLM_ENABLED=true LLM_MODEL=<verified model id> LLM_THINKING=disabled \
+LLM_ENABLED=true LLM_PROVIDER=anthropic LLM_MODEL=<verified model id> LLM_THINKING=disabled \
     python scripts/copilot_live_eval.py \
+    --set copilot_eval_v2 \
     --out ../copilot-eval/pilot-1 --confirm-paid-api-call --case kpis_may_occupancy
 ```
 
 The live script reads configuration only through `Settings`, never prints or writes the key, and
 writes the questions and answers about the fictional hotel to the directory you name. Nothing is
-committed automatically. `--set copilot_knowledge_eval_v1` runs §8's document set instead, and
+committed automatically. `--set copilot_eval_v2` runs §3's v2 questions -- use it for a new
+live run; `--set copilot_knowledge_eval_v1` runs §8's document set instead; and
 `--case ID` (repeatable) runs only those cases.
 
 ### Safeguards (R2.6B)
@@ -146,7 +197,13 @@ Each of these is checked **before a provider client exists**, so a refusal costs
 each is pinned by `tests/evaluation/test_live_eval_script.py`, which runs the script end to end
 with a stand-in model and sockets disabled:
 
-- `--confirm-paid-api-call` is required; `LLM_ENABLED` must be true and a key set.
+- **One consent flag, matching the provider** (R2.7O): `--confirm-local-model-call` for
+  `ollama`, `--confirm-paid-api-call` for `anthropic` (which also needs its key). Exactly one
+  is accepted, a mismatch is refused, and a run never falls back to the other provider.
+  `LLM_ENABLED` must be true. An off-machine `OLLAMA_BASE_URL`, or `LLM_BASE_URL` beside
+  `ollama`, is refused with a fixed sentence; so is a non-blank `LLM_API_KEY` -- in the shell
+  or the local `.env` -- while `LLM_PROVIDER` is not set explicitly (R2.7V), whichever flag is
+  passed. Set `LLM_PROVIDER` in the command to resolve it.
 - An `--out` **inside the Git repository is refused**: paths are resolved, and compared
   case-insensitively where the platform is. A capture must be reviewed for secrets, sensitive
   data and needless content before any of it is committed.
@@ -165,6 +222,8 @@ with a stand-in model and sockets disabled:
   provider requires within a tool-use turn, so tool use with thinking on is not supported
   ([v2-architecture.md](v2-architecture.md) §5.2, Amendments A12 and A13). The pilot command
   states `LLM_THINKING=disabled` although it is the default, so the intent is in the command.
+  A local run also records `ollama_options` -- base URL, `num_ctx`, `num_predict`,
+  `temperature`, `seed`, `presence_penalty` and `think` -- and `none` for the SDK fields.
 - **No headers from the environment.** With `ANTHROPIC_CUSTOM_HEADERS` set, the settings refuse
   to load and the run stops with a fixed sentence before a client exists; the value is never
   read or printed (A13). Unset it in the shell that runs the capture.
@@ -174,13 +233,19 @@ with a stand-in model and sockets disabled:
 The safeguards above are enforced. These are not -- the operator confirms them in the shell that
 runs the capture:
 
-- **Proxy and certificate variables** -- `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`,
-  `SSL_CERT_FILE`, `SSL_CERT_DIR` -- are either unset, or deliberately configured with a proxy
-  and certificate authority that are trusted. The SDK's HTTP client honours them whatever the
-  endpoint pin says: a proxy can carry the requests, and one whose certificate authority is
-  trusted can read them, the API key included ([v2-architecture.md](v2-architecture.md) §5.2,
-  Amendment A11). Check by name only; nothing here requires printing a value.
+- **Proxy and certificate variables (paid provider)** -- `HTTP_PROXY`, `HTTPS_PROXY`,
+  `ALL_PROXY`, `SSL_CERT_FILE`, `SSL_CERT_DIR` -- are either unset, or deliberately configured
+  with a proxy and certificate authority that are trusted. The SDK's HTTP client honours them
+  whatever the endpoint pin says: a proxy can carry the requests, and one whose certificate
+  authority is trusted can read them, the API key included
+  ([v2-architecture.md](v2-architecture.md) §5.2, Amendment A11). Check by name only; nothing
+  here requires printing a value.
 - `LLM_BASE_URL` is unset, unless a gateway is intended -- the official endpoint is then used.
+- **Local provider:** the Ollama server is running and serves the model in `LLM_MODEL` (default
+  `qwen3.5:4b`). Proxy variables do not apply to it -- its opener uses none, and it talks only
+  to loopback (A14). The first call includes loading the model: on a cold server consider a
+  longer `LLM_TIMEOUT_SECONDS` (up to 300), since a timed-out attempt is abandoned and the
+  server handles one request at a time.
 
 ### Request bounds
 
@@ -202,6 +267,16 @@ its request may still complete and be billed while the retry runs -- and any fai
 provider bills. Zero SDK retries removes the hidden retries; it does not make a failed call free.
 The circuit breaker (5 availability failures in 60 s opens it for 30 s) stops a run from
 hammering a failing provider.
+
+**A local run is not billed** -- it costs this machine's time and power -- but the same bounds
+apply, and a timed-out local attempt also keeps running until its connection closes at the
+deadline.
+
+**What a local run's tests do not establish.** `tests/backend/test_ollama_provider.py` and
+`tests/evaluation/test_ollama_kpis_offline.py` run offline against scripted answers: they prove
+the request shape, the tool replay and the scoring path, NOT the model. How `qwen3.5:4b`
+chooses tools, states figures, cites documents and how fast it answers is unverified until a
+separately approved local run (v2-architecture.md §5.2, Amendment A14).
 
 **No monetary estimate is given.** It needs the provider's current per-token prices for the exact
 model id and the real input-token count per request (system prompt, tool catalogue and the growing

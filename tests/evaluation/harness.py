@@ -28,6 +28,10 @@ into an aggregate**. A `statement` says, in words, what the result does not mean
 `python -m tests.evaluation.harness --write-reference` regenerates `reference_report.json` from
 the reference replays. A change to that file is a change to what CI considers correct, and is
 reviewed as one.
+
+*R2.7R.* `copilot_eval_v2` (`questions_v2.py`) has its own reference exchanges and pinned report
+(`fixtures/reference_replays_v2.json`, `reference_report_v2.json`); `--set copilot_eval_v2` with
+`--write-reference` regenerates that report. v1's files are untouched and remain v1's baseline.
 """
 
 from __future__ import annotations
@@ -59,6 +63,7 @@ from tests.evaluation.fixture_hotel import (
     FixtureInsight,
 )
 from tests.evaluation.questions import COPILOT_EVAL_V1, EvalCase, QuestionSet
+from tests.evaluation.questions_v2 import COPILOT_EVAL_V2
 from tests.evaluation.replay import (
     REFERENCE_PROVIDER,
     RecordingModel,
@@ -73,6 +78,10 @@ HARNESS_VERSION = "copilot_eval_harness_v2"
 HERE = Path(__file__).resolve().parent
 REFERENCE_REPLAYS = HERE / "fixtures" / "reference_replays.json"
 REFERENCE_REPORT = HERE / "reference_report.json"
+#: `copilot_eval_v2`'s own reference exchanges and pinned report (R2.7R). The exchanges are
+#: v1's hand-written turns, verbatim, bound to v2 -- synthetic, like v1's; no model wrote them.
+REFERENCE_REPLAYS_V2 = HERE / "fixtures" / "reference_replays_v2.json"
+REFERENCE_REPORT_V2 = HERE / "reference_report_v2.json"
 
 #: The measures, in report order. Each is reported as its own passed/scored pair.
 MEASURES = (
@@ -93,10 +102,17 @@ REFERENCE_STATEMENT = (
 )
 
 
-def live_statement(provider: str, model: str, recorded_on: str, size: int) -> str:
+def live_statement(
+    provider: str,
+    model: str,
+    recorded_on: str,
+    size: int,
+    identity: str = COPILOT_EVAL_V1.identity,
+) -> str:
+    """What a live report may claim. Names the set actually run (R2.7R: v1 or v2)."""
     return (
         f"One run of {provider}/{model}, recorded on {recorded_on}, against {size} questions of "
-        f"{COPILOT_EVAL_V1.identity} under {PROMPT.identity}, with fixed tool data. "
+        f"{identity} under {PROMPT.identity}, with fixed tool data. "
         "It describes this question set, this prompt and this model on that date, and nothing "
         "more: no aggregate accuracy is claimed, the set is too small for a rate to generalise, "
         "and it says nothing about the demand model's accuracy or about product usefulness."
@@ -363,7 +379,9 @@ def run(
     statement = (
         REFERENCE_STATEMENT
         if provider == REFERENCE_PROVIDER
-        else live_statement(provider, model, recorded_on, len(question_set.cases))
+        else live_statement(
+            provider, model, recorded_on, len(question_set.cases), question_set.identity
+        )
     )
     return {
         "harness": HARNESS_VERSION,
@@ -398,6 +416,11 @@ def reference_report() -> dict[str, Any]:
     return run_replays(load_replays(REFERENCE_REPLAYS, COPILOT_EVAL_V1))
 
 
+def reference_report_v2() -> dict[str, Any]:
+    """`copilot_eval_v2`'s reference run: its own exchanges, against its own set (R2.7R)."""
+    return run_replays(load_replays(REFERENCE_REPLAYS_V2, COPILOT_EVAL_V2), COPILOT_EVAL_V2)
+
+
 def canonical(report: dict[str, Any]) -> str:
     return json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
@@ -405,11 +428,20 @@ def canonical(report: dict[str, Any]) -> str:
 def main() -> None:  # pragma: no cover - a maintenance entry point, exercised by review
     parser = argparse.ArgumentParser(description="Regenerate the pinned reference report.")
     parser.add_argument("--write-reference", action="store_true")
+    parser.add_argument(
+        "--set",
+        dest="question_set",
+        choices=[COPILOT_EVAL_V1.identity, COPILOT_EVAL_V2.identity],
+        default=COPILOT_EVAL_V1.identity,
+        help="Which set's reference report. Default: copilot_eval_v1.",
+    )
     options = parser.parse_args()
-    report = canonical(reference_report())
+    v2 = options.question_set == COPILOT_EVAL_V2.identity
+    report = canonical(reference_report_v2() if v2 else reference_report())
+    target = REFERENCE_REPORT_V2 if v2 else REFERENCE_REPORT
     if options.write_reference:
-        REFERENCE_REPORT.write_text(report, encoding="utf-8", newline="\n")
-        print(f"wrote tests/evaluation/{REFERENCE_REPORT.name}")
+        target.write_text(report, encoding="utf-8", newline="\n")
+        print(f"wrote tests/evaluation/{target.name}")
     else:
         print(report)
 
@@ -422,10 +454,13 @@ __all__ = [
     "HARNESS_VERSION",
     "MEASURES",
     "REFERENCE_REPLAYS",
+    "REFERENCE_REPLAYS_V2",
     "REFERENCE_REPORT",
+    "REFERENCE_REPORT_V2",
     "CaseResult",
     "canonical",
     "reference_report",
+    "reference_report_v2",
     "run",
     "run_case",
     "run_replays",

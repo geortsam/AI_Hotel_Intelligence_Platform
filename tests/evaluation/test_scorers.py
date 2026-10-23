@@ -212,6 +212,94 @@ def test_an_expected_figure_may_be_written_rounded_or_as_a_percentage() -> None:
     assert scorers.missing_figures(CASE, "Occupancy was 71%.") == ("0.7000",)
 
 
+@pytest.mark.parametrize(
+    ("figure", "written", "states"),
+    [
+        # Exactly, trailing zeros aside -- or as a percentage.
+        ("0.7000", "0.70", True),
+        ("0.7000", "0.7", True),
+        ("0.7000", "70", True),
+        ("0.7000", "70.00", True),
+        ("0.9000", "90", True),
+        ("0.6100", "61.0", True),
+        ("434", "434", True),
+        ("120.00", "120", True),
+        ("24830.00", "24,830", True),
+        # Rounded, keeping at least two significant digits.
+        ("15.43", "15.4", True),
+        ("15.43", "15", True),
+        ("18.74", "19", True),
+        ("0.7350", "0.74", True),
+        ("0.7350", "74", True),
+        # Rounded to fewer than two -- an integer that merely rounds from the figure (R2.7Z).
+        ("0.7000", "1", False),
+        ("0.9000", "1", False),
+        ("0.6100", "1", False),
+        ("0.7350", "0.7", False),
+        ("2.41", "2", False),
+        # Not the figure at any precision.
+        ("0.9000", "2", False),
+        ("434", "430", False),
+        ("15.43", "15.5", False),
+        ("0.7000", "71", False),
+    ],
+)
+def test_a_figure_is_stated_only_exactly_or_rounded_to_two_significant_digits(
+    figure: str, written: str, states: bool
+) -> None:
+    value = Decimal(written.replace(",", ""))
+    assert scorers.states_figure(written, value, Decimal(figure)) is states
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "From 1 May 2026 to 31 May 2026, 434 room nights were occupied.",
+        "For 2026-05-01 to 2026-05-31, 434 room nights were occupied.",
+    ],
+)
+def test_a_date_does_not_state_a_rate_the_answer_omits(answer: str) -> None:
+    """R2.7Z: the `1` of a date rounds from 0.7000 at its own precision, and once passed for it."""
+    assert scorers.missing_figures(CASE, answer) == ("0.7000",)
+
+
+def test_an_unrelated_integer_does_not_state_the_busiest_days_rate() -> None:
+    week = {"date_from": "2026-05-01", "date_to": "2026-05-07"}
+    busiest = EvalCase(
+        "busiest_probe",
+        "single_tool",
+        "viewer",
+        "Which day between 1 May 2026 and 7 May 2026 had the highest occupancy rate?",
+        "answer",
+        calls=(ExpectedCall("get_daily_series", week),),
+        figures=("0.9000", "18"),
+    )
+    omitted = "Between 1 May and 7 May 2026, 2 May had the most, with 18 occupied room nights."
+    stated = "2 May 2026 had the highest occupancy rate, 90.00%, with 18 occupied room nights."
+
+    assert scorers.missing_figures(busiest, omitted) == ("0.9000",)
+    assert scorers.missing_figures(busiest, stated) == ()
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "From 1 May 2026 to 31 May 2026 the occupancy rate was 70% and 434 nights were occupied.",
+        "From 1 May 2026 to 31 May 2026 the occupancy rate was 70.00%.",
+        "From 1 May 2026 to 31 May 2026 the occupancy rate was 0.70.",
+    ],
+)
+def test_a_rate_stated_explicitly_beside_dates_is_still_found(answer: str) -> None:
+    assert scorers.missing_figures(CASE, answer) == ()
+
+
+def test_grounding_still_accepts_any_rounding_a_tool_figure_allows() -> None:
+    """The stricter rule is `expected_figures`' alone: grounding mirrors production, where a
+    figure rounded to one digit is still a figure a tool returned."""
+    assert scorers.traceable("1", Decimal("1"), [Decimal("0.7000")])
+    assert not scorers.states_figure("1", Decimal("1"), Decimal("0.7000"))
+
+
 # --- refusal -------------------------------------------------------------------------------------
 
 DECLINE = COPILOT_EVAL_V1.case("far_horizon")

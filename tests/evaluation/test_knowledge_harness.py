@@ -253,6 +253,38 @@ def test_the_scorer_rejects_every_malformed_citation_shape() -> None:
     assert knowledge_scorers.citation_validity("[Sunday] brunch", seen) is True
 
 
+OCCUPANCY_AND_PARKING = next(
+    case for case in COPILOT_KNOWLEDGE_EVAL_V1.cases if case.case_id == "occupancy_and_parking"
+)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "From 1 May 2026 to 31 May 2026, parking costs 15.00 EUR per night [S1].",
+        "Parking costs 15.00 EUR per night [S1].",
+        "For 2026-05-01 to 2026-05-31: parking is 15.00 EUR per night [S1].",
+    ],
+    ids=["date", "citation_label", "iso_date"],
+)
+def test_a_date_or_a_citation_label_does_not_state_an_omitted_rate(answer: str) -> None:
+    """R2.7ZA: the `1` of "1 May" or of `[S1]` rounds from 0.7000, and once passed for it."""
+    assert knowledge_scorers.expected_figures(OCCUPANCY_AND_PARKING, answer) is False
+
+
+@pytest.mark.parametrize("rate", ["70%", "70.00%", "0.70", "0.7"])
+def test_a_rate_stated_exactly_or_as_a_percentage_still_counts(rate: str) -> None:
+    answer = (
+        f"From 1 May 2026 to 31 May 2026 occupancy was {rate}. Parking costs 15 EUR per night [S1]."
+    )
+    assert knowledge_scorers.expected_figures(OCCUPANCY_AND_PARKING, answer) is True
+
+
+def test_a_missing_parking_price_is_still_missing() -> None:
+    answer = "From 1 May 2026 to 31 May 2026 occupancy was 70.00%. Parking is available [S1]."
+    assert knowledge_scorers.expected_figures(OCCUPANCY_AND_PARKING, answer) is False
+
+
 # ======================================================================================
 # knowledge_retrieval_v1: the set and its scorer (the measurement runs over PostgreSQL)
 # ======================================================================================

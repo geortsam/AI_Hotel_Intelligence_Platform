@@ -33,6 +33,7 @@
 > | A11 | R2.7D — Provider endpoint pinning | 2026-10-13 | §5.2 |
 > | A12 | R2.7F — Provider SDK 0.125.0 and the thinking setting | 2026-10-13 | §5.2 |
 > | A13 | R2.7I — Thinking off by default; environment headers refused | 2026-10-21 | §5.2 |
+> | A14 | R2.7O — Local Ollama provider by default; no provider fallback | 2026-10-22 | §5.2 |
 
 ---
 
@@ -506,6 +507,71 @@ every question with a failure.
 > cover it. `backend/requirements-llm.txt` is an exact pin, but unlike the other dependency
 > files it is not hash-locked; a lock needs package-index access and was not produced offline
 > (the proposed command is in that file).
+
+> **Amendment A14 (R2.7O) — a local provider, Ollama, is the default, and there is no
+> provider fallback.** `LLM_PROVIDER` takes `ollama` -- the default -- or `anthropic`, and
+> `LLM_ENABLED=false` is still the default, so a deployment that configures nothing calls no
+> model at all. The paid provider is used **only** when `LLM_PROVIDER=anthropic` is set. The
+> factory builds exactly the selected adapter: there is **no fallback** in either direction --
+> a failing local model is a declared failure, never a reason to call the paid one -- and with
+> `ollama` selected the Anthropic adapter is not even imported. `LLM_MODEL` is optional; unset,
+> each provider uses its default (`qwen3.5:4b`, `claude-sonnet-5`), read everywhere through
+> `Settings.effective_llm_model`. The API-key requirement, `LLM_BASE_URL` and the
+> `ANTHROPIC_CUSTOM_HEADERS` refusal are the paid provider's rules and apply only to it;
+> `LLM_BASE_URL` beside an enabled `ollama` is refused, since it would be silently ignored.
+> **Upgrading:** before R2.7O, `LLM_ENABLED=true` with `LLM_API_KEY` meant the paid provider.
+> Under the `ollama` default, which ignores the key, that configuration would silently switch
+> providers -- in a container with no local Ollama, every copilot question a `503`. Since R2.7V
+> the settings therefore refuse to load, with a fixed message that repeats no value, when the
+> copilot is enabled, `LLM_API_KEY` is non-blank after trimming, and `LLM_PROVIDER` was not
+> provided explicitly -- pydantic's `model_fields_set`, which counts the environment and `.env`
+> alike. Set `LLM_PROVIDER=anthropic` to keep the paid provider, or `LLM_PROVIDER=ollama` to
+> leave the key unused. A disabled copilot, or an enabled one with no usable key, is unaffected.
+>
+> **Transport: loopback only, no proxy, no redirect, no credential.**
+> `app.llm.providers.ollama_provider.OllamaChatModel` speaks Ollama's native `POST /api/chat`
+> (`stream: false`) with the standard library's `urllib.request` -- no new dependency. It is the
+> single, named exemption to the `app.llm` transport ban, which now also covers
+> `urllib.request`, `http.client`, `socket`, `aiohttp`, `urllib3` and `ollama`, sees through
+> `from X import Y`, and is limited by test to that one module and that one import.
+> `OLLAMA_BASE_URL` (default `http://127.0.0.1:11434`) must be an http(s) URL on `127.0.0.1`,
+> `localhost` or `[::1]` -- refused at settings load when the copilot is enabled on `ollama`,
+> and always again by the adapter at construction, with a fixed message. *(R2.7T: in every
+> other configuration the variable may belong to another tool -- an Open WebUI container sets
+> it to another host -- and checking it there stopped this application from starting with the
+> copilot off; it is no longer checked where it is not used.)* The opener is built with an empty `ProxyHandler({})`, so no proxy setting from the
+> environment or the operating system applies -- unlike the paid provider's SDK client (A11).
+> A redirect is refused, not followed; no API key and no authorization header is sent.
+>
+> **Requests and answers.** Every request sends `num_ctx` (`OLLAMA_NUM_CTX`, default 16384:
+> the server's own default window can be 4096 on an 8 GB GPU, and a longer prompt is cut, not
+> refused), `num_predict` (the request's output budget), `temperature` and `seed`
+> (`OLLAMA_TEMPERATURE` 0, `OLLAMA_SEED` 7151) and `presence_penalty: 0`, and `think: false`
+> unless `LLM_THINKING=provider_default`. A tool result names its tool (`tool_name`); a call
+> without a server id gets a deterministic one; string arguments are parsed as JSON and
+> anything else becomes `{}`, which the registry refuses. Thinking is never answer text. A call
+> cut off at the token limit, duplicate call ids, a thinking-only or malformed answer are
+> `502 LLM_INVALID_RESPONSE`; a refused connection, a timeout, a redirect or any non-2xx is
+> `503 LLM_UNAVAILABLE` -- the boundary, budget, breaker and retry rules of §5.7 and A10 are
+> unchanged. The live evaluation needs `--confirm-local-model-call` for `ollama` and
+> `--confirm-paid-api-call` for `anthropic`; exactly one is accepted and it must match, and
+> the capture records the provider, the effective model and the effective local options.
+>
+> **What has been observed, and what is still unverified.** The tests are offline: a scripted
+> transport and an in-memory `urllib` handler, with every socket refused; `kpis_may_occupancy`
+> passes through the real copilot stack over a scripted exchange. That proves the wiring, not
+> a model. One real local run has since been made (R2.7P, 2026-10-22: Ollama 0.40.7,
+> `qwen3.5:4b`, the single case `kpis_may_occupancy` of `copilot_eval_v1`, two requests). It
+> **observed** that the server accepts the native request -- tools, `options`, `think: false`
+> -- and loaded the model at the requested `num_ctx` of 16384; that it returns its own
+> tool-call ids, so the generated ones were not needed; and that a replayed round, the call and
+> its result named by `tool_name`, is accepted and answered. The model called
+> `get_hotel_kpis` with the exact dates and stated the occupancy rate, grounded, but not the
+> occupied room nights the v1 case also scores -- the question/figure mismatch `copilot_eval_v2`
+> corrects ([copilot-evaluation.md](copilot-evaluation.md) §3). That is one exchange of one
+> case: `qwen3.5:4b`'s tool selection, factual accuracy, latency and citation behaviour in
+> general remain **unverified**, as does any other Ollama version or model. The run's capture
+> was kept outside the repository. CI runs no model; no migration, dependency or CI change.
 
 ### 5.3 Prompts as versioned records
 

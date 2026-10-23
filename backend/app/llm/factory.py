@@ -78,18 +78,19 @@ def build_chat_model(settings: Settings) -> ChatModel:
     is configured, and should not: the answer is a `LlmDisabledError` at call time, which is the
     documented behaviour and the one a route will translate into its 503.
 
-    An enabled deployment with no API key is a **misconfiguration**, not a disabled one. It is
-    refused when the settings are loaded (`Settings._llm_key_required_when_enabled`), so such a
-    deployment never starts. This function is called per request, so the check below cannot
-    stop a process starting; it remains as a second guard for a `Settings` built without
+    An enabled ANTHROPIC deployment with no API key is a **misconfiguration**, not a disabled
+    one. It is refused when the settings are loaded (`Settings._llm_key_required_when_enabled`),
+    so such a deployment never starts. This function is called per request, so the check below
+    cannot stop a process starting; it remains as a second guard for a `Settings` built without
     validation (`model_construct`). A deployment that has said `llm_enabled=true` has asked for
     a working provider; discovering at 3am that it has been answering `LLM_DISABLED` for a week
-    because a secret was not mounted is the failure mode these checks exist to prevent.
+    because a secret was not mounted is the failure mode these checks exist to prevent. The
+    local `ollama` provider has no key, so the rule does not apply to it (R2.7O).
     """
     if not settings.llm_enabled:
         return GuardedChatModel(_UnreachableModel(), enabled=False)
 
-    if not settings.llm_api_key:
+    if settings.llm_provider == "anthropic" and not settings.llm_api_key:
         raise ValueError(
             "llm_enabled is true but llm_api_key is not set. Set the key, or set "
             "llm_enabled=false to run without a provider."
@@ -100,7 +101,7 @@ def build_chat_model(settings: Settings) -> ChatModel:
         provider,
         enabled=True,
         max_output_tokens=settings.llm_max_output_tokens,
-        breaker=breaker_for(settings.llm_provider, settings.llm_model),
+        breaker=breaker_for(settings.llm_provider, settings.effective_llm_model),
     )
 
 
@@ -113,14 +114,29 @@ def _build_provider(settings: Settings) -> ChatModel:
 
     `llm_provider` is a `Literal`, so an unknown value is a settings validation error long
     before it reaches this function. The `raise` below is therefore unreachable in practice and
-    is here so that adding a second literal without adding its branch fails immediately.
+    is here so that adding a literal without adding its branch fails immediately.
+
+    Exactly ONE adapter is built: the selected one. There is no fallback in either direction
+    (R2.7O) -- a failing local model is a declared failure, never a reason to spend money on the
+    paid provider -- and with `ollama` selected the Anthropic adapter is not even imported.
     """
+    if settings.llm_provider == "ollama":
+        from app.llm.providers.ollama_provider import OllamaChatModel
+
+        return OllamaChatModel(
+            model=settings.effective_llm_model,
+            base_url=settings.ollama_base_url,
+            num_ctx=settings.ollama_num_ctx,
+            temperature=settings.ollama_temperature,
+            seed=settings.ollama_seed,
+            thinking=settings.llm_thinking,
+        )
     if settings.llm_provider == "anthropic":
         from app.llm.providers.anthropic_provider import AnthropicChatModel
 
         return AnthropicChatModel(
             api_key=settings.llm_api_key or "",
-            model=settings.llm_model,
+            model=settings.effective_llm_model,
             base_url=settings.llm_base_url,
             thinking=settings.llm_thinking,
         )

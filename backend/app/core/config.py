@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -35,6 +36,58 @@ PROVIDER_HEADERS_REFUSAL = (
     "to every provider request, so the copilot will not start with it set. Unset it, or set "
     "LLM_ENABLED=false to run without a provider."
 )
+
+#: The model each provider uses when `LLM_MODEL` is not set (`Settings.effective_llm_model`).
+DEFAULT_MODELS: dict[str, str] = {"ollama": "qwen3.5:4b", "anthropic": "claude-sonnet-5"}
+
+#: The only hosts an `OLLAMA_BASE_URL` may name: this machine (R2.7O).
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+#: Why `LLM_BASE_URL` was refused beside `LLM_PROVIDER=ollama`. Fixed text, value never echoed.
+LLM_BASE_URL_WITH_OLLAMA_REFUSAL = (
+    "LLM_BASE_URL configures the anthropic provider and is not used by ollama. Unset it, or set "
+    "LLM_PROVIDER=anthropic."
+)
+
+#: Why an enabled copilot with an API key but no explicit `LLM_PROVIDER` was refused (R2.7V).
+#: Fixed text: no configured value is ever echoed.
+IMPLICIT_PROVIDER_REFUSAL = (
+    "LLM_ENABLED is true and LLM_API_KEY is set, but LLM_PROVIDER is not. Set LLM_PROVIDER "
+    "explicitly to ollama or anthropic: the default, ollama, does not use the key."
+)
+
+#: Why an `OLLAMA_BASE_URL` was refused. Fixed text: the value itself is never echoed.
+INVALID_OLLAMA_URL_MESSAGE = (
+    "OLLAMA_BASE_URL must be an http:// or https:// URL on this machine (127.0.0.1, localhost or "
+    "[::1]) with no credentials, query, fragment or whitespace."
+)
+
+
+def is_loopback_url(value: object) -> bool:
+    """Whether *value* is an absolute http(s) URL whose host is a loopback name.
+
+    Refuses credentials (`user@`), a query or fragment (even an empty `?` or `#`), whitespace or
+    control characters anywhere, and a malformed port. A path prefix and a port are allowed.
+    Pure and side-effect free: the settings check it at load, the Ollama adapter again at
+    construction.
+    """
+    if not isinstance(value, str) or not value or value != value.strip():
+        return False
+    if any(char.isspace() or ord(char) < 0x20 or ord(char) == 0x7F for char in value):
+        return False
+    try:
+        parts = urlsplit(value)
+        _ = parts.port  # raises ValueError for a malformed or out-of-range port
+    except ValueError:
+        return False
+    return (
+        parts.scheme in ("http", "https")
+        and parts.hostname in LOOPBACK_HOSTS
+        and parts.username is None
+        and parts.password is None
+        and "?" not in value
+        and "#" not in value
+    )
 
 
 class Settings(BaseSettings):
@@ -199,9 +252,13 @@ class Settings(BaseSettings):
     # purpose, and an accidentally-present key must not be enough to start spending money.
     llm_enabled: bool = False
     #: Which adapter the factory builds. Never read by a service: §5.1 requires that no caller
-    #: names a vendor, so the name is resolved here and nowhere above `app.llm`.
-    llm_provider: Literal["anthropic"] = "anthropic"
-    llm_model: str = "claude-sonnet-5"
+    #: names a vendor, so the name is resolved here and nowhere above `app.llm`. `ollama` -- a
+    #: local model on this machine -- is the default since R2.7O; the paid `anthropic` provider
+    #: is used ONLY when selected explicitly, and neither ever falls back to the other.
+    llm_provider: Literal["ollama", "anthropic"] = "ollama"
+    #: The model id. None means the provider's default (`DEFAULT_MODELS`); read it through
+    #: `effective_llm_model`, never directly, so every consumer resolves it the same way.
+    llm_model: str | None = None
     #: Optional override for a gateway or a regional endpoint: an absolute https:// URL, passed
     #: through unchanged. None means https://api.anthropic.com -- never the SDK's
     #: ANTHROPIC_BASE_URL environment fallback (app.llm.providers.anthropic_provider, R2.7D).
@@ -222,6 +279,20 @@ class Settings(BaseSettings):
     #: unbounded spend is the availability risk that section names.
     llm_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     llm_max_output_tokens: int = Field(default=1024, ge=1, le=32_000)
+
+    # --- Local model: Ollama (R2.7O) -----------------------------------------
+    #
+    # Read only when `llm_provider` is `ollama`. The server must be on THIS machine: with the
+    # copilot enabled on `ollama`, a URL whose host is not a loopback name is refused at load
+    # (`is_loopback_url`), and the adapter refuses it again at construction. No key is sent.
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    #: The context window requested on EVERY call. Sent explicitly because the server's own
+    #: default can be far smaller (4096 on an 8 GB GPU) and a prompt longer than the window is
+    #: cut, not refused.
+    ollama_num_ctx: int = Field(default=16_384, ge=4096, le=262_144)
+    #: Sampling, fixed for evaluation repeatability; the model's own defaults are random.
+    ollama_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    ollama_seed: int = Field(default=7151, ge=0)
 
     # --- Copilot budgets (Stage 7.7) -----------------------------------------
     #
@@ -335,11 +406,67 @@ class Settings(BaseSettings):
         and every question then failed at request time, because the chat model is built per
         request. Enforced in every environment; a whitespace-only key counts as none.
         """
-        if self.llm_enabled and not (self.llm_api_key or "").strip():
+        if (
+            self.llm_enabled
+            and self.llm_provider == "anthropic"
+            and not (self.llm_api_key or "").strip()
+        ):
             raise ValueError(
                 "LLM_ENABLED is true but LLM_API_KEY is not set. Set the key, or set "
                 "LLM_ENABLED=false to run without a provider."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _provider_explicit_beside_a_key(self) -> Settings:
+        """Refuse an enabled copilot with an API key but no explicit `LLM_PROVIDER` (R2.7V, M2).
+
+        Before R2.7O `anthropic` was the only provider, so `LLM_ENABLED=true` with a key meant
+        the paid provider. The default is now `ollama`, which ignores the key: loaded as it is,
+        such a configuration would silently switch to a local model -- in a container with none,
+        every question a `503`. Its intent cannot be known, so it is refused, not guessed.
+        "Explicit" is pydantic's `model_fields_set`: a value from the environment, a `.env` file
+        or the constructor counts; the default does not. A whitespace-only key counts as none,
+        as in the key rule above. The message is fixed and repeats no value.
+        """
+        if (
+            self.llm_enabled
+            and (self.llm_api_key or "").strip()
+            and "llm_provider" not in self.model_fields_set
+        ):
+            raise ValueError(IMPLICIT_PROVIDER_REFUSAL)
+        return self
+
+    @model_validator(mode="after")
+    def _ollama_url_is_loopback(self) -> Settings:
+        """Refuse a non-loopback `OLLAMA_BASE_URL` when the copilot will use it (R2.7O, R2.7T).
+
+        Only when the copilot is enabled AND `ollama` is selected: that is the one configuration
+        that builds a client from this URL. `OLLAMA_BASE_URL` is also a name other tools use (an
+        Open WebUI container, say, points it at another host), so checking it in every
+        configuration let a setting meant for another program stop this one from starting --
+        every V1 endpoint included -- with the copilot off (R2.7S, H1). The Ollama adapter checks
+        the URL again, independently, when it is constructed, so a configuration that skips this
+        validator (`model_construct`) still cannot reach a non-loopback host. The message is
+        fixed and never repeats the value.
+        """
+        if (
+            self.llm_enabled
+            and self.llm_provider == "ollama"
+            and not is_loopback_url(self.ollama_base_url)
+        ):
+            raise ValueError(INVALID_OLLAMA_URL_MESSAGE)
+        return self
+
+    @model_validator(mode="after")
+    def _no_anthropic_endpoint_for_ollama(self) -> Settings:
+        """Refuse `LLM_BASE_URL` while an enabled copilot uses Ollama (R2.7O).
+
+        `LLM_BASE_URL` configures the paid provider's endpoint. Set beside `ollama` it would be
+        ignored -- a configuration that says one thing and does another -- so it is refused.
+        """
+        if self.llm_enabled and self.llm_provider == "ollama" and self.llm_base_url is not None:
+            raise ValueError(LLM_BASE_URL_WITH_OLLAMA_REFUSAL)
         return self
 
     @model_validator(mode="after")
@@ -354,9 +481,18 @@ class Settings(BaseSettings):
         so that is what is checked -- a `.env` entry never reaches the SDK. A disabled copilot
         builds no client, so it is not refused. The adapter checks again when it builds a client.
         """
-        if self.llm_enabled and PROVIDER_HEADERS_VARIABLE in os.environ:
+        if (
+            self.llm_enabled
+            and self.llm_provider == "anthropic"
+            and PROVIDER_HEADERS_VARIABLE in os.environ
+        ):
             raise ValueError(PROVIDER_HEADERS_REFUSAL)
         return self
+
+    @property
+    def effective_llm_model(self) -> str:
+        """The model id in force: `LLM_MODEL` when set, else the selected provider's default."""
+        return self.llm_model or DEFAULT_MODELS[self.llm_provider]
 
     @model_validator(mode="after")
     def _accounting_outlives_conversations(self) -> Settings:

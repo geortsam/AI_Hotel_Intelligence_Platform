@@ -125,7 +125,14 @@ import time
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
-from app.llm.base import ChatRequest, ChatResponse, FinishReason, TokenUsage, ToolCall
+from app.llm.base import (
+    RESPONSE_MODEL_KEY,
+    ChatRequest,
+    ChatResponse,
+    FinishReason,
+    TokenUsage,
+    ToolCall,
+)
 from app.llm.errors import (
     LlmInvalidResponseError,
     LlmRateLimitedError,
@@ -143,9 +150,6 @@ SDK_DISTRIBUTION = "anthropic"
 
 #: Passed to the client explicitly. Zero: the boundary owns retries (see the module docstring).
 SDK_MAX_RETRIES = 0
-
-#: The `diagnostics` key holding the model id the provider returned, when it returned one.
-RESPONSE_MODEL_KEY = "response_model"
 
 #: The endpoint used when `LLM_BASE_URL` is not configured. Passed explicitly, so the SDK's own
 #: `ANTHROPIC_BASE_URL` environment fallback can never select one (module docstring).

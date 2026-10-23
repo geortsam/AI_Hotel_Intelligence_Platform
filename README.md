@@ -651,8 +651,28 @@ environment only — never hard-coded — so one artifact runs in every environm
 | `CORS_ORIGINS` | localhost:5173, localhost:3000 | Comma-separated |
 | `DATABASE_URL` | *(empty)* | Declared; unused until Stage 2 |
 | `SECRET_KEY` | *(empty)* | Declared; unused until authentication exists |
-| `LLM_ENABLED` | `false` | Switches the copilot on; reported to clients as `copilot_enabled` on `GET /api/v1/` |
-| `LLM_API_KEY` | *(empty)* | Required when `LLM_ENABLED=true`: the API refuses to start without it. Never logged or returned |
+| `LLM_ENABLED` | `false` | Switches the copilot on; reported to clients as `copilot_enabled` on `GET /api/v1/`. Off, no provider is ever called |
+| `LLM_PROVIDER` | `ollama` | `ollama` (a local model on this machine) or `anthropic` (a paid API). Only the selected provider is called; there is no fallback between them |
+| `LLM_MODEL` | *(provider default)* | Unset: `qwen3.5:4b` for `ollama`, `claude-sonnet-5` for `anthropic` |
+| `LLM_THINKING` | `disabled` | `disabled` or `provider_default`; tool use with thinking on is not supported |
+| `LLM_TIMEOUT_SECONDS` | `30` | Per-attempt deadline, at most 300; a cold local model may need more |
+| `LLM_MAX_OUTPUT_TOKENS` | `1024` | Per-request output ceiling, 1 to 32000 |
+| ***Anthropic only*** (`LLM_PROVIDER=anthropic`) | | |
+| `LLM_API_KEY` | *(empty)* | Required when `LLM_ENABLED=true` with `anthropic`: the API refuses to start without it. Not used by `ollama`. With `LLM_ENABLED=true`, a non-blank key requires `LLM_PROVIDER` to be set explicitly, or the API refuses to start. Never logged or returned |
+| `LLM_BASE_URL` | *(empty)* | Optional `https://` gateway; unset means `https://api.anthropic.com`. Refused beside an enabled `ollama` |
+| ***Ollama only*** (`LLM_PROVIDER=ollama`) | | No API key is needed or sent |
+| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Must be http(s) on `127.0.0.1`, `localhost` or `[::1]`, checked when the copilot is enabled on `ollama`. No proxy is used and no redirect followed |
+| `OLLAMA_NUM_CTX` | `16384` | Context window sent with every request, 4096 to 262144 |
+| `OLLAMA_TEMPERATURE` | `0.0` | Sampling temperature, 0.0 to 2.0 |
+| `OLLAMA_SEED` | `7151` | Sampling seed, 0 or more |
+
+**Upgrading from before R2.7O:** `LLM_ENABLED=true` with `LLM_API_KEY` used to mean the paid
+provider; the default is now `ollama`, which ignores the key. So that the old configuration
+cannot silently switch providers, the API refuses to start (R2.7V) when the copilot is enabled,
+`LLM_API_KEY` is non-blank and `LLM_PROVIDER` is not set -- in the environment or `.env`. Set
+`LLM_PROVIDER=anthropic` to keep the paid provider, or `LLM_PROVIDER=ollama` to use the local
+model and leave the key unused. See [docs/v2-architecture.md](docs/v2-architecture.md) §5.2,
+Amendment A14.
 
 `.env` is git-ignored. `.env.example` contains no real secrets and never should.
 

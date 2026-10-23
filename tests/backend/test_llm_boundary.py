@@ -919,6 +919,7 @@ def test_the_factory_path_ignores_the_environment_too(monkeypatch: pytest.Monkey
     monkeypatch.setitem(sys.modules, "anthropic", sdk)
     monkeypatch.setenv("ANTHROPIC_BASE_URL", REDIRECT)
     settings = Settings(
+        llm_provider="anthropic",
         _env_file=None,
         environment="test",
         llm_enabled=True,
@@ -1025,6 +1026,7 @@ def test_the_factory_refuses_an_invalid_endpoint_before_any_client_exists(
     sdk = RecordingSdk()
     monkeypatch.setitem(sys.modules, "anthropic", sdk)
     settings = Settings(
+        llm_provider="anthropic",
         _env_file=None,
         environment="test",
         llm_enabled=True,
@@ -1126,6 +1128,7 @@ def test_an_unsupported_thinking_setting_is_refused_when_the_settings_load(
 ) -> None:
     with pytest.raises(ValidationError) as refused:
         Settings(
+            llm_provider="anthropic",
             _env_file=None,
             environment="test",
             llm_enabled=True,
@@ -1191,6 +1194,7 @@ def test_the_factory_passes_the_thinking_setting_through(
     sdk = RecordingSdk()
     monkeypatch.setitem(sys.modules, "anthropic", sdk)
     settings = Settings(
+        llm_provider="anthropic",
         _env_file=None,
         environment="test",
         llm_enabled=True,
@@ -1291,7 +1295,11 @@ def test_a_default_deployment_sends_thinking_disabled_through_the_factory(
     sdk = RecordingSdk()
     monkeypatch.setitem(sys.modules, "anthropic", sdk)
     settings = Settings(
-        _env_file=None, environment="test", llm_enabled=True, llm_api_key="test-key-not-real"
+        llm_provider="anthropic",
+        _env_file=None,
+        environment="test",
+        llm_enabled=True,
+        llm_api_key="test-key-not-real",
     )
 
     build_chat_model(settings).complete(request_for())
@@ -1315,7 +1323,11 @@ def test_the_environment_variable_reaches_the_request(
     sdk = RecordingSdk()
     monkeypatch.setitem(sys.modules, "anthropic", sdk)
     settings = Settings(
-        _env_file=None, environment="test", llm_enabled=True, llm_api_key="test-key-not-real"
+        llm_provider="anthropic",
+        _env_file=None,
+        environment="test",
+        llm_enabled=True,
+        llm_api_key="test-key-not-real",
     )
 
     build_chat_model(settings).complete(request_for())
@@ -1340,7 +1352,12 @@ def test_an_enabled_copilot_refuses_to_load_with_custom_headers_in_the_environme
     monkeypatch.setenv("ANTHROPIC_CUSTOM_HEADERS", value)
 
     with pytest.raises(ValueError) as refused:
-        Settings(_env_file=None, llm_enabled=True, llm_api_key="test-key-not-real")
+        Settings(
+            llm_provider="anthropic",
+            _env_file=None,
+            llm_enabled=True,
+            llm_api_key="test-key-not-real",
+        )
 
     assert PROVIDER_HEADERS_REFUSAL in str(refused.value)
     for leaked in ("SENTINEL-HEADER-VALUE-9f3", "X-Probe-R27i", "test-key-not-real"):
@@ -1352,7 +1369,9 @@ def test_a_disabled_copilot_is_not_refused_because_it_builds_no_client(
 ) -> None:
     monkeypatch.setenv("ANTHROPIC_CUSTOM_HEADERS", INJECTED)
 
-    assert Settings(_env_file=None, llm_enabled=False).llm_enabled is False
+    assert (
+        Settings(llm_provider="anthropic", _env_file=None, llm_enabled=False).llm_enabled is False
+    )
 
 
 def test_a_dotenv_entry_is_not_refused_because_the_sdk_never_reads_it(
@@ -1362,7 +1381,12 @@ def test_a_dotenv_entry_is_not_refused_because_the_sdk_never_reads_it(
     dotenv = tmp_path / ".env"
     dotenv.write_text(f"ANTHROPIC_CUSTOM_HEADERS={INJECTED}\n", encoding="utf-8")
 
-    settings = Settings(_env_file=dotenv, llm_enabled=True, llm_api_key="test-key-not-real")
+    settings = Settings(
+        llm_provider="anthropic",
+        _env_file=dotenv,
+        llm_enabled=True,
+        llm_api_key="test-key-not-real",
+    )
 
     assert settings.llm_enabled is True
 
@@ -1435,6 +1459,23 @@ def test_a_header_refusal_is_one_attempt_and_not_a_breaker_failure(
     assert breaker.state == "closed"
 
 
+def test_amendment_a14_documents_the_local_provider_and_what_is_unverified() -> None:
+    document = (REPOSITORY_ROOT / "docs" / "v2-architecture.md").read_text(encoding="utf-8")
+    amendment = document[document.index("**Amendment A14") :]
+    amendment = amendment[: amendment.index("\n\n")]
+    for phrase in [
+        "`LLM_PROVIDER`",
+        "**no fallback**",
+        "`ProxyHandler({})`",
+        "`127.0.0.1`",
+        "`--confirm-local-model-call`",
+        "`Settings.effective_llm_model`",
+        "**unverified**",
+    ]:
+        assert phrase in amendment, phrase
+    assert "| A14 |" in document
+
+
 def test_amendment_a13_documents_the_default_and_the_header_policy() -> None:
     document = (REPOSITORY_ROOT / "docs" / "v2-architecture.md").read_text(encoding="utf-8")
     amendment = document[document.index("**Amendment A13") :]
@@ -1501,6 +1542,7 @@ def test_enabling_without_a_key_is_refused_when_the_settings_load(
     Before, it started, reported the copilot as enabled, and failed every question."""
     with pytest.raises(ValueError, match="LLM_API_KEY is not set"):
         Settings(
+            llm_provider="anthropic",
             environment=environment,
             secret_key="a-test-only-secret-not-used-for-anything",
             llm_enabled=True,
@@ -1512,6 +1554,7 @@ def test_the_same_refusal_applies_to_the_environment_a_deployment_uses(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("LLM_ENABLED", "true")
+    monkeypatch.setenv("LLM_PROVIDER", "anthropic")  # the key rule is the paid provider's
     monkeypatch.delenv("LLM_API_KEY", raising=False)
 
     with pytest.raises(ValueError, match="LLM_API_KEY is not set"):
@@ -1523,7 +1566,13 @@ def test_the_refusal_repeats_no_setting_it_was_given() -> None:
     beside it, truncated only in the middle, so a short secret -- or the start of a long one --
     would be echoed verbatim. The echo is switched off, so neither is."""
     with pytest.raises(ValueError) as refused:
-        Settings(_env_file=None, secret_key="Zq9-sk", llm_enabled=True, llm_api_key=" ")
+        Settings(
+            llm_provider="anthropic",
+            _env_file=None,
+            secret_key="Zq9-sk",
+            llm_enabled=True,
+            llm_api_key=" ",
+        )
     text = str(refused.value)
     assert "LLM_API_KEY is not set" in text
     assert "Zq9-sk" not in text
@@ -1532,7 +1581,9 @@ def test_the_refusal_repeats_no_setting_it_was_given() -> None:
 
 def test_the_factory_still_refuses_settings_that_skipped_validation() -> None:
     """The second guard: `model_construct` bypasses validators, the factory does not."""
-    unvalidated = Settings.model_construct(environment="test", llm_enabled=True, llm_api_key=None)
+    unvalidated = Settings.model_construct(
+        llm_provider="anthropic", environment="test", llm_enabled=True, llm_api_key=None
+    )
 
     with pytest.raises(ValueError, match="llm_api_key is not set"):
         build_chat_model(unvalidated)
@@ -1540,7 +1591,13 @@ def test_the_factory_still_refuses_settings_that_skipped_validation() -> None:
 
 def test_an_enabled_deployment_builds_a_guarded_provider() -> None:
     model = build_chat_model(
-        Settings(environment="test", llm_enabled=True, llm_api_key="k", llm_model="m")
+        Settings(
+            llm_provider="anthropic",
+            environment="test",
+            llm_enabled=True,
+            llm_api_key="k",
+            llm_model="m",
+        )
     )
 
     assert isinstance(model, GuardedChatModel)
@@ -1558,9 +1615,17 @@ def test_the_v1_application_is_unaffected_by_the_flag() -> None:
     """
     from app.main import create_app
 
-    off = create_app(Settings(environment="test", debug=True, llm_enabled=False)).openapi()
+    off = create_app(
+        Settings(llm_provider="anthropic", environment="test", debug=True, llm_enabled=False)
+    ).openapi()
     on = create_app(
-        Settings(environment="test", debug=True, llm_enabled=True, llm_api_key="k")
+        Settings(
+            llm_provider="anthropic",
+            environment="test",
+            debug=True,
+            llm_enabled=True,
+            llm_api_key="k",
+        )
     ).openapi()
 
     assert off == on
@@ -1659,6 +1724,46 @@ def test_no_router_reaches_the_llm_package() -> None:
             assert reached == set(), f"{path.name} imports {sorted(reached)}"
 
 
+#: Modules that open a connection. None may be imported anywhere in `app.llm` (R2.7O extended
+#: the list from `httpx` and `requests`) -- with ONE named exemption below.
+TRANSPORT_MODULES = (
+    "httpx",
+    "requests",
+    "urllib.request",
+    "http.client",
+    "socket",
+    "aiohttp",
+    "urllib3",
+    "ollama",
+)
+
+#: The single exemption: the local Ollama adapter, which has no SDK and must make its own HTTP
+#: call -- and may import exactly `urllib.request` for it, nothing else on the list. Its own
+#: rules (loopback-only URL, no proxy, no redirect, no credential) are tested in
+#: `tests/backend/test_ollama_provider.py`.
+PERMITTED_TRANSPORT_MODULE = "app/llm/providers/ollama_provider.py"
+PERMITTED_TRANSPORT_IMPORTS = frozenset({"urllib.request"})
+
+
+def imported_names(path: Path) -> set[str]:
+    """`module_imports`, plus `X.Y` for every `from X import Y` -- so `from urllib import
+    request` is seen as `urllib.request` and cannot slip past the transport ban."""
+    names = module_imports(path)
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            names.update(f"{node.module}.{alias.name}" for alias in node.names)
+    return names
+
+
+def transport_imports(path: Path) -> set[str]:
+    return {
+        forbidden
+        for imported in imported_names(path)
+        for forbidden in TRANSPORT_MODULES
+        if imported == forbidden or imported.startswith(f"{forbidden}.")
+    }
+
+
 @pytest.mark.parametrize(
     "forbidden",
     [
@@ -1668,21 +1773,44 @@ def test_no_router_reaches_the_llm_package() -> None:
         "app.models",
         "app.services",
         "psycopg",
-        "httpx",
-        "requests",
+        *TRANSPORT_MODULES,
     ],
 )
 def test_the_llm_package_reaches_no_database_and_no_transport(forbidden: str) -> None:
     """§4: no session, no SQL, no row. Structural, not advisory.
 
-    `httpx` and `requests` too: transport belongs to the vendor SDK inside the adapter, and a
-    hand-rolled HTTP call anywhere in this package would be a second, unguarded provider path.
+    Transport modules too: transport belongs to a vendor SDK inside its adapter, and a
+    hand-rolled HTTP call anywhere else in this package would be a second, unguarded provider
+    path. The one exception -- `urllib.request` in the Ollama adapter -- is granted by name.
     """
     for path in python_files_under(LLM_PACKAGE):
-        for imported in module_imports(path):
+        relative = path.relative_to(APP.parent).as_posix()
+        exempt = relative == PERMITTED_TRANSPORT_MODULE and forbidden in PERMITTED_TRANSPORT_IMPORTS
+        if exempt:
+            continue
+        for imported in imported_names(path):
             assert not (imported == forbidden or imported.startswith(f"{forbidden}.")), (
                 f"{path.name} imports {imported}"
             )
+
+
+def test_the_transport_exemption_is_one_module_one_import_and_actually_used() -> None:
+    """Every transport import in `app.llm`, file by file: exactly the exemption, no more."""
+    found = {
+        path.relative_to(APP.parent).as_posix(): transport_imports(path)
+        for path in python_files_under(LLM_PACKAGE)
+    }
+
+    assert {name: used for name, used in found.items() if used} == {
+        PERMITTED_TRANSPORT_MODULE: set(PERMITTED_TRANSPORT_IMPORTS)
+    }
+
+
+def test_the_transport_ban_sees_through_from_imports(tmp_path: Path) -> None:
+    sneaky = tmp_path / "sneaky.py"
+    sneaky.write_text("from urllib import request\nfrom http import client\n", encoding="utf-8")
+
+    assert transport_imports(sneaky) == {"urllib.request", "http.client"}
 
 
 @pytest.mark.parametrize(
@@ -1838,6 +1966,7 @@ def test_the_factory_builds_the_production_client_with_sdk_retries_off(
     sdk = RecordingSdk()
     monkeypatch.setitem(sys.modules, "anthropic", sdk)
     settings = Settings(
+        llm_provider="anthropic",
         _env_file=None,
         environment="test",
         llm_enabled=True,
@@ -1876,6 +2005,13 @@ def test_production_and_the_live_evaluation_build_through_the_shared_factory() -
         if calls_named(ast.parse(path.read_text(encoding="utf-8")), "AnthropicChatModel")
     )
     assert builders == [FACTORY.relative_to(REPOSITORY_ROOT).as_posix()]
+
+    local_builders = sorted(
+        path.relative_to(REPOSITORY_ROOT).as_posix()
+        for path in [*APP.rglob("*.py"), *(REPOSITORY_ROOT / "scripts").rglob("*.py")]
+        if calls_named(ast.parse(path.read_text(encoding="utf-8")), "OllamaChatModel")
+    )
+    assert local_builders == [FACTORY.relative_to(REPOSITORY_ROOT).as_posix()]
 
 
 def test_an_unavailable_provider_is_not_retried_by_the_boundary() -> None:

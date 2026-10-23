@@ -27,8 +27,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from app.llm.base import ChatModel, ChatRequest, ChatResponse, TokenUsage, ToolCall
-from app.llm.providers.anthropic_provider import RESPONSE_MODEL_KEY
+from app.llm.base import (
+    RESPONSE_MODEL_KEY,
+    ChatModel,
+    ChatRequest,
+    ChatResponse,
+    TokenUsage,
+    ToolCall,
+)
 from app.services.copilot import PROMPT
 
 #: Recorded wherever a live run could not establish a value. Never replaced by a guess.
