@@ -25,22 +25,33 @@ its checksum, the model, and the date the exchanges were recorded. Per case: wha
 each score. Per measure: `passed` and `scored` counts, reported separately and **never combined
 into an aggregate**. A `statement` says, in words, what the result does not mean.
 
-`python -m tests.evaluation.harness --write-reference` regenerates `reference_report.json` from
-the reference replays. A change to that file is a change to what CI considers correct, and is
-reviewed as one.
+`python -m tests.evaluation.harness` prints the report the reference replays produce. A change to a
+pinned report is a change to what CI considers correct, and is reviewed as one; v1's report is
+frozen since R2.7R, and writing it is refused (R2.7ZL4, below).
 
 *R2.7R.* `copilot_eval_v2` (`questions_v2.py`) has its own reference exchanges and pinned report
 (`fixtures/reference_replays_v2.json`, `reference_report_v2.json`); `--set copilot_eval_v2` with
 `--write-reference` regenerates that report. v1's files are untouched and remain v1's baseline.
+
+*R2.7ZL.* Both pinned reports now stay byte-for-byte as they are. Since the copilot refuses a
+question naming another hotel before any model is asked, `inject_other_hotel` is shown no tool
+catalogue, so its `tools_offered` is `[]` where the pinned reports, recorded before the refusal,
+list six tools. That one difference is declared in `REVIEWED_DELTAS` and applied to a copy of the
+pinned report (`expected_report`); every other field must still match exactly.
+
+*R2.7ZL4.* `--write-reference` for v1 is refused (`FROZEN_V1_REFUSAL`) before anything is
+computed or written: v1's report is frozen, and its digest is pinned. Printing it, and writing
+v2's, are unchanged.
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import time
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -425,8 +436,53 @@ def canonical(report: dict[str, Any]) -> str:
     return json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
-def main() -> None:  # pragma: no cover - a maintenance entry point, exercised by review
-    parser = argparse.ArgumentParser(description="Regenerate the pinned reference report.")
+#: R2.7ZL. Where the current code, given a pinned report's own exchanges, reports something other
+#: than the pinned file -- each difference reviewed, and declared here instead of being written into
+#: a frozen file. (case id, field) -> the value the current code reports. Exactly one entry: the
+#: copilot refuses `inject_other_hotel` before the model is asked, so no catalogue is offered.
+REVIEWED_DELTAS: dict[tuple[str, str], list[str]] = {("inject_other_hotel", "tools_offered"): []}
+
+
+def apply_reviewed_deltas(
+    pinned: Mapping[str, Any],
+    deltas: Mapping[tuple[str, str], list[str]] = REVIEWED_DELTAS,
+) -> dict[str, Any]:
+    """A deep copy of *pinned* with *deltas* applied; *pinned* itself is never modified.
+
+    Only a delta declared in `REVIEWED_DELTAS`, with its declared value, is accepted, and only on
+    a case and a field the report already has -- so this can express that one reviewed
+    difference and nothing broader.
+    """
+    expected = copy.deepcopy(dict(pinned))
+    cases = {case["case_id"]: case for case in expected["cases"]}
+    for (case_id, field), value in deltas.items():
+        if REVIEWED_DELTAS.get((case_id, field)) != value or value != []:
+            raise ValueError(f"not a reviewed delta: {case_id}.{field}")
+        if case_id not in cases:
+            raise ValueError(f"the report has no case {case_id!r}")
+        if field not in cases[case_id]:
+            raise ValueError(f"case {case_id!r} has no field {field!r}")
+        cases[case_id][field] = list(value)
+    return expected
+
+
+def expected_report(pinned_path: Path) -> str:
+    """What the current code must reproduce from a pinned report's exchanges: the pinned file,
+    with the reviewed deltas applied, in canonical form. The file is only read."""
+    return canonical(apply_reviewed_deltas(json.loads(pinned_path.read_text(encoding="utf-8"))))
+
+
+#: Why `--write-reference` is refused for v1 (R2.7ZL4).
+FROZEN_V1_REFUSAL = (
+    "copilot_eval_v1's reference report is frozen (R2.7R): reference_report.json is never "
+    "regenerated, and its digest is pinned. Declare a reviewed difference in REVIEWED_DELTAS "
+    "(tests/evaluation/harness.py) instead; without --write-reference this prints the report "
+    "the current code produces."
+)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Print, or regenerate, a reference report.")
     parser.add_argument("--write-reference", action="store_true")
     parser.add_argument(
         "--set",
@@ -435,8 +491,10 @@ def main() -> None:  # pragma: no cover - a maintenance entry point, exercised b
         default=COPILOT_EVAL_V1.identity,
         help="Which set's reference report. Default: copilot_eval_v1.",
     )
-    options = parser.parse_args()
+    options = parser.parse_args(argv)
     v2 = options.question_set == COPILOT_EVAL_V2.identity
+    if options.write_reference and not v2:
+        parser.error(FROZEN_V1_REFUSAL)  # exits 2, before anything is computed or written
     report = canonical(reference_report_v2() if v2 else reference_report())
     target = REFERENCE_REPORT_V2 if v2 else REFERENCE_REPORT
     if options.write_reference:
@@ -451,14 +509,18 @@ if __name__ == "__main__":  # pragma: no cover
 
 
 __all__ = [
+    "FROZEN_V1_REFUSAL",
     "HARNESS_VERSION",
     "MEASURES",
     "REFERENCE_REPLAYS",
     "REFERENCE_REPLAYS_V2",
     "REFERENCE_REPORT",
     "REFERENCE_REPORT_V2",
+    "REVIEWED_DELTAS",
     "CaseResult",
+    "apply_reviewed_deltas",
     "canonical",
+    "expected_report",
     "reference_report",
     "reference_report_v2",
     "run",

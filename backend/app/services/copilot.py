@@ -27,6 +27,19 @@ a name and arguments; `ToolInvocationService.invoke` binds the hotel, checks the
 the arguments (which have no field a hotel could travel in), runs the tool and audits it. Nothing
 here reads a hotel from anything the model produced. The prompt says nothing about access.
 
+## A question that names another hotel (R2.7ZL)
+
+That binding keeps another hotel's DATA out of reach, but not its NAME: asked for "the revenue of
+hotel <another id>", a model answered with this hotel's figure under the other hotel's id. So a
+question that labels a UUID as a hotel's -- "hotel" or "property", optionally "id" or "public
+id", optionally ":", "#" or "=", then the UUID (`names_another_hotel`) -- naming any hotel but
+the authorized one is answered with `ANOTHER_HOTEL_REFUSAL` before a model is asked. It is a
+complete answer: one `llm_invocations` row with no model call, no tool, and no text that repeats
+an identifier. Matching is textual and deliberately narrow. Whether a hotel with that id exists
+is never looked up -- an answer that differed would tell a caller it does -- and an unlabelled
+UUID, or another hotel named in words, is not caught here; the tools still keep its data out of
+reach.
+
 ## Partial answers are answers, labelled
 
 Stage 7.6's loop stops in five ways and only `completed` is complete. Every other stop is a
@@ -98,6 +111,7 @@ the generic internal fault, never attributed to the caller.
 from __future__ import annotations
 
 import logging
+import re
 import time
 import uuid
 from collections.abc import Callable, Sequence
@@ -165,6 +179,28 @@ PROMPT = COPILOT_ANSWER_V2
 #: returned as 'not found in this hotel's documents'." The complete answer, verbatim, whenever a
 #: document search ran and the answer cited none of it, or cited something it did not return.
 NOT_FOUND_ANSWER = "Not found in this hotel's documents."
+
+#: The complete answer to a question that names another hotel (R2.7ZL). Fixed, and repeats no
+#: identifier -- neither the one asked about nor this hotel's.
+ANOTHER_HOTEL_REFUSAL = (
+    "This assistant answers only about the hotel this request is for, so it cannot report on "
+    "another hotel."
+)
+
+#: A UUID the question labels as a hotel's. See "A question that names another hotel" above.
+HOTEL_LABELLED_UUID = re.compile(
+    r"\b(?:hotel|property)(?:[\s_-]*(?:public[\s_-]*)?id)?\s*[:#=]?\s*"
+    r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b",
+    re.IGNORECASE,
+)
+
+
+def names_another_hotel(question: str, hotel_public_id: uuid.UUID) -> bool:
+    """Whether *question* labels as a hotel's any UUID but *hotel_public_id*. Pure and textual."""
+    return any(
+        uuid.UUID(match) != hotel_public_id for match in HOTEL_LABELLED_UUID.findall(question)
+    )
+
 
 #: Added to a PARTIAL answer's notice when its text was withheld by the citation check.
 CITATION_WITHHELD_SENTENCES: dict[str, str] = {
@@ -236,6 +272,8 @@ class CopilotService:
         prompt = self._resolve_prompt(prompt_identity)
         hotel = self._scope.require_hotel(hotel_public_id)
         hotel_id = hotel.id
+        if names_another_hotel(question, hotel_public_id):
+            return self._refuse_another_hotel(hotel_id, prompt, first_label)
 
         offered = self._invocations.permitted_tools(hotel_public_id)
         catalogue = build_catalogue(self._registry, offered)
@@ -348,6 +386,37 @@ class CopilotService:
         )
 
     # --- internals ----------------------------------------------------------------------------
+
+    def _refuse_another_hotel(
+        self, hotel_id: int, prompt: PromptRecord, first_label: int
+    ) -> AnsweredTurn:
+        """`ANOTHER_HOTEL_REFUSAL`, recorded like any answer; no model is asked, no tool runs."""
+        started = self._monotonic()
+        result = LoopResult(
+            stop_reason="completed",
+            text=ANOTHER_HOTEL_REFUSAL,
+            rounds=0,
+            model_calls=0,
+            outcomes=(),
+            prompt_id=prompt.prompt_id,
+            prompt_version=prompt.version,
+        )
+        latency_ms = max(0, round((self._monotonic() - started) * 1000))
+        invocation_public_id = self._record(hotel_id, result, "completed", None, latency_ms)
+        self._observe(result, "completed", latency_ms, withheld=False, evidence="none", citations=0)
+        response = CopilotAnswerResponse(
+            answer=ANOTHER_HOTEL_REFUSAL,
+            complete=True,
+            stop_reason="completed",
+            notice=None,
+            tools_used=[],
+            prompt_id=prompt.prompt_id,
+            prompt_version=prompt.version,
+            invocation_public_id=invocation_public_id,
+            citations=[],
+            document_evidence="none",
+        )
+        return AnsweredTurn(response=response, next_label=first_label, context_turns=0)
 
     @staticmethod
     def _resolve_prompt(identity: tuple[str, str]) -> PromptRecord:
@@ -466,11 +535,14 @@ class CopilotService:
 
 
 __all__ = [
+    "ANOTHER_HOTEL_REFUSAL",
     "CITATION_WITHHELD_SENTENCES",
+    "HOTEL_LABELLED_UUID",
     "NOTICES",
     "NOT_FOUND_ANSWER",
     "PROMPT",
     "WITHHELD_SENTENCE",
     "AnsweredTurn",
     "CopilotService",
+    "names_another_hotel",
 ]

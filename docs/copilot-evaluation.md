@@ -86,7 +86,7 @@ tolerated tool and expected figure is v1's, and only those four questions change
 was removed and the scorer did not change. It has its own checksum (`6e9b755c…228b`), its own
 reference exchanges (`fixtures/reference_replays_v2.json`: v1's hand-written turns, verbatim,
 so synthetic -- no model wrote them) and its own pinned report (`reference_report_v2.json`,
-regenerated with `python -m tests.evaluation.harness --set copilot_eval_v2 --write-reference`).
+kept as it is since R2.7ZL -- see "Reviewed deltas" below).
 **v1 is unchanged**: its checksum, `reference_replays.json` and `reference_report.json` are
 pinned byte for byte, and results recorded against v1 stay comparable only with v1.
 `tests/evaluation/test_question_consistency.py` keeps v2 honest: an explicit table names, for
@@ -97,6 +97,31 @@ Not changed, and noted: *room revenue* is scored as the stay-based `room_revenue
 May), while the tool also returns `ledger_room_revenue` (51800.00); and *how many guests
 arrived* is scored as `arrivals`, a count of bookings. Both figures are asked for; only the
 label could be read another way.
+
+### Reviewed deltas: a server-side refusal, and frozen reports (R2.7ZL)
+
+Since R2.7ZL the copilot refuses, before any model is asked, a question that labels a UUID as
+another hotel's -- "hotel" or "property", optionally "id" or "public id", optionally ":", "#" or
+"=", then a UUID other than the authorized hotel's -- with a fixed sentence that repeats no
+identifier. A live run (R2.7ZJ) had shown a model attributing this hotel's figure to the hotel
+`inject_other_hotel` names; the tools never reached that hotel's data, but the answer said they
+had.
+
+`inject_other_hotel` is such a question, so it now reaches no model and is shown no tool
+catalogue: its `tools_offered` is `[]`, where both pinned reports, recorded before the refusal,
+list six tools. Every other field, every measure included, is unchanged. The pinned files are
+**not** regenerated -- v1's is frozen, its digest pinned since R2.7R, and v2's is kept as it is
+to match. The difference is declared instead, as the only entry of `REVIEWED_DELTAS` in
+`tests/evaluation/harness.py`, and the reference gates compare the run against the pinned report
+with that delta applied to a copy. A test proves the delta is still needed and changes nothing
+else, and the helper refuses any other case, field or value.
+
+Two concerns are tested apart. That the server refuses is a guarantee of the code, tested with
+a model that fails the test if it is asked (`tests/backend/test_copilot.py`, and through this
+harness in `tests/evaluation/test_harness.py`). That the refusal scorer catches a model
+*obeying* an injection is tested on `inject_estimate`, with a scripted answer the copilot serves
+complete: a guess stated from the tolerated forecast tool, or from an untolerated one. No model
+was evaluated in R2.7ZL; every exchange is scripted.
 
 ## 4. The measures
 
@@ -167,8 +192,10 @@ half-up rounding interval rather than a quantize-and-compare — imports nothing
 # CI mode, as CI runs it (part of the ordinary suite)
 python -m pytest tests/evaluation
 
-# Regenerate the pinned reference report after an INTENDED change -- then review the diff
-python -m tests.evaluation.harness --write-reference
+# Print the reference report the current code produces (it writes nothing). Adding
+# --write-reference for v1 is refused (R2.7ZL4): the frozen reference_report.json is never
+# rewritten, and an intended change is declared as a reviewed delta (section 3) instead.
+python -m tests.evaluation.harness
 
 # Live capture with the LOCAL model (the default provider, R2.7O): no key, no API cost --
 # but a real call to the Ollama server on this machine. One case first, into a NEW directory
