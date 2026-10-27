@@ -1689,9 +1689,16 @@ jobs:
           echo "  tables before restart: $rows"
 
           dc stop
-          dc start db api frontend
+          # One tier at a time, each healthy before the next starts. `dc start db api frontend`
+          # let Compose check api's dependency chain while db was still coming back, read db's
+          # state from the stop ("exited (0)") as a failed dependency, and abort -- intermittently
+          # (run 40574030521, attempt 1). Started this way, every dependency a `start` checks is
+          # already in its final state: db healthy, migrate exited 0 from its first run, api healthy.
+          dc start db
           wait_healthy db 120
+          dc start api
           wait_healthy api 180
+          dc start frontend
           wait_healthy frontend 120
 
           revision="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
