@@ -37,8 +37,27 @@ the authorized one is answered with `ANOTHER_HOTEL_REFUSAL` before a model is as
 complete answer: one `llm_invocations` row with no model call, no tool, and no text that repeats
 an identifier. Matching is textual and deliberately narrow. Whether a hotel with that id exists
 is never looked up -- an answer that differed would tell a caller it does -- and an unlabelled
-UUID, or another hotel named in words, is not caught here; the tools still keep its data out of
-reach.
+UUID is not caught here; the tools still keep its data out of reach.
+
+**Another property named in words (R2.7ZT).** A model asked for "the hotel across the street"
+answered with this hotel's occupancy as if it were the other's. `names_another_property` refuses,
+the same way and as early, a question in one of two closed forms -- nothing broader:
+
+- a qualifier that makes the property not this one -- "another", "other", "a different",
+  "competing", "competitor('s)", "rival", "neighbo(u)ring", "nearby" -- before "hotel(s)" or
+  "property/properties" that ENDS its noun phrase: a possessive, punctuation, the end of the
+  question, or a preposition or conjunction follows ("another hotel's ADR", "other hotels in
+  May"), so "another hotel room" or "other hotel data" is not one;
+- "the", "a" or "that" + "hotel"/"property", placed against this one: "across the street/road",
+  "across from us/ours", "next door", "next to us/ours", "opposite us/ours", "down the
+  street/road".
+
+It is a grammar of explicit references, not a classifier, and it misses by design what it cannot
+tell apart without judgement: a property named ("the Marriott"), "the hotel" or "our hotel"
+alone, a phrase that runs on ("the other hotel instead"), a paraphrase ("the place across the
+road"). Those reach the model, whose tools still read only this hotel. It also refuses some
+questions that merely mention another property ("guests who came from another hotel"), which
+the tools could not have answered either.
 
 ## Partial answers are answers, labelled
 
@@ -80,6 +99,14 @@ model tied to a source that does not exist is not made trustworthy by deleting t
 outcome is a new stop reason -- the persisted `llm_invocations` vocabulary is unchanged, and a
 replaced complete answer is still `completed` -- it is the additive `document_evidence` field.
 
+**The documents sentence is the server's to use (R2.7ZO).** A model may write `NOT_FOUND_ANSWER`
+itself without having searched -- declining a question no tool covers in the words meant for the
+documents. Served as written it would claim a search that never happened, so when the answer is
+exactly that sentence and no document search SUCCEEDED in this exchange -- a
+`search_hotel_knowledge` call that ran and returned (`ToolOutcome.succeeded`); a search that failed
+or was refused does not count -- `CANNOT_ANSWER` is served instead. Nothing else about the answer,
+the stop reason or the accounting changes; a searched answer keeps the documents sentence.
+
 ## Earlier turns (Stage 7.11)
 
 `answer_turn` is `ask` with three additions a multi-turn caller supplies: earlier turns, the
@@ -116,6 +143,7 @@ import time
 import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -130,7 +158,7 @@ from app.copilot.registry import ToolRegistry
 from app.copilot.tools.knowledge_search import NAME as KNOWLEDGE_TOOL
 from app.core.errors import internal_fault, sqlstate_of
 from app.llm.base import Budget, ChatModel, Message, ToolCall
-from app.llm.prompts.registry import COPILOT_ANSWER_V2, PromptRecord, get_prompt
+from app.llm.prompts.registry import CANNOT_ANSWER, COPILOT_ANSWER_V2, PromptRecord, get_prompt
 from app.schemas.copilot import (
     CopilotAnswerResponse,
     CopilotCitation,
@@ -202,6 +230,33 @@ def names_another_hotel(question: str, hotel_public_id: uuid.UUID) -> bool:
     )
 
 
+_PROPERTY = r"(?:hotels?|propert(?:y|ies))"
+#: An apostrophe, straight or typographic.
+_APOSTROPHE = "['" + chr(0x2019) + "]"
+#: What may follow a property noun that ends its noun phrase: a possessive, punctuation, the
+#: end, or a preposition or conjunction. Grammar, not topic: it decides only where the phrase ends.
+_PHRASE_ENDS = (
+    rf"(?={_APOSTROPHE}|\s*[?.,;:!)]|\s*$|"
+    r"\s+(?:in|on|at|for|from|of|near|during|between|over|and|or|than|versus|vs|"
+    r"compared|across|down|next|opposite)\b)"
+)
+#: Another property named in words (R2.7ZT). See "Another property named in words" above.
+OTHER_PROPERTY_IN_WORDS = re.compile(
+    r"\b(?:another|other|a\s+different|competing"
+    rf"|competitor(?:s|{_APOSTROPHE}s?)?|rival|neighbou?ring|nearby)"
+    rf"\s+{_PROPERTY}{_PHRASE_ENDS}"
+    rf"|\b(?:the|a|that)\s+{_PROPERTY}\s+(?:across\s+the\s+(?:street|road)"
+    r"|across\s+from\s+(?:us|ours)|next\s+door|next\s+to\s+(?:us|ours)"
+    r"|opposite\s+(?:us|ours)|down\s+the\s+(?:street|road))\b",
+    re.IGNORECASE,
+)
+
+
+def names_another_property(question: str) -> bool:
+    """Whether *question* names, in words, a property that is not this one. Pure and textual."""
+    return OTHER_PROPERTY_IN_WORDS.search(question) is not None
+
+
 #: Added to a PARTIAL answer's notice when its text was withheld by the citation check.
 CITATION_WITHHELD_SENTENCES: dict[str, str] = {
     "citation_rejected": (
@@ -210,6 +265,27 @@ CITATION_WITHHELD_SENTENCES: dict[str, str] = {
     ),
     "not_found": "Its text was withheld because it cited none of the documents it searched.",
 }
+
+
+#: Which branch of `answer_turn` produced the answer a caller is served (R2.7ZU), set where the
+#: branch is taken -- never worked out afterwards by comparing texts. Internal: not in the response
+#: body and not persisted; evaluation reads it to tell the model's text from the server's.
+#:
+#: - `model`: the model's final text, as written (possibly empty, when a partial loop wrote none);
+#: - `scope_guard`: `ANOTHER_HOTEL_REFUSAL`, before any model call (R2.7ZL, R2.7ZT);
+#: - `cannot_answer_substitution`: the model wrote `NOT_FOUND_ANSWER` with no successful document
+#:   search, and `CANNOT_ANSWER` is served instead (R2.7ZO);
+#: - `not_found_replacement`: the citation check replaced a complete answer with
+#:   `NOT_FOUND_ANSWER` (Stage 7.10);
+#: - `withheld`: no text is served -- the figure check withheld it, or the citation check did on a
+#:   partial answer.
+AnswerSource = Literal[
+    "model",
+    "scope_guard",
+    "cannot_answer_substitution",
+    "not_found_replacement",
+    "withheld",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,6 +297,8 @@ class AnsweredTurn:
     next_label: int
     #: How many earlier turns the model was shown, after the context budget.
     context_turns: int
+    #: Which branch produced `response.answer` (R2.7ZU). See `AnswerSource`.
+    answer_source: AnswerSource
 
 
 class CopilotService:
@@ -272,7 +350,7 @@ class CopilotService:
         prompt = self._resolve_prompt(prompt_identity)
         hotel = self._scope.require_hotel(hotel_public_id)
         hotel_id = hotel.id
-        if names_another_hotel(question, hotel_public_id):
+        if names_another_hotel(question, hotel_public_id) or names_another_property(question):
             return self._refuse_another_hotel(hotel_id, prompt, first_label)
 
         offered = self._invocations.permitted_tools(hotel_public_id)
@@ -344,12 +422,16 @@ class CopilotService:
             # Nothing partial exists to return. §5.7's declared status and code, unchanged.
             raise error
 
+        source: AnswerSource
         if served:
-            answer = result.text
+            answer, source = result.text, "model"
+            if answer.strip() == NOT_FOUND_ANSWER and not self._searched(result):
+                # R2.7ZO: no search ran, so none can have found nothing
+                answer, source = CANNOT_ANSWER, "cannot_answer_substitution"
         elif replaced and result.complete:
-            answer = NOT_FOUND_ANSWER
+            answer, source = NOT_FOUND_ANSWER, "not_found_replacement"
         else:
-            answer = ""
+            answer, source = "", "withheld"
 
         response = CopilotAnswerResponse(
             answer=answer,
@@ -382,7 +464,10 @@ class CopilotService:
             document_evidence=evidence,
         )
         return AnsweredTurn(
-            response=response, next_label=ledger.next_label, context_turns=len(kept)
+            response=response,
+            next_label=ledger.next_label,
+            context_turns=len(kept),
+            answer_source=source,
         )
 
     # --- internals ----------------------------------------------------------------------------
@@ -416,7 +501,9 @@ class CopilotService:
             citations=[],
             document_evidence="none",
         )
-        return AnsweredTurn(response=response, next_label=first_label, context_turns=0)
+        return AnsweredTurn(
+            response=response, next_label=first_label, context_turns=0, answer_source="scope_guard"
+        )
 
     @staticmethod
     def _resolve_prompt(identity: tuple[str, str]) -> PromptRecord:
@@ -428,13 +515,19 @@ class CopilotService:
         return prompt
 
     @staticmethod
+    def _searched(result: LoopResult) -> bool:
+        """Whether a document search ran and succeeded in this exchange -- read from the tool
+        outcomes the loop executed, never from what the model wrote or asked for."""
+        return any(
+            outcome.succeeded and outcome.tool == KNOWLEDGE_TOOL for outcome in result.outcomes
+        )
+
+    @staticmethod
     def _document_evidence(result: LoopResult, check: CitationCheck) -> DocumentEvidence:
         """How the answer relates to the hotel's documents. See the module docstring."""
         if check.invalid:
             return "citation_rejected"
-        searched = any(
-            outcome.succeeded and outcome.tool == KNOWLEDGE_TOOL for outcome in result.outcomes
-        )
+        searched = CopilotService._searched(result)
         if searched and not check.cited:
             return "not_found"
         return "cited" if check.cited else "none"
@@ -540,9 +633,12 @@ __all__ = [
     "HOTEL_LABELLED_UUID",
     "NOTICES",
     "NOT_FOUND_ANSWER",
+    "OTHER_PROPERTY_IN_WORDS",
     "PROMPT",
     "WITHHELD_SENTENCE",
+    "AnswerSource",
     "AnsweredTurn",
     "CopilotService",
     "names_another_hotel",
+    "names_another_property",
 ]

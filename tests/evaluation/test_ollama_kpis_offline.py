@@ -26,6 +26,7 @@ from app.llm.base import Budget
 from app.llm.boundary import GuardedChatModel
 from app.llm.factory import build_chat_model
 from app.llm.providers.ollama_provider import OllamaChatModel
+from app.services.copilot import PROMPT
 from tests.evaluation import harness
 from tests.evaluation.questions import COPILOT_EVAL_V1
 
@@ -117,6 +118,7 @@ def run_case(script: ScriptedOllama) -> dict[str, Any]:
         provider=settings.llm_provider,
         model=settings.effective_llm_model,
         recorded_on="2026-10-22",
+        prompt=PROMPT,
         budget=Budget(timeout_seconds=30.0, max_output_tokens=1024),
     )
     [case] = report["cases"]

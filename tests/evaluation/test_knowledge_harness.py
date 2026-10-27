@@ -44,14 +44,16 @@ NOT_FOUND = "Not found in this hotel's documents."
 
 
 def reference() -> Replays:
-    return load_replays(REFERENCE_REPLAYS, COPILOT_KNOWLEDGE_EVAL_V1)
+    return load_replays(
+        REFERENCE_REPLAYS, COPILOT_KNOWLEDGE_EVAL_V1, prompt=knowledge_harness.REFERENCE_PROMPT
+    )
 
 
 def variant(case_id: str, *turns: Turn) -> dict[str, Any]:
     """The reference run with one case's exchange replaced; returns that case's result."""
     replays = reference()
     replays = replace(replays, cases={**replays.cases, case_id: tuple(turns)})
-    report = knowledge_harness.run_replays(replays)
+    report = knowledge_harness.run_replays(replays, prompt=knowledge_harness.REFERENCE_PROMPT)
     [result] = [c for c in report["cases"] if c["case_id"] == case_id]
     return result
 

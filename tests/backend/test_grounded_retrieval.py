@@ -20,7 +20,7 @@ import ast
 import json
 import re
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, cast
 
@@ -48,7 +48,14 @@ from app.copilot.tools.knowledge_search import (
 )
 from app.core.errors import ForbiddenError, NotFoundError, ValidationError
 from app.llm.base import Budget, ToolCall
-from app.llm.prompts.registry import COPILOT_ANSWER_V1, COPILOT_ANSWER_V2, REGISTRY, PromptRecord
+from app.llm.prompts.registry import (
+    CANNOT_ANSWER,
+    COPILOT_ANSWER_V1,
+    COPILOT_ANSWER_V2,
+    REGISTRY,
+    SCOPE_ANSWER,
+    PromptRecord,
+)
 from app.llm.testing import ScriptedModel, ScriptedTurn
 from app.models.enums import HotelRole
 from app.schemas.copilot import CopilotAnswerResponse, CopilotCitation
@@ -559,6 +566,168 @@ def test_without_a_search_an_uncited_answer_is_served_as_before() -> None:
     assert (response.document_evidence, response.citations) == ("none", [])
 
 
+# --- R2.7ZO (S1): the documents sentence needs a search that succeeded ------------------------
+
+
+@pytest.mark.parametrize("written", [NOT_FOUND_ANSWER, f"  {NOT_FOUND_ANSWER}\n"])
+def test_the_documents_sentence_without_any_search_becomes_the_cannot_answer_sentence(
+    written: str,
+) -> None:
+    stack = Stack([written])
+
+    response = stack.ask("What room rate should we charge in June?")
+
+    assert response.answer == CANNOT_ANSWER == "The available data cannot answer this question."
+    assert (response.complete, response.stop_reason, response.notice) == (True, "completed", None)
+    assert (response.document_evidence, response.citations, response.tools_used) == ("none", [], [])
+    assert stack.log.rows[0]["stop_reason"] == "completed"
+
+
+def test_the_documents_sentence_after_a_successful_search_is_kept() -> None:
+    """The search ran and returned -- even with no excerpt, nothing found is the truth."""
+    stack = Stack([search("casino"), NOT_FOUND_ANSWER], [])
+
+    response = stack.ask("Is there a casino?")
+
+    assert (response.answer, response.document_evidence) == (NOT_FOUND_ANSWER, "not_found")
+    assert [u.model_dump() for u in response.tools_used] == [
+        {"tool": "search_hotel_knowledge", "outcome": "succeeded"}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("stack", "outcome"),
+    [
+        (lambda: Stack([search(), NOT_FOUND_ANSWER], [POOL], fails=True), "failed"),
+        (
+            lambda: Stack([search(hotel_public_id=str(OTHER_HOTEL)), NOT_FOUND_ANSWER], [POOL]),
+            "invalid_arguments",
+        ),
+    ],
+    ids=["search_failed", "search_refused"],
+)
+def test_a_search_that_did_not_succeed_does_not_license_the_documents_sentence(
+    stack: Callable[[], Stack], outcome: str
+) -> None:
+    built = stack()
+
+    response = built.ask()
+
+    assert [u.model_dump() for u in response.tools_used] == [
+        {"tool": "search_hotel_knowledge", "outcome": outcome}
+    ]
+    assert response.answer == CANNOT_ANSWER
+
+
+@pytest.mark.parametrize(
+    "written",
+    [
+        "I can only answer questions about this hotel's data.",
+        f"{NOT_FOUND_ANSWER} Try the front desk.",
+        CANNOT_ANSWER,
+    ],
+)
+def test_any_other_answer_without_a_search_is_served_as_written(written: str) -> None:
+    response = Stack([written]).ask("What is the capital of France?")
+    assert response.answer == written
+
+
+def test_an_ungrounded_answer_without_a_search_is_still_withheld() -> None:
+    response = Stack(["We charged 135.00 EUR a night."]).ask("What did we charge?")
+    assert (response.answer, response.stop_reason) == ("", "ungrounded_figures")
+
+
+# --- R2.7ZT: what is checked is the answer SERVED, not the model's text ---------------------
+
+
+def kpis_call() -> ScriptedTurn:
+    return ScriptedTurn(
+        tool_calls=(
+            ToolCall(
+                id="t1",
+                name="get_hotel_kpis",
+                arguments={"date_from": "2026-05-01", "date_to": "2026-05-31"},
+            ),
+        )
+    )
+
+
+def test_the_pilots_review_text_exchange_is_served_the_cannot_answer_sentence() -> None:
+    """R2.7ZS `review_text`: a data tool ran, then the model wrote the documents sentence. The
+    model's text stays what it was; the caller is served `CANNOT_ANSWER`, and nothing served
+    carries the documents sentence."""
+    stack = Stack([kpis_call(), NOT_FOUND_ANSWER])
+
+    response = stack.ask("What did guests write in their reviews in May 2026?")
+
+    last = stack.model.calls[-1]
+    assert [m.role for m in last.messages][-1] == "tool"  # the model wrote its text after the tool
+    assert [u.tool for u in response.tools_used] == ["get_hotel_kpis"]
+    assert response.answer == CANNOT_ANSWER
+    assert NOT_FOUND_ANSWER not in response.model_dump_json()
+    assert (response.complete, response.stop_reason, response.document_evidence) == (
+        True,
+        "completed",
+        "none",
+    )
+
+
+def test_a_conversation_turn_serves_and_returns_the_substituted_answer() -> None:
+    """What a multi-turn caller stores and shows next time is the served answer, so the
+    documents sentence the model wrote cannot come back as an earlier turn."""
+    stack = Stack([NOT_FOUND_ANSWER])
+
+    turn = stack.service.answer_turn(HOTEL, "What room rate should we charge in June?")
+
+    assert turn.response.answer == CANNOT_ANSWER
+    assert turn.answer_source == "cannot_answer_substitution"
+
+
+# --- R2.7ZU: which branch produced the served answer, as the copilot records it ---------------
+
+
+@pytest.mark.parametrize(
+    ("turns", "results", "question", "source", "answer"),
+    [
+        (["The pool is lovely."], [], "When does the pool open?", "model", "The pool is lovely."),
+        ([NOT_FOUND_ANSWER], [], "What should we charge?", "cannot_answer_substitution", None),
+        ([search(), NOT_FOUND_ANSWER], [], "Is there a casino?", "not_found_replacement", None),
+        (
+            [search(), "Opens at 07:30 [S9]."],
+            [],
+            "When does the pool open?",
+            "not_found_replacement",
+            None,
+        ),
+        (["We charged 135.00 EUR a night."], [], "What did we charge?", "withheld", ""),
+        ([], [], "What was occupancy at the hotel across the street?", "scope_guard", None),
+    ],
+    ids=["model", "s1", "searched_not_found", "citation", "figures", "guard"],
+)
+def test_the_answer_source_is_the_branch_that_produced_the_served_answer(
+    turns: list[str | ScriptedTurn],
+    results: list[Any],
+    question: str,
+    source: str,
+    answer: str | None,
+) -> None:
+    turn = Stack(turns, results).service.answer_turn(HOTEL, question)
+
+    assert turn.answer_source == source
+    expected = {
+        "cannot_answer_substitution": CANNOT_ANSWER,
+        "not_found_replacement": NOT_FOUND_ANSWER,
+        "scope_guard": SCOPE_ANSWER,
+    }.get(source, answer)
+    assert turn.response.answer == expected
+
+
+def test_the_answer_source_never_reaches_the_response_body() -> None:
+    turn = Stack([NOT_FOUND_ANSWER]).service.answer_turn(HOTEL, "What should we charge?")
+    assert "answer_source" not in turn.response.model_dump()
+    assert "cannot_answer_substitution" not in turn.response.model_dump_json()
+
+
 @pytest.mark.parametrize("cited", ["[S9]", "[S1, S2]", "[S01]"])
 def test_a_citation_no_search_returned_replaces_the_answer(cited: str) -> None:
     stack = Stack([search(), f"The pool opens at 07:30 {cited}."], [POOL])
@@ -692,12 +861,15 @@ def test_v1_is_unchanged_and_v2_is_registered_beside_it() -> None:
     assert COPILOT_ANSWER_V2.checksum == (
         "6ab8b15ebde62af4b25d0e66de41faeef8970ee167bedbe31b8edea85937e268"
     )
-    # Stage 7.11 added copilot_conversation@v1 beside them.
+    # Stage 7.11 added copilot_conversation@v1 beside them; R2.7ZN registered v3 of both, not
+    # yet served (the assertion below still holds).
     assert set(REGISTRY) == {
         "boundary_probe@v1",
         "copilot_answer@v1",
         "copilot_answer@v2",
         "copilot_conversation@v1",
+        "copilot_answer@v3",
+        "copilot_conversation@v2",
     }
     assert PROMPT is COPILOT_ANSWER_V2
 

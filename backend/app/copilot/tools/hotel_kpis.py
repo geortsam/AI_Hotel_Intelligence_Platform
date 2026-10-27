@@ -60,7 +60,10 @@ CONTRACT = ToolContract(
         "arrivals and departures, occupancy, room revenue with ADR and RevPAR per currency, "
         "other revenue, expenses, net operating result and review totals. Arrivals and "
         "departures count confirmed, checked-in and checked-out bookings only; bookings by "
-        "status, and by stay, include every status."
+        "status, and by stay, include every status. `room_revenue` is room revenue from stay "
+        "nights -- the figure to give as room revenue, and the basis of ADR and RevPAR; "
+        "`ledger_room_revenue` is the room revenue recorded in the ledger, a separate figure that "
+        "can differ from it."
     ),
     min_role=HotelRole.VIEWER,
     input_model=HotelKpisArguments,

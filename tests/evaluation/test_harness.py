@@ -27,7 +27,7 @@ import pytest
 from app.copilot.registry import build_default_registry
 from app.core.errors import ValidationError
 from app.llm.base import Budget, ChatRequest, ChatResponse, ToolCall
-from app.llm.prompts.registry import COPILOT_ANSWER_V2
+from app.llm.prompts.registry import COPILOT_ANSWER_V1, COPILOT_ANSWER_V2, COPILOT_ANSWER_V3
 from tests.evaluation import harness
 from tests.evaluation.fixture_hotel import (
     EVAL_HOTEL,
@@ -36,6 +36,7 @@ from tests.evaluation.fixture_hotel import (
 )
 from tests.evaluation.harness import (
     MEASURES,
+    REFERENCE_PROMPT,
     REFERENCE_REPLAYS,
     REFERENCE_REPORT,
     REFERENCE_STATEMENT,
@@ -46,6 +47,7 @@ from tests.evaluation.harness import (
     run_case,
 )
 from tests.evaluation.questions import COPILOT_EVAL_V1
+from tests.evaluation.questions_v2 import COPILOT_EVAL_V2
 from tests.evaluation.replay import (
     RecordingModel,
     ReplayError,
@@ -63,7 +65,7 @@ SCRIPT = REPOSITORY_ROOT / "scripts" / "copilot_live_eval.py"
 def reference_replays() -> Replays:
     """Loaded on first use, not at import: a stale recording must fail a TEST, by name, rather
     than break collection of the whole module."""
-    return load_replays(REFERENCE_REPLAYS, COPILOT_EVAL_V1)
+    return load_replays(REFERENCE_REPLAYS, COPILOT_EVAL_V1, prompt=REFERENCE_PROMPT)
 
 
 MAY = {"date_from": "2026-05-01", "date_to": "2026-05-31"}
@@ -79,6 +81,7 @@ def score(case_id: str, turns: list[Turn]) -> CaseResult:
         provider_name="variant",
         model_name="variant",
         measure_latency=False,
+        prompt=REFERENCE_PROMPT,
     )
 
 
@@ -238,7 +241,9 @@ def test_the_report_publishes_no_aggregate_figure() -> None:
 
 
 def test_a_live_report_statement_bounds_its_claim() -> None:
-    statement = harness.live_statement("vendor", "model-x", "2026-10-01", 24)
+    statement = harness.live_statement(
+        "vendor", "model-x", "2026-10-01", 24, prompt=REFERENCE_PROMPT
+    )
     for phrase in [
         "vendor/model-x",
         "2026-10-01",
@@ -299,7 +304,63 @@ def test_a_replay_recorded_against_something_else_is_refused(
     tmp_path: Path, changes: dict[str, Any], message: str
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        load_replays(rewrite(tmp_path, **changes), COPILOT_EVAL_V1)
+        load_replays(rewrite(tmp_path, **changes), COPILOT_EVAL_V1, prompt=REFERENCE_PROMPT)
+
+
+# --- R2.7ZN: the prompt is named by the caller, never taken from the copilot's default --------
+
+
+@pytest.mark.parametrize("other", [COPILOT_ANSWER_V1, COPILOT_ANSWER_V3], ids=["v1", "v3"])
+def test_replays_bound_to_v2_are_refused_under_any_other_named_prompt(other: Any) -> None:
+    with pytest.raises(ValueError, match="another prompt"):
+        load_replays(REFERENCE_REPLAYS, COPILOT_EVAL_V1, prompt=other)
+
+
+def test_a_file_naming_the_right_prompt_with_another_checksum_is_refused(tmp_path: Path) -> None:
+    """Identity alone is not enough: the checksum must be the named record's too."""
+    stale = rewrite(tmp_path, prompt_checksum=COPILOT_ANSWER_V3.checksum)
+    with pytest.raises(ValueError, match="another prompt"):
+        load_replays(stale, COPILOT_EVAL_V1, prompt=REFERENCE_PROMPT)
+
+
+def test_the_reference_runs_are_bound_to_v2_by_name() -> None:
+    from tests.evaluation import knowledge_harness
+
+    assert harness.REFERENCE_PROMPT is COPILOT_ANSWER_V2
+    assert knowledge_harness.REFERENCE_PROMPT is COPILOT_ANSWER_V2
+
+
+@pytest.mark.parametrize("prompt", [COPILOT_ANSWER_V2, COPILOT_ANSWER_V3], ids=["v2", "v3"])
+def test_a_case_is_asked_under_the_prompt_its_caller_names(prompt: Any) -> None:
+    """The system turn the model receives is the named record's -- v3 included, which the
+    copilot does not serve yet -- and the result is scored as before."""
+    model = ReplayModel(list(reference_replays().cases["kpis_may_occupancy"]))
+
+    result = run_case(
+        COPILOT_EVAL_V1.case("kpis_may_occupancy"),
+        model,
+        registry=build_default_registry(),
+        budget=Budget(timeout_seconds=30, max_output_tokens=1024),
+        provider_name="x",
+        model_name="x",
+        measure_latency=False,
+        prompt=prompt,
+    )
+
+    assert [request.messages[0].content for request in model.requests] == [prompt.system] * len(
+        model.requests
+    )
+    assert {request.prompt_version for request in model.requests} == {prompt.version}
+    assert result.complete is True
+
+
+def test_the_harnesses_never_read_the_copilots_default_prompt() -> None:
+    """`app.services.copilot.PROMPT` is what production serves; an evaluation names its own."""
+    for module in ("harness.py", "knowledge_harness.py", "replay.py"):
+        tree = ast.parse((Path(harness.__file__).parent / module).read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "app.services.copilot":
+                assert "PROMPT" not in {alias.name for alias in node.names}, module
 
 
 def test_a_behaviour_change_that_needs_another_turn_fails_loudly() -> None:
@@ -318,6 +379,7 @@ def test_the_recording_model_captures_turns_in_replay_form() -> None:
         provider_name="x",
         model_name="x",
         measure_latency=False,
+        prompt=REFERENCE_PROMPT,
     )
     assert recorder.turns() == reference_replays().cases["kpis_may_occupancy"]
 
@@ -407,11 +469,35 @@ def test_a_question_naming_another_hotel_is_refused_before_the_model_is_asked() 
         provider_name="variant",
         model_name="variant",
         measure_latency=False,
+        prompt=REFERENCE_PROMPT,
     )
 
     assert result.tools_called == []
     assert result.tools_offered == []
     assert result.output_tokens == 0
+    assert (result.complete, result.stop_reason, result.error_code) == (True, "completed", None)
+    assert result.refusal_correct is True
+
+
+@pytest.mark.parametrize("question_set", [COPILOT_EVAL_V1, COPILOT_EVAL_V2], ids=["v1", "v2"])
+def test_a_question_naming_another_property_in_words_is_refused_before_the_model(
+    question_set: Any,
+) -> None:
+    """R2.7ZT, through the evaluation stack: `another_property` -- "the hotel across the street",
+    the question the R2.7ZS pilot's model answered with this hotel's figure -- reaches no model."""
+    result = run_case(
+        question_set.case("another_property"),
+        MustNotBeAsked(),
+        registry=build_default_registry(),
+        budget=Budget(timeout_seconds=30, max_output_tokens=1024),
+        provider_name="variant",
+        model_name="variant",
+        measure_latency=False,
+        prompt=REFERENCE_PROMPT,
+    )
+
+    assert (result.tools_offered, result.tools_called) == ([], [])
+    assert (result.input_tokens, result.output_tokens) == (0, 0)
     assert (result.complete, result.stop_reason, result.error_code) == (True, "completed", None)
     assert result.refusal_correct is True
 
@@ -486,6 +572,7 @@ def test_a_model_failure_is_scored_as_a_failure_not_skipped() -> None:
         provider_name="x",
         model_name="x",
         measure_latency=False,
+        prompt=REFERENCE_PROMPT,
     )
     assert result.error_code == "LLM_UNAVAILABLE"
     assert result.tool_selection is False
@@ -506,7 +593,8 @@ def test_a_variant_run_changes_the_report() -> None:
         },
     )
     # Against what the gate expects, not the raw file: the two differ by the reviewed delta.
-    assert canonical(harness.run_replays(variant)) != expected_report(REFERENCE_REPORT)
+    produced = harness.run_replays(variant, prompt=REFERENCE_PROMPT)
+    assert canonical(produced) != expected_report(REFERENCE_REPORT)
 
 
 # ======================================================================================

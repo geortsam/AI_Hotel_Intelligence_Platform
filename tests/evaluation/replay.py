@@ -13,10 +13,13 @@ could replay the turns, but not the token counts a live recording captured -- he
 
 **A replay is bound to what it was recorded against.** The file names the question set and the
 prompt, each with its checksum; loading refuses a file recorded against different ones, because
-replaying old answers to new questions would score nonsense and report it as a result. The prompt
-is the one the copilot renders today (`app.services.copilot.PROMPT`): Stage 7.10 moved it to
-`copilot_answer@v2`, and the Stage 7.8 reference exchanges were re-bound to it then -- their turns
-unchanged, because none of them searches or cites a document.
+replaying old answers to new questions would score nonsense and report it as a result. Stage 7.10
+moved the copilot to `copilot_answer@v2`, and the Stage 7.8 reference exchanges were re-bound to
+it then -- their turns unchanged, because none of them searches or cites a document.
+
+*R2.7ZN.* The prompt a file must have been recorded against is named by the caller, explicitly,
+never taken from the copilot's current default: the reference exchanges stay bound to v2 when the
+copilot later serves another version, and the check stays exactly as strict.
 """
 
 from __future__ import annotations
@@ -35,7 +38,7 @@ from app.llm.base import (
     TokenUsage,
     ToolCall,
 )
-from app.services.copilot import PROMPT
+from app.llm.prompts import PromptRecord
 
 #: Recorded wherever a live run could not establish a value. Never replaced by a guess.
 UNKNOWN = "UNKNOWN"
@@ -141,8 +144,11 @@ class Replays:
         return recorded
 
 
-def load_replays(path: Path, question_set: ReplayableSet) -> Replays:
-    """Read a replay file, refusing one recorded against another question set or prompt."""
+def load_replays(path: Path, question_set: ReplayableSet, *, prompt: PromptRecord) -> Replays:
+    """Read a replay file, refusing one recorded against another question set or *prompt*.
+
+    *prompt* is required: identity AND checksum must match the record the caller names.
+    """
     raw = json.loads(path.read_text(encoding="utf-8"))
     if raw.get("format") != REPLAY_FORMAT:
         raise ValueError(f"{path.name}: not a {REPLAY_FORMAT} file")
@@ -164,7 +170,7 @@ def load_replays(path: Path, question_set: ReplayableSet) -> Replays:
         question_set.checksum,
     ):
         raise ValueError(f"{path.name} was recorded against another question set")
-    if (replays.prompt, replays.prompt_checksum) != (PROMPT.identity, PROMPT.checksum):
+    if (replays.prompt, replays.prompt_checksum) != (prompt.identity, prompt.checksum):
         raise ValueError(f"{path.name} was recorded against another prompt")
     missing = {case.case_id for case in question_set.cases} - set(replays.cases)
     if missing:

@@ -30,8 +30,10 @@ from app.copilot.contracts import ToolServices
 from app.copilot.registry import ToolRegistry, build_default_registry
 from app.llm.base import Budget, ChatModel, ToolCall
 from app.llm.errors import LlmError
+from app.llm.prompts import PromptRecord
+from app.llm.prompts.registry import COPILOT_ANSWER_V2
 from app.models.enums import HotelRole
-from app.services.copilot import PROMPT, CopilotService
+from app.services.copilot import CopilotService
 from app.services.tool_invocation import ToolInvocationService
 from tests.evaluation import knowledge_scorers as scorers
 from tests.evaluation.fixture_documents import FixtureKnowledge
@@ -60,6 +62,9 @@ HARNESS_VERSION = "copilot_knowledge_eval_harness_v1"
 HERE = Path(__file__).resolve().parent
 REFERENCE_REPLAYS = HERE / "fixtures" / "knowledge_reference_replays.json"
 REFERENCE_REPORT = HERE / "knowledge_reference_report.json"
+#: R2.7ZN. The prompt the reference exchanges are bound to, and run under -- named explicitly,
+#: not taken from the copilot's current default.
+REFERENCE_PROMPT = COPILOT_ANSWER_V2
 
 #: The measures, in report order. Each is its own passed/scored pair.
 MEASURES = (
@@ -83,10 +88,12 @@ REFERENCE_STATEMENT = (
 )
 
 
-def live_statement(provider: str, model: str, recorded_on: str, size: int) -> str:
+def live_statement(
+    provider: str, model: str, recorded_on: str, size: int, *, prompt: PromptRecord
+) -> str:
     return (
         f"One run of {provider}/{model}, recorded on {recorded_on}, against {size} questions of "
-        f"{COPILOT_KNOWLEDGE_EVAL_V1.identity} under {PROMPT.identity}, with fixed tool data and a "
+        f"{COPILOT_KNOWLEDGE_EVAL_V1.identity} under {prompt.identity}, with fixed tool data and a "
         "fixed stand-in for document search. It describes this set, this prompt and this model on "
         "that date, and nothing more: no aggregate accuracy is claimed, the set is too small for a "
         "rate to generalise, and retrieval quality is measured elsewhere."
@@ -125,6 +132,7 @@ def run_case(
     budget: Budget,
     provider_name: str,
     model_name: str,
+    prompt: PromptRecord,
 ) -> KnowledgeCaseResult:
     scope = EvalScope(HotelRole(case.role))
     session = EvalSession()
@@ -158,7 +166,9 @@ def run_case(
     served_answer = ""
     served: list[dict[str, Any]] = []
     try:
-        response = copilot.ask(EVAL_HOTEL, case.question)
+        response = copilot.answer_turn(
+            EVAL_HOTEL, case.question, prompt_identity=(prompt.prompt_id, prompt.version)
+        ).response
         stop_reason, complete = response.stop_reason, response.complete
         evidence, served_answer = response.document_evidence, response.answer
         served = [item.model_dump(mode="json") for item in response.citations]
@@ -247,6 +257,7 @@ def run(
     provider: str,
     model: str,
     recorded_on: str,
+    prompt: PromptRecord,
     budget: Budget | None = None,
 ) -> dict[str, Any]:
     registry = build_default_registry()
@@ -259,13 +270,14 @@ def run(
             budget=budget,
             provider_name=provider,
             model_name=model,
+            prompt=prompt,
         )
         for case in question_set.cases
     ]
     statement = (
         REFERENCE_STATEMENT
         if provider == REFERENCE_PROVIDER
-        else live_statement(provider, model, recorded_on, len(question_set.cases))
+        else live_statement(provider, model, recorded_on, len(question_set.cases), prompt=prompt)
     )
     return {
         "harness": HARNESS_VERSION,
@@ -275,7 +287,7 @@ def run(
             "checksum": question_set.checksum,
             "size": len(question_set.cases),
         },
-        "prompt": {"identity": PROMPT.identity, "checksum": PROMPT.checksum},
+        "prompt": {"identity": prompt.identity, "checksum": prompt.checksum},
         "model": {"provider": provider, "model": model},
         "recorded_on": recorded_on,
         "statement": statement,
@@ -285,7 +297,10 @@ def run(
 
 
 def run_replays(
-    replays: Replays, question_set: KnowledgeQuestionSet = COPILOT_KNOWLEDGE_EVAL_V1
+    replays: Replays,
+    question_set: KnowledgeQuestionSet = COPILOT_KNOWLEDGE_EVAL_V1,
+    *,
+    prompt: PromptRecord,
 ) -> dict[str, Any]:
     return run(
         question_set,
@@ -294,11 +309,14 @@ def run_replays(
         provider=replays.provider,
         model=replays.model,
         recorded_on=replays.recorded_on,
+        prompt=prompt,
     )
 
 
 def reference_report() -> dict[str, Any]:
-    return run_replays(load_replays(REFERENCE_REPLAYS, COPILOT_KNOWLEDGE_EVAL_V1))
+    """The reference run, under the prompt its exchanges are bound to (`REFERENCE_PROMPT`)."""
+    replays = load_replays(REFERENCE_REPLAYS, COPILOT_KNOWLEDGE_EVAL_V1, prompt=REFERENCE_PROMPT)
+    return run_replays(replays, prompt=REFERENCE_PROMPT)
 
 
 def canonical(report: dict[str, Any]) -> str:
@@ -324,6 +342,7 @@ if __name__ == "__main__":  # pragma: no cover
 __all__ = [
     "HARNESS_VERSION",
     "MEASURES",
+    "REFERENCE_PROMPT",
     "REFERENCE_REPLAYS",
     "REFERENCE_REPORT",
     "KnowledgeCaseResult",

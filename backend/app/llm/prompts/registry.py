@@ -288,6 +288,79 @@ COPILOT_CONVERSATION_V1 = PromptRecord(
 )
 
 
+#: R2.7ZM/R2.7ZN. The fixed answers `copilot_answer@v3` asks for, so that how a question was
+#: declined can be read off the answer itself. None repeats an identifier.
+#: `SCOPE_ANSWER` is, word for word, the sentence the server serves when a question labels another
+#: hotel's id (`app.services.copilot.ANOTHER_HOTEL_REFUSAL`, R2.7ZL): model and server agree.
+SCOPE_ANSWER = (
+    "This assistant answers only about the hotel this request is for, so it cannot report on "
+    "another hotel."
+)
+#: Says what the assistant will not do, not that no such information exists: a document the
+#: search returns may well name a guest.
+PERSONAL_DATA_ANSWER = "I can't provide information that identifies guests."
+CANNOT_ANSWER = "The available data cannot answer this question."
+
+#: Every tool reports on the one hotel the request is for; a question about any other is declined
+#: before a tool is called. The server binds every tool to that hotel whatever the model does --
+#: this sentence keeps the model from presenting this hotel's figures as another's.
+SCOPE_RULE = (
+    "Every tool reports on one hotel only: the hotel this request is for. If a question asks "
+    f"about any other hotel or property, call no tool and reply exactly: {SCOPE_ANSWER}"
+)
+#: Covers document excerpts too, which can contain a guest's details.
+PERSONAL_DATA_RULE = (
+    "Never state a guest's name, contact details or any other information that identifies a "
+    "person, even when a document excerpt contains it. If a question asks for such information, "
+    f"call no tool and reply exactly: {PERSONAL_DATA_ANSWER}"
+)
+#: Keeps the documents sentence for document questions that were actually searched.
+CANNOT_ANSWER_RULE = (
+    'Reply "Not found in this hotel\'s documents." only after a document search in this '
+    f"exchange; when the tools cannot answer a question, reply exactly: {CANNOT_ANSWER}"
+)
+
+#: The closing style sentence of `copilot_answer@v2`, before which later versions add rules.
+_CLOSING_SENTENCE = " Answer concisely, in plain text, in the language of the question."
+
+
+def _before_closing(system: str, *rules: str) -> str:
+    """*system* with *rules* added immediately before its closing style sentence.
+
+    A version is DERIVED from the one before it, never retyped: the earlier text stays its
+    exact prefix. Raises unless that sentence occurs exactly once, so a reworded predecessor
+    cannot silently produce a prompt that lacks the new rules.
+    """
+    if system.count(_CLOSING_SENTENCE) != 1:
+        raise ValueError("The closing style sentence must occur exactly once.")
+    added = "".join(f" {rule}" for rule in rules)
+    return system.replace(_CLOSING_SENTENCE, f"{added}{_CLOSING_SENTENCE}")
+
+
+#: R2.7ZN. `copilot_answer@v2`'s text, unchanged, with `SCOPE_RULE`, `PERSONAL_DATA_RULE` and
+#: `CANNOT_ANSWER_RULE` added before its closing style sentence (R2.7ZM design). Registered beside
+#: v2 and not yet served: `app.services.copilot.PROMPT` is still v2.
+COPILOT_ANSWER_V3 = PromptRecord(
+    prompt_id="copilot_answer",
+    version="v3",
+    system=_before_closing(
+        COPILOT_ANSWER_V2.system, SCOPE_RULE, PERSONAL_DATA_RULE, CANNOT_ANSWER_RULE
+    ),
+    template="{{ question }}",
+    variables=("question",),
+)
+
+#: R2.7ZN. Built from v3 exactly as `copilot_conversation@v1` is built from v2: the earlier-turns
+#: rule added before the closing style sentence. Registered, not yet served.
+COPILOT_CONVERSATION_V2 = PromptRecord(
+    prompt_id="copilot_conversation",
+    version="v2",
+    system=_before_closing(COPILOT_ANSWER_V3.system, EARLIER_TURNS_RULE),
+    template="{{ question }}",
+    variables=("question",),
+)
+
+
 #: Every prompt this application knows, keyed by identity. A registry rather than a module
 #: constant, so that a stored answer's `prompt_id@version` can be resolved back to the content
 #: that produced it -- which is the whole point of versioning them.
@@ -298,6 +371,8 @@ REGISTRY: dict[str, PromptRecord] = {
         COPILOT_ANSWER_V1,
         COPILOT_ANSWER_V2,
         COPILOT_CONVERSATION_V1,
+        COPILOT_ANSWER_V3,
+        COPILOT_CONVERSATION_V2,
     )
 }
 
@@ -318,11 +393,19 @@ def get_prompt(prompt_id: str, version: str) -> PromptRecord:
 
 __all__ = [
     "BOUNDARY_PROBE_V1",
+    "CANNOT_ANSWER",
+    "CANNOT_ANSWER_RULE",
     "COPILOT_ANSWER_V1",
     "COPILOT_ANSWER_V2",
+    "COPILOT_ANSWER_V3",
     "COPILOT_CONVERSATION_V1",
+    "COPILOT_CONVERSATION_V2",
     "EARLIER_TURNS_RULE",
+    "PERSONAL_DATA_ANSWER",
+    "PERSONAL_DATA_RULE",
     "REGISTRY",
+    "SCOPE_ANSWER",
+    "SCOPE_RULE",
     "PromptRecord",
     "get_prompt",
 ]

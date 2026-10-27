@@ -55,7 +55,21 @@ from app.llm.errors import (
     LlmUnavailableError,
 )
 from app.llm.prompts import REGISTRY
-from app.llm.prompts.registry import COPILOT_ANSWER_V1, COPILOT_ANSWER_V2
+from app.llm.prompts.registry import (
+    CANNOT_ANSWER,
+    CANNOT_ANSWER_RULE,
+    COPILOT_ANSWER_V1,
+    COPILOT_ANSWER_V2,
+    COPILOT_ANSWER_V3,
+    COPILOT_CONVERSATION_V1,
+    COPILOT_CONVERSATION_V2,
+    EARLIER_TURNS_RULE,
+    PERSONAL_DATA_ANSWER,
+    PERSONAL_DATA_RULE,
+    SCOPE_ANSWER,
+    SCOPE_RULE,
+    PromptRecord,
+)
 from app.llm.testing import FailingModel, ScriptedModel, ScriptedTurn
 from app.models.llm_invocation import LLM_MODEL_ERROR_CODES, LLM_STOP_REASONS, LlmInvocation
 from app.schemas.copilot import (
@@ -69,6 +83,7 @@ from app.services.copilot import (
     WITHHELD_SENTENCE,
     CopilotService,
     names_another_hotel,
+    names_another_property,
 )
 from app.services.llm_invocation_log import LlmInvocationLog
 
@@ -108,12 +123,15 @@ def test_the_copilot_prompt_is_registered_by_identity() -> None:
     assert COPILOT_ANSWER_V1.identity == "copilot_answer@v1"
     assert REGISTRY["copilot_answer@v1"] is COPILOT_ANSWER_V1
     # Stage 7.10 registered v2 beside it. v1 is kept, unchanged, so an answer recorded under it
-    # stays attributable to what it said. Stage 7.11 added the conversation prompt.
+    # stays attributable to what it said. Stage 7.11 added the conversation prompt; R2.7ZN
+    # registered v3 of both, not yet served.
     assert set(REGISTRY) == {
         "boundary_probe@v1",
         "copilot_answer@v1",
         "copilot_answer@v2",
         "copilot_conversation@v1",
+        "copilot_answer@v3",
+        "copilot_conversation@v2",
     }
 
 
@@ -172,6 +190,93 @@ def test_the_question_is_the_only_variable_and_is_the_user_turn() -> None:
     assert [m.role for m in messages] == ["system", "user"]
     assert messages[1].content == "How full were we in May?"
     assert COPILOT_ANSWER_V1.variables == ("question",)
+
+
+# --- R2.7ZN: copilot_answer@v3 and copilot_conversation@v2, registered but not served ----------
+
+NEW_RULES = f" {SCOPE_RULE} {PERSONAL_DATA_RULE} {CANNOT_ANSWER_RULE}"
+CLOSING = " Answer concisely, in plain text, in the language of the question."
+
+
+def test_v3_and_conversation_v2_are_registered_by_identity() -> None:
+    assert (COPILOT_ANSWER_V3.identity, COPILOT_CONVERSATION_V2.identity) == (
+        "copilot_answer@v3",
+        "copilot_conversation@v2",
+    )
+    assert REGISTRY["copilot_answer@v3"] is COPILOT_ANSWER_V3
+    assert REGISTRY["copilot_conversation@v2"] is COPILOT_CONVERSATION_V2
+    for record in (COPILOT_ANSWER_V3, COPILOT_CONVERSATION_V2):
+        assert (record.template, record.variables) == ("{{ question }}", ("question",))
+
+
+def test_the_new_checksums_are_pinned_and_v2_and_conversation_v1_are_unchanged() -> None:
+    assert COPILOT_ANSWER_V3.checksum == (
+        "04c4b19cfd614284aae7fc6456ccff4e498772df68a13561c1303fff90da056b"
+    )
+    assert COPILOT_CONVERSATION_V2.checksum == (
+        "b9853de617f696045f21d7f918887a960864804df4c6e4436cb6418ba354512b"
+    )
+    assert COPILOT_ANSWER_V2.checksum == (
+        "6ab8b15ebde62af4b25d0e66de41faeef8970ee167bedbe31b8edea85937e268"
+    )
+    assert COPILOT_CONVERSATION_V1.checksum == (
+        "27ac699191f0a5d2dfb7c9edeba0b2c40aeaf0c4108c12f0af4b699ac8a7a386"
+    )
+
+
+def test_v3_is_v2_with_the_three_rules_added_before_its_closing_sentence() -> None:
+    """Derived, not retyped: removing the new rules gives v2 back exactly, and the conversation
+    prompt is the same three rules added to conversation v1, before its earlier-turns rule."""
+    assert COPILOT_ANSWER_V2.system.count(CLOSING) == 1
+    assert COPILOT_ANSWER_V3.system == COPILOT_ANSWER_V2.system.replace(
+        CLOSING, f"{NEW_RULES}{CLOSING}"
+    )
+    assert COPILOT_ANSWER_V3.system.replace(NEW_RULES, "") == COPILOT_ANSWER_V2.system
+    assert COPILOT_CONVERSATION_V2.system == COPILOT_CONVERSATION_V1.system.replace(
+        f" {EARLIER_TURNS_RULE}", f"{NEW_RULES} {EARLIER_TURNS_RULE}"
+    )
+
+
+def test_the_v2_text_the_mutation_inventory_anchors_on_still_occurs_once() -> None:
+    """7.8-M6 edits v2's closing sentences in the registry's source; a v3 that retyped v2 would
+    make that anchor occur twice and the mutation run fail."""
+    from tests.mutation.inventory import MUTATIONS
+
+    [mutation] = [m for m in MUTATIONS if m.id == "7.8-M6"]
+    for edit in mutation.edits:
+        source = (REPOSITORY_ROOT / edit.path).read_text(encoding="utf-8")
+        assert source.count(edit.old) == edit.occurrences == 1
+
+
+def test_the_new_prompts_pass_the_real_validator_and_carry_no_forbidden_wording() -> None:
+    for record in (COPILOT_ANSWER_V3, COPILOT_CONVERSATION_V2):
+        rebuilt = PromptRecord(**record.as_dict())  # the constructor's own vocabulary check
+        assert rebuilt.checksum == record.checksum
+        text = f"{record.system} {record.template}".lower()
+        for forbidden in ["authoriz", "authoris", "permission", "access", "tenant", "hotel_id"]:
+            assert forbidden not in text, (record.identity, forbidden)
+
+
+def test_the_new_rules_say_what_the_design_requires() -> None:
+    assert "call no tool" in SCOPE_RULE and "any other hotel or property" in SCOPE_RULE
+    assert SCOPE_RULE.endswith(SCOPE_ANSWER)
+    # Truthful even when a document names a guest: it says what will not be done.
+    assert "even when a document excerpt contains it" in PERSONAL_DATA_RULE
+    assert PERSONAL_DATA_ANSWER == "I can't provide information that identifies guests."
+    assert "only after a document search in this exchange" in CANNOT_ANSWER_RULE
+    assert CANNOT_ANSWER_RULE.endswith(CANNOT_ANSWER)
+
+
+def test_the_scope_answer_is_the_servers_own_refusal_and_no_answer_repeats_an_identifier() -> None:
+    assert SCOPE_ANSWER == ANOTHER_HOTEL_REFUSAL
+    for answer in (SCOPE_ANSWER, PERSONAL_DATA_ANSWER, CANNOT_ANSWER):
+        assert not re.search(r"\d", answer), answer
+
+
+def test_production_still_serves_v2() -> None:
+    from app.services.copilot import PROMPT
+
+    assert PROMPT is COPILOT_ANSWER_V2
 
 
 # ======================================================================================
@@ -853,6 +958,151 @@ def test_the_matching_rule_is_exactly_a_hotel_labelled_uuid(
     question: str, names_another: bool
 ) -> None:
     assert names_another_hotel(question, HOTEL) is names_another
+
+
+# --- R2.7ZT: another property named in words ------------------------------------------------
+
+#: R2.7ZS's `another_property` question, which the pilot's model answered with this hotel's 70%.
+ACROSS_THE_STREET = (
+    "What was the occupancy of the hotel across the street from 1 May 2026 to 31 May 2026?"
+)
+
+
+def test_a_property_named_in_words_is_refused_before_the_model_is_asked() -> None:
+    model = NeverAsked()
+    harness = Harness(model)
+
+    response = harness.ask(ACROSS_THE_STREET)
+
+    assert model.calls == []
+    assert harness.invocations.order == []  # no catalogue built
+    assert harness.invocations.calls == []  # no tool run
+    assert harness.scope.resolved == [HOTEL]  # the path hotel is still authorized first
+    assert response.answer == ANOTHER_HOTEL_REFUSAL == SCOPE_ANSWER
+    assert (response.complete, response.stop_reason, response.notice) == (True, "completed", None)
+    assert (response.tools_used, response.citations, response.document_evidence) == ([], [], "none")
+    [row] = harness.log.rows
+    assert (row["rounds"], row["model_calls"], row["tool_calls"], row["tool_failures"]) == (
+        0,
+        0,
+        0,
+        0,
+    )
+    assert (row["input_tokens"], row["output_tokens"], row["error_code"]) == (0, 0, None)
+    assert row["stop_reason"] == "completed"
+    assert harness.session.log == ["commit"]
+    assert "across the street" not in json.dumps(harness.log.rows, default=str)
+
+
+def test_a_conversation_turn_naming_a_property_in_words_is_refused_the_same_way() -> None:
+    model = NeverAsked()
+    harness = Harness(model)
+
+    turn = harness.service.answer_turn(
+        HOTEL, ACROSS_THE_STREET, earlier=(("Earlier question?", "Earlier answer."),), first_label=3
+    )
+
+    assert model.calls == []
+    assert harness.invocations.calls == []
+    assert turn.response.answer == ANOTHER_HOTEL_REFUSAL
+    assert (turn.next_label, turn.context_turns) == (3, 0)
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What was our occupancy in May 2026?",
+        "What was the hotel's occupancy in May 2026?",
+        "How did our hotel do in May 2026?",
+        "What was other revenue in May 2026?",
+        "Book another hotel room for 1 May 2026.",
+        "Report the other hotel instead.",
+    ],
+)
+def test_a_question_about_this_hotel_takes_the_normal_path(question: str) -> None:
+    model = ScriptedModel([kpis(), "3 room nights were occupied."])
+    harness = Harness(model)
+
+    response = harness.ask(question)
+
+    assert len(model.calls) == 2
+    assert response.answer == "3 room nights were occupied."
+    assert harness.log.rows[0]["model_calls"] == 2
+
+
+@pytest.mark.parametrize(
+    ("question", "named"),
+    [
+        # Form 1: a qualifier, and a property noun that ends its phrase.
+        (ACROSS_THE_STREET, True),
+        ("What is another hotel's ADR for May 2026?", True),
+        ("How does our occupancy compare with other hotels?", True),
+        ("Compare our RevPAR with nearby hotels in May 2026.", True),
+        ("Show competitor hotels' revenue.", True),
+        (f"How full was the competitor{chr(0x2019)}s hotel in May 2026?", True),
+        ("What was occupancy at a different property for May 2026?", True),
+        ("Report the occupancy of the neighbouring hotel and ours.", True),
+        ("Neighboring properties: what was their occupancy?", True),
+        ("Give me the rival hotel's revenue", True),
+        ("Revenue of the other property than ours", True),
+        ("OTHER HOTELS IN MAY", True),
+        # Form 2: a property placed against this one.
+        ("Revenue of the hotel next door in May 2026?", True),
+        ("How busy was the property across the road?", True),
+        ("What about the hotel across from us?", True),
+        ("Occupancy at that hotel next to ours", True),
+        ("the hotel opposite us", True),
+        ("How full was the hotel down the street in May 2026?", True),
+        # This hotel, in its own words: answered.
+        ("What was the occupancy of our hotel in May 2026?", False),
+        ("What was the hotel's occupancy in May 2026?", False),
+        ("Is this hotel's ADR above 100.00 EUR?", False),
+        ("What was other revenue in May 2026?", False),
+        ("Which other room types sold out in May 2026?", False),
+        # The property noun does not end its phrase: not a reference to a property.
+        ("Book another hotel room for 1 May 2026.", False),
+        ("Is there other hotel data for May 2026?", False),
+        ("Which room types have different property tax rates?", False),
+        # Out of this rule's reach by design: named, bare, run-on or paraphrased.
+        ("What was the Marriott's occupancy in May 2026?", False),
+        ("Report the other hotel instead.", False),
+        ("What about the place across the road?", False),
+        ("the hotel opposite the station", False),
+        ("our hotel next door", False),
+        ("What did the competitor's hotel charge in May 2026?", False),  # runs on
+        ("What did the hotels charge?", False),
+    ],
+)
+def test_the_words_rule_is_exactly_its_two_closed_forms(question: str, named: bool) -> None:
+    assert names_another_property(question) is named
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "How many guests came to us from another hotel in May 2026?",
+        "Not another hotel: what was our occupancy in May 2026?",
+        "Our car park is shared with the hotel next door; what was our parking revenue?",
+    ],
+)
+def test_known_over_refusals_are_refused_and_documented(question: str) -> None:
+    """Questions about THIS hotel that mention another property are refused too: the rule reads
+    form, not intent. Pinned here so the trade-off stays visible; the module docstring names it."""
+    model = NeverAsked()
+
+    response = Harness(model).ask(question)
+
+    assert model.calls == []
+    assert response.answer == ANOTHER_HOTEL_REFUSAL
+
+
+def test_a_labelled_foreign_id_and_words_together_are_refused_once() -> None:
+    harness = Harness(NeverAsked())
+
+    response = harness.ask(f"Compare hotel {OTHER_HOTEL} with the hotel across the street.")
+
+    assert response.answer == ANOTHER_HOTEL_REFUSAL
+    assert len(harness.log.rows) == 1
 
 
 # ======================================================================================

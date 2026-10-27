@@ -1020,6 +1020,26 @@ def test_the_forecast_tool_does_not_let_the_model_choose_a_horizon() -> None:
     assert "SERVED_HORIZON_DAYS" in source_of(Path(inspect.getfile(demand_forecast)))
 
 
+def test_the_kpi_tool_says_which_room_revenue_is_which() -> None:
+    """R2.7ZO (S2). A live model reported the ledger's room revenue (51,800) where the stay-night
+    figure (52,080) was asked for; the output carries both, so the description names them."""
+    text = hotel_kpis.CONTRACT.description
+    assert "`room_revenue` is room revenue from stay nights" in text
+    assert "the figure to give as room revenue, and the basis of ADR and RevPAR" in text
+    assert "`ledger_room_revenue` is the room revenue recorded in the ledger" in text
+    # Both names are real fields of what the tool returns, so the sentence stays true.
+    fields = hotel_kpis.CONTRACT.output_model.model_fields
+    assert {"room_revenue", "ledger_room_revenue"} <= set(fields)
+    # And the model reads it: the catalogue entry carries the same text.
+    [spec] = build_catalogue(build_default_registry(), ("get_hotel_kpis",))
+    assert spec.description == text
+
+
+def test_the_ledger_tool_still_points_room_revenue_to_the_kpi_tool() -> None:
+    text = revenue_breakdown.CONTRACT.description
+    assert "Room revenue from stay nights is reported by get_hotel_kpis, not here." in text
+
+
 @pytest.mark.parametrize("name", EXPECTED_TOOLS)
 def test_no_description_speaks_about_authorization(name: str) -> None:
     """Authorization is code. Nothing the model reads claims or grants access."""

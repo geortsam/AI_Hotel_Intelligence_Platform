@@ -43,14 +43,17 @@ def load_script() -> ModuleType:
 class StandInModel:
     """Answers every request without tools. `returned` is what a provider would name, or None."""
 
-    def __init__(self, returned: str | None) -> None:
+    def __init__(self, returned: str | None, text: str = "Nothing to report.") -> None:
         self.returned = returned
+        self.text = text
         self.calls = 0
+        self.requests: list[ChatRequest] = []
 
     def complete(self, request: ChatRequest) -> ChatResponse:
         self.calls += 1
+        self.requests.append(request)
         return ChatResponse(
-            text="Nothing to report.",
+            text=self.text,
             parsed=None,
             usage=TokenUsage(input_tokens=3, output_tokens=2),
             latency_ms=0.0,
@@ -74,15 +77,19 @@ class World:
         #: The provider the settings select, and the consent flag a run passes (R2.7O).
         self.provider = "anthropic"
         self.consent = "--confirm-paid-api-call"
+        #: What the stand-in answers (R2.7ZQ: a fixed sentence, to exercise the v3 analysis).
+        self.text = "Nothing to report."
 
     def run(self, *extra: str) -> int:
         return int(
             self.script.main(["--out", str(self.out), self.consent, *extra], today=lambda: TODAY)
         )
 
-    def files(self) -> tuple[dict[str, Any], dict[str, Any]]:
-        replays = json.loads((self.out / f"replays-{TODAY}.json").read_text(encoding="utf-8"))
-        report = json.loads((self.out / f"report-{TODAY}.json").read_text(encoding="utf-8"))
+    def files(self, suffix: str = "") -> tuple[dict[str, Any], dict[str, Any]]:
+        replays = json.loads(
+            (self.out / f"replays-{TODAY}{suffix}.json").read_text(encoding="utf-8")
+        )
+        report = json.loads((self.out / f"report-{TODAY}{suffix}.json").read_text(encoding="utf-8"))
         return replays, report
 
 
@@ -119,7 +126,7 @@ def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> World:
     monkeypatch.setattr(script, "load_settings", configured)
 
     def build(_settings: Settings) -> StandInModel:
-        model = StandInModel(state.returned)
+        model = StandInModel(state.returned, state.text)
         state.built.append(model)
         return model
 
@@ -426,12 +433,13 @@ def test_the_paid_call_flag_is_required() -> None:
 
 
 def test_a_subset_capture_cannot_pass_as_a_recording_of_the_full_set(world: World) -> None:
+    from app.services.copilot import PROMPT
     from tests.evaluation.replay import load_replays
 
     assert world.run("--case", "kpis_may_occupancy") == 0
 
     with pytest.raises(ValueError, match="another question set"):
-        load_replays(world.out / f"replays-{TODAY}.json", COPILOT_EVAL_V1)
+        load_replays(world.out / f"replays-{TODAY}.json", COPILOT_EVAL_V1, prompt=PROMPT)
 
 
 # --- R2.7O: the local provider -------------------------------------------------------------------
@@ -566,3 +574,256 @@ def test_the_default_set_is_still_v1() -> None:
     assert load_script().parse_arguments(
         ["--out", "x", "--confirm-local-model-call"]
     ).question_set == ("copilot_eval_v1")
+
+
+# --- R2.7ZQ: the prompt is chosen by name; v2 stays the default ---------------------------------
+
+V3 = "-copilot_answer-v3"
+
+
+def test_the_default_prompt_is_v2_and_is_what_the_copilot_serves() -> None:
+    from app.llm.prompts.registry import COPILOT_ANSWER_V2
+    from app.services.copilot import PROMPT
+
+    script = load_script()
+    assert script.parse_arguments(["--out", "x", "--confirm-local-model-call"]).prompt == (
+        "copilot_answer@v2"
+    )
+    assert script.DEFAULT_PROMPT == PROMPT.identity == COPILOT_ANSWER_V2.identity
+    assert script.resolve_prompt("copilot_answer@v3").identity == "copilot_answer@v3"
+
+
+def test_a_default_run_renders_and_records_v2_under_its_usual_names(world: World) -> None:
+    from app.llm.prompts.registry import COPILOT_ANSWER_V2
+
+    assert world.run("--case", "kpis_may_occupancy") == 0
+
+    replays, report = world.files()  # the names a v2 run has always written
+    v2 = {"identity": COPILOT_ANSWER_V2.identity, "checksum": COPILOT_ANSWER_V2.checksum}
+    assert (replays["prompt"], replays["prompt_checksum"]) == (v2["identity"], v2["checksum"])
+    assert report["prompt"] == replays["live_provenance"]["prompt"] == v2
+    assert report["live_provenance"]["prompt"] == v2
+    assert "v3_analysis" not in report
+    [request] = world.built[0].requests
+    assert (request.prompt_id, request.prompt_version) == ("copilot_answer", "v2")
+    assert request.messages[0].content == COPILOT_ANSWER_V2.system
+
+
+def test_a_v3_run_renders_v3_and_records_it_in_every_file(world: World) -> None:
+    from app.llm.prompts.registry import COPILOT_ANSWER_V2, COPILOT_ANSWER_V3
+    from app.services.copilot import PROMPT
+
+    assert local(world).run("--set", "copilot_eval_v2", "--prompt", "copilot_answer@v3") == 0
+
+    assert sorted(path.name for path in world.out.iterdir()) == [
+        f"replays-{TODAY}{V3}.json",
+        f"report-{TODAY}{V3}.json",
+    ]
+    replays, report = world.files(V3)
+    v3 = {"identity": COPILOT_ANSWER_V3.identity, "checksum": COPILOT_ANSWER_V3.checksum}
+    assert (replays["prompt"], replays["prompt_checksum"]) == (v3["identity"], v3["checksum"])
+    assert report["prompt"] == v3
+    for provenance in (replays["live_provenance"], report["live_provenance"]):
+        assert provenance["prompt"] == v3
+        assert provenance["provider"] == "ollama"
+        assert provenance["configured_model"] == "qwen3.5:4b"
+        assert set(provenance["budget"]) == {"timeout_seconds", "max_output_tokens"}
+    assert "copilot_answer@v3" in report["statement"]
+    assert report["v3_analysis"]["prompt"] == v3
+    requests = [request for model in world.built for request in model.requests]
+    assert requests
+    for request in requests:
+        assert (request.prompt_id, request.prompt_version) == ("copilot_answer", "v3")
+        assert request.messages[0].content == COPILOT_ANSWER_V3.system
+    assert PROMPT is COPILOT_ANSWER_V2  # the copilot's own default was never touched
+
+
+@pytest.mark.parametrize(
+    "prompt", ["copilot_answer@v1", "copilot_answer@v4", "v3", "boundary_probe@v1"]
+)
+def test_an_unknown_prompt_is_refused_by_the_command_line(prompt: str) -> None:
+    with pytest.raises(SystemExit):
+        load_script().parse_arguments(
+            ["--out", "x", "--confirm-local-model-call", "--prompt", prompt]
+        )
+
+
+def test_a_prompt_outside_the_allowed_ones_is_never_resolved() -> None:
+    script = load_script()
+    for identity in ("copilot_answer@v1", "copilot_conversation@v2", "copilot_answer@v4"):
+        with pytest.raises(script.RunRefusedError):
+            script.resolve_prompt(identity)
+
+
+def test_a_prompt_missing_from_the_registry_is_refused_not_replaced(
+    world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from app.llm.prompts import registry
+
+    monkeypatch.delitem(registry.REGISTRY, "copilot_answer@v3")
+
+    assert local(world).run("--prompt", "copilot_answer@v3") == 2
+    assert world.built == []
+    assert not world.out.exists()
+    assert "copilot_answer@v3" in capsys.readouterr().err
+
+
+# --- R2.7ZQ: a v3 run's files are its own ---------------------------------------------------------
+
+
+def test_v3_file_names_never_collide_with_a_v2_runs() -> None:
+    script = load_script()
+    out = Path("anywhere")
+    v2 = script.output_paths(out, "2026-10-27")
+    v3 = script.output_paths(out, "2026-10-27", "copilot_answer@v3")
+
+    assert [p.name for p in v2] == ["replays-2026-10-27.json", "report-2026-10-27.json"]
+    assert [p.name for p in v3] == [
+        "replays-2026-10-27-copilot_answer-v3.json",
+        "report-2026-10-27-copilot_answer-v3.json",
+    ]
+    assert script.output_paths(out, "2026-10-27", "copilot_answer@v2") == v2
+
+
+def test_a_v3_run_refuses_a_directory_that_already_holds_anything(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert local(world).run("--case", "kpis_may_occupancy") == 0  # a v2 run, in that directory
+    before = {path.name: path.read_bytes() for path in world.out.iterdir()}
+    built = len(world.built)
+
+    assert world.run("--prompt", "copilot_answer@v3", "--case", "kpis_may_occupancy") == 2
+
+    assert len(world.built) == built  # refused before a client existed
+    assert {path.name: path.read_bytes() for path in world.out.iterdir()} == before
+    assert "not empty" in capsys.readouterr().err
+
+
+def test_a_v3_run_is_never_repeated_into_its_own_directory(world: World) -> None:
+    assert local(world).run("--prompt", "copilot_answer@v3", "--case", "guest_names") == 0
+    before = {path.name: path.read_bytes() for path in world.out.iterdir()}
+
+    assert world.run("--prompt", "copilot_answer@v3", "--case", "guest_names") == 2
+    assert {path.name: path.read_bytes() for path in world.out.iterdir()} == before
+
+
+def test_a_v3_run_accepts_a_new_empty_directory(world: World) -> None:
+    world.out.mkdir()
+    assert local(world).run("--prompt", "copilot_answer@v3", "--case", "guest_names") == 0
+    assert len(list(world.out.iterdir())) == 2
+
+
+def test_a_v3_run_refuses_a_file_where_its_directory_should_be(world: World) -> None:
+    world.out.write_text("not a directory", encoding="utf-8")
+    assert local(world).run("--prompt", "copilot_answer@v3") == 2
+    assert world.built == []
+
+
+def test_a_v3_run_inside_the_repository_is_refused(world: World) -> None:
+    for inside in (REPO_ROOT / "tests" / "evaluation", REPO_ROOT / "v3-pilot-must-not-exist"):
+        world.out = inside
+        assert local(world).run("--prompt", "copilot_answer@v3") == 2
+    assert world.built == []
+    assert not (REPO_ROOT / "v3-pilot-must-not-exist").exists()
+
+
+def test_the_key_is_in_no_file_of_a_v3_run(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert world.run("--prompt", "copilot_answer@v3", "--case", "guest_names") == 0
+
+    printed = capsys.readouterr()
+    for path in world.out.iterdir():
+        assert SENTINEL_KEY not in path.read_text(encoding="utf-8")
+    assert SENTINEL_KEY not in printed.out + printed.err
+
+
+# --- R2.7ZQ: the v3 analysis, end to end ---------------------------------------------------------
+
+
+def test_a_v3_report_classifies_wording_apart_from_outcome_and_tools(world: World) -> None:
+    from app.llm.prompts.registry import PERSONAL_DATA_ANSWER
+
+    local(world).text = PERSONAL_DATA_ANSWER
+    argv = ["--set", "copilot_eval_v2", "--prompt", "copilot_answer@v3"]
+    assert world.run(*argv, "--case", "guest_names", "--case", "inject_other_hotel") == 0
+
+    _, report = world.files(V3)
+    rows = {row["case_id"]: row for row in report["v3_analysis"]["cases"]}
+    assert rows["guest_names"]["wording"] == "personal_data"
+    assert rows["guest_names"]["outcome"] == "completed"
+    assert (rows["guest_names"]["tools_called"], rows["guest_names"]["model_calls"]) == ([], 1)
+    # Refused by the server before any model call (R2.7ZL): no model text to classify.
+    assert rows["inject_other_hotel"]["wording"] == "no_text"
+    assert rows["inject_other_hotel"]["model_calls"] == 0
+    # The shared case results carry no wording field: their schema is the frozen reports'.
+    assert all("wording" not in case for case in report["cases"])
+
+
+# --- R2.7ZU: the served side, end to end ----------------------------------------------------------
+
+
+def test_a_v3_report_tells_the_servers_refusal_from_the_models(world: World) -> None:
+    from app.llm.prompts.registry import CANNOT_ANSWER, PERSONAL_DATA_ANSWER
+    from app.services.copilot import NOT_FOUND_ANSWER
+
+    local(world).text = PERSONAL_DATA_ANSWER
+    argv = ["--set", "copilot_eval_v2", "--prompt", "copilot_answer@v3"]
+    assert world.run(*argv, "--case", "guest_names", "--case", "another_property") == 0
+
+    _, report = world.files(V3)
+    served = {row["case_id"]: row for row in report["served"]["cases"]}
+    analysed = {row["case_id"]: row for row in report["v3_analysis"]["cases"]}
+    assert (served["guest_names"]["answer_source"], served["guest_names"]["model_text"]) == (
+        "model",
+        PERSONAL_DATA_ANSWER,
+    )
+    assert (
+        served["another_property"]["answer_source"],
+        served["another_property"]["model_text"],
+    ) == (
+        "scope_guard",
+        None,
+    )
+    assert (analysed["guest_names"]["wording"], analysed["guest_names"]["served_wording"]) == (
+        "personal_data",
+        "personal_data",
+    )
+    assert (
+        analysed["another_property"]["wording"],
+        analysed["another_property"]["served_wording"],
+    ) == (
+        "no_text",
+        "scope",
+    )
+    assert analysed["another_property"]["answer_source"] == "scope_guard"
+    assert NOT_FOUND_ANSWER != CANNOT_ANSWER  # the two are never confused below
+    assert "served" not in report["cases"][0]  # the shared case results are unchanged
+
+
+def test_a_substituted_answer_is_recorded_as_both_texts(world: World) -> None:
+    from app.llm.prompts.registry import CANNOT_ANSWER
+    from app.services.copilot import NOT_FOUND_ANSWER
+
+    local(world).text = NOT_FOUND_ANSWER
+    assert world.run("--set", "copilot_eval_v2", "--case", "pricing_advice") == 0
+
+    _, report = world.files()
+    [row] = report["served"]["cases"]
+    assert (row["model_text"], row["served_answer"], row["answer_source"]) == (
+        NOT_FOUND_ANSWER,
+        CANNOT_ANSWER,
+        "cannot_answer_substitution",
+    )
+    [case] = report["cases"]
+    assert case["refusal_correct"] is True and row["served_refusal_correct"] is True
+
+
+def test_a_knowledge_run_adds_no_served_block(world: World) -> None:
+    """Its case results already carry `served_answer`; the knowledge report is unchanged."""
+    case = COPILOT_KNOWLEDGE_EVAL_V1.cases[0].case_id
+    assert world.run("--set", "copilot_knowledge_eval_v1", "--case", case) == 0
+
+    _, report = world.files()
+    assert "served" not in report
+    assert "served_answer" in report["cases"][0]

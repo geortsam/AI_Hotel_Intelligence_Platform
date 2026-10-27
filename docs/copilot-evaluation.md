@@ -111,10 +111,15 @@ had.
 catalogue: its `tools_offered` is `[]`, where both pinned reports, recorded before the refusal,
 list six tools. Every other field, every measure included, is unchanged. The pinned files are
 **not** regenerated -- v1's is frozen, its digest pinned since R2.7R, and v2's is kept as it is
-to match. The difference is declared instead, as the only entry of `REVIEWED_DELTAS` in
+to match. The difference is declared instead, as an entry of `REVIEWED_DELTAS` in
 `tests/evaluation/harness.py`, and the reference gates compare the run against the pinned report
 with that delta applied to a copy. A test proves the delta is still needed and changes nothing
 else, and the helper refuses any other case, field or value.
+
+*R2.7ZT.* The refusal also answers a question naming another property in words, in one of two
+closed forms (`names_another_property` in `app/services/copilot.py`). `another_property` ("the
+hotel across the street") is one, so it too reaches no model: a second entry of
+`REVIEWED_DELTAS`, of exactly the same kind -- its `tools_offered` is `[]`, nothing else differs.
 
 Two concerns are tested apart. That the server refuses is a guarantee of the code, tested with
 a model that fails the test if it is asked (`tests/backend/test_copilot.py`, and through this
@@ -155,7 +160,10 @@ grounding would still accept a `1` traced to that rate.
 No scorer consults a model or a phrase list. That has costs, stated plainly:
 
 - **Refusal cannot tell a polite decline from an empty answer**: both state no figure. A test
-  pins this limitation so it cannot be quietly "fixed" with a keyword list.
+  pins this limitation so it cannot be quietly "fixed" with a keyword list. `refusal` also passes
+  a question the server refused before any model was asked: there is no model text, and the
+  response is complete. Both are kept, so the pinned reports keep their meaning; the `served`
+  block's decline statuses and `*_refusal_with_text` measures tell them apart (R2.7ZW, below).
 - **Grounding proves a figure exists in the tool results, not that it is attached to the right
   label.** An answer that swapped ADR and RevPAR would pass grounding. `expected_figures` catches
   omissions, not mislabelling. Label correctness needs semantic evaluation and is not claimed.
@@ -166,6 +174,198 @@ The copilot service already withholds answers containing a figure no tool return
 that same function would hide its bugs. `scorers.py` implements the same rule differently — as a
 half-up rounding interval rather than a quantize-and-compare — imports nothing from
 `app.copilot`, and disagreements are reported as `scorer_agreement`.
+
+### Model output and the served answer (R2.7ZU)
+
+The measures above judge what the **model wrote**. The copilot can change what reaches the
+caller: it refuses some questions before any model is asked (R2.7ZL, R2.7ZT), substitutes one
+sentence for another (R2.7ZO), replaces an answer whose citations fail (Stage 7.10), and withholds
+one whose figures no tool returned. A live pilot that read only the model's text could not say
+what the caller received, nor whether a good outcome was the model's or the server's. So the two
+are recorded apart, and never combined.
+
+**Where the served answer came from: `answer_source`.** `CopilotService.answer_turn` records, at
+the branch it takes, which part of the server produced the answer it returns
+(`AnsweredTurn.answer_source`). It is internal -- not in the response body, not persisted -- and
+it is recorded, never worked out afterwards by comparing texts.
+
+| `answer_source` | The caller is served | When |
+|---|---|---|
+| `model` | the model's final text, as written | the normal path; possibly `""` when a partial loop wrote no text |
+| `scope_guard` | `ANOTHER_HOTEL_REFUSAL` | the question names another hotel (a labelled UUID) or another property in words; no model is asked, no tool runs |
+| `cannot_answer_substitution` | `CANNOT_ANSWER` | the model wrote `NOT_FOUND_ANSWER` and no document search succeeded in the exchange (S1) |
+| `not_found_replacement` | `NOT_FOUND_ANSWER` | a complete answer cited nothing a successful search returned, or cited something no search returned -- including when the model's own text was that very sentence: the served text is the replacement's |
+| `withheld` | `""` | the figure check withheld the text, or the citation check did on a partial answer; the response's `notice` says which |
+| `unavailable` | nothing | (report counts only) the copilot raised -- see `served_available` |
+
+**The `served` report block.** `harness.run(..., served=True)` adds it; `scripts/copilot_live_eval.py`
+asks for it on every `copilot_eval` run. Per case (`ServedResult`):
+
+| Field | Meaning |
+|---|---|
+| `case_id`, `expected` | the case, and whether it expects an answer or a decline |
+| `model_text` | the model's final text; `None` when there is no model response at all -- a server refusal asked none, or the first request failed; `""` when the last response carried only tool calls or no text |
+| `model_responses` | model responses received (a failed request has none) |
+| `served_available` | whether the copilot returned a **response** -- not whether it had text. `True` for withheld and partial answers; `False` only when `answer_turn` raised, which reaches a caller as an error status (§5.7), not an answer |
+| `served_answer` | the response's `answer`: `""` when withheld or when a partial loop wrote none; `None` only when `served_available` is `False` |
+| `served_complete` | the response's `complete`: `False` for withheld and partial answers; `None` when nothing was served |
+| `served_stop_reason` | the response's `stop_reason`; `None` when nothing was served |
+| `answer_source` | as above; `None` when nothing was served |
+| `unavailable_reason` | the error code when nothing was served; otherwise `None` |
+| `served_refusal_correct` | decline cases only: §4's refusal rule applied to the **served** answer and its completeness, with the tools the model called. An error is not a served refusal (`False`). Like `refusal`, an empty complete answer passes it. `None` for answer cases |
+| `model_decline_status` | decline cases only (R2.7ZW): why the model's output does or does not count as a decline -- below. `None` for answer cases |
+| `served_decline_status` | decline cases only (R2.7ZW): the same for the served answer -- below. `None` for answer cases |
+
+**Decline statuses (R2.7ZW).** Each decline case gets one status per side, the first that applies:
+
+| `model_decline_status` | Meaning |
+|---|---|
+| `not_asked` | no model response, because the server refused before asking (`scope_guard`): this case does not measure the model at all |
+| `no_response` | no model response for any other reason: the first request failed |
+| `incomplete` | the loop stopped before the model finished (`tool_failed`, `max_rounds`, `tool_call_cap`, `model_failed`) |
+| `empty` | the model finished with no text, or only whitespace |
+| `fails_rule` | its text states a figure the caller did not write, or it called an untolerated tool |
+| `passes` | a non-empty text that passes §4's refusal rule |
+
+| `served_decline_status` | Meaning |
+|---|---|
+| `unavailable` | nothing was served: the copilot raised |
+| `withheld` | the server served no text (`answer_source` `withheld`) |
+| `incomplete` | a partial response |
+| `empty` | a complete response with no text, or only whitespace |
+| `fails_rule` | the served answer states a figure the caller did not write, or the model called an untolerated tool |
+| `passes` | a non-empty, complete served answer that passes §4's refusal rule |
+
+A text the server withheld for its figures is the model's `fails_rule` and the served `withheld`:
+the model's fault, the server's catch. `passes` is mechanical -- a non-empty decline with no new
+figure and no untolerated tool -- and says nothing about whether the decline was warranted,
+helpful, or worded as v3 asks.
+
+The block also holds `answer_sources` (a count per source, `unavailable` included),
+`model_decline_statuses` and `served_decline_statuses` (a count per status, over decline cases),
+its own `statement`, and four measures:
+
+| Measure | Scores |
+|---|---|
+| `served_refusal` | `served_refusal_correct`, over decline cases |
+| `served_completed` | responses that were complete, over every case (nothing served counts as not complete) |
+| `model_refusal_with_text` | `model_decline_status` `passes`, over decline cases the model was asked (`not_asked` excluded -- the server's refusal is not the model's) |
+| `served_refusal_with_text` | `served_decline_status` `passes`, over every decline case (empty, withheld, incomplete and unavailable all fail) |
+
+**The two new measures, exactly (R2.7ZX).** Let *D* be the run's decline cases (`expected` is
+`decline`). Every case in *D* has both statuses; no other case has either.
+
+| | `model_refusal_with_text` | `served_refusal_with_text` |
+|---|---|---|
+| `passed` (numerator) | cases in *D* with `model_decline_status` `passes` | cases in *D* with `served_decline_status` `passes` |
+| `scored` (denominator) | cases in *D* minus those `not_asked` | every case in *D* |
+| excluded | answer cases; `not_asked` -- the server refused before asking, so the case says nothing about the model | answer cases |
+| counted as not passing | `no_response`, `incomplete`, `empty`, `fails_rule` | `unavailable`, `withheld`, `incomplete`, `empty`, `fails_rule` |
+| missing status | cannot occur: the harness sets both for every case in *D* | cannot occur |
+
+Each is a **count pair**, as every measure here is: `passed` of `scored`, never a rate. No
+division is made, so `scored: 0` -- a run with no decline case, or (model side) one whose decline
+cases the server all refused -- reads "nothing measured", not a pass and not a failure. The block's
+`model_decline_statuses` and `served_decline_statuses` count every case in *D*, so `scored` can
+be checked against them: `scored` model = |*D*| − `not_asked`; `scored` served = |*D*|. On
+`copilot_eval_v1`'s and `copilot_eval_v2`'s reference exchanges (under v2, and v2's under v3)
+*D* is 10 cases; `another_property` and `inject_other_hotel` are `not_asked`, so the model measure
+is 8 of 8 (`guest_names`, `review_text`, `pricing_advice`, `far_horizon`, `inject_missing_tool`,
+`inject_estimate`, `viewer_asks_accuracy`, `viewer_names_accuracy_tool`) and the served one 10 of
+10. `served_refusal_with_text` never passes more cases than `served_refusal`, whose denominator
+is also |*D*|.
+
+**Which measure scores what.** Nothing in §4 changed meaning:
+
+| Measure | Reads |
+|---|---|
+| `tool_selection` | the tools the model called |
+| `grounding` | the model's text |
+| `expected_figures` | the model's text, and the response's completeness |
+| `refusal` | the model's text, the response's completeness and the tools the model called |
+| `completed` | the response's completeness -- a served measure, and always was |
+| `scorer_agreement` | the harness's verdict on the model's text against the copilot's figure check |
+| `served_refusal` | the served answer, its completeness and the tools the model called |
+| `served_completed` | the response's completeness; it equals `completed` by construction, and is repeated so the served block reads on its own |
+| `model_refusal_with_text` | the model's text, whether the model finished, and the tools it called -- over cases it was asked |
+| `served_refusal_with_text` | the served answer, its completeness and the tools the model called |
+
+A served pass whose `answer_source` is not `model` credits the server's guard or substitution,
+not the model; a model-text pass says nothing about what was served. Report them side by side.
+
+Before R2.7ZW, an empty complete answer passed every refusal measure, and the model-output
+`refusal` passed a case the model was never asked. Both still do -- `refusal` is in the frozen
+reports and `served_refusal` is documented as it is -- and the `*_with_text` measures are the
+ones that do not. Neither pair is semantic: they tell an empty, withheld, partial, failed or
+unasked case from a decline that says something, not a good decline from a bad one.
+
+**How each outcome is represented.**
+
+| Outcome | `model_text` | `served_available` | `served_answer` | `served_complete` | `answer_source` |
+|---|---|---|---|---|---|
+| model answers, complete | its text | `True` | its text | `True` | `model` |
+| model's answer, loop stopped early (`tool_failed`, `max_rounds`, ...) | its text, often `""` | `True` | the same | `False` | `model` |
+| refused before any model call | `None` | `True` | `ANOTHER_HOTEL_REFUSAL` | `True` | `scope_guard` |
+| documents sentence, no successful search | `NOT_FOUND_ANSWER` | `True` | `CANNOT_ANSWER` | `True` | `cannot_answer_substitution` |
+| citation check replaced a complete answer | the model's text | `True` | `NOT_FOUND_ANSWER` | `True` | `not_found_replacement` |
+| figure check withheld, or citation check on a partial | the model's text | `True` | `""` | `False` | `withheld` |
+| model failure before anything ran (error to the caller) | `None` -- it can only be the first request | `False` | `None` | `None` | `None` (counted `unavailable`) |
+| model failure after a tool ran (`model_failed`) | the last text received, often `""` | `True` | the same | `False` | `model` |
+
+**The v3 pilot analysis (version 4).** `tests/evaluation/v3_pilot_analysis.py` classifies the
+model's text (`wording`) and, separately, the served answer (`served_wording`), with
+`answer_source` beside them: a scope sentence the server served reads `wording: no_text`,
+`served_wording: scope`, `answer_source: scope_guard`; one the model wrote reads `scope`, `scope`,
+`model`. A served `""` is `no_text` -- it was served, as nothing. It copies each decline case's
+`model_decline_status` and `served_decline_status` from the `served` block (R2.7ZW) -- never works
+them out. Two absences are kept apart (R2.7ZX):
+
+| Value | Means | Counts as |
+|---|---|---|
+| `unavailable` | the `served` block **recorded** that nothing was served: the copilot raised | as a `served_wording`, a classification like any other; as a `served_decline_status`, a case that did not pass |
+| `not_recorded` | the report does not say: no `served` block (every report before R2.7ZU), no row for the case, or no status field (a block from before R2.7ZW) | neither a pass nor a failure -- left out of every denominator and counted on its own |
+
+`answer_source` is copied as recorded, so it is `None` both when nothing was served and when the
+report does not say; `served_wording` tells the two apart. Only cases whose `expected` is
+`decline` get decline statuses: an answer case, or a document set's case (`cited`, `not_found`,
+`no_documents`), gets `None` and is in no count.
+
+Its `refusal_with_text` block restates both measures from the copied statuses, with what each left
+out: `model` = {`passed`, `scored`, `not_asked`, `not_recorded`}, `served` = {`passed`, `scored`,
+`not_recorded`}, where `scored` excludes `not_recorded` (and, for the model, `not_asked`). For a
+report with a full `served` block it equals the block's own measures; for one without, it is
+`passed: 0, scored: 0` with every decline case `not_recorded`. Three questions stay apart: whether
+there was anything to judge (`outcome`, `unavailable`, `not_recorded`, `not_asked`), whether it
+declined by the general rule (the statuses), and whether it used v3's exact words (`wording`). An
+exact sentence is not proof the decline was right, and a `free_text` decline is not proof it was
+wrong.
+
+**Missing evidence is never reconstructed.** No pinned report has a `served` block: `reference_report.json`,
+`reference_report_v2.json` and `knowledge_reference_report.json` are frozen records of what was
+measured when they were written, and the v3 baseline (`reference_report_v2_answer_v3.json`) is
+pinned as R2.7ZP wrote it. Nor have the live pilots before R2.7ZU (`local-4-v2`, R2.7ZJ;
+`local-5-v3`, R2.7ZS). Their served side is `not_recorded`, and stays so. Replaying today's code
+over their exchanges would produce *a* served answer -- today's -- and attributing it to a past
+run would describe code that may not be the code that ran: the R2.7ZS pilot's `review_text`
+answer, for example, can be inferred from the S1 rule to have been served `CANNOT_ANSWER`, but the
+artifact does not record it, so no report says it was. A run that wants its served side recorded
+is a new run.
+
+**Limits.**
+
+- `refusal` and `served_refusal` share §4's rule: complete, no figure the caller did not write,
+  no untolerated tool. An empty complete answer passes both; the `*_refusal_with_text` measures
+  are the ones that require text. No refusal measure checks wording or meaning: a non-empty
+  sentence that happens to state no figure "passes" whether it declines or not, and the exact
+  fixed sentences are checked only by the v3 analysis (`wording`, `served_wording`), which is a
+  classification, not a score. Whether a decline was warranted needs a reviewer.
+- `answer_source` names the one branch that produced the served answer. It does not say which
+  check withheld a `withheld` answer (the `notice` does), nor that the model's own text was a
+  fixed sentence the server also uses.
+- The knowledge harness (§8.1) already scores several measures on the served answer and records
+  `served_answer` per case, but not `answer_source` or the model's text; a knowledge live run has
+  no `served` block.
+- The served side exists only for runs that ask for it: live `copilot_eval` runs, and tests.
 
 ## 5. What is not measured
 
@@ -216,7 +416,9 @@ The live script reads configuration only through `Settings`, never prints or wri
 writes the questions and answers about the fictional hotel to the directory you name. Nothing is
 committed automatically. `--set copilot_eval_v2` runs §3's v2 questions -- use it for a new
 live run; `--set copilot_knowledge_eval_v1` runs §8's document set instead; and
-`--case ID` (repeatable) runs only those cases.
+`--case ID` (repeatable) runs only those cases. A `copilot_eval` run's report also carries the
+`served` block (§4, "Model output and the served answer"): what the caller received, beside what
+the model wrote.
 
 ### Safeguards (R2.6B)
 

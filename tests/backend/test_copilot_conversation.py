@@ -291,6 +291,8 @@ def test_the_conversation_prompt_is_pinned_and_v2_is_unchanged() -> None:
         "copilot_answer@v1",
         "copilot_answer@v2",
         "copilot_conversation@v1",
+        "copilot_answer@v3",  # R2.7ZN: registered, not yet served
+        "copilot_conversation@v2",
     }
 
 
