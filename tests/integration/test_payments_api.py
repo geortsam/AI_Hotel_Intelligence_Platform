@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import re
 import uuid
 from collections.abc import Iterator
 from decimal import Decimal
@@ -39,6 +40,18 @@ CHECK_IN = dt.date(2026, 9, 1)
 CHECK_OUT = dt.date(2026, 9, 4)
 CARD_LAST_FOUR = "4242"
 TXN_REFERENCE = "pi_3ABCdefGHIjklMNO"
+
+#: A UUID in canonical spelling, as the request URLs logged here carry the hotel and booking
+#: ids. They are random, so a log line contains "4242" by chance about once in a thousand runs
+#: (CI 40563510049: booking ``…-6cb424223ae5``). The same reasoning as
+#: ``tests/integration/test_audit_trail_api.py``'s ``MINTED_VALUE``, applied to free text.
+MINTED_UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b")
+
+
+def without_minted_uuids(text: str) -> str:
+    """*text* with each canonical UUID replaced by a placeholder, and nothing else changed: a
+    card fragment or a reference written anywhere else stays exactly where a leak would put it."""
+    return MINTED_UUID.sub("<uuid>", text)
 
 
 def hotel_payload(slug: str) -> dict[str, object]:
@@ -682,11 +695,28 @@ def test_logs_contain_no_card_fragment_or_transaction_reference(
     with caplog.at_level(logging.DEBUG):
         api.post(payments_url(hotel, booking), json=payload)  # triggers the 409
 
-    captured = "\n".join(
-        record.getMessage() + str(record.exc_info or "") for record in caplog.records
+    captured = without_minted_uuids(
+        "\n".join(record.getMessage() + str(record.exc_info or "") for record in caplog.records)
     )
     for secret in [TXN_REFERENCE, CARD_LAST_FOUR]:
         assert secret not in captured, f"leaked {secret!r} into logs"
+
+
+def test_masking_minted_uuids_cannot_hide_a_leaked_card_fragment() -> None:
+    """The log check above masks random UUIDs so they cannot contain "4242" by chance. This
+    shows the mask removes exactly those, and nothing a leak would look like."""
+    lucky = "96810d0c-8ad4-43c4-9da9-6cb424223ae5"  # the booking id that failed CI 40563510049
+    line = (
+        f'POST /hotels/{lucky}/bookings/{lucky}/payments "HTTP/1.1 409 Conflict" '
+        f"card {CARD_LAST_FOUR} ref {TXN_REFERENCE} digits {CARD_LAST_FOUR * 8}"
+    )
+
+    masked = without_minted_uuids(line)
+
+    assert lucky not in masked
+    assert masked.count("<uuid>") == 2
+    # Kept: the card fragment on its own, the reference, and a run of digits with no UUID shape.
+    assert f"card {CARD_LAST_FOUR} ref {TXN_REFERENCE} digits {CARD_LAST_FOUR * 8}" in masked
 
 
 def test_errors_use_the_shared_envelope(api: TestClient, booking_ctx: tuple[str, str]) -> None:
