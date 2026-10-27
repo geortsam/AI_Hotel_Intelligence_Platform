@@ -327,13 +327,17 @@ _CLOSING_SENTENCE = " Answer concisely, in plain text, in the language of the qu
 def _before_closing(system: str, *rules: str) -> str:
     """*system* with *rules* added immediately before its closing style sentence.
 
-    A version is DERIVED from the one before it, never retyped: the earlier text stays its
-    exact prefix. Raises unless that sentence occurs exactly once, so a reworded predecessor
-    cannot silently produce a prompt that lacks the new rules.
+    A version is DERIVED from the one before it, never retyped: everything before the closing
+    sentence stays its exact prefix. Where that sentence does not occur exactly once -- only an
+    edit to the earlier prompt can cause it -- the rules are appended at the end instead, so the
+    new version still carries them. It never raises: this runs at import, and an import error
+    would stop the very tests that catch the edit -- the pinned checksums of both versions, and
+    `test_the_closing_sentence_occurs_exactly_once_in_every_derived_base` -- from running
+    (R2.7ZZZZZ, mutation 7.8-M6).
     """
-    if system.count(_CLOSING_SENTENCE) != 1:
-        raise ValueError("The closing style sentence must occur exactly once.")
     added = "".join(f" {rule}" for rule in rules)
+    if system.count(_CLOSING_SENTENCE) != 1:
+        return f"{system}{added}"
     return system.replace(_CLOSING_SENTENCE, f"{added}{_CLOSING_SENTENCE}")
 
 

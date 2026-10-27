@@ -248,6 +248,60 @@ def test_the_v2_text_the_mutation_inventory_anchors_on_still_occurs_once() -> No
         assert source.count(edit.old) == edit.occurrences == 1
 
 
+# --- R2.7ZZZZZ: an edited v2 is caught by tests, not by an import error ---------------------
+
+
+def test_the_closing_sentence_occurs_exactly_once_in_every_derived_base() -> None:
+    """The guard `_before_closing` used to apply at import, held here instead: v3 is derived
+    from v2 and conversation v2 from v3, each by inserting before this one sentence."""
+    from app.llm.prompts.registry import _CLOSING_SENTENCE
+
+    assert _CLOSING_SENTENCE == CLOSING
+    for base in (COPILOT_ANSWER_V2, COPILOT_ANSWER_V3):
+        assert base.system.count(CLOSING) == 1, base.identity
+
+
+@pytest.mark.parametrize(
+    "base",
+    ["Answer in plain text.", f"First.{CLOSING} Second.{CLOSING}"],
+    ids=["missing", "twice"],
+)
+def test_a_base_without_one_closing_sentence_still_derives_with_the_rules(base: str) -> None:
+    from app.llm.prompts.registry import _before_closing
+
+    assert _before_closing(base, "Rule one.", "Rule two.") == f"{base} Rule one. Rule two."
+
+
+def test_the_registry_still_imports_under_mutation_7_8_m6(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CI run 40563510049: 7.8-M6 rewords v2's closing sentence, the import-time derivation of
+    v3 raised, and the mutation's killer could not even be collected ("did not run"). Applied
+    here in memory, never on disk: the registry must import, and v2's checksum must move -- which
+    is what the killer, comparing against the pinned reports, detects."""
+    import sys
+    import types
+
+    from tests.mutation.inventory import MUTATIONS
+
+    [mutation] = [m for m in MUTATIONS if m.id == "7.8-M6"]
+    [edit] = mutation.edits
+    path = REPOSITORY_ROOT / edit.path
+    source = path.read_text(encoding="utf-8")
+    assert source.count(edit.old) == 1
+    module = types.ModuleType("mutated_prompt_registry")
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+
+    exec(compile(source.replace(edit.old, edit.new), str(path), "exec"), module.__dict__)
+
+    mutated_v2 = module.COPILOT_ANSWER_V2
+    mutated_v3 = module.COPILOT_ANSWER_V3
+    assert mutated_v2.checksum != COPILOT_ANSWER_V2.checksum
+    assert mutated_v3.checksum != COPILOT_ANSWER_V3.checksum
+    for rule in (SCOPE_RULE, PERSONAL_DATA_RULE, CANNOT_ANSWER_RULE):
+        assert rule in mutated_v3.system  # the rules are kept, appended
+
+
 def test_the_new_prompts_pass_the_real_validator_and_carry_no_forbidden_wording() -> None:
     for record in (COPILOT_ANSWER_V3, COPILOT_CONVERSATION_V2):
         rebuilt = PromptRecord(**record.as_dict())  # the constructor's own vocabulary check
