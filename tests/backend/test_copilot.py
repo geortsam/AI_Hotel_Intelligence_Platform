@@ -559,6 +559,35 @@ def test_with_no_tool_output_every_figure_is_refused() -> None:
     assert ungrounded_figures("Occupancy was 71%.", outputs=[], question="How full?") == ("71",)
 
 
+#: Longer than Decimal's default 28-digit precision: rounding it raised `InvalidOperation`.
+LONG = "2" * 32
+
+
+@pytest.mark.parametrize(
+    ("outputs", "question", "evidence", "answer"),
+    [
+        ([OUTPUT], f"What was the occupancy {LONG} in May 2026?", None, "Occupancy was 9.68%."),
+        ([OUTPUT, {"value": LONG}], "", None, "Occupancy was 9.68%."),
+        ([OUTPUT, {"value": f"{LONG}.5"}], "", None, "Occupancy was 9.68%."),
+        ([OUTPUT], "", {"S1": f"Ref {LONG}."}, "Occupancy was 9.68% [S1]."),
+    ],
+)
+def test_an_over_long_source_number_never_raises_and_matches_only_itself(
+    outputs: list[dict[str, Any]], question: str, evidence: dict[str, str] | None, answer: str
+) -> None:
+    """R2.8N-D: a digit run too long to round grounds no other figure, and breaks no check."""
+    assert ungrounded_figures(answer, outputs=outputs, question=question, evidence=evidence) == ()
+    refused = answer.replace("9.68", "97.3")
+    assert ungrounded_figures(refused, outputs=outputs, question=question, evidence=evidence) == (
+        "97.3",
+    )
+
+
+def test_an_over_long_number_is_grounded_by_itself_and_by_nothing_shorter() -> None:
+    assert ungrounded_figures(f"You wrote {LONG}.", outputs=[], question=f"Is {LONG} ok?") == ()
+    assert ungrounded_figures(f"It was {LONG}.", outputs=[OUTPUT], question="") == (LONG,)
+
+
 # ======================================================================================
 # C. The loop's usage totals
 # ======================================================================================

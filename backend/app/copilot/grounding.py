@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Iterator, Mapping
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, DecimalException, InvalidOperation
 from typing import Any
 
 from app.copilot.citations import sentences_with_citations
@@ -92,15 +92,25 @@ def _rounded(value: Decimal, places: int) -> Decimal:
     return value.quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP)
 
 
+def _matches(source: Decimal, target: Decimal, places: int) -> bool:
+    """Whether *source*, as written or as a percentage, rounds to *target* (R2.8N-D).
+
+    A source too long for Decimal's context precision (a 32-digit run in a question) cannot be
+    rounded: `quantize` raises. It then matches nothing by rounding -- only an equal figure, which
+    `_grounded` checks first -- so the check errs toward refusing, never toward raising.
+    """
+    try:
+        return _rounded(source, places) == target or _rounded(source * _HUNDRED, places) == target
+    except DecimalException:
+        return False
+
+
 def _grounded(written: str, value: Decimal, sources: set[Decimal]) -> bool:
     target = abs(value)
     places = _decimals(written)
     if target in sources:
         return True
-    return any(
-        _rounded(source, places) == target or _rounded(source * _HUNDRED, places) == target
-        for source in sources
-    )
+    return any(_matches(source, target, places) for source in sources)
 
 
 def ungrounded_figures(
