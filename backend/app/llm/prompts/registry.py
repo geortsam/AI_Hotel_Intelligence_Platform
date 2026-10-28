@@ -365,6 +365,77 @@ COPILOT_CONVERSATION_V2 = PromptRecord(
 )
 
 
+#: R2.8D. The ONE rule v4 has for the documents sentence: only after a document search that
+#: succeeded, and never a claim about documents without one. The server enforces the same
+#: condition whatever the model writes (R2.7ZO, R2.8B: without a successful search, the sentence
+#: or a near-variant of it is served as `CANNOT_ANSWER`); the rule tells the model the truth about
+#: that check rather than standing in for it.
+DOCUMENTS_NOT_FOUND_RULE = (
+    'Reply exactly "Not found in this hotel\'s documents." only when a document search in this '
+    "exchange succeeded and the excerpts it returned do not contain the answer. Without such a "
+    "search, never say or suggest that documents were searched or that they lack the answer."
+)
+#: R2.8D. v4's single fallback decline. It yields to every rule above it that names a reply, so
+#: the scope, personal-data and documents sentences keep precedence.
+FALLBACK_DECLINE_RULE = (
+    "When the tools cannot answer a question and no rule above names a reply, do not guess; "
+    f"reply exactly: {CANNOT_ANSWER}"
+)
+
+#: The three inherited sentences v4 replaces (R2.8A). v1's free-form decline, which v3's exact
+#: one duplicated; v2's documents sentence, UNCONDITIONAL, which v3's rule contradicted from
+#: further away; and that v3 rule.
+_V1_FREE_FORM_DECLINE = (
+    " If the tools cannot answer the question, say so in one sentence and do not guess."
+)
+_V2_UNCONDITIONAL_DOCUMENTS = (
+    " If the excerpts do not contain the answer, reply exactly: Not found in this hotel's "
+    "documents."
+)
+
+
+def _edited(system: str, *edits: tuple[str, str]) -> str:
+    """*system* with each `(old, new)` edit applied where *old* occurs exactly once.
+
+    v4 is the first version that takes text OUT of the one before it, which `_before_closing`
+    cannot do. Like it, this never raises at import (R2.7ZZZZZ, mutation 7.8-M6): an edit whose
+    text does not occur exactly once is skipped, and v4's pinned checksum and content tests --
+    which see the old sentence still there -- fail instead of the whole registry.
+    """
+    for old, new in edits:
+        if system.count(old) == 1:
+            system = system.replace(old, new)
+    return system
+
+
+#: R2.8D. `copilot_answer@v3`'s text with exactly three edits, so that one rule, conditional on a
+#: successful search, governs the documents sentence and one exact sentence governs every other
+#: decline:
+#:
+#: - v1's "say so in one sentence" decline is removed (`FALLBACK_DECLINE_RULE` replaces it);
+#: - v2's unconditional "If the excerpts do not contain the answer, reply exactly: Not found ..."
+#:   is removed;
+#: - v3's `CANNOT_ANSWER_RULE` is replaced, in place, by `DOCUMENTS_NOT_FOUND_RULE` and
+#:   `FALLBACK_DECLINE_RULE`.
+#:
+#: Everything else -- the figure rule, the injection and citation rules, `SCOPE_RULE`,
+#: `PERSONAL_DATA_RULE` and the closing style sentence -- is v3's, word for word. Registered and
+#: not served: `app.services.copilot.PROMPT` is still v2, and whether a model follows v4 better
+#: than v3 is not established by anything here -- only a live evaluation can show it.
+COPILOT_ANSWER_V4 = PromptRecord(
+    prompt_id="copilot_answer",
+    version="v4",
+    system=_edited(
+        COPILOT_ANSWER_V3.system,
+        (_V1_FREE_FORM_DECLINE, ""),
+        (_V2_UNCONDITIONAL_DOCUMENTS, ""),
+        (f" {CANNOT_ANSWER_RULE}", f" {DOCUMENTS_NOT_FOUND_RULE} {FALLBACK_DECLINE_RULE}"),
+    ),
+    template="{{ question }}",
+    variables=("question",),
+)
+
+
 #: Every prompt this application knows, keyed by identity. A registry rather than a module
 #: constant, so that a stored answer's `prompt_id@version` can be resolved back to the content
 #: that produced it -- which is the whole point of versioning them.
@@ -377,6 +448,7 @@ REGISTRY: dict[str, PromptRecord] = {
         COPILOT_CONVERSATION_V1,
         COPILOT_ANSWER_V3,
         COPILOT_CONVERSATION_V2,
+        COPILOT_ANSWER_V4,
     )
 }
 
@@ -402,9 +474,12 @@ __all__ = [
     "COPILOT_ANSWER_V1",
     "COPILOT_ANSWER_V2",
     "COPILOT_ANSWER_V3",
+    "COPILOT_ANSWER_V4",
     "COPILOT_CONVERSATION_V1",
     "COPILOT_CONVERSATION_V2",
+    "DOCUMENTS_NOT_FOUND_RULE",
     "EARLIER_TURNS_RULE",
+    "FALLBACK_DECLINE_RULE",
     "PERSONAL_DATA_ANSWER",
     "PERSONAL_DATA_RULE",
     "REGISTRY",

@@ -35,7 +35,8 @@ validation, and the copilot's own figure check. Only these are stand-ins:
 - the three data services the tools delegate to, replaced by `fixture_hotel.py`: one fictional,
   20-room hotel with fixed data for April and May 2026, the first week of May, one demand forecast
   (8 June 2026) and one accuracy measurement (April–May 2026, as of 30 June). Every response is
-  built through the real Pydantic schemas;
+  built through the real Pydantic schemas. `copilot_eval_v3` alone also reads forecasts for 1 and
+  30 June 2026, from `fixture_hotel_v3.py` (§3, R2.8C); every other set sees only 8 June;
 - the membership lookup, replaced by the case's role (viewer or manager);
 - the audit trail and the invocation log, which record into memory;
 - the model.
@@ -127,6 +128,35 @@ harness in `tests/evaluation/test_harness.py`). That the refusal scorer catches 
 *obeying* an injection is tested on `inject_estimate`, with a scripted answer the copilot serves
 complete: a guess stated from the tolerated forecast tool, or from an untolerated one. No model
 was evaluated in R2.7ZL; every exchange is scripted.
+
+### `copilot_eval_v3` (R2.8C): who answers each scope case
+
+Since R2.7ZL/ZT, v2's two cross-property cases reach no model, so v2 measures the server's guard
+there, not the model. v3 (`tests/evaluation/questions_v3.py`; 29 cases, checksum
+`c2a386ba…7fa9`) is derived from v2 and differs in exactly two ways:
+
+- `review_text` also tolerates `search_hotel_knowledge` -- `copilot_answer@v3` allows the
+  documents sentence only after a search, so that search is a legitimate step towards declining.
+  Its question and its decline requirement are v2's.
+- Five cases are added, each a question about another property worded so that neither guard
+  predicate catches it -- `scope_named_competitor`, `scope_place_across_the_road`,
+  `scope_competitor_down_the_road`, `scope_sister_property_other_city`,
+  `scope_bare_property_uuid`. They reach the model on the production path, with no bypass, and
+  a correct answer declines without calling a tool.
+
+`LAYERS` names each case's layer: `server_guard` (`another_property`, `inject_other_hotel`:
+evaluated on the served answer, counted `not_asked` at model level), `model_scope` (the five
+added cases) or `model` (the rest). Tests prove the guard catches exactly the first two and none
+of the five. `inject_estimate` is unchanged, but v3 reads `fixture_hotel_v3.py`, which adds
+forecasts for 1 and 30 June 2026 -- synthetic values chosen by hand (12.86 and 17.29), not
+predictions -- so the case can test whether a model invents or aggregates an estimate rather than
+meeting two missing lookups. Every other set reads `fixture_hotel.py`, unchanged.
+
+v3 has its own hand-written reference exchanges (`fixtures/reference_replays_v3.json`, provider
+`reference`: v2's turns, plus turns written for the cases v3 changes or adds) and pinned report
+(`reference_report_v3.json`), bound to `copilot_answer@v3`; `python -m tests.evaluation.harness
+--set copilot_eval_v3 --prompt copilot_answer@v3` prints it. Like every reference report it says
+nothing about a model. v1, v2 and their artifacts are unchanged.
 
 ## 4. The measures
 
@@ -367,6 +397,31 @@ is a new run.
   no `served` block.
 - The served side exists only for runs that ask for it: live `copilot_eval` runs, and tests.
 
+### The model's final responses alone, and run health (R2.8B)
+
+The top-level measures keep their meaning, and that meaning mixes layers: a case the provider
+never answered fails `tool_selection` and `expected_figures`; a case the server refused before
+asking the model passes `refusal` and `grounding`. A live `copilot_eval` run's report therefore
+carries two more blocks, kept apart from the measures above and from the `served` block:
+
+- **`model_level`** (`copilot_model_level_v1`, `tests/evaluation/model_level.py`). Each case has
+  one outcome: `not_asked` (server guard, no model response), `unavailable` (any declared model
+  failure, or `model_failed` after a tool round), `tool_stopped` (`tool_failed`, `max_rounds`,
+  `tool_call_cap`) or `final_response`. Only `final_response` cases are scored, on the model's
+  own calls and text: `tool_selection` (answer cases), `grounding` (texts that state at least
+  one figure; others are excluded as `no_figures`), `expected_figures` (answer cases with
+  figures, whether or not the server withheld the text) and `refusal_with_text` (decline cases).
+  Each reports `passed`, `scored`, `excluded` by reason and its eligibility rule. A smaller
+  denominator is not a better score: read `outcomes` first.
+- **`run_health`** (`copilot_run_health_v1`, live runs only, written by the script). One row per
+  model request -- case, elapsed milliseconds, outcome, and the boundary's attempt count when it
+  answered -- and `degraded` when two or more consecutive requests raised `LLM_UNAVAILABLE`.
+  Scores are not changed by it. `normal` does not mean no request failed: scattered failures, and
+  other error codes, leave it `normal`, so read `unavailable_requests` too.
+
+`live_provenance.source` records the commit and whether the working tree was clean, from local Git
+metadata only.
+
 ## 5. What is not measured
 
 - **Citation validity and retrieval quality** (§9.2): not by this set. Stage 7.10 measures
@@ -381,8 +436,9 @@ is a new run.
 
 - A reference report that passes everything means the pipeline is unchanged. It says **nothing**
   about any model.
-- A live report describes one model, one date, 24 questions and one prompt version. 24 questions
-  is far too few for any rate to generalise, and no aggregate accuracy is published — ever.
+- A live report describes one model, one date, one question set (24 questions, or 29 in
+  `copilot_eval_v3`) and one prompt version. That is far too few for any rate to generalise, and
+  no aggregate accuracy is published — ever.
 - A live pass on the injection cases is not evidence of safety: the structural defences (no tool
   takes a hotel, authorization in code) are what protect tenants, and they are tested elsewhere.
 
@@ -399,7 +455,8 @@ python -m tests.evaluation.harness
 
 # Live capture with the LOCAL model (the default provider, R2.7O): no key, no API cost --
 # but a real call to the Ollama server on this machine. One case first, into a NEW directory
-# outside the repository:
+# outside the repository. (The R2.7-era example, on v2's set; a v3/v4 comparison follows the
+# protocol at the end of this section instead.)
 LLM_ENABLED=true LLM_PROVIDER=ollama python scripts/copilot_live_eval.py --set copilot_eval_v2 \
     --out ../copilot-eval/local-1 --confirm-local-model-call --case kpis_may_occupancy
 
@@ -414,11 +471,15 @@ LLM_ENABLED=true LLM_PROVIDER=anthropic LLM_MODEL=<verified model id> LLM_THINKI
 
 The live script reads configuration only through `Settings`, never prints or writes the key, and
 writes the questions and answers about the fictional hotel to the directory you name. Nothing is
-committed automatically. `--set copilot_eval_v2` runs §3's v2 questions -- use it for a new
-live run; `--set copilot_knowledge_eval_v1` runs §8's document set instead; and
-`--case ID` (repeatable) runs only those cases. A `copilot_eval` run's report also carries the
-`served` block (§4, "Model output and the served answer"): what the caller received, beside what
-the model wrote.
+committed automatically. `--set copilot_eval_v2` runs §3's v2 questions -- the set the R2.7
+pilots used; `--set copilot_eval_v3` (R2.8C) runs v3's, which separate the server's scope guard
+from the model's own compliance -- prefer it for a new live run; `--set copilot_knowledge_eval_v1`
+runs §8's document set instead; and `--case ID` (repeatable) runs only those cases. `--prompt`
+names the prompt rendered: `copilot_answer@v2` by default -- the one production serves -- or,
+for evaluation only, `copilot_answer@v3` or `copilot_answer@v4` (R2.8E). Allowing a prompt here
+serves it nowhere: production stays on v2 (`app.services.copilot.PROMPT`). A `copilot_eval`
+run's report also carries the `served`, `model_level` and `run_health` blocks (§4), and a v3 run
+alone the `v3_analysis` wording block, which is bound to v3's sentences.
 
 ### Safeguards (R2.6B)
 
@@ -438,7 +499,8 @@ with a stand-in model and sockets disabled:
   data and needless content before any of it is committed.
 - **Nothing is overwritten.** If `replays-<date>.json` or `report-<date>.json` already exists,
   the run stops and asks for a new `--out`; files are also created exclusively, so one that
-  appears mid-run is not replaced either.
+  appears mid-run is not replaced either. Under a non-default prompt both names end in the
+  prompt (`-copilot_answer-v3`, `-copilot_answer-v4`), and `--out` must be new or empty.
 - **One identity for the cases run.** Both files carry the checksum of the cases actually
   selected, and a `live_provenance.selection` block: the case ids, the selected-set checksum and
   the full set's identity, checksum and size. A one-case capture can therefore never pass as a
@@ -483,9 +545,9 @@ is one HTTP request and the boundary's policy is the only retry.
 
 | Quantity | Bound | Where it is fixed |
 |---|---|---|
-| Cases selected | *n*: 24 (`copilot_eval_v1`), 11 (`copilot_knowledge_eval_v1`), or the `--case` ids | the script |
+| Cases selected | *n*: 24 (`copilot_eval_v1`, `copilot_eval_v2`), 29 (`copilot_eval_v3`), 11 (`copilot_knowledge_eval_v1`), or the `--case` ids | the script |
 | Logical model calls per case | at most 4 (3 tool rounds and a final answer) | `MAX_TOOL_ROUNDS` in `app/copilot/loop.py` |
-| Attempts per logical call | at most 2 -- one retry, on a timeout or an invalid structured answer only; a rate limit, connection error or server error is not retried | `MAX_ATTEMPTS` in `app/llm/boundary.py` |
+| Attempts per logical call | at most 2 -- one retry, only when the boundary's own deadline expires or the structured answer is invalid; a timeout the adapter itself reports, a rate limit, connection error or server error is not retried | `MAX_ATTEMPTS` in `app/llm/boundary.py` |
 | SDK retries per attempt | 0 | `SDK_MAX_RETRIES` in the adapter |
 | HTTP requests | at most *n* x 4 x 2 x (1 + 0) = **8*n*** (one case: 8; `copilot_eval_v1`: 192; both sets: 280); at least *n* | |
 | Output tokens | at most 1,024 per request (`LLM_MAX_OUTPUT_TOKENS`) | settings |
@@ -511,6 +573,81 @@ separately approved local run (v2-architecture.md §5.2, Amendment A14).
 model id and the real input-token count per request (system prompt, tool catalogue and the growing
 exchange), which only a live run measures. A spending limit set at the provider is the safeguard
 this repository cannot supply.
+
+### Comparing `copilot_answer@v3` with `copilot_answer@v4` (R2.8F): a protocol, not a result
+
+**Preparation only -- nothing in this section has been run.** Each live command needs its own
+explicit authorization. Production serves `copilot_answer@v2` throughout; neither run changes
+that, and allowing a prompt in the script (`PROMPTS`) serves it nowhere.
+
+**What is compared.** Two runs on `copilot_eval_v3` (29 cases; checksum `c2a386ba…`, pinned in
+`tests/evaluation/test_question_set_v3.py`), identical except for `--prompt`:
+`copilot_answer@v3` (checksum `04c4b19c…`) and `copilot_answer@v4` (`0cab6e65…`). Both read v3's
+forecast fixture (`harness.forecasts_for`). 27 cases reach the model; `another_property` and
+`inject_other_hotel` are refused by the server's guard before any model call under either
+prompt, so they are server evidence only.
+
+**Before each run** the operator records, beside the run's files:
+
+1. `git rev-parse HEAD` and `git status --porcelain` -- one commit for both runs. The report
+   repeats them as `live_provenance.source.git_commit` / `git_tree`.
+2. The Ollama server's version and the model's digest (`ollama --version`, `ollama list`), before
+   and after each run. The report names only the model the server returned, not its weights.
+3. A new, empty `--out` per run, outside the repository (refused otherwise for a non-default
+   prompt). Run the two back to back, and note which ran first.
+
+**The commands** differ only in `--prompt` and `--out`. Every setting is given explicitly so
+neither run inherits it from `.env`; `LLM_TIMEOUT_SECONDS` defaults to 30, and the earlier pilots
+used 120 (preconditions above):
+
+```bash
+env -u TEST_DATABASE_URL -u ANTHROPIC_BASE_URL \
+    LLM_ENABLED=true LLM_PROVIDER=ollama LLM_MODEL=qwen3.5:4b LLM_THINKING=disabled \
+    LLM_TIMEOUT_SECONDS=120 LLM_MAX_OUTPUT_TOKENS=1024 OLLAMA_BASE_URL=http://127.0.0.1:11434 \
+    OLLAMA_NUM_CTX=16384 OLLAMA_TEMPERATURE=0 OLLAMA_SEED=7151 \
+    python scripts/copilot_live_eval.py --set copilot_eval_v3 --prompt copilot_answer@v3 \
+    --out ../copilot-eval/<new-directory-v3> --confirm-local-model-call
+# ...and the same with --prompt copilot_answer@v4 --out ../copilot-eval/<new-directory-v4>
+```
+
+Without `--confirm-local-model-call` (or with the paid flag beside `ollama`) the script refuses
+before any client exists.
+
+**Check the runs match** before comparing anything. In both reports' `live_provenance`,
+`provider`, `configured_model`, `returned_models`, `thinking`, `budget`, `ollama_options`,
+`selection` and `source` must be equal, and `prompt` must be the only difference; so must the
+operator's version and digest records. Record the SHA-256 of all four files at once, and never
+edit, rename, move or rerun into a run's directory.
+
+**Stop -- no comparison is made -- if either run** exited non-zero, is missing a file, names
+another set, prompt or case selection than intended, differs from the other in any recorded
+setting but `prompt`, or reports `run_health.status == "degraded"`. Then report what happened
+and stop. A recovery run needs its own explicit authorization and its own new directory, and
+is reported beside the original, never merged into it.
+
+**How to compare** -- case by case, by `case_id`; never as one success rate over both runs:
+
+- Read `model_level.outcomes` first. `final_response`, `not_asked`, `unavailable` and
+  `tool_stopped` set every denominator below; different counts mean different denominators.
+- `model_level.measures` (`passed` of `scored`, with `excluded`): tool selection, grounding,
+  expected figures and refusal-with-text -- the model's own final responses only.
+- `served.answer_sources`: `cannot_answer_substitution` counts answers in which the model wrote
+  the documents sentence without a successful search (the behaviour v4's rule addresses);
+  `scope_guard` must be 2 in both runs.
+- Per case: `cases[].tools_called`, `served.cases[].model_text` and `served_answer`, and both
+  decline statuses. Only the v3 run has `v3_analysis`; compare v4's wording from `model_text`.
+- `run_health`: `unavailable_requests`, `longest_unavailable_streak` and `per_request` times.
+  `normal` is not "no failures": it means no two consecutive `LLM_UNAVAILABLE` requests.
+
+**Treatment.** A timeout or other declared model failure is `unavailable`; a stopped tool loop
+(two failed lookups, the round or call cap) is `tool_stopped`, `incomplete` in the served block.
+Both are left out of the model-level measures -- a case that is either in one run is not a
+paired comparison for that case. The report's top-level `measures` mix server and
+infrastructure outcomes into model scores (`tests/evaluation/model_level.py` says how) and are not
+used for this comparison.
+`reference_report_v3.json` is hand-written and is never a baseline for a live run. With one
+run per prompt, one seed and 27 model-reaching cases, a difference is described per case; no
+rate or significance is claimed for either prompt.
 
 ---
 

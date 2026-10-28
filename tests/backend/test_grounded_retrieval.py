@@ -72,6 +72,7 @@ from app.services.copilot import (
     NOTICES,
     PROMPT,
     CopilotService,
+    is_documents_sentence,
 )
 from app.services.tool_invocation import ToolInvocationService
 
@@ -632,6 +633,88 @@ def test_any_other_answer_without_a_search_is_served_as_written(written: str) ->
     assert response.answer == written
 
 
+# --- R2.8B: near-variants of the documents sentence are the documents sentence --------------------
+
+TYPOGRAPHIC = chr(0x2019)
+#: The same claim as `NOT_FOUND_ANSWER`, written differently: case, apostrophe, full stop, spacing.
+VARIANTS = [
+    "not found in this hotel's documents.",
+    "NOT FOUND IN THIS HOTEL'S DOCUMENTS.",
+    f"Not found in this hotel{TYPOGRAPHIC}s documents.",
+    "Not found in this hotel's documents",
+    f"  not found in this hotel{TYPOGRAPHIC}s documents\n",
+]
+#: Texts that say something else, or something more. None is the sentence.
+NOT_VARIANTS = [
+    f"{NOT_FOUND_ANSWER} Try the front desk.",
+    f"Not found in this hotel{TYPOGRAPHIC}s documents. Try the front desk.",
+    "Not found in the hotel's documents.",
+    "Not found in this hotel's documents..",
+    "Not found.",
+    CANNOT_ANSWER,
+    "",
+]
+
+
+@pytest.mark.parametrize("text", [NOT_FOUND_ANSWER, *VARIANTS])
+def test_every_variant_is_recognised_as_the_documents_sentence(text: str) -> None:
+    assert is_documents_sentence(text)
+
+
+@pytest.mark.parametrize("text", NOT_VARIANTS)
+def test_a_longer_or_different_text_is_not_the_documents_sentence(text: str) -> None:
+    assert not is_documents_sentence(text)
+
+
+@pytest.mark.parametrize("written", VARIANTS)
+def test_a_variant_without_any_search_becomes_the_cannot_answer_sentence(written: str) -> None:
+    stack = Stack([written])
+
+    response = stack.ask("What room rate should we charge in June?")
+
+    assert response.answer == CANNOT_ANSWER
+    assert (response.complete, response.stop_reason, response.notice) == (True, "completed", None)
+    assert (response.document_evidence, response.citations, response.tools_used) == ("none", [], [])
+
+
+@pytest.mark.parametrize("written", VARIANTS)
+def test_a_variant_after_a_failed_search_becomes_the_cannot_answer_sentence(written: str) -> None:
+    stack = Stack([search(), written], [POOL], fails=True)
+
+    response = stack.ask()
+
+    assert [u.model_dump() for u in response.tools_used] == [
+        {"tool": "search_hotel_knowledge", "outcome": "failed"}
+    ]
+    assert response.answer == CANNOT_ANSWER
+
+
+@pytest.mark.parametrize("written", VARIANTS)
+def test_a_variant_after_a_successful_search_is_served_as_the_documents_sentence(
+    written: str,
+) -> None:
+    """The established contract: after a search that succeeded, an answer citing nothing is
+    replaced by `NOT_FOUND_ANSWER` itself -- so the caller is served the canonical sentence."""
+    stack = Stack([search("casino"), written], [])
+
+    turn = stack.service.answer_turn(HOTEL, "Is there a casino?")
+
+    assert (turn.response.answer, turn.response.document_evidence) == (
+        NOT_FOUND_ANSWER,
+        "not_found",
+    )
+    assert turn.answer_source == "not_found_replacement"
+    assert [u.model_dump() for u in turn.response.tools_used] == [
+        {"tool": "search_hotel_knowledge", "outcome": "succeeded"}
+    ]
+
+
+@pytest.mark.parametrize("written", NOT_VARIANTS[:2])
+def test_a_longer_answer_without_a_search_is_served_as_written(written: str) -> None:
+    turn = Stack([written]).service.answer_turn(HOTEL, "What is the capital of France?")
+    assert (turn.response.answer, turn.answer_source) == (written, "model")
+
+
 def test_an_ungrounded_answer_without_a_search_is_still_withheld() -> None:
     response = Stack(["We charged 135.00 EUR a night."]).ask("What did we charge?")
     assert (response.answer, response.stop_reason) == ("", "ungrounded_figures")
@@ -861,8 +944,8 @@ def test_v1_is_unchanged_and_v2_is_registered_beside_it() -> None:
     assert COPILOT_ANSWER_V2.checksum == (
         "6ab8b15ebde62af4b25d0e66de41faeef8970ee167bedbe31b8edea85937e268"
     )
-    # Stage 7.11 added copilot_conversation@v1 beside them; R2.7ZN registered v3 of both, not
-    # yet served (the assertion below still holds).
+    # Stage 7.11 added copilot_conversation@v1 beside them; R2.7ZN registered v3 of both, and
+    # R2.8D copilot_answer@v4, none yet served (the assertion below still holds).
     assert set(REGISTRY) == {
         "boundary_probe@v1",
         "copilot_answer@v1",
@@ -870,6 +953,7 @@ def test_v1_is_unchanged_and_v2_is_registered_beside_it() -> None:
         "copilot_conversation@v1",
         "copilot_answer@v3",
         "copilot_conversation@v2",
+        "copilot_answer@v4",
     }
     assert PROMPT is COPILOT_ANSWER_V2
 

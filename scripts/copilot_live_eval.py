@@ -17,8 +17,10 @@ The key (anthropic only) is read from the environment (`LLM_API_KEY`) or the loc
 from the command line. `--set copilot_knowledge_eval_v1` (Stage 7.10) runs the document
 questions instead of the default `copilot_eval_v1`; `--set copilot_eval_v2` (R2.7R) runs v1's
 cases with four questions reworded to ask for every figure they are scored on -- prefer it
-for a new live run; `--case ID` (repeatable) runs only those cases. Either way the recording
-names the set and the prompt the run rendered.
+for a new live run; `--set copilot_eval_v3` (R2.8C) adds cases that test the model's own scope
+compliance and reads v3's forecast fixture (`tests/evaluation/questions_v3.py`); `--case ID`
+(repeatable) runs only those cases. Either way the recording names the set and the prompt the run
+rendered.
 
 ## The prompt (R2.7ZQ)
 
@@ -34,6 +36,16 @@ the copilot's own `PROMPT` is never touched. A run under v3:
 - adds a `v3_analysis` block to its report (`tests/evaluation/v3_pilot_analysis.py`): how each
   final answer's wording matches v3's fixed sentences, exactly, with outcome and tool use beside
   it. It is not a score, and no shared report schema changes.
+
+*R2.8E.* `copilot_answer@v4` may also be named -- an evaluation-only choice, exactly like v3: its
+files are named `...-copilot_answer-v4.json`, it needs a new empty `--out`, and it is resolved
+from the registry with no fallback. Four things stay apart: the prompt production serves
+(`app.services.copilot.PROMPT`, still v2), the prompts the registry holds, the prompts this script
+may render (`PROMPTS`), and the one a given run rendered (recorded in both files). Naming v4 here
+serves it nowhere and runs nothing by itself; a run still needs its confirmation flag, checked
+before any client exists. A v4 report carries the `served`, `model_level` and `run_health` blocks
+but no `v3_analysis`: that analysis is bound to v3's prompt and refuses any other, so it is added
+for v3 runs only.
 
 ## Request bounds (R2.6B)
 
@@ -79,6 +91,30 @@ Two files in `--out`, both naming the exact cases selected and the same checksum
 selected-set checksum, and the full set's checksum and size -- and (R2.7ZQ) the prompt's identity
 and checksum and the request budget. The key is never printed, logged or written.
 
+## Source, timing and run health (R2.8B)
+
+- `live_provenance.source` -- the commit this repository's checkout was at (`git rev-parse HEAD`)
+  and whether its working tree was `clean` or `dirty` (`git status --porcelain`, untracked files
+  included). Read from local Git metadata only; nothing is fetched. `UNKNOWN` when Git cannot
+  answer.
+- `run_health.per_request` (report only) -- one row per model request, in the order made: the
+  case, the request's number within it, its elapsed milliseconds and how it ended (`answered`, or
+  the declared failure's code). A request is one call to the guarded model, so its time includes
+  any retry the boundary made (it retries once when its own deadline expires) and the jitter
+  before it; `attempts` is the boundary's count for an answered request and `null` for one that
+  raised, because the boundary does not report attempts on a failure. Single HTTP attempts are
+  not timed separately.
+- `run_health.status` -- `degraded` when `DEGRADED_AFTER_CONSECUTIVE_UNAVAILABLE` (2) or more
+  consecutive requests, counted across case boundaries, raised `LLM_UNAVAILABLE` (the boundary's
+  deadline expired twice, the adapter reported a timeout or refused connection, or the circuit
+  was open); otherwise `normal`. Any other outcome ends a streak. Each such streak is listed with
+  its first and last case. A degraded run still completes and is scored exactly as before: no
+  case result changes; the status says the scores were taken while the provider was failing, and
+  the run's summary prints it.
+
+For a `copilot_eval` set the report also carries a `model_level` block (R2.8B,
+`tests/evaluation/model_level.py`): the measures the model's final responses alone are held to.
+
 The files contain the evaluation questions and the model's answers about a FICTIONAL hotel -- no
 production data -- and are not committed automatically.
 """
@@ -89,8 +125,10 @@ import argparse
 import datetime as dt
 import json
 import os
+import subprocess
 import sys
-from collections.abc import Callable, Iterable, Sequence
+import time
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -99,11 +137,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
-QUESTION_SETS = ("copilot_eval_v1", "copilot_eval_v2", "copilot_knowledge_eval_v1")
+QUESTION_SETS = (
+    "copilot_eval_v1",
+    "copilot_eval_v2",
+    "copilot_eval_v3",
+    "copilot_knowledge_eval_v1",
+)
 
-#: The prompts a run may render (R2.7ZQ): the default, and v3 only when named.
+#: The prompts a run may render (R2.7ZQ): the default, and v3 or (R2.8E) v4 only when named.
+#: Allowing one here makes it renderable in an evaluation run; it does not serve it anywhere.
 DEFAULT_PROMPT = "copilot_answer@v2"
-PROMPTS = (DEFAULT_PROMPT, "copilot_answer@v3")
+#: The one prompt `v3_pilot_analysis` is bound to; its block is added for that prompt only.
+V3_ANALYSIS_PROMPT = "copilot_answer@v3"
+PROMPTS = (DEFAULT_PROMPT, V3_ANALYSIS_PROMPT, "copilot_answer@v4")
 
 
 class RunRefusedError(Exception):
@@ -298,6 +344,136 @@ def ollama_options(settings: Any) -> dict[str, Any] | None:
     }
 
 
+#: What `source_identity` records when Git cannot say (R2.8B). The replay module's word for it.
+UNKNOWN_SOURCE = "UNKNOWN"
+
+GitRunner = Callable[..., "subprocess.CompletedProcess[str]"]
+
+
+def source_identity(root: Path = REPO_ROOT, run: GitRunner = subprocess.run) -> dict[str, str]:
+    """The commit *root* is checked out at, and whether its working tree is clean (R2.8B).
+
+    Two local Git commands, never a fetch. Either one failing -- Git missing, not a repository --
+    records `UNKNOWN` for what it would have said rather than stopping the run.
+    """
+
+    def git(*args: str) -> str | None:
+        try:
+            done = run(
+                ["git", "-C", str(root), *args],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return done.stdout
+
+    head = git("rev-parse", "HEAD")
+    status = git("status", "--porcelain")
+    return {
+        "git_commit": head.strip() if head and head.strip() else UNKNOWN_SOURCE,
+        "git_tree": UNKNOWN_SOURCE if status is None else ("dirty" if status.strip() else "clean"),
+    }
+
+
+#: R2.8B. How many consecutive model requests must raise `LLM_UNAVAILABLE`, as the boundary
+#: raised it, before a run is reported `degraded`. Two is the smallest number that is a pattern
+#: rather than one bad request; the R2.7 pilot's first two requests met it.
+DEGRADED_AFTER_CONSECUTIVE_UNAVAILABLE = 2
+#: `LlmUnavailableError.code`, which an open circuit shares. A test pins the two together.
+UNAVAILABLE_CODE = "LLM_UNAVAILABLE"
+RUN_HEALTH_VERSION = "copilot_run_health_v1"
+ANSWERED = "answered"
+
+
+class TimedModel:
+    """Times every request to *inner* and appends one row per request to *log* (R2.8B).
+
+    Changes nothing: the response is returned and a declared failure re-raised exactly as they
+    came. A request is one `complete` call on the guarded model, so its time includes any retry
+    the boundary made, and the jitter before it.
+    """
+
+    def __init__(
+        self,
+        inner: Any,
+        log: list[dict[str, Any]],
+        case_id: str,
+        monotonic: Callable[[], float] = time.perf_counter,
+    ) -> None:
+        self._inner = inner
+        self._log = log
+        self._case_id = case_id
+        self._monotonic = monotonic
+        self._count = 0
+
+    def complete(self, request: Any) -> Any:
+        from app.llm.errors import LlmError
+
+        self._count += 1
+        started = self._monotonic()
+        try:
+            response = self._inner.complete(request)
+        except LlmError as failed:
+            self._record(started, failed.code, None)
+            raise
+        self._record(started, ANSWERED, response.attempts)
+        return response
+
+    def _record(self, started: float, outcome: str, attempts: int | None) -> None:
+        self._log.append(
+            {
+                "case_id": self._case_id,
+                "request": self._count,
+                "elapsed_ms": max(0, round((self._monotonic() - started) * 1000)),
+                "outcome": outcome,
+                "attempts": attempts,
+            }
+        )
+
+
+def run_health(
+    requests: Sequence[Mapping[str, Any]],
+    threshold: int = DEGRADED_AFTER_CONSECUTIVE_UNAVAILABLE,
+) -> dict[str, Any]:
+    """The report's `run_health` block: `normal` or `degraded`, and why. See the module."""
+    streaks: list[list[Mapping[str, Any]]] = []
+    current: list[Mapping[str, Any]] = []
+    for row in requests:
+        if row["outcome"] == UNAVAILABLE_CODE:
+            current.append(row)
+            continue
+        if current:
+            streaks.append(current)
+        current = []
+    if current:
+        streaks.append(current)
+    degraded = [streak for streak in streaks if len(streak) >= threshold]
+    return {
+        "version": RUN_HEALTH_VERSION,
+        "status": "degraded" if degraded else "normal",
+        "rule": (
+            f"degraded when {threshold} or more consecutive model requests, across cases, raise "
+            f"{UNAVAILABLE_CODE}; case scores are not changed"
+        ),
+        "threshold": threshold,
+        "requests": len(requests),
+        "unavailable_requests": sum(len(streak) for streak in streaks),
+        "longest_unavailable_streak": max((len(streak) for streak in streaks), default=0),
+        "degraded_streaks": [
+            {
+                "first_case": streak[0]["case_id"],
+                "last_case": streak[-1]["case_id"],
+                "requests": len(streak),
+            }
+            for streak in degraded
+        ],
+        "per_request": [dict(row) for row in requests],
+    }
+
+
 def live_provenance(
     *,
     full: Any,
@@ -310,10 +486,12 @@ def live_provenance(
     prompt: Any,
     budget: Any,
     model_options: dict[str, Any] | None = None,
+    source: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """The block both output files carry. Built from public values only; never the settings."""
     distinct = sorted({model for models in returned_models.values() for model in models})
     return {
+        "source": dict(source) if source is not None else None,
         "provider": provider,
         "configured_model": configured_model,
         "prompt": {"identity": prompt.identity, "checksum": prompt.checksum},
@@ -349,6 +527,7 @@ def main(
     argv: list[str] | None = None,
     *,
     today: Callable[[], dt.date] = dt.date.today,
+    monotonic: Callable[[], float] = time.perf_counter,
 ) -> int:
     options = parse_arguments(argv)
 
@@ -357,6 +536,7 @@ def main(
     from tests.evaluation.knowledge_questions import COPILOT_KNOWLEDGE_EVAL_V1
     from tests.evaluation.questions import COPILOT_EVAL_V1
     from tests.evaluation.questions_v2 import COPILOT_EVAL_V2
+    from tests.evaluation.questions_v3 import COPILOT_EVAL_V3
     from tests.evaluation.replay import RecordingModel, Replays
 
     try:
@@ -376,11 +556,15 @@ def main(
     full: Any = {
         "copilot_knowledge_eval_v1": COPILOT_KNOWLEDGE_EVAL_V1,
         "copilot_eval_v2": COPILOT_EVAL_V2,
+        "copilot_eval_v3": COPILOT_EVAL_V3,
     }.get(options.question_set, COPILOT_EVAL_V1)
     runner: Any = knowledge_harness.run if full is COPILOT_KNOWLEDGE_EVAL_V1 else harness.run
-    # R2.7ZU: a copilot_eval run also reports each case as the caller saw it. The knowledge
-    # harness records the served answer in its own case results already.
-    served: dict[str, Any] = {} if full is COPILOT_KNOWLEDGE_EVAL_V1 else {"served": True}
+    # R2.7ZU: a copilot_eval run also reports each case as the caller saw it, and (R2.8B) the
+    # model's final responses alone. The knowledge harness records the served answer in its own
+    # case results already.
+    blocks: dict[str, Any] = (
+        {} if full is COPILOT_KNOWLEDGE_EVAL_V1 else {"served": True, "model_level": True}
+    )
     recorded_on = today().isoformat()
     replay_path, report_path = output_paths(options.out, recorded_on, options.prompt)
     try:
@@ -402,9 +586,10 @@ def main(
 
     model = build_chat_model(settings)
     recordings: dict[str, RecordingModel] = {}
+    requests: list[dict[str, Any]] = []
 
     def model_for(case: Any) -> ChatModel:
-        recorder = RecordingModel(model)
+        recorder = RecordingModel(TimedModel(model, requests, case.case_id, monotonic))
         recordings[case.case_id] = recorder
         print(f"  {case.case_id} ...", flush=True)
         return recorder
@@ -420,7 +605,7 @@ def main(
         # same record the capture below names.
         prompt=prompt,
         budget=budget,
-        **served,
+        **blocks,
     )
 
     provenance = live_provenance(
@@ -434,9 +619,13 @@ def main(
         prompt=prompt,
         budget=budget,
         model_options=ollama_options(settings),
+        source=source_identity(),
     )
     report["live_provenance"] = provenance
-    if options.prompt != DEFAULT_PROMPT:
+    report["run_health"] = run_health(requests)
+    # Only for v3 (R2.8E): the analysis refuses any other prompt, and under v4 that refusal would
+    # come after every model call and before either file was written.
+    if options.prompt == V3_ANALYSIS_PROMPT:
         report["v3_analysis"] = v3_pilot_analysis.analyse(
             prompt,
             report["cases"],
@@ -466,6 +655,12 @@ def main(
     print(report["statement"])
     for measure, counts in report["measures"].items():
         print(f"  {measure}: {counts['passed']} of {counts['scored']}")
+    health = report["run_health"]
+    print(
+        f"  run health: {health['status']} ({health['unavailable_requests']} of "
+        f"{health['requests']} model requests unavailable, longest streak "
+        f"{health['longest_unavailable_streak']})"
+    )
     return 0
 
 

@@ -53,6 +53,16 @@ verbatim, bound to v3 -- as R2.7R bound v1's turns to v2 -- and `reference_repor
 is their report. `--prompt copilot_answer@v3` selects it, for `copilot_eval_v2` only. It is a
 code-regression baseline: a replay ignores the prompt it is rendered under, so this report shows
 that the pipeline runs under v3 and nothing about how any model follows v3's rules.
+
+*R2.8B.* `run(..., model_level=True)` adds a `model_level` block (`model_level.py`): the measures
+the model's own final response can be held to, with cases the server refused, the provider did not
+answer or the tool loop stopped counted apart instead of scored. Off by default, like `served`.
+
+*R2.8C.* `copilot_eval_v3` (`questions_v3.py`) has its own hand-written exchanges and pinned report
+(`fixtures/reference_replays_v3.json`, `reference_report_v3.json`), bound to and run under
+`copilot_answer@v3`, at paths no earlier artifact uses. It reads its forecasts from
+`fixture_hotel_v3.py` (`forecasts_for`); every other set reads `fixture_hotel.py`, unchanged.
+`--set copilot_eval_v3 --prompt copilot_answer@v3` prints, or with `--write-reference` writes, it.
 """
 
 from __future__ import annotations
@@ -78,6 +88,7 @@ from app.llm.prompts.registry import COPILOT_ANSWER_V2, COPILOT_ANSWER_V3
 from app.models.enums import SAFE_AUDIT_DETAIL_KEYS, HotelRole
 from app.services.copilot import AnsweredTurn, CopilotService
 from app.services.tool_invocation import ToolInvocationService
+from tests.evaluation import model_level as model_level_block
 from tests.evaluation import scorers
 from tests.evaluation.fixture_documents import FixtureKnowledge
 from tests.evaluation.fixture_hotel import (
@@ -87,8 +98,10 @@ from tests.evaluation.fixture_hotel import (
     FixtureForecasts,
     FixtureInsight,
 )
+from tests.evaluation.fixture_hotel_v3 import FixtureForecastsV3
 from tests.evaluation.questions import COPILOT_EVAL_V1, EvalCase, QuestionSet
 from tests.evaluation.questions_v2 import COPILOT_EVAL_V2
+from tests.evaluation.questions_v3 import COPILOT_EVAL_V3
 from tests.evaluation.replay import (
     REFERENCE_PROVIDER,
     RecordingModel,
@@ -116,6 +129,10 @@ REFERENCE_PROMPT = COPILOT_ANSWER_V2
 REFERENCE_REPLAYS_V2_ANSWER_V3 = HERE / "fixtures" / "reference_replays_v2_answer_v3.json"
 REFERENCE_REPORT_V2_ANSWER_V3 = HERE / "reference_report_v2_answer_v3.json"
 BASELINE_V3_PROMPT = COPILOT_ANSWER_V3
+#: R2.8C. `copilot_eval_v3`'s hand-written exchanges and pinned report, bound to and run under
+#: `BASELINE_V3_PROMPT`. New paths; nothing earlier is read for them or moved.
+REFERENCE_REPLAYS_V3 = HERE / "fixtures" / "reference_replays_v3.json"
+REFERENCE_REPORT_V3 = HERE / "reference_report_v3.json"
 
 #: The measures, in report order. Each is reported as its own passed/scored pair.
 MEASURES = (
@@ -141,6 +158,22 @@ BASELINE_V3_STATEMENT = (
     f"under {COPILOT_ANSWER_V3.identity}: a code-regression baseline for the pipeline under that "
     "prompt, not evidence of how any model follows its rules."
 )
+
+#: What `copilot_eval_v3`'s baseline adds (R2.8C).
+SET_V3_STATEMENT = (
+    f"{REFERENCE_STATEMENT} These are copilot_eval_v3's hand-written exchanges -- v2's, with "
+    "turns written for the cases v3 changes or adds -- run under "
+    f"{COPILOT_ANSWER_V3.identity} with v3's forecast fixture: a code-regression baseline, not "
+    "evidence of how any model answers these questions."
+)
+
+
+def forecasts_for(question_set: QuestionSet) -> Any:
+    """The forecast service a set's cases read (R2.8C): `copilot_eval_v3`'s own fixture for v3,
+    and `fixture_hotel.FixtureForecasts`, unchanged, for every other set."""
+    if question_set.identity == COPILOT_EVAL_V3.identity:
+        return FixtureForecastsV3()
+    return FixtureForecasts()
 
 
 def live_statement(
@@ -386,14 +419,16 @@ def run_case_served(
     model_name: str,
     measure_latency: bool,
     prompt: PromptRecord,
+    forecasts: Any | None = None,
 ) -> tuple[CaseResult, ServedResult]:
     """`run_case`, and the same case as the caller saw it (R2.7ZU). The `CaseResult` is exactly
-    what `run_case` returns."""
+    what `run_case` returns. *forecasts* (R2.8C) is the forecast service; by default the shared
+    `FixtureForecasts`."""
     scope = EvalScope(HotelRole(case.role))
     session = EvalSession()
     services = ToolServices(
         analytics=cast(Any, FixtureAnalytics()),
-        demand_prediction=cast(Any, FixtureForecasts()),
+        demand_prediction=cast(Any, forecasts if forecasts is not None else FixtureForecasts()),
         forecast_performance=cast(Any, FixtureAccuracy()),
         insight=cast(Any, FixtureInsight()),
         knowledge=cast(Any, FixtureKnowledge()),
@@ -609,11 +644,13 @@ def run(
     budget: Budget | None = None,
     on_case: Callable[[EvalCase, RecordingModel | None], None] | None = None,
     served: bool = False,
+    model_level: bool = False,
 ) -> dict[str, Any]:
     """Run every case under *prompt* and return the report. Deterministic for a replay.
 
-    *served* (R2.7ZU) adds a `served` block: each case as the caller saw it. Off by default, so
-    a report without it -- every pinned one -- is exactly what it was."""
+    *served* (R2.7ZU) adds a `served` block: each case as the caller saw it. *model_level*
+    (R2.8B) adds a `model_level` block: the model's final responses alone. Both are off by
+    default, so a report without them -- every pinned one -- is exactly what it was."""
     registry = build_default_registry()
     budget = budget or Budget(timeout_seconds=30.0, max_output_tokens=1024)
     results: list[CaseResult] = []
@@ -629,6 +666,7 @@ def run(
             model_name=model,
             measure_latency=mode == "live",
             prompt=prompt,
+            forecasts=forecasts_for(question_set),
         )
         results.append(result)
         served_rows.append(served_row)
@@ -664,6 +702,8 @@ def run(
     }
     if served:
         report["served"] = _served_block(served_rows)
+    if model_level:
+        report["model_level"] = model_level_block.block(question_set.cases, results, served_rows)
     return report
 
 
@@ -706,6 +746,17 @@ def reference_report_v2_answer_v3() -> dict[str, Any]:
         raise ValueError(f"{REFERENCE_REPLAYS_V2_ANSWER_V3.name} is not a hand-written reference")
     report = run_replays(replays, COPILOT_EVAL_V2, prompt=BASELINE_V3_PROMPT)
     report["statement"] = BASELINE_V3_STATEMENT
+    return report
+
+
+def reference_report_v3() -> dict[str, Any]:
+    """`copilot_eval_v3`'s reference run (R2.8C): its own hand-written exchanges, against its own
+    set, under `BASELINE_V3_PROMPT`, with v3's forecast fixture. No reviewed deltas apply."""
+    replays = load_replays(REFERENCE_REPLAYS_V3, COPILOT_EVAL_V3, prompt=BASELINE_V3_PROMPT)
+    if replays.provider != REFERENCE_PROVIDER:
+        raise ValueError(f"{REFERENCE_REPLAYS_V3.name} is not a hand-written reference")
+    report = run_replays(replays, COPILOT_EVAL_V3, prompt=BASELINE_V3_PROMPT)
+    report["statement"] = SET_V3_STATEMENT
     return report
 
 
@@ -761,10 +812,18 @@ FROZEN_V1_REFUSAL = (
     "the current code produces."
 )
 
-#: Why `--prompt copilot_answer@v3` is refused for v1 (R2.7ZP): only v2's set has a v3 baseline.
+#: Why `--prompt copilot_answer@v3` is refused for v1 (R2.7ZP): v1 has no v3 baseline (R2.8C: v2
+#: and v3 have one each).
 V3_BASELINE_SET_REFUSAL = (
-    f"{BASELINE_V3_PROMPT.identity} has a baseline for {COPILOT_EVAL_V2.identity} only; "
-    f"pass --set {COPILOT_EVAL_V2.identity}."
+    f"{BASELINE_V3_PROMPT.identity} has baselines for {COPILOT_EVAL_V2.identity} and "
+    f"{COPILOT_EVAL_V3.identity} only; pass --set with one of them."
+)
+
+#: Why `--set copilot_eval_v3` needs `--prompt copilot_answer@v3` (R2.8C): its exchanges are
+#: bound to v3 only.
+SET_V3_PROMPT_REFUSAL = (
+    f"{COPILOT_EVAL_V3.identity}'s baseline is bound to {BASELINE_V3_PROMPT.identity}; "
+    f"pass --prompt {BASELINE_V3_PROMPT.identity}."
 )
 
 
@@ -774,7 +833,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--set",
         dest="question_set",
-        choices=[COPILOT_EVAL_V1.identity, COPILOT_EVAL_V2.identity],
+        choices=[COPILOT_EVAL_V1.identity, COPILOT_EVAL_V2.identity, COPILOT_EVAL_V3.identity],
         default=COPILOT_EVAL_V1.identity,
         help="Which set's reference report. Default: copilot_eval_v1.",
     )
@@ -787,12 +846,18 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     options = parser.parse_args(argv)
     v2 = options.question_set == COPILOT_EVAL_V2.identity
+    set_v3 = options.question_set == COPILOT_EVAL_V3.identity
     v3 = options.prompt == BASELINE_V3_PROMPT.identity
-    if options.write_reference and not v2:
+    if options.write_reference and not (v2 or set_v3):
         parser.error(FROZEN_V1_REFUSAL)  # exits 2, before anything is computed or written
-    if v3 and not v2:
+    if v3 and not (v2 or set_v3):
         parser.error(V3_BASELINE_SET_REFUSAL)  # exits 2, before anything is computed or written
-    if v3:
+    if set_v3 and not v3:
+        parser.error(SET_V3_PROMPT_REFUSAL)  # exits 2, before anything is computed or written
+    if set_v3:
+        report = canonical(reference_report_v3())
+        target = REFERENCE_REPORT_V3
+    elif v3:
         report = canonical(reference_report_v2_answer_v3())
         target = REFERENCE_REPORT_V2_ANSWER_V3
     else:
@@ -821,21 +886,27 @@ __all__ = [
     "REFERENCE_REPLAYS",
     "REFERENCE_REPLAYS_V2",
     "REFERENCE_REPLAYS_V2_ANSWER_V3",
+    "REFERENCE_REPLAYS_V3",
     "REFERENCE_REPORT",
     "REFERENCE_REPORT_V2",
     "REFERENCE_REPORT_V2_ANSWER_V3",
+    "REFERENCE_REPORT_V3",
     "REVIEWED_DELTAS",
     "SERVED_DECLINE_STATUSES",
     "SERVED_STATEMENT",
+    "SET_V3_PROMPT_REFUSAL",
+    "SET_V3_STATEMENT",
     "V3_BASELINE_SET_REFUSAL",
     "CaseResult",
     "ServedResult",
     "apply_reviewed_deltas",
     "canonical",
     "expected_report",
+    "forecasts_for",
     "reference_report",
     "reference_report_v2",
     "reference_report_v2_answer_v3",
+    "reference_report_v3",
     "run",
     "run_case",
     "run_case_served",

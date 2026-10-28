@@ -35,9 +35,11 @@ class DailySeriesOutput(ToolOutput):
 CONTRACT = ToolContract(
     name="get_daily_series",
     description=(
-        "A gap-free daily series for the current hotel over an inclusive date range: occupied "
-        "and available room nights, occupancy, room and other revenue, expenses, arrivals, "
-        "departures, bookings created and cancellations for each day. Arrivals and departures "
+        "One row per day for the current hotel over an inclusive date range, with no day "
+        "missing: occupied and available room nights, occupancy, room and other revenue, "
+        "expenses, arrivals, departures, bookings created and cancellations for each day. Use it "
+        "for a question about a particular day, such as how many guests arrived or departed on a "
+        "date. It gives no totals for the range; get_hotel_kpis does. Arrivals and departures "
         "count confirmed, checked-in and checked-out bookings only."
     ),
     min_role=HotelRole.VIEWER,

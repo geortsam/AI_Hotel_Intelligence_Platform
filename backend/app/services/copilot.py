@@ -107,6 +107,11 @@ exactly that sentence and no document search SUCCEEDED in this exchange -- a
 or was refused does not count -- `CANNOT_ANSWER` is served instead. Nothing else about the answer,
 the stop reason or the accounting changes; a searched answer keeps the documents sentence.
 
+"Exactly that sentence" is read as `is_documents_sentence` reads it (R2.8B): up to letter case, a
+straight or typographic apostrophe, the closing full stop and surrounding whitespace. Each of
+those makes the same claim, so each is replaced the same way. A text that says anything more
+("... Try the front desk.") is not the sentence, and is served as written.
+
 ## Earlier turns (Stage 7.11)
 
 `answer_turn` is `ask` with three additions a multi-turn caller supplies: earlier turns, the
@@ -207,6 +212,18 @@ PROMPT = COPILOT_ANSWER_V2
 #: returned as 'not found in this hotel's documents'." The complete answer, verbatim, whenever a
 #: document search ran and the answer cited none of it, or cited something it did not return.
 NOT_FOUND_ANSWER = "Not found in this hotel's documents."
+
+
+def _sentence_key(text: str) -> str:
+    return text.strip().replace(chr(0x2019), "'").casefold().removesuffix(".")
+
+
+def is_documents_sentence(text: str) -> bool:
+    """Whether *text* is `NOT_FOUND_ANSWER` and nothing else, up to letter case, a straight or
+    typographic apostrophe, one closing full stop and surrounding whitespace (R2.8B). Pure and
+    textual: a longer text containing the sentence is not it."""
+    return _sentence_key(text) == _sentence_key(NOT_FOUND_ANSWER)
+
 
 #: The complete answer to a question that names another hotel (R2.7ZL). Fixed, and repeats no
 #: identifier -- neither the one asked about nor this hotel's.
@@ -425,7 +442,7 @@ class CopilotService:
         source: AnswerSource
         if served:
             answer, source = result.text, "model"
-            if answer.strip() == NOT_FOUND_ANSWER and not self._searched(result):
+            if is_documents_sentence(answer) and not self._searched(result):
                 # R2.7ZO: no search ran, so none can have found nothing
                 answer, source = CANNOT_ANSWER, "cannot_answer_substitution"
         elif replaced and result.complete:
@@ -639,6 +656,7 @@ __all__ = [
     "AnswerSource",
     "AnsweredTurn",
     "CopilotService",
+    "is_documents_sentence",
     "names_another_hotel",
     "names_another_property",
 ]

@@ -1040,6 +1040,53 @@ def test_the_ledger_tool_still_points_room_revenue_to_the_kpi_tool() -> None:
     assert "Room revenue from stay nights is reported by get_hotel_kpis, not here." in text
 
 
+# --- R2.8D: range totals and per-day values, told apart by their descriptions -----------------
+
+
+def test_the_kpi_tool_says_it_returns_range_totals_and_points_days_elsewhere() -> None:
+    text = hotel_kpis.CONTRACT.description
+    assert text.startswith("Totals for the current hotel over an inclusive date range")
+    assert "one set of figures for the whole range and never a value per day" in text
+    assert "For a figure on one particular day, use get_daily_series instead." in text
+    assert "for each day" not in text
+
+
+def test_the_daily_tool_says_it_returns_one_row_per_day_and_names_its_use() -> None:
+    text = daily_series.CONTRACT.description
+    assert text.startswith("One row per day for the current hotel over an inclusive date range")
+    assert "for each day" in text
+    assert (
+        "Use it for a question about a particular day, such as how many guests arrived or "
+        "departed on a date." in text
+    )
+    assert "It gives no totals for the range; get_hotel_kpis does." in text
+
+
+def test_the_two_descriptions_name_each_other_and_the_model_reads_both() -> None:
+    """Complementary: each points to the other by its registered name, and the catalogue the
+    model is shown carries exactly these texts."""
+    names = set(build_default_registry().names())
+    specs = {
+        spec.name: spec.description
+        for spec in build_catalogue(
+            build_default_registry(), ("get_hotel_kpis", "get_daily_series")
+        )
+    }
+    assert specs == {
+        "get_hotel_kpis": hotel_kpis.CONTRACT.description,
+        "get_daily_series": daily_series.CONTRACT.description,
+    }
+    assert "get_daily_series" in specs["get_hotel_kpis"] and "get_daily_series" in names
+    assert "get_hotel_kpis" in specs["get_daily_series"] and "get_hotel_kpis" in names
+
+
+def test_only_the_descriptions_moved_not_the_arguments() -> None:
+    """R2.8D changed wording, not behaviour: both tools still take exactly a date range."""
+    for contract in (hotel_kpis.CONTRACT, daily_series.CONTRACT):
+        assert set(contract.input_model.model_fields) == {"date_from", "date_to"}
+        assert contract.input_schema()["required"] == ["date_from", "date_to"]
+
+
 @pytest.mark.parametrize("name", EXPECTED_TOOLS)
 def test_no_description_speaks_about_authorization(name: str) -> None:
     """Authorization is code. Nothing the model reads claims or grants access."""

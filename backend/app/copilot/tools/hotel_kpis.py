@@ -56,9 +56,11 @@ class HotelKpisOutput(ToolOutput):
 CONTRACT = ToolContract(
     name="get_hotel_kpis",
     description=(
-        "Key figures for the current hotel over an inclusive date range: bookings by status, "
-        "arrivals and departures, occupancy, room revenue with ADR and RevPAR per currency, "
-        "other revenue, expenses, net operating result and review totals. Arrivals and "
+        "Totals for the current hotel over an inclusive date range, one set of figures for the "
+        "whole range and never a value per day: bookings by status, arrivals and departures, "
+        "occupancy, room revenue with ADR and RevPAR per currency, other revenue, expenses, net "
+        "operating result and review totals. For a figure on one particular day, use "
+        "get_daily_series instead. Arrivals and "
         "departures count confirmed, checked-in and checked-out bookings only; bookings by "
         "status, and by stay, include every status. `room_revenue` is room revenue from stay "
         "nights -- the figure to give as room revenue, and the basis of ADR and RevPAR; "
