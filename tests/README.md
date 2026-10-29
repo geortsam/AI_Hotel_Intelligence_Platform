@@ -24,10 +24,16 @@ pytest -q
 
 ## Mutation checks
 
-Stages 7.6–7.14, F2 and F16 each broke their own guarantees on purpose and reported that a test
-caught every break. Those runs are now committed, in `mutation/inventory.py`: 79 mutations, each
-an exact edit plus the named tests (its *killers*) that must fail when it is applied. The edits
-are the ones the stages ran; where one had to change since, its `note` says how and why.
+Stages 7.6–7.14, F2, F16, I4, F1, F2-ADR, M1, M2, F2-COMP, F3, F4, G1, H1–H4, H6–H8, R2.2 and
+R2.2b each broke their own guarantees on purpose and reported that a test caught every break.
+Those runs are now committed, in `mutation/inventory.py`: 328 mutations across 29 stages, 267
+with pytest killers and 61 with Vitest killers, each an exact edit plus the named tests (its
+*killers*) that must fail when it is applied. The edits are the ones the stages ran; where one
+had to change since, its `note` says how and why. These are counts of the inventory, not of any
+run: each run reports its own killed, survived, not-run and error counts. Historically, the
+inventory originally held only stages 7.6–7.14, F2 and F16: 79 mutations, 5 of them needing a
+database. That older subset is all the figure 79 describes. `test_inventory_docs.py` keeps these
+counts and this stage list in step with the inventory.
 
 ```bash
 python -m tests.mutation --list                   # the inventory
@@ -43,17 +49,21 @@ python -m tests.mutation --require-all --database-url postgresql+psycopg://postg
 - **Killed means every killer failed.** Before any mutation, every killer must pass on the
   unmutated copy. A killer that is skipped, or never runs because the mutation broke an import,
   does not count as a kill, and a surviving mutation fails the run.
-- **Databases are explicit.** Five mutations have integration-test killers. They run only with
+- **Databases are explicit.** 129 mutations have integration-test killers. They run only with
   `--database-url`, which must name a disposable database (`python scripts/testdb.py create
   <name>_test`), and are otherwise reported as *not run*; `--require-all`, which CI uses, turns
   that into a failure. `TEST_DATABASE_URL` is never inherited, because on a developer machine it
-  may point at seeded demo data.
+  may point at seeded demo data. These 129 are the mutations flagged `needs_database`, and no
+  Vitest mutation is among them, so a local run with `--no-frontend` and no `--database-url`
+  runs 138 mutations and reports the other 190 as *not run* (129 needing a database, 61
+  frontend). CI passes a database and Node, and runs all 328.
 - **Maintenance.** `test_harness.py` fails in the normal suite as soon as a refactor moves an
   anchor or renames a killer. `python -m tests.mutation --discover --only <id>` then lists every
   test that fails under that mutation, to re-pin it.
 
-A full run takes about ten minutes. CI runs it in its own `Mutation checks` job, in parallel
-with the others.
+How long a full run takes varies with the machine and with how many mutations it may run. Two CI
+runs of all 328 on 2026-10-29 took 20m23s and 31m06s; those are observations, not a promise. CI
+runs it in its own `Mutation checks` job, in parallel with the others.
 
 ## Frontend tests
 
