@@ -1366,3 +1366,86 @@ def test_a_rejected_answer_is_diagnosed_end_to_end_without_its_content(
     assert case["error_code"] == "LLM_INVALID_RESPONSE"  # the failure's classification is unchanged
     for written in (json.dumps(replays), json.dumps(report)):
         assert DIAGNOSTIC_MARKER not in written
+
+
+# --- R2.8N-W: derived diagnostic annotations ----------------------------------------------------
+
+
+def cut_off_with_calls(
+    world: World, monkeypatch: pytest.MonkeyPatch, calls: int
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """One `kpis_may_occupancy` run whose answer is cut off at 1,024 tokens while holding *calls*
+    tool calls: the real factory, boundary and Ollama adapter over a fake transport. SYNTHETIC."""
+    import app.llm.factory as factory
+    from app.llm.providers import ollama_provider
+
+    call = {"function": {"name": "get_demand_forecast", "arguments": {"q": DIAGNOSTIC_MARKER}}}
+    body = json.dumps(
+        {
+            "done": True,
+            "done_reason": "length",
+            "eval_count": 1024,
+            "message": {"content": "", "tool_calls": [call] * calls},
+        }
+    ).encode("utf-8")
+
+    def answer(_transport: object, url: str, sent: bytes, timeout: float) -> bytes:
+        return body
+
+    monkeypatch.setattr(ollama_provider.UrllibTransport, "post_json", answer)
+    monkeypatch.setattr(factory, "_BREAKERS", {})
+    local(world).real_factory = True
+    assert world.run("--case", "kpis_may_occupancy") == 0
+    return world.files()
+
+
+def test_a_cut_off_answer_over_the_call_cap_is_annotated_and_nothing_else_changes(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.copilot.loop import MAX_CALLS_PER_ROUND
+
+    replays, report = cut_off_with_calls(world, monkeypatch, MAX_CALLS_PER_ROUND + 1)
+
+    block = report["diagnostic_annotations"]
+    assert block["version"] == "copilot_eval_diagnostic_annotations_v1"
+    assert block["annotations"] == [
+        {
+            "case_id": "kpis_may_occupancy",
+            "request": 1,
+            "annotation": "call_cap_exceeded_before_truncation",
+            "evidence": {
+                "reason": "length_with_tool_calls",
+                "tool_calls_parsed": MAX_CALLS_PER_ROUND + 1,
+            },
+        }
+    ]
+    # The raw record, the case, and the model-level outcome are exactly as without it.
+    [row] = report["run_health"]["per_request"]
+    assert row["diagnostics"]["tool_calls_parsed"] == MAX_CALLS_PER_ROUND + 1
+    [case] = report["cases"]
+    assert case["error_code"] == "LLM_INVALID_RESPONSE"
+    [level] = report["model_level"]["cases"]
+    assert level["outcome"] == "unavailable"
+    for written in (json.dumps(replays), json.dumps(report)):
+        assert DIAGNOSTIC_MARKER not in written  # still no argument anywhere
+
+
+def test_a_cut_off_answer_within_the_call_cap_is_not_annotated(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, report = cut_off_with_calls(world, monkeypatch, 2)
+    assert report["run_health"]["per_request"][0]["diagnostics"]["reason"] == (
+        "length_with_tool_calls"
+    )
+    assert report["diagnostic_annotations"]["annotations"] == []
+    # The block's presence changes nothing either: the same outcomes as the over-cap case.
+    [case] = report["cases"]
+    assert case["error_code"] == "LLM_INVALID_RESPONSE"
+    [level] = report["model_level"]["cases"]
+    assert level["outcome"] == "unavailable"
+
+
+def test_an_ordinary_run_carries_an_empty_annotation_block(world: World) -> None:
+    assert world.run("--case", "kpis_may_occupancy") == 0
+    _, report = world.files()
+    assert report["diagnostic_annotations"]["annotations"] == []

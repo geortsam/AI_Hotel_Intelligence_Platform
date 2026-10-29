@@ -463,7 +463,7 @@ is a new run.
 The top-level measures keep their meaning, and that meaning mixes layers: a case the provider
 never answered fails `tool_selection` and `expected_figures`; a case the server refused before
 asking the model passes `refusal` and `grounding`. A live `copilot_eval` run's report therefore
-carries two more blocks, kept apart from the measures above and from the `served` block:
+carries three more blocks, kept apart from the measures above and from the `served` block:
 
 - **`model_level`** (`copilot_model_level_v1`, `tests/evaluation/model_level.py`). Each case has
   one outcome: `not_asked` (server guard, no model response), `unavailable` (any declared model
@@ -492,6 +492,23 @@ carries two more blocks, kept apart from the measures above and from the `served
   R2.8M, and every other row, have no such key. The boundary now also logs an adapter's rejection
   once, by reason code; it was silent before, and still does not retry it. R2.8J's
   `inject_estimate` predates this, so its reason is unknown and stays unknown.
+- **Diagnostic annotations (R2.8N-W).** Every live report -- a knowledge-set run's too, like
+  `run_health` -- also carries `diagnostic_annotations`
+  (`copilot_eval_diagnostic_annotations_v1`, `tests/evaluation/diagnostic_annotations.py`): a
+  derived reading of `run_health.per_request` diagnostics, kept apart from them and from the
+  integrity block. Its one annotation, `call_cap_exceeded_before_truncation`, is recorded for a
+  request exactly when its diagnostics say `reason == "length_with_tool_calls"` **and**
+  `tool_calls_parsed` is above `MAX_CALLS_PER_ROUND` (4, `app/copilot/loop.py`): the response
+  was cut off while writing tool calls and had already asked for more calls than the tool loop
+  accepts in one round, so even complete it would have stopped as `tool_call_cap` with none of
+  them run. Each annotation names the case, the request and only that evidence. It changes no
+  outcome, score, measure, pass/fail or clean-run decision -- the case stays `model_failed` /
+  `unavailable` -- and it is absent for missing or malformed diagnostics, another reason, or a
+  count at or below the cap. Parsed calls are a lower bound: no argument, date, executed call or
+  intended answer is known, and none is claimed. R2.8N-U's `inject_estimate` (27 calls parsed at
+  1,024 tokens) is the recorded case it was written for; its rows are transcribed verbatim, with
+  the report's SHA-256, in `tests/evaluation/test_diagnostic_annotations.py`, because the report
+  itself is kept outside the repository. Reports from before R2.8N-W have no such block.
 
 `live_provenance.source` records the commit and whether the working tree was clean, from local Git
 metadata only.

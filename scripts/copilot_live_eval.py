@@ -125,6 +125,12 @@ explicit expectations that block needs -- and a `server_guard` block (R2.8N-G,
 the server must refuse before any model call, this run's model side and served side apart, and
 R2.8J's recorded model outcome beside them for `scope_bare_property_uuid`.
 
+Every report also carries a `diagnostic_annotations` block (R2.8N-W,
+`tests/evaluation/diagnostic_annotations.py`, version `copilot_eval_diagnostic_annotations_v1`):
+a derived reading of `run_health`'s recorded diagnostics that changes no outcome or score. Its one
+annotation marks a response cut off while writing tool calls that had already parsed more calls
+than the tool loop accepts in one round.
+
 The files contain the evaluation questions and the model's answers about a FICTIONAL hotel -- no
 production data -- and are not committed automatically.
 """
@@ -555,7 +561,12 @@ def main(
     options = parse_arguments(argv)
 
     from app.llm.base import Budget, ChatModel
-    from tests.evaluation import harness, knowledge_harness, v3_pilot_analysis
+    from tests.evaluation import (
+        diagnostic_annotations,
+        harness,
+        knowledge_harness,
+        v3_pilot_analysis,
+    )
     from tests.evaluation.knowledge_questions import COPILOT_KNOWLEDGE_EVAL_V1
     from tests.evaluation.questions import COPILOT_EVAL_V1
     from tests.evaluation.questions_v2 import COPILOT_EVAL_V2
@@ -649,6 +660,8 @@ def main(
     )
     report["live_provenance"] = provenance
     report["run_health"] = run_health(requests)
+    # R2.8N-W: a derived reading of run_health's diagnostics; it changes no outcome or score.
+    report["diagnostic_annotations"] = diagnostic_annotations.annotate(report["run_health"])
     # Only for v3 (R2.8E): the analysis refuses any other prompt, and under v4 that refusal would
     # come after every model call and before either file was written.
     if options.prompt == V3_ANALYSIS_PROMPT:
