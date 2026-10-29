@@ -31,12 +31,87 @@ provider did.
 
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
+
 from fastapi import status
 
 from app.core.errors import AppError
 
 #: What every message here refuses to say. Asserted by a test rather than left to review.
 GENERIC_LLM_MESSAGE = "The assistant is not available right now."
+
+#: R2.8M. Why an answer was rejected as unusable: stable, machine-readable, content-free. Each is
+#: emitted by exactly the branch its name describes (see the adapters and `app.llm.boundary`);
+#: `other_invalid_response` is what an `LlmInvalidResponseError` raised without a reason carries.
+INVALID_RESPONSE_REASONS = (
+    "oversized_response",  # the body exceeded the adapter's byte limit; nothing was parsed
+    "malformed_json",  # the body was not UTF-8 JSON
+    "malformed_structure",  # JSON, but not the documented shape (no message object)
+    "incomplete_response",  # the provider marked the answer as not done
+    "non_string_text",  # the answer's text field was not a string
+    "length_with_tool_calls",  # tool calls in an answer the provider stopped for length
+    "empty_response",  # neither text nor tool calls
+    "malformed_tool_calls",  # a tool call without the documented fields
+    "duplicate_tool_call_ids",  # two calls shared an id, so results could not be paired
+    "schema_validation_failed",  # structured output failed the request's schema, after the retry
+    "provider_response_validation",  # the provider SDK rejected its own response
+    "other_invalid_response",
+)
+#: Reasons for a body that parsed as the documented shape but broke a rule this server enforces
+#: on it -- as opposed to one that could not be read at all. `oversized_response` is not one: the
+#: body is refused by its size before it is parsed, so nothing about its shape is known (R2.8N).
+STRUCTURAL_REASONS = frozenset(
+    {"length_with_tool_calls", "empty_response", "duplicate_tool_call_ids"}
+)
+#: A provider completion reason is kept only if it looks like one: a short lowercase word.
+_SAFE_COMPLETION_REASON = re.compile(r"[a-z][a-z_]{0,31}")
+
+
+def safe_completion_reason(value: object) -> str | None:
+    """*value* if it is a short lowercase identifier (`stop`, `length`, `max_tokens`, ...), else
+    `None` -- never a guess, and never free text a provider might have put there."""
+    if isinstance(value, str) and _SAFE_COMPLETION_REASON.fullmatch(value):
+        return value
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class InvalidResponseDiagnostics:
+    """What is known about a rejected answer, without any of its content (R2.8M).
+
+    Every field is a code, a count or a flag. `None` means the adapter did not know -- the body was
+    not parsed that far, or the provider did not report it -- and is never filled with a guess.
+    """
+
+    reason: str
+    #: The adapter that rejected the answer (`ollama`, `anthropic`); `None` at the boundary.
+    provider: str | None = None
+    #: The provider's own completion reason, when it gave a safe one (`safe_completion_reason`).
+    completion_reason: str | None = None
+    #: Output tokens the provider reported for the rejected answer.
+    output_tokens: int | None = None
+    #: Tool calls parsed before the rejection.
+    tool_calls_parsed: int | None = None
+    has_tool_calls: bool | None = None
+    has_text: bool | None = None
+
+    @property
+    def structural(self) -> bool:
+        """Rejected by a rule this server applies to a readable body (`STRUCTURAL_REASONS`)."""
+        return self.reason in STRUCTURAL_REASONS
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "reason": self.reason,
+            "provider": self.provider,
+            "completion_reason": self.completion_reason,
+            "output_tokens": self.output_tokens,
+            "tool_calls_parsed": self.tool_calls_parsed,
+            "has_tool_calls": self.has_tool_calls,
+            "has_text": self.has_text,
+            "structural": self.structural,
+        }
 
 
 class LlmError(AppError):
@@ -131,6 +206,18 @@ class LlmInvalidResponseError(LlmError):
     code = "LLM_INVALID_RESPONSE"
     message = "The assistant returned an unusable answer."
 
+    def __init__(
+        self, message: str | None = None, *, diagnostics: InvalidResponseDiagnostics | None = None
+    ) -> None:
+        super().__init__(message)
+        #: R2.8M. Why the answer was rejected, without its content. Never part of the client's
+        #: error body -- the handler renders `status_code`, `code` and `message` only.
+        self.diagnostics = diagnostics or InvalidResponseDiagnostics("other_invalid_response")
+
+    @property
+    def reason(self) -> str:
+        return self.diagnostics.reason
+
 
 class LlmToolFailedError(LlmError):
     """A tool failed while the model was using it. §5.7 row 4.
@@ -199,6 +286,9 @@ DECLARED_FAILURES: dict[str, type[LlmError]] = {
 __all__ = [
     "DECLARED_FAILURES",
     "GENERIC_LLM_MESSAGE",
+    "INVALID_RESPONSE_REASONS",
+    "STRUCTURAL_REASONS",
+    "InvalidResponseDiagnostics",
     "LlmBudgetExhaustedError",
     "LlmCircuitOpenError",
     "LlmDisabledError",
@@ -207,4 +297,5 @@ __all__ = [
     "LlmRateLimitedError",
     "LlmToolFailedError",
     "LlmUnavailableError",
+    "safe_completion_reason",
 ]

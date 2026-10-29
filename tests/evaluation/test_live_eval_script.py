@@ -1212,3 +1212,157 @@ def test_a_v3_set_run_records_v3_and_tells_the_guard_from_the_model(world: World
     outcomes = {row["case_id"]: row["outcome"] for row in report["model_level"]["cases"]}
     assert outcomes == {"another_property": "not_asked", "scope_named_competitor": "final_response"}
     assert world.built[0].calls == 1  # only the model-scope case was asked
+
+
+# --- R2.8L: the integrity block -------------------------------------------------------------------
+
+
+def test_a_v3_set_run_carries_the_integrity_block(world: World) -> None:
+    from app.llm.prompts.registry import SCOPE_ANSWER
+    from tests.evaluation.integrity import INTEGRITY_VERSION
+
+    local(world).text = SCOPE_ANSWER
+    argv = ["--set", "copilot_eval_v3", "--prompt", "copilot_answer@v3"]
+    assert world.run(*argv, "--case", "scope_named_competitor") == 0
+
+    _, report = world.files(V3)
+    assert report["integrity"]["version"] == INTEGRITY_VERSION
+    [row] = report["integrity"]["cases"]
+    assert (row["refusal_result"], row["scope_compliance"]) == ("correct", True)
+
+
+def test_a_run_on_a_set_without_expectations_has_no_integrity_block(world: World) -> None:
+    assert world.run("--set", "copilot_eval_v2", "--case", "kpis_may_occupancy") == 0
+
+    _, report = world.files()
+    assert "integrity" not in report
+    assert "model_level" in report  # the other blocks are unchanged
+
+
+# --- R2.8N-G: the server_guard block -------------------------------------------------------------
+
+
+def test_a_v3_run_carries_the_versioned_server_guard_block(world: World) -> None:
+    """The script asks for `copilot_eval_v3_expectations_v2` on a v3 run: the bare UUID case is
+    refused before the stand-in is asked, beside R2.8J's recorded model outcome."""
+    from app.llm.prompts.registry import SCOPE_ANSWER
+    from tests.evaluation.transcribed_r28j import TURNS
+
+    local(world).text = SCOPE_ANSWER
+    argv = ["--set", "copilot_eval_v3", "--prompt", "copilot_answer@v3"]
+    cases = ["--case", "scope_bare_property_uuid", "--case", "scope_named_competitor"]
+    assert world.run(*argv, *cases) == 0
+
+    _, report = world.files(V3)
+    block = report["server_guard"]
+    assert (block["version"], block["full_set"]) == ("copilot_eval_v3_expectations_v2", False)
+    [row] = block["cases"]
+    assert row["case_id"] == "scope_bare_property_uuid"
+    assert row["guard_verdict"] == "refused_before_model"
+    assert row["model_side"] == {"model_responses": 0, "model_text_present": False}
+    assert row["history"]["model_text"] == TURNS["scope_bare_property_uuid"][-1]["text"]
+    assert block["not_scored"] == ["scope_named_competitor"]
+    assert world.built[0].calls == 1  # only the model-scope case reached the stand-in
+    assert {"served", "model_level", "integrity"} <= set(report)  # beside, not instead
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--set", "copilot_eval_v2", "--case", "kpis_may_occupancy"],
+        ["--case", "kpis_may_occupancy"],  # v1, the default set
+    ],
+)
+def test_an_earlier_set_run_has_no_server_guard_block(world: World, argv: list[str]) -> None:
+    assert world.run(*argv) == 0
+
+    _, report = world.files()
+    assert "server_guard" not in report
+    assert "model_level" in report  # the other blocks are unchanged
+
+
+def test_a_knowledge_run_has_no_server_guard_block(world: World) -> None:
+    case = COPILOT_KNOWLEDGE_EVAL_V1.cases[0].case_id
+    assert world.run("--set", "copilot_knowledge_eval_v1", "--case", case) == 0
+
+    _, report = world.files()
+    assert "server_guard" not in report
+
+
+# --- R2.8M: invalid-response diagnostics in run_health ------------------------------------------
+
+DIAGNOSTIC_MARKER = "DIAG-CONTENT-MARKER-7f3a"
+
+
+class Raising:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def complete(self, request: Any) -> Any:
+        raise self.error
+
+
+def test_only_an_invalid_response_row_carries_diagnostics(world: World) -> None:
+    from app.llm.errors import InvalidResponseDiagnostics, LlmInvalidResponseError
+
+    log: list[dict[str, Any]] = []
+    rejected = LlmInvalidResponseError(
+        diagnostics=InvalidResponseDiagnostics("empty_response", provider="ollama")
+    )
+    for error in (rejected, LlmUnavailableError()):
+        with pytest.raises(type(error)):
+            world.script.TimedModel(Raising(error), log, "c").complete(object())
+
+    invalid, unavailable = log
+    assert invalid["outcome"] == "LLM_INVALID_RESPONSE"
+    assert invalid["diagnostics"] == rejected.diagnostics.as_dict()
+    assert "diagnostics" not in unavailable  # every other row keeps its shape
+    # run_health reads both, and rows from before R2.8M (no key at all) as before.
+    assert world.script.run_health(log)["status"] == "normal"
+
+
+def test_a_rejected_answer_is_diagnosed_end_to_end_without_its_content(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real factory, boundary and Ollama adapter over a fake transport. The body is a
+    SYNTHETIC answer shaped like R2.8J's failure -- tool calls cut off at 1,024 tokens -- not the
+    recorded one, which was never kept."""
+    import app.llm.factory as factory
+    from app.llm.providers import ollama_provider
+
+    call = {"function": {"name": "get_demand_forecast", "arguments": {"q": DIAGNOSTIC_MARKER}}}
+    body = json.dumps(
+        {
+            "done": True,
+            "done_reason": "length",
+            "eval_count": 1024,
+            "message": {"content": "", "tool_calls": [call, call]},
+        }
+    ).encode("utf-8")
+
+    def answer(_transport: object, url: str, sent: bytes, timeout: float) -> bytes:
+        return body
+
+    monkeypatch.setattr(ollama_provider.UrllibTransport, "post_json", answer)
+    monkeypatch.setattr(factory, "_BREAKERS", {})
+    local(world).real_factory = True
+
+    assert world.run("--case", "kpis_may_occupancy") == 0
+
+    replays, report = world.files()
+    [row] = report["run_health"]["per_request"]
+    assert (row["outcome"], row["attempts"]) == ("LLM_INVALID_RESPONSE", None)
+    assert row["diagnostics"] == {
+        "reason": "length_with_tool_calls",
+        "provider": "ollama",
+        "completion_reason": "length",
+        "output_tokens": 1024,
+        "tool_calls_parsed": 2,
+        "has_tool_calls": True,
+        "has_text": False,
+        "structural": True,
+    }
+    [case] = report["cases"]
+    assert case["error_code"] == "LLM_INVALID_RESPONSE"  # the failure's classification is unchanged
+    for written in (json.dumps(replays), json.dumps(report)):
+        assert DIAGNOSTIC_MARKER not in written

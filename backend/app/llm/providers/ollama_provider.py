@@ -46,6 +46,14 @@ Connection refused, a timeout, a redirect, any non-2xx status or any other trans
 `LlmUnavailableError`; a body that is not the documented shape (or exceeds `MAX_RESPONSE_BYTES`)
 is `LlmInvalidResponseError`.
 
+*R2.8M.* Each rejection carries `InvalidResponseDiagnostics`: a reason naming the branch that
+raised it (`oversized_response`, `malformed_json`, `malformed_structure`, `incomplete_response`,
+`non_string_text`, `length_with_tool_calls`, `empty_response`, `malformed_tool_calls`,
+`duplicate_tool_call_ids`) and what the parsed body safely says -- Ollama's `done_reason` if it is
+a short identifier, `eval_count`, how many calls were parsed, and whether text or calls were
+present. Never the body, the text or an argument. Nothing is logged here; the boundary logs the
+reason once.
+
 The transport is given the request's own budget as its timeout, but `urllib` applies that timeout
 to each socket operation -- connecting, then each read -- not to the request as a whole. It is
 not a total deadline: an attempt can outlive the budget, up to about twice it in the worst case
@@ -64,6 +72,7 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any, Protocol
 
 from app.core.config import INVALID_OLLAMA_URL_MESSAGE, is_loopback_url
@@ -76,7 +85,12 @@ from app.llm.base import (
     TokenUsage,
     ToolCall,
 )
-from app.llm.errors import LlmInvalidResponseError, LlmUnavailableError
+from app.llm.errors import (
+    InvalidResponseDiagnostics,
+    LlmInvalidResponseError,
+    LlmUnavailableError,
+    safe_completion_reason,
+)
 
 #: The provider's name for itself, reported on every response for attribution.
 PROVIDER_NAME = "ollama"
@@ -194,7 +208,7 @@ class OllamaChatModel:
             raise LlmUnavailableError() from failure
         elapsed_ms = (time.perf_counter() - started) * 1000
         if len(raw) > MAX_RESPONSE_BYTES:
-            raise LlmInvalidResponseError()
+            raise _rejection("oversized_response")
         return self._response(request, self._decode(raw), elapsed_ms)
 
     # --- request ------------------------------------------------------------------------------
@@ -268,11 +282,13 @@ class OllamaChatModel:
         try:
             body = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, ValueError) as malformed:
-            raise LlmInvalidResponseError() from malformed
-        if not isinstance(body, dict) or not isinstance(body.get("message"), dict):
-            raise LlmInvalidResponseError()
+            raise _rejection("malformed_json") from malformed
+        if not isinstance(body, dict):
+            raise _rejection("malformed_structure")
+        if not isinstance(body.get("message"), dict):
+            raise _rejection("malformed_structure", body)
         if body.get("done") is False:
-            raise LlmInvalidResponseError()
+            raise _rejection("incomplete_response", body)
         return body
 
     def _response(
@@ -281,15 +297,34 @@ class OllamaChatModel:
         message: Mapping[str, Any] = body["message"]
         text = message.get("content") or ""
         if not isinstance(text, str):
-            raise LlmInvalidResponseError()
-        calls = self._calls(message.get("tool_calls"), turn=len(request.messages))
+            raise _rejection("non_string_text", body)
+        try:
+            calls = self._calls(message.get("tool_calls"), turn=len(request.messages))
+        except LlmInvalidResponseError as rejected:
+            # The call parser knows the reason; the body adds what it safely reports.
+            raise LlmInvalidResponseError(
+                diagnostics=replace(
+                    rejected.diagnostics,
+                    completion_reason=safe_completion_reason(body.get("done_reason")),
+                    output_tokens=_reported(body.get("eval_count")),
+                    has_text=bool(text),
+                )
+            ) from rejected
         done_reason = body.get("done_reason")
         if calls and done_reason in _LENGTH_REASONS:
             # Cut off while writing a call: its arguments may be truncated (§5.5).
-            raise LlmInvalidResponseError()
+            raise _rejection(
+                "length_with_tool_calls",
+                body,
+                tool_calls_parsed=len(calls),
+                has_tool_calls=True,
+                has_text=bool(text),
+            )
         if not text and not calls:
             # Nothing to show and nothing to run -- a thinking-only answer included.
-            raise LlmInvalidResponseError()
+            raise _rejection(
+                "empty_response", body, tool_calls_parsed=0, has_tool_calls=False, has_text=False
+            )
         returned = body.get("model")
         named = returned if isinstance(returned, str) and returned else None
         return ChatResponse(
@@ -314,23 +349,60 @@ class OllamaChatModel:
         if raw is None:
             return ()
         if not isinstance(raw, list):
-            raise LlmInvalidResponseError()
+            raise _rejection("malformed_tool_calls", has_tool_calls=True)
         calls: list[ToolCall] = []
         for index, entry in enumerate(raw):
             function = entry.get("function") if isinstance(entry, dict) else None
             if not isinstance(function, dict):
-                raise LlmInvalidResponseError()
+                raise _rejection(
+                    "malformed_tool_calls", tool_calls_parsed=len(calls), has_tool_calls=True
+                )
             name = function.get("name")
             if not isinstance(name, str) or not name:
-                raise LlmInvalidResponseError()
+                raise _rejection(
+                    "malformed_tool_calls", tool_calls_parsed=len(calls), has_tool_calls=True
+                )
             given = entry.get("id")
             call_id = given if isinstance(given, str) and given else f"call_{turn}_{index}"
             calls.append(
                 ToolCall(id=call_id, name=name, arguments=_arguments(function.get("arguments")))
             )
         if len({call.id for call in calls}) != len(calls):
-            raise LlmInvalidResponseError()  # results could not be paired back to their calls
+            # Results could not be paired back to their calls.
+            raise _rejection(
+                "duplicate_tool_call_ids", tool_calls_parsed=len(calls), has_tool_calls=True
+            )
         return tuple(calls)
+
+
+def _reported(raw: object) -> int | None:
+    """A count the provider reported, or `None` when it reported none -- never a default."""
+    return raw if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0 else None
+
+
+def _rejection(
+    reason: str,
+    body: Mapping[str, Any] | None = None,
+    *,
+    tool_calls_parsed: int | None = None,
+    has_tool_calls: bool | None = None,
+    has_text: bool | None = None,
+) -> LlmInvalidResponseError:
+    """The declared failure for *reason*, with what the parsed *body* safely says (R2.8M): its
+    completion reason if it is a short identifier, and its output-token count. No content."""
+    return LlmInvalidResponseError(
+        diagnostics=InvalidResponseDiagnostics(
+            reason=reason,
+            provider=PROVIDER_NAME,
+            completion_reason=None
+            if body is None
+            else safe_completion_reason(body.get("done_reason")),
+            output_tokens=None if body is None else _reported(body.get("eval_count")),
+            tool_calls_parsed=tool_calls_parsed,
+            has_tool_calls=has_tool_calls,
+            has_text=has_text,
+        )
+    )
 
 
 def _arguments(raw: object) -> dict[str, Any]:

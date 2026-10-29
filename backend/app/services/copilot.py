@@ -36,8 +36,16 @@ id", optionally ":", "#" or "=", then the UUID (`names_another_hotel`) -- naming
 the authorized one is answered with `ANOTHER_HOTEL_REFUSAL` before a model is asked. It is a
 complete answer: one `llm_invocations` row with no model call, no tool, and no text that repeats
 an identifier. Matching is textual and deliberately narrow. Whether a hotel with that id exists
-is never looked up -- an answer that differed would tell a caller it does -- and an unlabelled
-UUID is not caught here; the tools still keep its data out of reach.
+is never looked up -- an answer that differed would tell a caller it does.
+
+**An unlabelled UUID (R2.8N-D).** A UUID need not be labelled to be another property's: R2.8J's
+`scope_bare_property_uuid` asked for "the room revenue of <another id>" with no "hotel" before
+it, and reached the model. So any UUID in the current question other than the authorized hotel's
+(`names_foreign_uuid`: the canonical hyphenated form, 8-4-4-4-12 hex digits, any letter case,
+compared as a UUID with the path hotel's) is refused the same way and as early. The authorized
+hotel's own id is never refused, an id-like string in any other shape is not a UUID here, and
+the id is compared, never looked up: what it identifies -- a property, anything else, or nothing
+-- is not known, and the refusal says nothing about it. Earlier turns are not read.
 
 **Another property named in words (R2.7ZT).** A model asked for "the hotel across the street"
 answered with this hotel's occupancy as if it were the other's. `names_another_property` refuses,
@@ -58,6 +66,30 @@ alone, a phrase that runs on ("the other hotel instead"), a paraphrase ("the pla
 road"). Those reach the model, whose tools still read only this hotel. It also refuses some
 questions that merely mention another property ("guests who came from another hotel"), which
 the tools could not have answered either.
+
+## This hotel's figures under another property's name (R2.8N)
+
+The guards above refuse before a model is asked, and all are deliberately narrow. A question
+they let through can still refer to another property -- "the Grand Meridian Hotel", "our
+competitor down the road", "our sister property in Athens" -- and a model asked one answered
+with this hotel's occupancy under the other property's name. So after the figure and citation
+checks, a served answer is checked once more (`references_another_property`, then
+`tool_sourced_figures`): when the CURRENT question refers to another property and the answer
+states a figure that only this request's structured tool outputs ground -- not one the caller
+wrote -- the whole answer is replaced by `ANOTHER_HOTEL_REFUSAL`, labelled `attribution_withheld`.
+The whole answer, not the offending sentences: a comparison of the two properties is withheld
+entirely. A question that refers to another property is otherwise answered as before, and so is
+an answer that states no tool figure.
+
+"Refers to another property" is one of: any guard form above (so a non-own UUID, which the
+pre-model guard now refuses first, is covered twice); "competitor(s)" or "sister
+property/hotel"; or a proper name before a capitalised "Hotel", "Resort", "Inn", "Motel" or
+"Hostel" (`named_properties`: capitalised words, stopping at a lowercase word, punctuation or a
+word in `NOT_NAME_WORDS`) that is not this hotel's canonical `Hotel.name`, compared up to case,
+punctuation, a leading "the" and the property noun. Lowercase names, names with no property noun
+("the Marriott"), and paraphrases are not found. Earlier turns are not read. Nothing here selects
+a hotel: the tools stay bound to the authorized one, and a UUID or a name in the question is only
+ever compared, never looked up.
 
 ## Partial answers are answers, labelled
 
@@ -156,7 +188,7 @@ from sqlalchemy.orm import Session
 from app.copilot.catalogue import build_catalogue
 from app.copilot.citations import CitationCheck, EvidenceLedger, check_citations
 from app.copilot.contracts import ToolOutcome
-from app.copilot.grounding import ungrounded_figures
+from app.copilot.grounding import tool_sourced_figures, ungrounded_figures
 from app.copilot.history import fit
 from app.copilot.loop import LoopResult, ToolLoop
 from app.copilot.registry import ToolRegistry
@@ -274,6 +306,100 @@ def names_another_property(question: str) -> bool:
     return OTHER_PROPERTY_IN_WORDS.search(question) is not None
 
 
+# --- R2.8N: another property named beside this hotel's figures --------------------------------
+
+#: Any UUID, labelled or not.
+ANY_UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
+#: The nouns that end a property's proper name: "the Grand Meridian Hotel", "Harbour Inn".
+PROPERTY_NAME_NOUN = re.compile(r"\b(?:hotels?|resorts?|inns?|motels?|hostels?)\b", re.IGNORECASE)
+#: The approved scope terms: a competitor, or a sister property -- whatever follows them.
+SCOPE_TERMS = re.compile(
+    rf"\bcompetitor(?:s|{_APOSTROPHE}s?)?\b|\bsister\s+(?:propert(?:y|ies)|hotels?)\b",
+    re.IGNORECASE,
+)
+#: Capitalised words that open or join a question rather than name a property. A run of name
+#: words before a property noun stops at the first of these (compared case-insensitively).
+_NOT_NAME_TEXT = (
+    "the a an this that these those our ours my your their his her its which what whose who "
+    "whom any all every each both either neither some no another other same own whole entire "
+    "total overall average per how why when where is was are were be been did does do has have "
+    "had can could would should will please show give tell list compare find get report and or "
+    "but of in at on by for from to with versus vs than i we you they it "
+    "january february march april may june july august september october november december "
+    "monday tuesday wednesday thursday friday saturday sunday"
+)
+NOT_NAME_WORDS = frozenset(_NOT_NAME_TEXT.split())
+_EDGE = "\"'([{" + chr(0x2018) + chr(0x2019) + chr(0x201C) + chr(0x201D)
+
+
+_NAME_WORD = re.compile(r"[^\W_]+")
+_TOKEN = re.compile(r"\S+")
+
+
+def _name_key(text: str) -> tuple[str, ...]:
+    """*text* reduced for comparing names: its words, case-folded, with apostrophes, punctuation
+    and a leading "the" removed."""
+    words = tuple(_NAME_WORD.findall(text.casefold()))
+    return words[1:] if words[:1] == ("the",) else words
+
+
+def _name_core(text: str) -> tuple[str, ...]:
+    """`_name_key` without a leading or trailing property noun: "Seaview Hotel" -> ("seaview",)."""
+    words = _name_key(text)
+    while words and PROPERTY_NAME_NOUN.fullmatch(words[-1]):
+        words = words[:-1]
+    while words and PROPERTY_NAME_NOUN.fullmatch(words[0]):
+        words = words[1:]
+    return words
+
+
+def named_properties(question: str) -> list[str]:
+    """The proper names *question* gives a property: one or more capitalised words, none of them
+    in `NOT_NAME_WORDS`, immediately before a capitalised property noun ("the Grand Meridian
+    Hotel" -> "Grand Meridian Hotel"). A lowercase name, a lowercase noun, or a name without one
+    of those nouns, is not found: the grammar is deliberately narrow. Pure and textual."""
+    found: list[str] = []
+    for noun in PROPERTY_NAME_NOUN.finditer(question):
+        if not noun.group(0)[0].isupper():
+            continue  # "Summarise hotel performance" names nothing
+        start: int | None = None
+        for token in reversed(list(_TOKEN.finditer(question, 0, noun.start()))):
+            word = token.group(0).lstrip(_EDGE)
+            if not word or not word[-1].isalnum() or not word[0].isupper():
+                break  # punctuation after a word, or a lowercase word, ends the name
+            if word.casefold() in NOT_NAME_WORDS:
+                break
+            start = token.end() - len(word)
+            if word != token.group(0):
+                break  # an opening quote or bracket begins the name
+        if start is not None:
+            found.append(question[start : noun.end()])  # as written
+    return found
+
+
+def names_foreign_uuid(question: str, hotel_public_id: uuid.UUID) -> bool:
+    """Whether *question* contains any UUID but *hotel_public_id*, labelled or not: the pre-model
+    guard since R2.8N-D. Never used to find or select a hotel: the tenant is the authorized
+    request's. Pure and textual."""
+    return any(uuid.UUID(match) != hotel_public_id for match in ANY_UUID.findall(question))
+
+
+def references_another_property(question: str, hotel_public_id: uuid.UUID, own_name: str) -> bool:
+    """Whether *question* refers to a property other than the authorized hotel (R2.8N): either
+    guard form, a non-own UUID, an approved scope term (`SCOPE_TERMS`), or a property's proper
+    name (`named_properties`) other than *own_name* -- the authorized hotel's canonical name,
+    compared case- and punctuation-insensitively, with or without its property noun."""
+    if names_another_hotel(question, hotel_public_id) or names_another_property(question):
+        return True
+    if names_foreign_uuid(question, hotel_public_id) or SCOPE_TERMS.search(question):
+        return True
+    own_key, own_core = _name_key(own_name), _name_core(own_name)
+    return any(
+        _name_key(name) != own_key and _name_core(name) != own_core
+        for name in named_properties(question)
+    )
+
+
 #: Added to a PARTIAL answer's notice when its text was withheld by the citation check.
 CITATION_WITHHELD_SENTENCES: dict[str, str] = {
     "citation_rejected": (
@@ -289,19 +415,22 @@ CITATION_WITHHELD_SENTENCES: dict[str, str] = {
 #: body and not persisted; evaluation reads it to tell the model's text from the server's.
 #:
 #: - `model`: the model's final text, as written (possibly empty, when a partial loop wrote none);
-#: - `scope_guard`: `ANOTHER_HOTEL_REFUSAL`, before any model call (R2.7ZL, R2.7ZT);
+#: - `scope_guard`: `ANOTHER_HOTEL_REFUSAL`, before any model call (R2.7ZL, R2.7ZT, R2.8N-D);
 #: - `cannot_answer_substitution`: the model wrote `NOT_FOUND_ANSWER` with no successful document
 #:   search, and `CANNOT_ANSWER` is served instead (R2.7ZO);
 #: - `not_found_replacement`: the citation check replaced a complete answer with
 #:   `NOT_FOUND_ANSWER` (Stage 7.10);
 #: - `withheld`: no text is served -- the figure check withheld it, or the citation check did on a
-#:   partial answer.
+#:   partial answer;
+#: - `attribution_withheld`: `ANOTHER_HOTEL_REFUSAL`, because the question referred to another
+#:   property and the answer stated this hotel's tool figures (R2.8N).
 AnswerSource = Literal[
     "model",
     "scope_guard",
     "cannot_answer_substitution",
     "not_found_replacement",
     "withheld",
+    "attribution_withheld",
 ]
 
 
@@ -367,7 +496,12 @@ class CopilotService:
         prompt = self._resolve_prompt(prompt_identity)
         hotel = self._scope.require_hotel(hotel_public_id)
         hotel_id = hotel.id
-        if names_another_hotel(question, hotel_public_id) or names_another_property(question):
+        own_name = hotel.name
+        if (
+            names_another_hotel(question, hotel_public_id)
+            or names_another_property(question)
+            or names_foreign_uuid(question, hotel_public_id)  # R2.8N-D: labelled or not
+        ):
             return self._refuse_another_hotel(hotel_id, prompt, first_label)
 
         offered = self._invocations.permitted_tools(hotel_public_id)
@@ -426,13 +560,16 @@ class CopilotService:
             hotel_id, result, stop_reason, error.code if error is not None else None, latency_ms
         )
         served = not replaced and not offending
+        # R2.8N: this hotel's figures are never served as another property's.
+        misattributed = served and self._misattributes(result, question, hotel_public_id, own_name)
         self._observe(
             result,
             stop_reason,
             latency_ms,
             withheld=bool(offending),
             evidence=evidence,
-            citations=len(check.valid) if served else 0,
+            citations=len(check.valid) if served and not misattributed else 0,
+            attribution_withheld=misattributed,
         )
 
         if error is not None and not result.outcomes:
@@ -440,7 +577,10 @@ class CopilotService:
             raise error
 
         source: AnswerSource
-        if served:
+        if misattributed:
+            # The whole answer, not the offending sentences: a comparison is withheld entirely.
+            answer, source = ANOTHER_HOTEL_REFUSAL, "attribution_withheld"
+        elif served:
             answer, source = result.text, "model"
             if is_documents_sentence(answer) and not self._searched(result):
                 # R2.7ZO: no search ran, so none can have found nothing
@@ -476,7 +616,7 @@ class CopilotService:
                 )
                 for item in check.valid
             ]
-            if served
+            if served and not misattributed
             else [],
             document_evidence=evidence,
         )
@@ -530,6 +670,22 @@ class CopilotService:
         if prompt.variables != ("question",):
             raise ValueError(f"{prompt.identity} does not answer a question.")
         return prompt
+
+    @staticmethod
+    def _misattributes(
+        result: LoopResult, question: str, hotel_public_id: uuid.UUID, own_name: str
+    ) -> bool:
+        """Whether the answer would present this hotel's figures as another property's (R2.8N):
+        the question refers to another property and the answer states a figure only this
+        request's structured tool outputs -- always the authorized hotel's -- ground."""
+        if not references_another_property(question, hotel_public_id, own_name):
+            return False
+        structured = [
+            outcome.output
+            for outcome in result.outcomes
+            if outcome.succeeded and outcome.output is not None and outcome.tool != KNOWLEDGE_TOOL
+        ]
+        return bool(tool_sourced_figures(result.text, outputs=structured, question=question))
 
     @staticmethod
     def _searched(result: LoopResult) -> bool:
@@ -618,6 +774,7 @@ class CopilotService:
         withheld: bool,
         evidence: str,
         citations: int,
+        attribution_withheld: bool = False,
     ) -> None:
         """One event per question: how it ended and what it cost. No text of any kind."""
         logger.info(
@@ -636,6 +793,7 @@ class CopilotService:
                 "output_tokens": result.output_tokens,
                 "latency_ms": latency_ms,
                 "answer_withheld": withheld,
+                "attribution_withheld": attribution_withheld,
                 "document_evidence": evidence,
                 "citations": citations,
                 "prompt_id": result.prompt_id,
@@ -646,17 +804,24 @@ class CopilotService:
 
 __all__ = [
     "ANOTHER_HOTEL_REFUSAL",
+    "ANY_UUID",
     "CITATION_WITHHELD_SENTENCES",
     "HOTEL_LABELLED_UUID",
     "NOTICES",
     "NOT_FOUND_ANSWER",
+    "NOT_NAME_WORDS",
     "OTHER_PROPERTY_IN_WORDS",
     "PROMPT",
+    "PROPERTY_NAME_NOUN",
+    "SCOPE_TERMS",
     "WITHHELD_SENTENCE",
     "AnswerSource",
     "AnsweredTurn",
     "CopilotService",
     "is_documents_sentence",
+    "named_properties",
     "names_another_hotel",
     "names_another_property",
+    "names_foreign_uuid",
+    "references_another_property",
 ]

@@ -122,6 +122,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
@@ -134,9 +135,11 @@ from app.llm.base import (
     ToolCall,
 )
 from app.llm.errors import (
+    InvalidResponseDiagnostics,
     LlmInvalidResponseError,
     LlmRateLimitedError,
     LlmUnavailableError,
+    safe_completion_reason,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime
@@ -325,13 +328,33 @@ class AnthropicChatModel:
         stop_reason = getattr(message, "stop_reason", "") or ""
         returned_model = getattr(message, "model", None)
         named = returned_model if isinstance(returned_model, str) and returned_model else None
-        calls = self._calls_of(message)
-        if calls and stop_reason == "max_tokens":
-            # Cut off while writing a call: the arguments may be truncated. See module docstring.
-            raise LlmInvalidResponseError()
+        try:
+            calls = self._calls_of(message)
+            if calls and stop_reason == "max_tokens":
+                # Cut off while writing a call: the arguments may be truncated. See module
+                # docstring.
+                raise LlmInvalidResponseError(
+                    diagnostics=InvalidResponseDiagnostics(
+                        "length_with_tool_calls",
+                        provider=PROVIDER_NAME,
+                        tool_calls_parsed=len(calls),
+                        has_tool_calls=True,
+                        has_text=bool(self._text_of(message, allow_empty=True)),
+                    )
+                )
+            text = self._text_of(message, allow_empty=bool(calls))
+        except LlmInvalidResponseError as rejected:
+            # R2.8M: what the message safely reports, beside the reason -- never its content.
+            raise LlmInvalidResponseError(
+                diagnostics=replace(
+                    rejected.diagnostics,
+                    completion_reason=safe_completion_reason(stop_reason),
+                    output_tokens=_reported_output_tokens(message),
+                )
+            ) from rejected
 
         return ChatResponse(
-            text=self._text_of(message, allow_empty=bool(calls)),
+            text=text,
             parsed=None,
             usage=self._usage_of(message),
             latency_ms=elapsed_ms,
@@ -414,7 +437,14 @@ class AnthropicChatModel:
                 continue
             call_id = getattr(block, "id", None)
             if not isinstance(call_id, str) or not call_id:
-                raise LlmInvalidResponseError()
+                raise LlmInvalidResponseError(
+                    diagnostics=InvalidResponseDiagnostics(
+                        "malformed_tool_calls",
+                        provider=PROVIDER_NAME,
+                        tool_calls_parsed=len(calls),
+                        has_tool_calls=True,
+                    )
+                )
             arguments = getattr(block, "input", None)
             calls.append(
                 ToolCall(
@@ -440,7 +470,15 @@ class AnthropicChatModel:
         ]
         text = "".join(parts)
         if not text and not allow_empty:
-            raise LlmInvalidResponseError()
+            raise LlmInvalidResponseError(
+                diagnostics=InvalidResponseDiagnostics(
+                    "empty_response",
+                    provider=PROVIDER_NAME,
+                    tool_calls_parsed=0,
+                    has_tool_calls=False,
+                    has_text=False,
+                )
+            )
         return text
 
     @staticmethod
@@ -473,8 +511,18 @@ class AnthropicChatModel:
         if name in {"APITimeoutError", "APIConnectionError", "InternalServerError"}:
             return LlmUnavailableError()
         if name in {"APIResponseValidationError", "UnprocessableEntityError"}:
-            return LlmInvalidResponseError()
+            return LlmInvalidResponseError(
+                diagnostics=InvalidResponseDiagnostics(
+                    "provider_response_validation", provider=PROVIDER_NAME
+                )
+            )
         return LlmUnavailableError()
+
+
+def _reported_output_tokens(message: Any) -> int | None:
+    """The output tokens the provider reported, or `None` when it reported none (R2.8M)."""
+    value = getattr(getattr(message, "usage", None), "output_tokens", None)
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
 
 def _carries_environment_headers(client: Any) -> bool:

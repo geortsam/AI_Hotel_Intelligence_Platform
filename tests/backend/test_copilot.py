@@ -34,7 +34,7 @@ from sqlalchemy import CheckConstraint, Table
 
 from app.copilot.catalogue import build_catalogue
 from app.copilot.contracts import ToolOutcome
-from app.copilot.grounding import ungrounded_figures
+from app.copilot.grounding import tool_sourced_figures, ungrounded_figures
 from app.copilot.loop import LoopResult, ToolLoop
 from app.copilot.registry import build_default_registry
 from app.core.errors import (
@@ -588,6 +588,14 @@ def test_an_over_long_number_is_grounded_by_itself_and_by_nothing_shorter() -> N
     assert ungrounded_figures(f"It was {LONG}.", outputs=[OUTPUT], question="") == (LONG,)
 
 
+def test_tool_sourced_figures_never_raise_on_an_over_long_question_number() -> None:
+    question = f"What was the occupancy {LONG} in May 2026?"
+    assert tool_sourced_figures("Occupancy was 9.68%.", outputs=[OUTPUT], question=question) == (
+        "9.68",
+    )
+    assert tool_sourced_figures(f"{LONG}", outputs=[OUTPUT, {"v": LONG}], question=question) == ()
+
+
 # ======================================================================================
 # C. The loop's usage totals
 # ======================================================================================
@@ -773,6 +781,7 @@ def test_the_stop_reasons_agree_everywhere() -> None:
 
 class FakeHotel:
     id = 41
+    name = "Harbour View Hotel"
 
 
 class FakeScope:

@@ -132,6 +132,7 @@ class FakeAnalytics:
 
 class FakeHotel:
     id = 41
+    name = "Harbour View Hotel"
 
 
 class FakeScope:

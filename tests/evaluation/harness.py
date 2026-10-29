@@ -63,6 +63,17 @@ answer or the tool loop stopped counted apart instead of scored. Off by default,
 `copilot_answer@v3`, at paths no earlier artifact uses. It reads its forecasts from
 `fixture_hotel_v3.py` (`forecasts_for`); every other set reads `fixture_hotel.py`, unchanged.
 `--set copilot_eval_v3 --prompt copilot_answer@v3` prints, or with `--write-reference` writes, it.
+
+*R2.8L.* `run(..., integrity=True)` adds an `integrity` block (`integrity.py`): whether a tool's
+figure was attributed to the right entity, whether a decline used the right fixed sentence, and
+each executed tool call's outcome. It needs explicit expectations, which only `copilot_eval_v3`
+has (`expectations_v3.py`); for any other set it is refused. Off by default, like `served`.
+
+*R2.8N-G.* `run(..., server_guard=True)` adds a `server_guard` block (`expectations_v3_v2.py`):
+for each case `copilot_eval_v3_expectations_v2` says the server must refuse before any model
+call, whether it did -- this run's model side and served side apart, and R2.8J's recorded model
+outcome beside them for a case that version moved. Only `copilot_eval_v3`, or an exact selection
+of its cases, is accepted; any other set is refused before a case runs. Off by default.
 """
 
 from __future__ import annotations
@@ -87,12 +98,16 @@ from app.llm.prompts import PromptRecord
 from app.llm.prompts.registry import COPILOT_ANSWER_V2, COPILOT_ANSWER_V3
 from app.models.enums import SAFE_AUDIT_DETAIL_KEYS, HotelRole
 from app.services.copilot import AnsweredTurn, CopilotService
-from app.services.tool_invocation import ToolInvocationService
+from app.services.tool_invocation import UNKNOWN_REFERENCE, ToolInvocationService
+from tests.evaluation import expectations_v3_v2 as guard_block
+from tests.evaluation import integrity as integrity_block
 from tests.evaluation import model_level as model_level_block
 from tests.evaluation import scorers
+from tests.evaluation.expectations_v3 import EXPECTATIONS_V3, CaseExpectation
 from tests.evaluation.fixture_documents import FixtureKnowledge
 from tests.evaluation.fixture_hotel import (
     EVAL_HOTEL,
+    NO_DATA,
     FixtureAccuracy,
     FixtureAnalytics,
     FixtureForecasts,
@@ -168,6 +183,14 @@ SET_V3_STATEMENT = (
 )
 
 
+def expectations_for(question_set: QuestionSet) -> dict[str, CaseExpectation]:
+    """The integrity expectations of *question_set* (R2.8L). Only `copilot_eval_v3` has them; any
+    other set is refused rather than given guessed metadata."""
+    if question_set.identity != COPILOT_EVAL_V3.identity:
+        raise ValueError(f"{question_set.identity} has no integrity expectations")
+    return EXPECTATIONS_V3
+
+
 def forecasts_for(question_set: QuestionSet) -> Any:
     """The forecast service a set's cases read (R2.8C): `copilot_eval_v3`'s own fixture for v3,
     and `fixture_hotel.FixtureForecasts`, unchanged, for every other set."""
@@ -201,6 +224,8 @@ def live_statement(
 
 class EvalHotel:
     id = 1
+    #: The canonical name R2.8N's attribution check exempts. Named by no question in any set.
+    name = "Evaluation Fixture Hotel"
 
 
 class EvalScope:
@@ -226,12 +251,17 @@ class EvalAudit:
 
     def __init__(self) -> None:
         self.events: list[dict[str, Any]] = []
+        #: R2.8L. Each event's subject -- the tool's name, or `None` for an unknown one -- in the
+        #: same order as `events`, for the integrity block's per-call outcomes.
+        self.subjects: list[str | None] = []
 
     def record(self, *args: Any, details: dict[str, object] | None = None, **kwargs: Any) -> None:
         unapproved = set(details or {}) - SAFE_AUDIT_DETAIL_KEYS
         if unapproved:
             raise AssertionError(f"audit details carry unapproved keys {sorted(unapproved)}")
         self.events.append(dict(details or {}))
+        subject = args[2] if len(args) > 2 else None
+        self.subjects.append(None if subject == UNKNOWN_REFERENCE else str(subject))
 
 
 class EvalRow:
@@ -420,12 +450,15 @@ def run_case_served(
     measure_latency: bool,
     prompt: PromptRecord,
     forecasts: Any | None = None,
+    evidence: list[integrity_block.CaseEvidence] | None = None,
 ) -> tuple[CaseResult, ServedResult]:
     """`run_case`, and the same case as the caller saw it (R2.7ZU). The `CaseResult` is exactly
     what `run_case` returns. *forecasts* (R2.8C) is the forecast service; by default the shared
-    `FixtureForecasts`."""
+    `FixtureForecasts`. *evidence* (R2.8L), when given, receives the case's `CaseEvidence` for the
+    integrity block; nothing else about the run changes."""
     scope = EvalScope(HotelRole(case.role))
     session = EvalSession()
+    audit = EvalAudit()
     services = ToolServices(
         analytics=cast(Any, FixtureAnalytics()),
         demand_prediction=cast(Any, forecasts if forecasts is not None else FixtureForecasts()),
@@ -434,7 +467,7 @@ def run_case_served(
         knowledge=cast(Any, FixtureKnowledge()),
     )
     invocations = ToolInvocationService(
-        cast(Any, session), registry, cast(Any, scope), cast(Any, EvalAudit()), services
+        cast(Any, session), registry, cast(Any, scope), cast(Any, audit), services
     )
     recorder = RecordingModel(model)
     copilot = CopilotService(
@@ -543,6 +576,31 @@ def run_case_served(
         output_tokens=sum(r.usage.output_tokens for r in recorder.responses),
         latency_ms=latency_ms,
     )
+    if evidence is not None:
+        shown = (
+            [m.content for m in last_request.messages if m.role == "tool"]
+            if last_request is not None
+            else []
+        )
+        evidence.append(
+            integrity_block.CaseEvidence(
+                case_id=case.case_id,
+                requested_tools=tuple(call.name for call in calls),
+                tool_calls=integrity_block.tool_call_records(
+                    list(zip(audit.subjects, audit.events, strict=True)), shown, NO_DATA
+                ),
+                tool_sourced_figures=integrity_block.tool_sourced_figures(
+                    final_text, _tool_outputs_seen(last_request), case.question
+                )
+                if recorder.responses
+                else (),
+                served_tool_sourced_figures=integrity_block.tool_sourced_figures(
+                    served.served_answer, _tool_outputs_seen(last_request), case.question
+                )
+                if served.served_answer
+                else (),
+            )
+        )
     return result, served
 
 
@@ -579,6 +637,7 @@ ANSWER_SOURCES = (
     "cannot_answer_substitution",
     "not_found_replacement",
     "withheld",
+    "attribution_withheld",
     "unavailable",
 )
 
@@ -645,16 +704,27 @@ def run(
     on_case: Callable[[EvalCase, RecordingModel | None], None] | None = None,
     served: bool = False,
     model_level: bool = False,
+    integrity: bool = False,
+    server_guard: bool = False,
 ) -> dict[str, Any]:
     """Run every case under *prompt* and return the report. Deterministic for a replay.
 
     *served* (R2.7ZU) adds a `served` block: each case as the caller saw it. *model_level*
-    (R2.8B) adds a `model_level` block: the model's final responses alone. Both are off by
-    default, so a report without them -- every pinned one -- is exactly what it was."""
+    (R2.8B) adds a `model_level` block: the model's final responses alone. *integrity* (R2.8L)
+    adds an `integrity` block: entity attribution, refusal reasons and per-call tool outcomes,
+    for a set with explicit expectations (`expectations_for`). *server_guard* (R2.8N-G) adds a
+    `server_guard` block: `copilot_eval_v3_expectations_v2`'s verdict on the cases the server must
+    refuse before any model call, for `copilot_eval_v3` or an exact selection of its cases only.
+    All are off by default, so a report without them -- every pinned one -- is exactly what it
+    was. A set a requested block cannot apply to is refused before any case runs."""
+    expectations = expectations_for(question_set) if integrity else None
+    if server_guard:
+        guard_block.require_selection(question_set)
     registry = build_default_registry()
     budget = budget or Budget(timeout_seconds=30.0, max_output_tokens=1024)
     results: list[CaseResult] = []
     served_rows: list[ServedResult] = []
+    evidence_rows: list[integrity_block.CaseEvidence] = []
     for case in question_set.cases:
         case_model = model_for(case)
         result, served_row = run_case_served(
@@ -667,6 +737,7 @@ def run(
             measure_latency=mode == "live",
             prompt=prompt,
             forecasts=forecasts_for(question_set),
+            evidence=evidence_rows if integrity else None,
         )
         results.append(result)
         served_rows.append(served_row)
@@ -704,6 +775,12 @@ def run(
         report["served"] = _served_block(served_rows)
     if model_level:
         report["model_level"] = model_level_block.block(question_set.cases, results, served_rows)
+    if expectations is not None:
+        report["integrity"] = integrity_block.block(
+            question_set.cases, results, served_rows, evidence_rows, expectations
+        )
+    if server_guard:
+        report["server_guard"] = guard_block.block(question_set, served_rows)
     return report
 
 
@@ -774,6 +851,15 @@ REVIEWED_DELTAS: dict[tuple[str, str], list[str]] = {
     ("another_property", "tools_offered"): [],
 }
 
+#: R2.8N-D. The same kind of difference in `copilot_eval_v3`'s own pinned report -- kept apart,
+#: because the v1 and v2 reports do not have the case. The copilot now refuses an UNLABELLED UUID
+#: other than the authorized hotel's before the model is asked, so `scope_bare_property_uuid` is
+#: offered no catalogue. Version 1 of v3's layers (`questions_v3.LAYERS`) still calls the case
+#: `model_scope`; `expectations_v3_v2` calls it `server_guard`.
+REVIEWED_DELTAS_V3: dict[tuple[str, str], list[str]] = {
+    ("scope_bare_property_uuid", "tools_offered"): [],
+}
+
 
 def apply_reviewed_deltas(
     pinned: Mapping[str, Any],
@@ -781,14 +867,15 @@ def apply_reviewed_deltas(
 ) -> dict[str, Any]:
     """A deep copy of *pinned* with *deltas* applied; *pinned* itself is never modified.
 
-    Only a delta declared in `REVIEWED_DELTAS`, with its declared value, is accepted, and only on
-    a case and a field the report already has -- so this can express those reviewed
-    differences and nothing broader.
+    Only a delta declared in `REVIEWED_DELTAS` or `REVIEWED_DELTAS_V3`, with its declared value,
+    is accepted, and only on a case and a field the report already has -- so this can express
+    those reviewed differences and nothing broader.
     """
     expected = copy.deepcopy(dict(pinned))
     cases = {case["case_id"]: case for case in expected["cases"]}
     for (case_id, field), value in deltas.items():
-        if REVIEWED_DELTAS.get((case_id, field)) != value or value != []:
+        declared = {**REVIEWED_DELTAS, **REVIEWED_DELTAS_V3}.get((case_id, field))
+        if declared != value or value != []:
             raise ValueError(f"not a reviewed delta: {case_id}.{field}")
         if case_id not in cases:
             raise ValueError(f"the report has no case {case_id!r}")
@@ -798,10 +885,14 @@ def apply_reviewed_deltas(
     return expected
 
 
-def expected_report(pinned_path: Path) -> str:
+def expected_report(
+    pinned_path: Path, deltas: Mapping[tuple[str, str], list[str]] = REVIEWED_DELTAS
+) -> str:
     """What the current code must reproduce from a pinned report's exchanges: the pinned file,
-    with the reviewed deltas applied, in canonical form. The file is only read."""
-    return canonical(apply_reviewed_deltas(json.loads(pinned_path.read_text(encoding="utf-8"))))
+    with the reviewed deltas applied, in canonical form. The file is only read. *deltas* is
+    `REVIEWED_DELTAS_V3` for `copilot_eval_v3`'s report."""
+    pinned = json.loads(pinned_path.read_text(encoding="utf-8"))
+    return canonical(apply_reviewed_deltas(pinned, deltas))
 
 
 #: Why `--write-reference` is refused for v1 (R2.7ZL4).
@@ -892,6 +983,7 @@ __all__ = [
     "REFERENCE_REPORT_V2_ANSWER_V3",
     "REFERENCE_REPORT_V3",
     "REVIEWED_DELTAS",
+    "REVIEWED_DELTAS_V3",
     "SERVED_DECLINE_STATUSES",
     "SERVED_STATEMENT",
     "SET_V3_PROMPT_REFUSAL",
@@ -901,6 +993,7 @@ __all__ = [
     "ServedResult",
     "apply_reviewed_deltas",
     "canonical",
+    "expectations_for",
     "expected_report",
     "forecasts_for",
     "reference_report",

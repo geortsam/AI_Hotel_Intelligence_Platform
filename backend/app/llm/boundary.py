@@ -77,6 +77,7 @@ from pydantic import ValidationError as PydanticValidationError
 from app.llm.base import ChatModel, ChatRequest, ChatResponse
 from app.llm.circuit import CircuitBreaker
 from app.llm.errors import (
+    InvalidResponseDiagnostics,
     LlmBudgetExhaustedError,
     LlmDisabledError,
     LlmInvalidResponseError,
@@ -169,13 +170,22 @@ class GuardedChatModel:
             except LlmRateLimitedError:
                 # Row 2: no retry, explicitly. Re-raised as-is.
                 raise
+            except LlmInvalidResponseError as rejected:
+                # R2.8M. An answer the ADAPTER rejected: not retried -- exactly as before, when it
+                # passed through here unobserved -- but now logged once, by its reason code.
+                self._observe(request, "invalid_response", attempt, reason=rejected.reason)
+                raise
             except PydanticValidationError as invalid:
                 # Row 3: one retry, then 502. A second malformed answer is not a third chance.
                 if attempt < MAX_ATTEMPTS:
                     self._sleep(self._jitter(*JITTER_SECONDS))
                     continue
-                self._observe(request, "invalid_response", attempt)
-                raise LlmInvalidResponseError() from invalid
+                self._observe(
+                    request, "invalid_response", attempt, reason="schema_validation_failed"
+                )
+                raise LlmInvalidResponseError(
+                    diagnostics=InvalidResponseDiagnostics("schema_validation_failed")
+                ) from invalid
 
             self._require_usage_within_budget(request, response)
             self._observe(request, "answered", attempt)
@@ -244,8 +254,11 @@ class GuardedChatModel:
             completed_at=None if self._now is None else self._now(),
         )
 
-    def _observe(self, request: ChatRequest, outcome: str, attempts: int) -> None:
-        """One event per call. Six fields, and not one of them is content.
+    def _observe(
+        self, request: ChatRequest, outcome: str, attempts: int, *, reason: str | None = None
+    ) -> None:
+        """One event per call. Six fields, and not one of them is content -- seven for a rejected
+        answer, whose `reason` is one of `INVALID_RESPONSE_REASONS` (R2.8M): a code, never text.
 
         No prompt text, no rendered message, no answer, no token from either side, no provider
         name, no model name, no key and no tenant identifier. The prompt is named by its
@@ -256,20 +269,23 @@ class GuardedChatModel:
         reason: an operational log that accumulates user content is a data-retention liability
         that nobody decided to take on.
         """
+        extra: dict[str, object] = {
+            "outcome": outcome,
+            "prompt_id": request.prompt_id,
+            "prompt_version": request.prompt_version,
+            "attempts": attempts,
+            "structured": request.response_schema is not None,
+            "tools_offered": len(request.tools),
+        }
+        if reason is not None:
+            extra["reason"] = reason
         logger.info(
             "llm %s (prompt=%s@%s) after %s attempt(s)",
             outcome,
             request.prompt_id,
             request.prompt_version,
             attempts,
-            extra={
-                "outcome": outcome,
-                "prompt_id": request.prompt_id,
-                "prompt_version": request.prompt_version,
-                "attempts": attempts,
-                "structured": request.response_schema is not None,
-                "tools_offered": len(request.tools),
-            },
+            extra=extra,
         )
 
 

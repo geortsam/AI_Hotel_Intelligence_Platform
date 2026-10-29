@@ -24,6 +24,7 @@ from app.llm.testing import ScriptedModel, ScriptedTurn
 from app.schemas.ml_serving import SERVED_HORIZON_DAYS
 from app.services.copilot import names_another_hotel, names_another_property
 from tests.evaluation import harness, scorers
+from tests.evaluation.expectations_v3_v2 import LAYER_CHANGES, SERVER_GUARD_CASES_V2
 from tests.evaluation.fixture_hotel import (
     ACCURACY,
     BREAKDOWNS,
@@ -199,17 +200,22 @@ def baseline_run() -> dict[str, Any]:
 
 
 def test_on_the_production_path_guard_cases_never_reach_a_model_and_scope_cases_do() -> None:
+    """Who answers on the production path TODAY is `copilot_eval_v3_expectations_v2`'s layer map:
+    since R2.8N-D the pre-model guard also refuses the unlabelled UUID that version 1 (`LAYERS`,
+    pinned above, unchanged) sent to the model."""
     report = baseline_run()
     served = {row["case_id"]: row for row in report["served"]["cases"]}
     outcomes = {row["case_id"]: row["outcome"] for row in report["model_level"]["cases"]}
 
-    for case_id in SERVER_GUARD_CASES:
+    guarded = SERVER_GUARD_CASES_V2
+    assert guarded == (*SERVER_GUARD_CASES, *LAYER_CHANGES)
+    for case_id in guarded:
         assert (served[case_id]["answer_source"], served[case_id]["model_responses"]) == (
             "scope_guard",
             0,
         )
         assert outcomes[case_id] == "not_asked"  # never counted as model compliance
-    for case_id in MODEL_SCOPE_CASES:
+    for case_id in (case for case in MODEL_SCOPE_CASES if case not in LAYER_CHANGES):
         assert (served[case_id]["answer_source"], served[case_id]["model_responses"]) == (
             "model",
             1,
@@ -371,10 +377,14 @@ def test_the_v3_exchanges_refuse_to_load_against_anything_else(
         load_replays(harness.REFERENCE_REPLAYS_V3, question_set, prompt=prompt)
 
 
-def test_the_v3_reference_run_matches_its_pinned_report_exactly() -> None:
-    assert canonical(reference_report_v3()) == harness.REFERENCE_REPORT_V3.read_text(
-        encoding="utf-8"
-    )
+def test_the_v3_reference_run_matches_its_pinned_report_but_for_its_reviewed_delta() -> None:
+    """R2.8N-D: exactly the pinned file, with `REVIEWED_DELTAS_V3` applied to a copy -- the file
+    itself is not regenerated. The delta is still needed, and is the only difference."""
+    produced = canonical(reference_report_v3())
+    pinned = harness.REFERENCE_REPORT_V3
+    assert produced == harness.expected_report(pinned, harness.REVIEWED_DELTAS_V3)
+    assert produced != pinned.read_text(encoding="utf-8")
+    assert harness.REVIEWED_DELTAS_V3 == {("scope_bare_property_uuid", "tools_offered"): []}
 
 
 def test_the_v3_report_says_no_model_was_evaluated() -> None:
@@ -423,7 +433,8 @@ def test_the_v3_set_without_the_v3_prompt_is_refused_before_anything_runs(
 
 def test_printing_the_v3_baseline_writes_nothing(capsys: pytest.CaptureFixture[str]) -> None:
     harness.main(["--set", "copilot_eval_v3", "--prompt", "copilot_answer@v3"])
-    assert capsys.readouterr().out == harness.REFERENCE_REPORT_V3.read_text(encoding="utf-8") + "\n"
+    expected = harness.expected_report(harness.REFERENCE_REPORT_V3, harness.REVIEWED_DELTAS_V3)
+    assert capsys.readouterr().out == expected + "\n"
 
 
 def test_writing_the_v3_baseline_writes_only_its_own_file(

@@ -103,7 +103,11 @@ and checksum and the request budget. The key is never printed, logged or written
   any retry the boundary made (it retries once when its own deadline expires) and the jitter
   before it; `attempts` is the boundary's count for an answered request and `null` for one that
   raised, because the boundary does not report attempts on a failure. Single HTTP attempts are
-  not timed separately.
+  not timed separately. A row whose request ended in `LLM_INVALID_RESPONSE` also carries
+  `diagnostics` (R2.8M): the rejection's reason code, the provider, the provider's completion
+  reason and output-token count when it reported them, how many tool calls were parsed, whether
+  text or calls were present, and whether a structural rule rejected it -- never content. Other
+  rows have no such key, and a report from before R2.8M has none at all.
 - `run_health.status` -- `degraded` when `DEGRADED_AFTER_CONSECUTIVE_UNAVAILABLE` (2) or more
   consecutive requests, counted across case boundaries, raised `LLM_UNAVAILABLE` (the boundary's
   deadline expired twice, the adapter reported a timeout or refused connection, or the circuit
@@ -114,6 +118,12 @@ and checksum and the request budget. The key is never printed, logged or written
 
 For a `copilot_eval` set the report also carries a `model_level` block (R2.8B,
 `tests/evaluation/model_level.py`): the measures the model's final responses alone are held to.
+A `copilot_eval_v3` run also carries an `integrity` block (R2.8L, `tests/evaluation/integrity.py`):
+entity attribution, refusal reasons and each executed tool call's outcome -- the only set with the
+explicit expectations that block needs -- and a `server_guard` block (R2.8N-G,
+`tests/evaluation/expectations_v3_v2.py`, version `copilot_eval_v3_expectations_v2`): for each case
+the server must refuse before any model call, this run's model side and served side apart, and
+R2.8J's recorded model outcome beside them for `scope_bare_property_uuid`.
 
 The files contain the evaluation questions and the model's answers about a FICTIONAL hotel -- no
 production data -- and are not committed automatically.
@@ -410,28 +420,41 @@ class TimedModel:
         self._count = 0
 
     def complete(self, request: Any) -> Any:
-        from app.llm.errors import LlmError
+        from app.llm.errors import LlmError, LlmInvalidResponseError
 
         self._count += 1
         started = self._monotonic()
         try:
             response = self._inner.complete(request)
         except LlmError as failed:
-            self._record(started, failed.code, None)
+            # R2.8M: a rejected answer's content-free diagnostics, beside its code.
+            diagnostics = (
+                failed.diagnostics.as_dict()
+                if isinstance(failed, LlmInvalidResponseError)
+                else None
+            )
+            self._record(started, failed.code, None, diagnostics)
             raise
         self._record(started, ANSWERED, response.attempts)
         return response
 
-    def _record(self, started: float, outcome: str, attempts: int | None) -> None:
-        self._log.append(
-            {
-                "case_id": self._case_id,
-                "request": self._count,
-                "elapsed_ms": max(0, round((self._monotonic() - started) * 1000)),
-                "outcome": outcome,
-                "attempts": attempts,
-            }
-        )
+    def _record(
+        self,
+        started: float,
+        outcome: str,
+        attempts: int | None,
+        diagnostics: dict[str, Any] | None = None,
+    ) -> None:
+        row: dict[str, Any] = {
+            "case_id": self._case_id,
+            "request": self._count,
+            "elapsed_ms": max(0, round((self._monotonic() - started) * 1000)),
+            "outcome": outcome,
+            "attempts": attempts,
+        }
+        if diagnostics is not None:
+            row["diagnostics"] = diagnostics
+        self._log.append(row)
 
 
 def run_health(
@@ -565,6 +588,9 @@ def main(
     blocks: dict[str, Any] = (
         {} if full is COPILOT_KNOWLEDGE_EVAL_V1 else {"served": True, "model_level": True}
     )
+    if full is COPILOT_EVAL_V3:
+        blocks["integrity"] = True  # R2.8L: only v3 has the expectations it needs
+        blocks["server_guard"] = True  # R2.8N-G: copilot_eval_v3_expectations_v2, v3 only
     recorded_on = today().isoformat()
     replay_path, report_path = output_paths(options.out, recorded_on, options.prompt)
     try:

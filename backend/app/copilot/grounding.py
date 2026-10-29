@@ -151,4 +151,24 @@ def ungrounded_figures(
     return tuple(offending)
 
 
-__all__ = ["ungrounded_figures"]
+def tool_sourced_figures(
+    answer: str, *, outputs: Iterable[Mapping[str, Any]], question: str
+) -> tuple[str, ...]:
+    """The numbers in *answer*, as written, that a structured tool output grounds and no number
+    in *question* does (R2.8N) -- by exactly the rule `ungrounded_figures` uses, applied to the
+    two sources apart. They can only have come from this request's tool data, which is always
+    the authorized hotel's: a date or figure the caller wrote is never one of them. Order follows
+    the answer; duplicates are reported once.
+    """
+    from_tools = {abs(value) for output in outputs for value in _values_in(output)}
+    from_question = {abs(value) for _, value in _numbers_in(question)}
+    found: list[str] = []
+    for written, value in _numbers_in(answer):
+        if written in found:
+            continue
+        if _grounded(written, value, from_tools) and not _grounded(written, value, from_question):
+            found.append(written)
+    return tuple(found)
+
+
+__all__ = ["tool_sourced_figures", "ungrounded_figures"]
