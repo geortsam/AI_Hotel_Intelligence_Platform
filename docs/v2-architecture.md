@@ -938,6 +938,16 @@ exposure through a generative surface needs its own argument).
 > at import any tool whose input schema names a hotel, tenant, property, organisation, user,
 > account, member or UUID, or any `id`/`*_id` field, at any depth.
 
+> **Amendment (R2.8P) — revenue totals per currency.** `get_revenue_breakdown`'s output is its
+> service response minus `hotel_public_id`, **plus** `totals`: one entry per currency
+> (`currency`, `amount`, `tax_amount`, `entry_count`), calculated by the server with exact
+> `Decimal` arithmetic over the same categories. Amounts in different currencies are never added
+> together (there is no FX conversion), and the tool description says so. The prompt still
+> forbids the model to calculate sums, and the figure check is unchanged: a total the tool returns
+> is grounded, a cross-currency or any other unreturned sum is still withheld. The REST response
+> (`RevenueBreakdownResponse`) and the frontend are unchanged. Every other tool's output is still
+> exactly its service response minus `hotel_public_id`.
+
 ### 7.3 Per-tool definition template
 
 Each tool is specified in its implementing stage with exactly these fields, and a test per field:

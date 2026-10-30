@@ -877,13 +877,20 @@ def test_only_the_forecast_tool_declares_a_side_effect() -> None:
     assert declared == {"get_demand_forecast"}
 
 
+#: Fields a tool adds to its service's response for the model alone, and only these (R2.8P: the
+#: revenue tool's server-calculated per-currency totals). Every other tool adds nothing.
+ADDED_OUTPUT_FIELDS: dict[str, set[str]] = {"get_revenue_breakdown": {"totals"}}
+
+
 @pytest.mark.parametrize("name", DATA_TOOLS)
 def test_each_output_is_the_service_response_minus_the_hotel(name: str) -> None:
     module, response, _, _ = TOOL_MODULES[name]
     assert set(module.CONTRACT.output_model.model_fields) == (
         set(response.model_fields) - {HOTEL_IDENTIFIER_FIELD}
-    )
+    ) | ADDED_OUTPUT_FIELDS.get(name, set())
     assert HOTEL_IDENTIFIER_FIELD in module.CONTRACT.withheld
+    # An added field is the tool's own, never one the service response already has.
+    assert not ADDED_OUTPUT_FIELDS.get(name, set()) & set(response.model_fields)
 
 
 def test_the_forecast_tool_withholds_only_the_hotel() -> None:
