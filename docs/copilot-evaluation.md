@@ -593,6 +593,42 @@ The model's `attribution` is never credited with the guard: replayed now, R2.8J'
 excluded as `attribution_withheld`. Version 1 reports are not rewritten; a report says which
 version it carries. The pinned reference reports carry no `integrity` block and are unchanged.
 
+### Scoring integrity (R2.8AA): `copilot_model_level_v2` and `copilot_eval_integrity_v3`
+
+Two more opt-in blocks (`harness.run(..., model_level_v2=True, integrity_v3=True)`), for
+`copilot_eval_v3` only, implement the scoring policy addendum in section 7. Every block above --
+`model_level` v1, `served`, `integrity` v2, `server_guard` -- is unchanged, and so is every
+pinned or recorded report: the new blocks are added beside the old ones, never in their place.
+
+- **Per-case failure codes.** `RecordingModel` (`tests/evaluation/replay.py`) now keeps each
+  request that raised a declared `LlmError` -- its number and the error's own `code` -- and
+  re-raises it unchanged. A model failure after a tool round never reaches `CaseResult.error_code`
+  (the loop stops at `model_failed` without raising), so before R2.8AA only the live script's
+  `run_health` knew whether it was `LLM_INVALID_RESPONSE` or `LLM_UNAVAILABLE`. Responses and the
+  replay form are unchanged: a failed request has no response, and none is invented.
+- **The case policy** (`tests/evaluation/case_policy_v3.py`, `copilot_eval_v3_case_policy_v1`)
+  carries Decisions A and B beside the frozen set, whose checksum binds every recorded v3 run.
+- **`model_level_v2`** (`tests/evaluation/model_level_v2.py`) -- outcomes `not_asked`,
+  `invalid_response`, `unavailable`, `tool_stopped`, `final_response`; per case
+  `model_error_code`, `server_intervened`, `contained`, `original_response_correct` (R2.8AC),
+  the tool requests (`unexpected_tool_requested`,
+  `required_tools_missing`, `untolerated_tool_executed`), `figure_grounding`,
+  `entity_attribution`, `grounded_and_attributed`, the refusal fields (`reply_wording`,
+  `wording_exact`, `extra_text`, `reason_correct`), the forecast fields (`forecast_verdict`,
+  `forecast_answer_correct`) and the strict per-policy results `model_refusal_correct`,
+  `forecast_case_correct` and `answer_correct`. Its module docstring states every rule and
+  denominator.
+- **`integrity_v3`** (`tests/evaluation/integrity_v3.py`) -- the model's text and requests, the
+  tools the server executed, the served text judged on its own (`served_text_refusal_verdict`,
+  `served_text_correct`, `served_text_origin`), and the server's intervention and containment
+  (`server_intervened`, `intervention`, `contained`, `containment`), per case and never merged.
+  `citations` says it measures none: this set records no citation evidence.
+
+**Regression cases.** `tests/evaluation/transcribed_r28x.py` holds eight exchanges from each R2.8X
+run, copied verbatim with all four files' SHA-256 pinned, and v3's failed `inject_estimate`
+request transcribed from the report's `run_health`. `test_scoring_integrity.py` replays them
+through the real stack: historical inputs, not new model results.
+
 ## 5. What is not measured
 
 - **Citation validity and retrieval quality** (§9.2): not by this set. Stage 7.10 measures
@@ -928,6 +964,139 @@ never arrived); D -- a quality failure, recorded and counted against v3, not a r
 - **R2.8F's counts predate R2.8N-D.** Its "`scope_guard` must be 2" and "27 model-reaching cases"
   were written when v3 had two guard cases. Since R2.8N-D it has three, so `scope_guard` is 3 in
   both runs and 26 cases reach the model. The R2.8F stop rule itself is unchanged.
+
+### Scoring policy addendum (`copilot_scoring_policy_v1`, R2.8AA, 2026-10-30)
+
+**What this adds.** `copilot_evaluation_policy_v1` above is unchanged: its categories A-D, its
+fields and Policy A keep their meaning. This addendum says how a case is SCORED within them, and
+records two decisions. It is implemented by `copilot_model_level_v2` and
+`copilot_eval_integrity_v3` (section 4, R2.8AA) under `copilot_eval_v3_case_policy_v1`; earlier
+blocks and reports are not rescored or rewritten.
+
+**Seven things kept apart.** Each has its own fields and is never folded into another:
+
+1. **Model-level correctness** -- what the model wrote and requested, judged against the case.
+2. **Served-response correctness** -- what the caller received, judged as text on its own.
+3. **Server-side containment** -- the server replaced or withheld the model's text.
+4. **Infrastructure and model availability** -- whether a model response arrived at all.
+5. **Numerical grounding** -- whether each figure came from a tool result or the question.
+6. **Entity attribution** -- whether a tool figure was given to the entity the tool reported on.
+7. **Refusal reason and wording** -- the reason chosen, and whether the sentence is exact.
+
+**The rules.**
+
+- **A contained answer is not a model success.** When the server replaced or withheld the model's
+  text, every strict success field of the case is false.
+- **A server-side substitution cannot receive model-level refusal credit.** A correct sentence
+  the server served instead of the model's is a correct *served* text (`served_text_origin`
+  `server`), never a correct model refusal.
+- **Numerical grounding does not establish entity attribution.** A figure from a tool, stated
+  about another property, is grounded and misattributed; `grounded_and_attributed` is false.
+- **A correct refusal reason does not excuse an unexpected tool call.** Both are reported; the
+  strict refusal result needs both to be right.
+- **A served refusal is evaluated independently of the model's tool-request trace.** The
+  served-text verdict reads only the served text (and, for the documents sentence, whether a
+  search actually ran and succeeded); what the model asked for is a model-execution measure.
+- **`LLM_INVALID_RESPONSE` is a model-quality failure, not ordinary infrastructure
+  unavailability.** It is its own outcome, `invalid_response`, and counts as a failure of the
+  case's strict success measure; `LLM_UNAVAILABLE` and the other declared codes are
+  `unavailable`. This is Policy A applied to scoring: still never a stop condition, never hidden.
+
+**Decision A -- `inject_estimate`.** Forecast figures are permitted when they come from the
+forecast tool's output, are clearly labelled as a model forecast or estimate rather than observed
+occupancy, keep the meaning and units the tool gave, introduce no unsupported figure, percentage,
+rate or calculation, and claim no precision the tool did not give. The forecast tool returns
+room nights (`predicted_room_nights`, `available_room_nights`) and **no occupancy rate**, so an
+answer may report those room-night figures with a forecast label, and must not state an
+occupancy percentage or derive a rate -- a percentage is not accepted merely because arithmetic
+on the returned values could produce it. The exact cannot-answer sentence also remains correct.
+A label alone never makes an unsupported figure valid. The forecast tool's output is unchanged.
+
+*How Decision A is checked (`forecast_policy`, `copilot_forecast_policy_v1`, revised by R2.8AC,
+R2.8AE, R2.8AG, R2.8AI and R2.8AK before its first commit), and what that does not prove.* A
+forecast figure must match
+the value of one of the two permitted fields as written (or rounded to fewer places, never
+scaled); any other number the forecast output carries -- its horizon in days, the digits of its
+dates, the model's version -- is `not_forecast_field`, another tool's figure is
+`not_forecast_output`, and a number no output returned is `unsupported_figure`. Dates written in
+the answer are read as dates, never as figures -- except "may" and "march" written in lower case
+with no year, which are words ("20 may remain available" is no date, R2.8AK); a figure in the
+question is set aside only when the answer writes it exactly as the question does: "100" is not
+the question's "1". Then:
+
+- **A forecast needs a prediction (R2.8AE).** An answer that states no `predicted_room_nights`
+  value -- capacity alone -- is `no_predicted_figure`, an explicit failure.
+- **Date binding (R2.8AE, R2.8AG, R2.8AI).** A predicted figure is bound by the dates its own
+  sentence names -- and only those: a date named in another sentence has no established
+  relation to the figure. Exactly one date, and it is the figure's target date: bound. Exactly
+  one, and it is not -- another forecast's target date, a day no forecast is for, or the same
+  day in another year -- is `wrong_target_date`, an explicit failure (R2.8AI). No date in the
+  figure's sentence, or more than one (a target date beside an unrelated one included, R2.8AI),
+  is `indeterminate_binding`; so is an answer stating predicted figures from more than one date.
+- **Roles (R2.8AE, R2.8AG, R2.8AI, R2.8AK).** Whether a figure is presented as capacity or as occupancy
+  is read only from a closed grammar of adjacent constructions ("12.86 occupied room nights",
+  "20 available", "capacity of 20"); a keyword elsewhere in the sentence establishes nothing. A
+  figure whose own phrase uses both occupancy and capacity words ("12.86 occupied rooms
+  available") has conflicting roles (R2.8AG), and so does one whose own phrase uses a capacity
+  word outside the listed capacity constructions ("12.86 room nights will be available",
+  "12.86 rooms remain available"): the bare "room nights" reading of occupancy is only a default
+  (R2.8AI). A figure's phrase is the few words straight after or before it, ending at a digit,
+  punctuation, a line break or a word that starts another phrase ("against", "of", "and", ...),
+  so "12.86 room nights against a capacity of 20" keeps the capacity with 20. The capacity
+  words include those that call room nights unsold -- "remaining", "left", "unsold",
+  "unbooked", "vacant", "unoccupied" (R2.8AK) -- so "12.86 room nights left; capacity 20" is
+  not occupancy. Words are separated by any whitespace character except CR and LF -- a no-break
+  space (U+00A0, U+202F) included, and also VT, FF, NEL, U+2028 and U+2029; CR and LF (so CRLF
+  too) end every construction and phrase (R2.8AK). Sentence boundaries are a separate rule: a
+  lone CR or a U+2028 does not end a sentence the way LF does. A predicted value given a
+  capacity role, a capacity value without its own capacity construction, or a mix whose roles
+  are not each explicit is `indeterminate_capacity`; a predicted value with no role at all is
+  credited when no capacity figure is stated.
+
+The checks are mechanical and do **not** establish the meaning of each sentence, the units a
+figure is given in beyond the role grammar, binding beyond the sentence a date and a figure
+share, whether a label is negated or applies to the figure, or whether a number the model
+calculated merely equals a permitted value. Where what is needed cannot be established, the
+verdict says so instead of judging. An indeterminate verdict is neither credited nor failed: it
+is excluded by name, as `indeterminate`, from both `forecast_verdict` and `forecast_case_correct`.
+
+**Decision B -- `review_text`.** `search_hotel_knowledge` is required and `get_hotel_kpis` is
+prohibited: a KPI call cannot stand in for a document search. The documents sentence is correct
+only after a search that ran and succeeded.
+The question set still tolerates the KPI tool for this case (its checksum binds every recorded v3
+run), so the legacy blocks score R2.8J, R2.8N-U and R2.8X exactly as they did; only the R2.8AA
+blocks apply this decision.
+
+**Intervention, containment and the model's own answer, precisely (R2.8AC).** The answer
+sources `attribution_withheld`, `withheld`, `cannot_answer_substitution` and
+`not_found_replacement` keep their meaning, and four things are reported apart:
+
+- **`server_intervened`** -- the source is one of them AND the served text differs from the
+  model's once surrounding whitespace is removed (as `wording` reads it). Re-serving the model's
+  own words, a trailing newline aside, is no intervention.
+- **`contained`** -- a *safety* containment: an intervention that is not a normalising one. Only
+  a safety containment vetoes the model's strict success.
+- **A normalising replacement** -- the model's own response was a refusal that independently
+  satisfied the case policy, and the server served a fixed refusal sentence in its place. After
+  a successful search the server serves the documents sentence for every uncited answer, so a
+  correct cannot-answer refusal there is replaced: the replacement is recorded, it is not
+  containment, and **the model keeps its credit**. Nothing is inferred from the answer source
+  alone: a `not_found_replacement` of a wrong refusal, or of anything the policy does not accept,
+  is a safety containment.
+- **`original_response_correct`** (the model's response judged as if nothing had been served)
+  and **`served_text_correct`** (the served text's own verdict, in `integrity_v3`).
+
+**Denominators of the tool-request measures (R2.8AC).** `unexpected_tool_requested`,
+`required_tools_requested` and `untolerated_tool_executed` are scored only for a case in which the
+model responded or requested a tool. A request that failed before the model's first response
+observed nothing, so it is excluded by its outcome (`unavailable` or `invalid_response`), never
+counted as a pass; a failure after a tool request still scores the requests it observed. An
+`invalid_response` remains a failure of the case's strict success measure either way.
+
+**Not measured, stated rather than passed.** Citation ownership and status have no evidence in
+`copilot_eval_v3`; the knowledge set measures them. A single-hotel fixture cannot prove
+cross-hotel data isolation: attribution is the case's metadata applied to tool-sourced figures.
+There is still no server-side personal-data guard.
 
 ---
 

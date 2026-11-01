@@ -101,8 +101,11 @@ from app.services.copilot import AnsweredTurn, CopilotService
 from app.services.tool_invocation import UNKNOWN_REFERENCE, ToolInvocationService
 from tests.evaluation import expectations_v3_v2 as guard_block
 from tests.evaluation import integrity as integrity_block
+from tests.evaluation import integrity_v3 as integrity_v3_block
 from tests.evaluation import model_level as model_level_block
+from tests.evaluation import model_level_v2 as model_level_v2_block
 from tests.evaluation import scorers
+from tests.evaluation.case_policy_v3 import policies_for
 from tests.evaluation.expectations_v3 import EXPECTATIONS_V3, CaseExpectation
 from tests.evaluation.fixture_documents import FixtureKnowledge
 from tests.evaluation.fixture_hotel import (
@@ -599,9 +602,29 @@ def run_case_served(
                 )
                 if served.served_answer
                 else (),
+                model_failures=tuple(recorder.failures),
+                tool_outputs=_named_tool_outputs(last_request),
             )
         )
     return result, served
+
+
+def _named_tool_outputs(request: ChatRequest | None) -> tuple[tuple[str, Any], ...]:
+    """R2.8AA. `_tool_outputs_seen`, each output beside the name of the tool that returned it --
+    paired through the call id the request's own assistant turns carry."""
+    if request is None:
+        return ()
+    names = {
+        call.id: call.name
+        for message in request.messages
+        if message.role == "assistant"
+        for call in message.tool_calls
+    }
+    return tuple(
+        (names.get(message.tool_call_id or "", ""), json.loads(message.content))
+        for message in request.messages
+        if message.role == "tool" and not message.is_error
+    )
 
 
 # --- a whole run ---------------------------------------------------------------------------------
@@ -706,6 +729,8 @@ def run(
     model_level: bool = False,
     integrity: bool = False,
     server_guard: bool = False,
+    model_level_v2: bool = False,
+    integrity_v3: bool = False,
 ) -> dict[str, Any]:
     """Run every case under *prompt* and return the report. Deterministic for a replay.
 
@@ -715,9 +740,12 @@ def run(
     for a set with explicit expectations (`expectations_for`). *server_guard* (R2.8N-G) adds a
     `server_guard` block: `copilot_eval_v3_expectations_v2`'s verdict on the cases the server must
     refuse before any model call, for `copilot_eval_v3` or an exact selection of its cases only.
+    *model_level_v2* and *integrity_v3* (R2.8AA) add `copilot_model_level_v2` and
+    `copilot_eval_integrity_v3`, scored under `case_policy_v3`, for `copilot_eval_v3` only.
     All are off by default, so a report without them -- every pinned one -- is exactly what it
     was. A set a requested block cannot apply to is refused before any case runs."""
     expectations = expectations_for(question_set) if integrity else None
+    policies = policies_for(question_set) if model_level_v2 or integrity_v3 else None
     if server_guard:
         guard_block.require_selection(question_set)
     registry = build_default_registry()
@@ -737,7 +765,7 @@ def run(
             measure_latency=mode == "live",
             prompt=prompt,
             forecasts=forecasts_for(question_set),
-            evidence=evidence_rows if integrity else None,
+            evidence=evidence_rows if integrity or policies is not None else None,
         )
         results.append(result)
         served_rows.append(served_row)
@@ -781,6 +809,14 @@ def run(
         )
     if server_guard:
         report["server_guard"] = guard_block.block(question_set, served_rows)
+    if policies is not None and model_level_v2:
+        report["model_level_v2"] = model_level_v2_block.block(
+            question_set.cases, results, served_rows, evidence_rows, policies
+        )
+    if policies is not None and integrity_v3:
+        report["integrity_v3"] = integrity_v3_block.block(
+            question_set.cases, results, served_rows, evidence_rows, policies
+        )
     return report
 
 

@@ -86,6 +86,7 @@ from typing import TYPE_CHECKING, Any
 from tests.evaluation import model_level, scorers, v3_pilot_analysis
 from tests.evaluation.expectations_v3 import CaseExpectation
 from tests.evaluation.questions import EvalCase
+from tests.evaluation.replay import RecordedFailure
 
 if TYPE_CHECKING:
     from tests.evaluation.harness import CaseResult, ServedResult
@@ -145,6 +146,12 @@ class CaseEvidence:
     tool_sourced_figures: tuple[str, ...]
     #: The same, in the answer the caller was served (R2.8N); empty when nothing was served.
     served_tool_sourced_figures: tuple[str, ...] = ()
+    #: R2.8AA. Every request of the case that raised a declared LLM failure, in order -- read by
+    #: `model_level_v2` and `integrity_v3` only; this block's rows do not use it.
+    model_failures: tuple[RecordedFailure, ...] = ()
+    #: R2.8AA. The successful tool results the model was shown in its last request, each beside
+    #: the name of the tool that returned it, in the order shown.
+    tool_outputs: tuple[tuple[str, Any], ...] = ()
 
 
 def tool_sourced_figures(text: str, tool_outputs: Sequence[Any], question: str) -> tuple[str, ...]:

@@ -23,9 +23,10 @@ HEADING = "### Copilot evaluation policy v1 (`copilot_evaluation_policy_v1`, R2.
 
 
 def policy() -> str:
+    """The R2.8R section alone: up to the next section of its level (R2.8AA's addendum) or rule."""
     text = DOC.read_text(encoding="utf-8")
     assert text.count(HEADING) == 1
-    return text.split(HEADING, 1)[1].split("\n---", 1)[0]
+    return text.split(HEADING, 1)[1].split("\n---", 1)[0].split("\n### ", 1)[0]
 
 
 def subsection(letter: str) -> str:

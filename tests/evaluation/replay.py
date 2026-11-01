@@ -38,6 +38,7 @@ from app.llm.base import (
     TokenUsage,
     ToolCall,
 )
+from app.llm.errors import LlmError
 from app.llm.prompts import PromptRecord
 
 #: Recorded wherever a live run could not establish a value. Never replaced by a guess.
@@ -213,17 +214,59 @@ class ReplayModel:
         return _response(request, self._turns[len(self.requests) - 1])
 
 
+class ReplayThenRaise:
+    """R2.8AA. `ReplayModel` for a recording whose last request FAILED: answers with *turns*, then
+    raises *error* -- a declared `LlmError` -- on the next request, and fails loudly past that.
+
+    A replay file holds responses only, so a request that raised is absent from it; this
+    reproduces one transcribed from the same run's report, at exactly the request it raised on.
+    """
+
+    def __init__(self, turns: Sequence[Turn], error: LlmError) -> None:
+        self._replay = ReplayModel(turns)
+        self._turns = len(turns)
+        self._error = error
+        self.requests: list[ChatRequest] = []
+
+    def complete(self, request: ChatRequest) -> ChatResponse:
+        self.requests.append(request)
+        if len(self.requests) == self._turns + 1:
+            raise self._error
+        return self._replay.complete(request)
+
+
+@dataclass(frozen=True, slots=True)
+class RecordedFailure:
+    """R2.8AA. A request that raised a declared LLM failure: its number among the case's
+    requests (1-based) and the error's own `code` -- the structured attribute, never a message."""
+
+    request: int
+    code: str
+
+
 class RecordingModel:
-    """Wraps any `ChatModel` and keeps every request and response. Changes nothing."""
+    """Wraps any `ChatModel` and keeps every request and response. Changes nothing.
+
+    *R2.8AA.* A request that raises a declared `LlmError` is also kept, in `failures`, and the
+    error is re-raised unchanged. The tool loop turns a failure after a tool round into the stop
+    reason `model_failed` without raising, so this is the one place the case can still learn which
+    code ended it -- `LLM_INVALID_RESPONSE` or `LLM_UNAVAILABLE` alike. `responses` and `turns`
+    stay exactly as before: a failed request has no response, and none is invented for it.
+    """
 
     def __init__(self, inner: ChatModel) -> None:
         self._inner = inner
         self.requests: list[ChatRequest] = []
         self.responses: list[ChatResponse] = []
+        self.failures: list[RecordedFailure] = []
 
     def complete(self, request: ChatRequest) -> ChatResponse:
         self.requests.append(request)
-        response = self._inner.complete(request)
+        try:
+            response = self._inner.complete(request)
+        except LlmError as failed:
+            self.failures.append(RecordedFailure(request=len(self.requests), code=failed.code))
+            raise
         self.responses.append(response)
         return response
 
@@ -256,9 +299,11 @@ __all__ = [
     "REFERENCE_PROVIDER",
     "REPLAY_FORMAT",
     "UNKNOWN",
+    "RecordedFailure",
     "RecordingModel",
     "ReplayError",
     "ReplayModel",
+    "ReplayThenRaise",
     "ReplayableSet",
     "Replays",
     "Turn",

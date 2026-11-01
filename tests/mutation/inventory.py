@@ -3940,6 +3940,411 @@ STAGE_R2_2B = [
 ]
 
 
+# --- R2.8AA: evaluation scoring integrity -----------------------------------------------------
+
+MODEL_LEVEL_V2 = "tests/evaluation/model_level_v2.py"
+INTEGRITY_V3 = "tests/evaluation/integrity_v3.py"
+CASE_POLICY_V3 = "tests/evaluation/case_policy_v3.py"
+FORECAST_POLICY = "tests/evaluation/forecast_policy.py"
+SCORING_TESTS = "tests/evaluation/test_scoring_integrity.py"
+FAILURE_TESTS = "tests/evaluation/test_model_failure_recording.py"
+CASE_POLICY_TESTS = "tests/evaluation/test_case_policy_v3.py"
+FORECAST_TESTS = "tests/evaluation/test_forecast_policy.py"
+
+
+def scoring(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R2.8AA-M{number}", "R2.8AA", breaks, one(path, old, new), killers)
+
+
+STAGE_R2_8AA = [
+    scoring(
+        1,
+        "an invalid response is filed as unavailable",
+        MODEL_LEVEL_V2,
+        '        return "invalid_response" if code == INVALID_RESPONSE_CODE else "unavailable"\n',
+        '        return "unavailable"\n',
+        f"{SCORING_TESTS}::test_v3s_invalid_response_is_a_scored_model_failure",
+        f"{FAILURE_TESTS}::test_a_model_failure_with_no_recorded_code_is_refused_not_guessed",
+    ),
+    scoring(
+        2,
+        "the containment veto is removed",
+        MODEL_LEVEL_V2,
+        "    if contained:\n        # The containment veto",
+        "    if False:\n        # The containment veto",
+        f"{SCORING_TESTS}::"
+        "test_the_veto_fails_a_safety_containment_even_when_the_models_text_would_pass",
+    ),
+    scoring(
+        3,
+        "the served-text refusal verdict reads the model's tool requests",
+        INTEGRITY_V3,
+        "                case, policy.expectation, text, NO_TOOL_TRACE, seen.searched\n",
+        "                case, policy.expectation, text, evidence.requested_tools, seen.searched\n",
+        f"{SCORING_TESTS}::test_the_served_refusal_does_not_inherit_the_models_tool_trace",
+    ),
+    scoring(
+        4,
+        "a wrong reason outranks an unexpected tool call",
+        INTEGRITY_V3,
+        "    if untolerated:\n",
+        '    if untolerated and reason_status == "correct":\n',
+        f"{SCORING_TESTS}::test_an_unexpected_tool_outranks_a_wrong_reason",
+    ),
+    scoring(
+        5,
+        "entity attribution is ignored once the figures are grounded",
+        MODEL_LEVEL_V2,
+        '    return grounding and entity != "misattributed"\n',
+        "    return grounding\n",
+        f"{SCORING_TESTS}::test_a_grounded_figure_about_the_wrong_entity_is_not_a_success[r28x_v3]",
+        f"{SCORING_TESTS}::test_a_grounded_figure_about_the_wrong_entity_is_not_a_success[r28x_v4]",
+    ),
+    scoring(
+        6,
+        "review_text tolerates the KPI tool again",
+        CASE_POLICY_V3,
+        '    "review_text": (frozenset({KNOWLEDGE_TOOL}), frozenset({KNOWLEDGE_TOOL})),\n',
+        '    "review_text": (frozenset({KNOWLEDGE_TOOL, KPI_TOOL}), '
+        "frozenset({KNOWLEDGE_TOOL})),\n",
+        f"{CASE_POLICY_TESTS}::"
+        "test_review_text_requires_the_search_and_does_not_tolerate_the_kpi_tool",
+        f"{SCORING_TESTS}::test_review_text_kpi_call_without_a_search_is_rejected_and_contained"
+        "[r28x_v3]",
+    ),
+    scoring(
+        7,
+        "every forecast figure is rejected, the tool's own included",
+        FORECAST_POLICY,
+        "        matching = [f for f in fields if _matches(written, value, f.value)]\n",
+        "        matching = []\n",
+        f"{SCORING_TESTS}::test_a_labelled_room_night_forecast_is_permitted_and_served",
+        f"{FORECAST_TESTS}::test_a_labelled_single_date_room_night_forecast_is_permitted[exact]",
+    ),
+    scoring(
+        8,
+        "a figure no forecast returned is accepted",
+        FORECAST_POLICY,
+        "            failures.append(UNSUPPORTED)\n",
+        "            failures.append(LABELLED)\n",
+        f"{FORECAST_TESTS}::test_a_calculation_on_forecast_values_fails[sum]",
+        f"{SCORING_TESTS}::test_an_unsupported_or_unlabelled_forecast_fails[sum]",
+    ),
+    scoring(
+        9,
+        "a percentage of a returned number is accepted",
+        FORECAST_POLICY,
+        "    if PERCENT.search(text):\n",
+        "    if False:\n",
+        f"{FORECAST_TESTS}::test_a_percentage_fails_even_when_its_number_was_returned",
+    ),
+]
+
+
+# --- R2.8AC: scoring defect remediation (the R2.8AB audit) ------------------------------------
+
+
+def remediation(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R2.8AC-M{number}", "R2.8AC", breaks, one(path, old, new), killers)
+
+
+STAGE_R2_8AC = [
+    remediation(
+        1,
+        "a question figure is excluded through scaling and rounding again",
+        FORECAST_POLICY,
+        "        if written not in asked:\n",
+        '        if not scorers.traceable(written, Decimal(written.replace(",", "")), '
+        "[abs(v) for _, v in scorers.figures_in(question)]):\n",
+        f"{FORECAST_TESTS}::test_a_question_figure_times_100_is_a_new_unsupported_figure"
+        "[one_times_100]",
+    ),
+    remediation(
+        2,
+        "every number in a forecast output is a permitted source",
+        FORECAST_POLICY,
+        "    fields = field_values(forecasts)\n",
+        '    fields = [FieldValue(PREDICTED_FIELD, v, "") for v in forecast_numbers]\n',
+        f"{FORECAST_TESTS}::test_the_horizon_presented_as_predicted_room_nights_fails",
+    ),
+    remediation(
+        3,
+        "figures from several forecast dates are judged as if bound",
+        FORECAST_POLICY,
+        "    if len({d for s in predicted for d in s.predicted_dates}) > 1:\n",
+        "    if False:\n",
+        f"{FORECAST_TESTS}::"
+        "test_predicted_figures_from_two_dates_stay_indeterminate_even_when_each_is_bound",
+    ),
+    remediation(
+        4,
+        "a capacity figure's role is never checked",
+        FORECAST_POLICY,
+        "    if not roles_established(text, stated):\n",
+        "    if False:\n",
+        f"{FORECAST_TESTS}::test_capacity_presented_as_occupied_room_nights_is_indeterminate",
+    ),
+    remediation(
+        5,
+        "model and served texts are compared raw again",
+        MODEL_LEVEL_V2,
+        '    return (text or "").strip()\n',
+        '    return text or ""\n',
+        f"{SCORING_TESTS}::test_intervention_containment_model_and_served_are_judged_apart"
+        "[trailing_newline_only]",
+    ),
+    remediation(
+        6,
+        "a correct refusal replaced by a fixed sentence loses its credit",
+        MODEL_LEVEL_V2,
+        '    contained = intervened and not normalising(served, row["model_refusal_correct"])\n',
+        "    contained = intervened\n",
+        f"{SCORING_TESTS}::test_a_correct_refusal_replaced_by_a_fixed_sentence_keeps_its_credit",
+    ),
+    remediation(
+        7,
+        "a failure before any response passes the tool-request measures",
+        MODEL_LEVEL_V2,
+        "    responded = served.model_responses > 0 or bool(evidence.requested_tools)\n",
+        '    responded = kind != "not_asked"\n',
+        f"{SCORING_TESTS}::test_a_tool_request_measure_scores_only_an_observed_response_or_request"
+        "[unavailable_before_first_response]",
+    ),
+]
+
+
+# --- R2.8AE: forecast semantic safety (the R2.8AD audit) --------------------------------------
+
+
+def forecast_safety(
+    number: int, breaks: str, path: str, old: str, new: str, *killers: str
+) -> Mutation:
+    return Mutation(f"R2.8AE-M{number}", "R2.8AE", breaks, one(path, old, new), killers)
+
+
+STAGE_R2_8AE = [
+    forecast_safety(
+        1,
+        "a figure stated for another forecast's date is credited",
+        FORECAST_POLICY,
+        "    if binding == WRONG_TARGET_DATE:\n",
+        "    if False:\n",
+        f"{FORECAST_TESTS}::test_the_r2_8ad_wrong_date_probe_gets_no_credit",
+    ),
+    forecast_safety(
+        2,
+        "a figure is bound although its sentence names two target dates",
+        FORECAST_POLICY,
+        "        if len(evidence) != 1:\n",
+        "        if not evidence:\n",
+        f"{FORECAST_TESTS}::test_a_predicted_figure_is_bound_to_its_target_date[two_target_dates]",
+    ),
+    forecast_safety(
+        3,
+        "the capacity keyword anywhere in the text settles the roles again",
+        FORECAST_POLICY,
+        "    if not roles_established(text, stated):\n",
+        "    if any(s.fields == {CAPACITY_FIELD} for s in stated) and not CAPACITY.search(text):\n",
+        f"{FORECAST_TESTS}::test_predicted_and_capacity_roles_must_each_be_explicit"
+        "[available_keyword_elsewhere]",
+        f"{FORECAST_TESTS}::test_predicted_and_capacity_roles_must_each_be_explicit[swapped_f1]",
+    ),
+    forecast_safety(
+        4,
+        "a capacity-only answer is credited as a forecast",
+        FORECAST_POLICY,
+        "    if not predicted:\n",
+        "    if False:\n",
+        f"{FORECAST_TESTS}::test_capacity_only_is_not_a_forecast_answer[f8_probe]",
+    ),
+    forecast_safety(
+        5,
+        "an indeterminate verdict is scored in forecast_verdict",
+        MODEL_LEVEL_V2,
+        'INDETERMINATE_VALUES: dict[str, frozenset[str]] = {\n    "forecast_verdict": '
+        "forecast_policy.INDETERMINATE\n}\n",
+        "INDETERMINATE_VALUES: dict[str, frozenset[str]] = {}\n",
+        f"{SCORING_TESTS}::test_forecast_verdict_and_case_correct_share_their_denominators"
+        "[indeterminate]",
+    ),
+    forecast_safety(
+        6,
+        "an indeterminate forecast is scored as a failure",
+        MODEL_LEVEL_V2,
+        '            indeterminate = row["forecast_verdict"] in forecast_policy.INDETERMINATE\n',
+        "            indeterminate = False\n",
+        f"{SCORING_TESTS}::test_forecast_verdict_and_case_correct_share_their_denominators"
+        "[indeterminate]",
+    ),
+    forecast_safety(
+        7,
+        "an indeterminate forecast is scored as a success",
+        MODEL_LEVEL_V2,
+        'kind in JUDGED and not indeterminate:\n            row["forecast_case_correct"] = bool(\n'
+        '                row["model_refusal_correct"] or row["forecast_answer_correct"]\n',
+        'kind in JUDGED:\n            row["forecast_case_correct"] = bool(\n'
+        '                row["model_refusal_correct"] or row["forecast_answer_correct"] or '
+        "indeterminate\n",
+        f"{SCORING_TESTS}::test_forecast_verdict_and_case_correct_share_their_denominators"
+        "[indeterminate]",
+    ),
+]
+
+
+# --- R2.8AG: the R2.8AF forecast false positives ----------------------------------------------
+
+
+def false_positive(
+    number: int, breaks: str, path: str, old: str, new: str, *killers: str
+) -> Mutation:
+    return Mutation(f"R2.8AG-M{number}", "R2.8AG", breaks, one(path, old, new), killers)
+
+
+STAGE_R2_8AG = [
+    false_positive(
+        1,
+        "a target date in another sentence binds the figure again",
+        FORECAST_POLICY,
+        "        evidence = own\n",
+        "        evidence = own or {iso for _, iso in named if iso is not None}\n",
+        f"{FORECAST_TESTS}::test_a_target_date_in_another_sentence_binds_nothing",
+    ),
+    false_positive(
+        2,
+        "conflicting role words in a figure's own phrase are accepted",
+        FORECAST_POLICY,
+        "    if any(_conflicting(phrase) for phrase in local):\n",
+        "    if False:\n",
+        f"{FORECAST_TESTS}::test_occupied_rooms_available_is_a_role_conflict",
+    ),
+]
+
+
+# --- R2.8AI: the R2.8AH role false positive, phrase boundaries, explicit non-target dates ------
+
+
+def hardening(
+    number: int, breaks: str, path: str, old: str, new: str, *killers: str, note: str = ""
+) -> Mutation:
+    return Mutation(f"R2.8AI-M{number}", "R2.8AI", breaks, one(path, old, new), killers, note=note)
+
+
+#: Why R2.8AI-M2 and -M5 name other source lines than R2.8AI ran.
+REPINNED_R2_8AK = (
+    "R2.8AK rewrote the pattern on the shared `_GAP`/`_JOIN`/`_WORD` pieces (a no-break space is "
+    "a space); the edit is re-pinned onto the new source line and makes the same break."
+)
+
+
+STAGE_R2_8AI = [
+    hardening(
+        1,
+        "a capacity word after a figure, outside the grammar, leaves it occupancy",
+        FORECAST_POLICY,
+        "    if _unlisted_capacity(following, capacity_after):\n",
+        "    if False:\n",
+        f"{FORECAST_TESTS}::test_room_nights_still_available_is_not_occupancy",
+    ),
+    hardening(
+        2,
+        "a figure's following phrase is four words long again",
+        FORECAST_POLICY,
+        'FOLLOWING = re.compile(rf"{_GAP}*((?:{_WORD}{_JOIN}+){{0,5}}{_WORD})")\n',
+        'FOLLOWING = re.compile(rf"{_GAP}*((?:{_WORD}{_JOIN}+){{0,3}}{_WORD})")\n',
+        f"{FORECAST_TESTS}::test_room_nights_will_be_available_is_not_occupancy",
+        note=REPINNED_R2_8AK,
+    ),
+    hardening(
+        3,
+        "a capacity word before a figure, outside the grammar, leaves it occupancy",
+        FORECAST_POLICY,
+        "    if _unlisted_capacity(preceding, capacity_before):\n",
+        "    if False:\n",
+        f"{FORECAST_TESTS}::test_available_before_the_figure_is_not_occupancy",
+    ),
+    hardening(
+        4,
+        "both kinds of word before a figure are no conflict",
+        FORECAST_POLICY,
+        "    local = [m.group(1) for m in (LOCAL_AFTER.match(after), LOCAL_BEFORE.search(before)) "
+        "if m]\n",
+        "    local = [m.group(1) for m in (LOCAL_AFTER.match(after),) if m]\n",
+        f"{FORECAST_TESTS}::test_both_kinds_of_word_before_the_figure_are_a_conflict",
+    ),
+    hardening(
+        5,
+        "a figure's local phrase runs on past a line break",
+        FORECAST_POLICY,
+        'LOCAL_AFTER = re.compile(rf"{_GAP}*((?:{_WORD}{_JOIN}+){{0,3}}{_WORD})")\n',
+        'LOCAL_AFTER = re.compile(r"\\s*((?:[^\\W\\d_]+[\\s-]+){0,3}[^\\W\\d_]+)")\n',
+        f"{FORECAST_TESTS}::test_a_line_break_ends_a_figures_phrase",
+        note=REPINNED_R2_8AK,
+    ),
+    hardening(
+        6,
+        "a capacity word past a phrase stop is read as the figure's",
+        FORECAST_POLICY,
+        "    stops = [i for i, word in enumerate(words) if word.lower() in PHRASE_STOP]\n",
+        "    stops: list[int] = []\n",
+        f"{FORECAST_TESTS}::test_a_capacity_word_past_a_phrase_stop_belongs_to_another_phrase",
+    ),
+    hardening(
+        7,
+        "a date no forecast is for is ignored again",
+        FORECAST_POLICY,
+        "    named = [(m, m.target(targets) or m.iso) for m in mentions]\n",
+        "    named = [(m, m.target(targets)) for m in mentions if m.target(targets)]\n",
+        f"{FORECAST_TESTS}::test_a_single_non_target_date_is_a_wrong_date",
+    ),
+]
+
+
+# --- R2.8AK: the R2.8AJ no-break space regression, word months, unsold-capacity words ---------
+
+
+def regression_fix(
+    number: int, breaks: str, path: str, old: str, new: str, *killers: str
+) -> Mutation:
+    return Mutation(f"R2.8AK-M{number}", "R2.8AK", breaks, one(path, old, new), killers)
+
+
+STAGE_R2_8AK = [
+    regression_fix(
+        1,
+        "the gap between words is a space or tab only again",
+        FORECAST_POLICY,
+        '_GAP = r"[^\\S\\r\\n]"\n',
+        '_GAP = r"[ \\t]"\n',
+        f"{FORECAST_TESTS}::test_a_no_break_space_after_a_figure_is_a_space",
+    ),
+    regression_fix(
+        2,
+        "phrases join words by a space or tab only, while the gap stays wide",
+        FORECAST_POLICY,
+        '_JOIN = rf"(?:{_GAP}|-)"\n',
+        '_JOIN = r"[ \\t-]"\n',
+        f"{FORECAST_TESTS}::test_a_no_break_space_between_words_is_a_space",
+    ),
+    regression_fix(
+        3,
+        '"20 may remain available" is read as 20 May again',
+        FORECAST_POLICY,
+        "            if month_word in WORD_MONTHS and written_year is None:\n",
+        "            if False:\n",
+        f"{FORECAST_TESTS}::test_twenty_may_remain_available_states_no_date",
+    ),
+    regression_fix(
+        4,
+        "the words for unsold room nights are no capacity words again",
+        FORECAST_POLICY,
+        '    r"\\b(?:available|availability|capacity|remaining|left|unsold|unbooked|vacant|vacancy'
+        '|vacancies"\n    r"|unoccupied)\\b",\n',
+        '    r"\\b(?:available|availability|capacity)\\b",\n',
+        f"{FORECAST_TESTS}::test_room_nights_left_against_a_capacity_is_not_occupancy",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -3970,4 +4375,10 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_H8,
     *STAGE_R2_2,
     *STAGE_R2_2B,
+    *STAGE_R2_8AA,
+    *STAGE_R2_8AC,
+    *STAGE_R2_8AE,
+    *STAGE_R2_8AG,
+    *STAGE_R2_8AI,
+    *STAGE_R2_8AK,
 )
