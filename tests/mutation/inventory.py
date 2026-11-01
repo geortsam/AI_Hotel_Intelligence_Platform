@@ -4345,6 +4345,26 @@ STAGE_R2_8AK = [
 ]
 
 
+# --- R2.9B: the R2.8AA scoring blocks in the live evaluation script -----------------------------
+
+LIVE_SCRIPT = "scripts/copilot_live_eval.py"
+LIVE_SCRIPT_TESTS = "tests/evaluation/test_live_eval_script.py"
+
+STAGE_R2_9B = [
+    Mutation(
+        "R2.9B-M1",
+        "R2.9B",
+        "a live v3 run no longer asks the harness for the R2.8AA scoring blocks",
+        one(
+            LIVE_SCRIPT,
+            '        blocks["model_level_v2"] = True\n        blocks["integrity_v3"] = True\n',
+            "",
+        ),
+        (f"{LIVE_SCRIPT_TESTS}::test_a_v3_run_asks_the_harness_for_both_r2_8aa_blocks",),
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -4381,4 +4401,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R2_8AG,
     *STAGE_R2_8AI,
     *STAGE_R2_8AK,
+    *STAGE_R2_9B,
 )

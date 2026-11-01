@@ -1449,3 +1449,206 @@ def test_an_ordinary_run_carries_an_empty_annotation_block(world: World) -> None
     assert world.run("--case", "kpis_may_occupancy") == 0
     _, report = world.files()
     assert report["diagnostic_annotations"]["annotations"] == []
+
+
+# --- R2.9B: the R2.8AA scoring blocks in a live v3 run ---------------------------------------
+
+#: The two R2.8AA flags `harness.run` takes. A live run asks for them on a v3 set only.
+SCORING_V2_FLAGS = ("model_level_v2", "integrity_v3")
+
+
+def spy_on_runners(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Record the keyword arguments the script passes to either harness, then run it for real."""
+    from tests.evaluation import harness, knowledge_harness
+
+    calls: list[dict[str, Any]] = []
+    for module in (harness, knowledge_harness):
+        real = module.run
+
+        def spy(*args: Any, _real: Any = real, **kwargs: Any) -> Any:
+            calls.append(kwargs)
+            return _real(*args, **kwargs)
+
+        monkeypatch.setattr(module, "run", spy)
+    return calls
+
+
+class ToolThenInvalid:
+    """Asks for the forecast tool, then fails the next request as R2.8X's v3 `inject_estimate`
+    did: `LLM_INVALID_RESPONSE`, a reply cut off while writing tool calls. SYNTHETIC."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(self, request: ChatRequest) -> ChatResponse:
+        from app.llm.base import ToolCall
+        from app.llm.errors import InvalidResponseDiagnostics, LlmInvalidResponseError
+
+        self.calls += 1
+        if self.calls > 1:
+            raise LlmInvalidResponseError(
+                diagnostics=InvalidResponseDiagnostics("length_with_tool_calls", provider="ollama")
+            )
+        call = ToolCall(
+            id="call-1", name="get_demand_forecast", arguments={"target_date": "2026-06-01"}
+        )
+        return ChatResponse(
+            text="",
+            parsed=None,
+            usage=TokenUsage(input_tokens=3, output_tokens=2),
+            latency_ms=0.0,
+            provider="ollama",
+            model=CONFIGURED,
+            finish_reason="tool_use",
+            prompt_id=request.prompt_id,
+            prompt_version=request.prompt_version,
+            tool_calls=(call,),
+        )
+
+
+def test_a_v3_run_asks_the_harness_for_both_r2_8aa_blocks(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = spy_on_runners(monkeypatch)
+    argv = ["--set", "copilot_eval_v3", "--prompt", "copilot_answer@v3"]
+    assert local(world).run(*argv, "--case", "kpis_may_occupancy") == 0
+
+    [options] = calls
+    assert {flag: options.get(flag) for flag in SCORING_V2_FLAGS} == {
+        "model_level_v2": True,
+        "integrity_v3": True,
+    }
+    # Beside the blocks a v3 run already asked for, never instead of them.
+    assert all(options[flag] is True for flag in ("served", "model_level", "integrity"))
+    assert options["server_guard"] is True
+
+
+def test_a_full_v3_run_carries_both_blocks_with_their_versions_and_policies(
+    world: World,
+) -> None:
+    from app.llm.prompts.registry import CANNOT_ANSWER
+    from tests.evaluation.integrity_v3 import INTEGRITY_V3_VERSION
+    from tests.evaluation.model_level_v2 import MODEL_LEVEL_V2_VERSION
+    from tests.evaluation.questions_v3 import COPILOT_EVAL_V3
+
+    local(world).text = CANNOT_ANSWER
+    assert world.run("--set", "copilot_eval_v3", "--prompt", "copilot_answer@v3") == 0
+
+    _, report = world.files(V3)
+    level, integrity = report["model_level_v2"], report["integrity_v3"]
+    assert (level["version"], integrity["version"]) == (
+        MODEL_LEVEL_V2_VERSION,
+        INTEGRITY_V3_VERSION,
+    )
+    ids = [case.case_id for case in COPILOT_EVAL_V3.cases]
+    assert [row["case_id"] for row in level["cases"]] == ids
+    assert [row["case_id"] for row in integrity["cases"]] == ids
+    # The three server-guard cases never reach the model; every other case answered once.
+    assert level["outcomes"] == {
+        "final_response": 26,
+        "invalid_response": 0,
+        "not_asked": 3,
+        "tool_stopped": 0,
+        "unavailable": 0,
+    }
+    rows = {row["case_id"]: row for row in level["cases"]}
+    # Decision A: the exact cannot-answer sentence is a correct answer to inject_estimate.
+    estimate = rows["inject_estimate"]
+    assert (estimate["answer_policy"], estimate["forecast_case_correct"]) == (
+        "forecast_permitted",
+        True,
+    )
+    # Decision B: review_text needs a document search, and the stand-in made none.
+    review = rows["review_text"]
+    assert review["required_tools_missing"] == ["search_hotel_knowledge"]
+    assert review["model_refusal_correct"] is False
+    # The legacy blocks stay beside the new ones, for comparison.
+    assert {"served", "model_level", "integrity", "server_guard"} <= set(report)
+
+
+def test_a_v3_case_selection_scores_only_the_selected_cases(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = spy_on_runners(monkeypatch)
+    argv = ["--set", "copilot_eval_v3", "--prompt", "copilot_answer@v3"]
+    assert local(world).run(*argv, "--case", "inject_estimate", "--case", "review_text") == 0
+
+    [options] = calls
+    assert all(options.get(flag) is True for flag in SCORING_V2_FLAGS)
+    _, report = world.files(V3)
+    for name in SCORING_V2_FLAGS:
+        assert [row["case_id"] for row in report[name]["cases"]] == [
+            "review_text",
+            "inject_estimate",
+        ]
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--case", "kpis_may_occupancy"],  # v1, the default set
+        ["--set", "copilot_eval_v2", "--case", "kpis_may_occupancy"],
+        [
+            "--set",
+            "copilot_knowledge_eval_v1",
+            "--case",
+            COPILOT_KNOWLEDGE_EVAL_V1.cases[0].case_id,
+        ],
+    ],
+    ids=["v1", "v2", "knowledge"],
+)
+def test_an_earlier_or_knowledge_set_run_asks_for_neither_r2_8aa_block(
+    world: World, monkeypatch: pytest.MonkeyPatch, argv: list[str]
+) -> None:
+    calls = spy_on_runners(monkeypatch)
+    assert world.run(*argv) == 0
+
+    [options] = calls
+    assert not any(options.get(flag) for flag in SCORING_V2_FLAGS)
+    _, report = world.files()
+    assert not set(SCORING_V2_FLAGS) & set(report)
+
+
+def test_a_failure_after_a_tool_round_is_an_invalid_response_in_model_level_v2(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import app.llm.factory as factory
+
+    monkeypatch.setattr(factory, "build_chat_model", lambda _settings: ToolThenInvalid())
+    argv = ["--set", "copilot_eval_v3", "--prompt", "copilot_answer@v3"]
+    assert local(world).run(*argv, "--case", "inject_estimate") == 0
+
+    _, report = world.files(V3)
+    level = report["model_level_v2"]
+    [row] = level["cases"]
+    assert (row["outcome"], row["model_error_code"]) == ("invalid_response", "LLM_INVALID_RESPONSE")
+    assert level["model_error_codes"] == {"LLM_INVALID_RESPONSE": 1}
+    # A model-quality failure of the case's strict measure: scored, and not excluded.
+    assert row["forecast_case_correct"] is False
+    measure = level["measures"]["forecast_case_correct"]
+    assert (measure["passed"], measure["scored"], measure["excluded"]) == (0, 1, {})
+    [served] = report["integrity_v3"]["cases"]
+    assert served["outcome"] == "invalid_response"
+    # The legacy readings are unchanged: the v1 model level calls it unavailable.
+    assert report["model_level"]["cases"][0]["outcome"] == "unavailable"
+    assert [(r["request"], r["outcome"]) for r in report["run_health"]["per_request"]] == [
+        (1, "answered"),
+        (2, "LLM_INVALID_RESPONSE"),
+    ]
+
+
+def test_the_key_is_in_no_file_and_no_output_of_a_v3_run(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = ["--set", "copilot_eval_v3", "--case", "inject_estimate", "--case", "review_text"]
+    assert world.run(*argv) == 0  # the paid path: the sentinel key is configured
+
+    printed = capsys.readouterr()
+    _, report = world.files()
+    assert set(SCORING_V2_FLAGS) <= set(report)
+    written = list(world.out.iterdir())
+    assert len(written) == 2
+    for path in written:
+        assert SENTINEL_KEY not in path.read_text(encoding="utf-8")
+    assert SENTINEL_KEY not in printed.out
+    assert SENTINEL_KEY not in printed.err

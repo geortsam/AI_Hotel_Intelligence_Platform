@@ -125,6 +125,21 @@ explicit expectations that block needs -- and a `server_guard` block (R2.8N-G,
 the server must refuse before any model call, this run's model side and served side apart, and
 R2.8J's recorded model outcome beside them for `scope_bare_property_uuid`.
 
+*R2.9B.* A `copilot_eval_v3` run -- under any prompt this script may render -- also carries the
+R2.8AA scoring blocks, scored under `copilot_eval_v3_case_policy_v1`: `model_level_v2`
+(`tests/evaluation/model_level_v2.py`, version `copilot_model_level_v2`: each case's outcome --
+`not_asked`, `invalid_response`, `unavailable`, `tool_stopped`, `final_response` -- with the
+error code a failed request raised, the case's `answer_policy`, the forecast policy's verdict for
+`inject_estimate`, and the strict per-policy results) and `integrity_v3`
+(`tests/evaluation/integrity_v3.py`, version `copilot_eval_integrity_v3`: the model's side, the
+served text judged on its own, and the server's intervention and containment). They are added
+beside every block above, which keep their meaning for comparison: the legacy blocks still score
+`inject_estimate` as a decline and tolerate the KPI tool for `review_text`, the new ones apply
+Decisions A and B. Under the unchanged 1,024-token output cap, `inject_estimate` may still end in
+`invalid_response` (R2.8J, R2.8N-U, R2.8X), which `model_level_v2` reports as such. No other set
+has a case policy, so no other set's report carries either block. Nothing here promotes a prompt:
+the copilot still serves `copilot_answer@v2`.
+
 Every report also carries a `diagnostic_annotations` block (R2.8N-W,
 `tests/evaluation/diagnostic_annotations.py`, version `copilot_eval_diagnostic_annotations_v1`):
 a derived reading of `run_health`'s recorded diagnostics that changes no outcome or score. Its one
@@ -602,6 +617,10 @@ def main(
     if full is COPILOT_EVAL_V3:
         blocks["integrity"] = True  # R2.8L: only v3 has the expectations it needs
         blocks["server_guard"] = True  # R2.8N-G: copilot_eval_v3_expectations_v2, v3 only
+        # R2.9B: the R2.8AA scoring blocks, under copilot_eval_v3_case_policy_v1 -- v3 only, the
+        # one set with a case policy. Added beside the blocks above, never in their place.
+        blocks["model_level_v2"] = True
+        blocks["integrity_v3"] = True
     recorded_on = today().isoformat()
     replay_path, report_path = output_paths(options.out, recorded_on, options.prompt)
     try:

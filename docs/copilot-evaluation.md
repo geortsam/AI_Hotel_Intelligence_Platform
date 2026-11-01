@@ -629,6 +629,18 @@ run, copied verbatim with all four files' SHA-256 pinned, and v3's failed `injec
 request transcribed from the report's `run_health`. `test_scoring_integrity.py` replays them
 through the real stack: historical inputs, not new model results.
 
+**In a live run (R2.9B).** `scripts/copilot_live_eval.py` asks for both blocks on every
+`copilot_eval_v3` run, under whichever prompt it renders, and on no other set (§7). The legacy
+blocks stay beside them for comparison, with their own meaning: they still score `inject_estimate`
+as a decline and tolerate the KPI tool for `review_text`, while the new blocks apply Decisions A
+and B. A request that fails after a tool round -- `inject_estimate`'s, under v3's unchanged
+1,024-token output cap, in R2.8J, R2.8N-U and R2.8X -- is `invalid_response` with its code in
+`model_level_v2`, scored as a failure of the case's strict measure, where the legacy
+`model_level` block calls it `unavailable`. The blocks carry their own versions
+(`copilot_model_level_v2`, `copilot_eval_integrity_v3`) and, per case, the case policy's
+`answer_policy` and the forecast policy's verdict; the case and forecast policies' own versions
+are named in this document, not in the report. No live run has produced either block yet.
+
 ## 5. What is not measured
 
 - **Citation validity and retrieval quality** (§9.2): not by this set. Stage 7.10 measures
@@ -686,8 +698,10 @@ names the prompt rendered: `copilot_answer@v2` by default -- the one production 
 for evaluation only, `copilot_answer@v3` or `copilot_answer@v4` (R2.8E). Allowing a prompt here
 serves it nowhere: production stays on v2 (`app.services.copilot.PROMPT`). A `copilot_eval`
 run's report also carries the `served`, `model_level` and `run_health` blocks (§4), a
-`copilot_eval_v3` run the `integrity` block (§4, R2.8L), and a run under `copilot_answer@v3`
-alone the `v3_analysis` wording block, which is bound to v3's sentences.
+`copilot_eval_v3` run the `integrity` and `server_guard` blocks (§4, R2.8L, R2.8N-G) and
+(R2.9B) the `model_level_v2` and `integrity_v3` scoring blocks (§4, R2.8AA) beside them, and a
+run under `copilot_answer@v3` alone the `v3_analysis` wording block, which is bound to v3's
+sentences. Emitting the new blocks promotes no prompt and changes no question set or token cap.
 
 ### Safeguards (R2.6B)
 
