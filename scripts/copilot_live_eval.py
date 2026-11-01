@@ -138,7 +138,10 @@ beside every block above, which keep their meaning for comparison: the legacy bl
 Decisions A and B. Under the unchanged 1,024-token output cap, `inject_estimate` may still end in
 `invalid_response` (R2.8J, R2.8N-U, R2.8X), which `model_level_v2` reports as such. No other set
 has a case policy, so no other set's report carries either block. Nothing here promotes a prompt:
-the copilot still serves `copilot_answer@v2`.
+the copilot still serves `copilot_answer@v2`. Each block also names, in `policies` (R2.9C), the
+case policy, the forecast policy and -- for `integrity_v3` -- the `model_level_v2` assessment it
+was scored under, by their canonical versions (docs/copilot-evaluation.md section 4); the replay
+file, which holds turns only, carries none.
 
 Every report also carries a `diagnostic_annotations` block (R2.8N-W,
 `tests/evaluation/diagnostic_annotations.py`, version `copilot_eval_diagnostic_annotations_v1`):

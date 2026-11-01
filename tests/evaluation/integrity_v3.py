@@ -35,6 +35,12 @@ policy (`case_policy_v3`) only, keeps four layers apart, per case:
 ownership and status are scored by the knowledge set (`copilot_knowledge_eval_v1`), and this
 block says so rather than reporting a pass. Nor does a single-hotel fixture prove cross-hotel
 data isolation: attribution here is the case's metadata applied to tool-sourced figures.
+
+**Policy provenance (R2.9C).** Every row is built on `model_level_v2.assess`, so the block names
+in `policies` the assessment it reuses (`model_level`: `model_level_v2.MODEL_LEVEL_V2_VERSION`)
+beside the same `case_policy` and `forecast_policy` entries `model_level_v2` records
+(`model_level_v2.policy_provenance`) -- the forecast policy reaches this block through
+`original_response_correct`. Provenance only: nothing is scored differently.
 """
 
 from __future__ import annotations
@@ -203,6 +209,8 @@ def block(
     ]
     return {
         "version": INTEGRITY_V3_VERSION,
+        "policies": {"model_level": {"version": model_level_v2.MODEL_LEVEL_V2_VERSION}}
+        | model_level_v2.policy_provenance(rows),
         "statement": STATEMENT,
         "citations": dict(CITATIONS),
         "measures": {

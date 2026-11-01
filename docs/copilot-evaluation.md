@@ -636,10 +636,29 @@ as a decline and tolerate the KPI tool for `review_text`, while the new blocks a
 and B. A request that fails after a tool round -- `inject_estimate`'s, under v3's unchanged
 1,024-token output cap, in R2.8J, R2.8N-U and R2.8X -- is `invalid_response` with its code in
 `model_level_v2`, scored as a failure of the case's strict measure, where the legacy
-`model_level` block calls it `unavailable`. The blocks carry their own versions
-(`copilot_model_level_v2`, `copilot_eval_integrity_v3`) and, per case, the case policy's
-`answer_policy` and the forecast policy's verdict; the case and forecast policies' own versions
-are named in this document, not in the report. No live run has produced either block yet.
+`model_level` block calls it `unavailable`. No live run has produced either block yet.
+
+**Policy provenance (R2.9C).** Each block carries its own `version` and, beside it, a `policies`
+entry naming every policy its rows were scored under, by the canonical constants that define
+them -- never a copy:
+
+| Block | `policies` entry | Version | Source constant |
+|---|---|---|---|
+| `model_level_v2`, `integrity_v3` | `case_policy` | `copilot_eval_v3_case_policy_v1` | `case_policy_v3.CASE_POLICY_VERSION` |
+| `model_level_v2`, `integrity_v3` | `forecast_policy` | `copilot_forecast_policy_v1` | `forecast_policy.FORECAST_POLICY_VERSION` |
+| `integrity_v3` | `model_level` | `copilot_model_level_v2` | `model_level_v2.MODEL_LEVEL_V2_VERSION` |
+
+`integrity_v3` names `model_level` because every one of its rows is built on `model_level_v2`'s
+assessment, and the forecast policy reaches it through `original_response_correct`. Each entry is
+`{"version": ...}`; `forecast_policy` also lists in `applies_to` the selected cases whose
+`answer_policy` is `forecast_permitted`, in the set's order -- an empty list when the selection has
+none, so the version is named even where the policy took no verdict. Whether it took one for a
+given case is that case's `forecast_verdict` (`None` when it took none: another policy, a failed
+request, a refusal). The entries are added beside every existing field, which keep their meaning;
+nothing is scored differently, and no legacy block gains a `policies` entry. A report produced
+live and one produced by replaying that run's capture record the same entries, because both are
+built by `harness.run`; the capture itself (`replays-*.json`) holds the model's turns only, so it
+carries no scoring provenance -- the report scored from it does.
 
 ## 5. What is not measured
 

@@ -94,6 +94,16 @@ Counts only (`passed` of `scored`, `excluded` by reason), never rates.
   (R2.8AC). A request that failed before the model's first response observed no tool request, so
   it is excluded by its outcome (`unavailable` or `invalid_response`) rather than counted as a
   vacuous pass. A failure after a tool request still scores the requests it observed.
+
+## Policy provenance (R2.9C)
+
+Beside its own `version`, the block names the policies its rows were scored under, by their
+canonical constants, in `policies` (`policy_provenance`): `case_policy`
+(`case_policy_v3.CASE_POLICY_VERSION`) governs every case; `forecast_policy`
+(`forecast_policy.FORECAST_POLICY_VERSION`) governs the `forecast_permitted` cases listed in its
+`applies_to` -- an empty list when the selection has none, so the version is named even where no
+forecast verdict was taken. A case's own `forecast_verdict` stays `None` wherever the forecast
+policy took none. Provenance only: nothing is scored differently.
 """
 
 from __future__ import annotations
@@ -104,7 +114,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from tests.evaluation import forecast_policy, integrity, model_level, scorers, v3_pilot_analysis
-from tests.evaluation.case_policy_v3 import FORECAST_TOOL, KNOWLEDGE_TOOL, CasePolicy
+from tests.evaluation.case_policy_v3 import (
+    CASE_POLICY_VERSION,
+    FORECAST_TOOL,
+    KNOWLEDGE_TOOL,
+    CasePolicy,
+)
 from tests.evaluation.integrity import CaseEvidence
 from tests.evaluation.questions import EvalCase
 
@@ -535,6 +550,21 @@ MEASURES: dict[str, tuple[str, Population, Callable[[Any], bool], str, str]] = {
 }
 
 
+def policy_provenance(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """R2.9C. The policies *rows* were scored under, by their canonical versions: the case policy
+    for every row, the forecast policy for the `forecast_permitted` rows it lists -- none, when
+    the selection holds no such case, and its version is named all the same."""
+    return {
+        "case_policy": {"version": CASE_POLICY_VERSION},
+        "forecast_policy": {
+            "version": forecast_policy.FORECAST_POLICY_VERSION,
+            "applies_to": [
+                row["case_id"] for row in rows if row["answer_policy"] == "forecast_permitted"
+            ],
+        },
+    }
+
+
 def block(
     cases: Sequence[EvalCase],
     results: Sequence[CaseResult],
@@ -558,6 +588,7 @@ def block(
     codes = Counter(row["model_error_code"] for row in rows if row["model_error_code"])
     return {
         "version": MODEL_LEVEL_V2_VERSION,
+        "policies": policy_provenance(rows),
         "statement": STATEMENT,
         "outcomes": {kind: sum(1 for row in rows if row["outcome"] == kind) for kind in OUTCOMES},
         "model_error_codes": dict(sorted(codes.items())),
@@ -600,6 +631,7 @@ __all__ = [
     "normalised",
     "normalising",
     "outcome",
+    "policy_provenance",
     "searched",
     "server_intervened",
 ]

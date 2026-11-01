@@ -943,3 +943,85 @@ def test_the_pinned_reference_report_still_reproduces() -> None:
 def test_the_scope_sentence_is_one_of_the_fixed_sentences() -> None:
     """The scope refusal the server serves is the prompt's own scope sentence, verbatim."""
     assert ANOTHER_HOTEL_REFUSAL == SCOPE_ANSWER
+
+
+# --- R2.9C: policy provenance -----------------------------------------------------------------
+
+
+def shared_policies(*forecast_cases: str) -> dict[str, dict[str, Any]]:
+    """The `case_policy` and `forecast_policy` entries, from the canonical constants."""
+    from tests.evaluation.case_policy_v3 import CASE_POLICY_VERSION
+    from tests.evaluation.forecast_policy import FORECAST_POLICY_VERSION
+
+    return {
+        "case_policy": {"version": CASE_POLICY_VERSION},
+        "forecast_policy": {"version": FORECAST_POLICY_VERSION, "applies_to": list(forecast_cases)},
+    }
+
+
+def test_both_blocks_name_every_policy_by_its_canonical_version(r28x_v4: dict[str, Any]) -> None:
+    from tests.evaluation.integrity_v3 import INTEGRITY_V3_VERSION
+    from tests.evaluation.model_level_v2 import MODEL_LEVEL_V2_VERSION
+
+    level, integrity = r28x_v4["model_level_v2"], r28x_v4["integrity_v3"]
+    assert (level["version"], integrity["version"]) == (
+        MODEL_LEVEL_V2_VERSION,
+        INTEGRITY_V3_VERSION,
+    )
+    assert level["policies"] == shared_policies("inject_estimate")
+    # integrity_v3 reuses model_level_v2's assessment, and names it.
+    assert integrity["policies"] == {"model_level": {"version": MODEL_LEVEL_V2_VERSION}} | (
+        shared_policies("inject_estimate")
+    )
+
+
+def test_a_forecast_case_with_no_verdict_still_names_the_forecast_policy(
+    r28x_v3: dict[str, Any],
+) -> None:
+    """v3's inject_estimate failed before any final text: no forecast verdict was taken, and the
+    version it would have been taken under is recorded all the same."""
+    row = v2(r28x_v3, "inject_estimate")
+    assert (row["outcome"], row["forecast_verdict"]) == ("invalid_response", None)
+    for block in ("model_level_v2", "integrity_v3"):
+        assert r28x_v3[block]["policies"]["forecast_policy"]["applies_to"] == ["inject_estimate"]
+
+
+def test_a_selection_without_a_forecast_case_names_the_forecast_policy_for_no_case() -> None:
+    report = run({"guest_names": [turn(CANNOT_ANSWER)]})
+    assert report["model_level_v2"]["policies"] == shared_policies()
+    assert report["integrity_v3"]["policies"]["forecast_policy"]["applies_to"] == []
+    assert v2(report, "guest_names")["forecast_verdict"] is None  # not applicable
+
+
+def test_policy_provenance_survives_the_canonical_report_serialisation(
+    r28x_v4: dict[str, Any],
+) -> None:
+    written = json.loads(harness.canonical(r28x_v4))
+    for block in ("model_level_v2", "integrity_v3"):
+        assert written[block]["policies"] == r28x_v4[block]["policies"]
+
+
+def test_the_legacy_blocks_are_unchanged_by_the_provenance() -> None:
+    """The same exchanges with and without the R2.8AA blocks: every legacy block is identical, and
+    none of them gains a `policies` entry."""
+    turns = {"inject_estimate": [turn("", JUNE_1, JUNE_30), turn(LABELLED_FORECAST)]}
+    subset = replace(
+        COPILOT_EVAL_V3, cases=tuple(c for c in COPILOT_EVAL_V3.cases if c.case_id in turns)
+    )
+    without = harness.run(
+        subset,
+        lambda case: model_for(turns[case.case_id], None),
+        mode="replay",
+        provider="transcribed-r28x",
+        model="qwen3.5:4b",
+        recorded_on="2026-10-30",
+        prompt=COPILOT_ANSWER_V3,
+        served=True,
+        model_level=True,
+        integrity=True,
+    )
+    with_blocks = run(turns)
+    for block in ("cases", "measures", "served", "model_level", "integrity"):
+        assert with_blocks[block] == without[block], block
+    assert "policies" not in without["model_level"] and "policies" not in without["integrity"]
+    assert not {"model_level_v2", "integrity_v3"} & set(without)

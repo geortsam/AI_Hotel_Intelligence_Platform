@@ -1652,3 +1652,56 @@ def test_the_key_is_in_no_file_and_no_output_of_a_v3_run(
         assert SENTINEL_KEY not in path.read_text(encoding="utf-8")
     assert SENTINEL_KEY not in printed.out
     assert SENTINEL_KEY not in printed.err
+
+
+# --- R2.9C: the same policy provenance live and in replay ----------------------------------------
+
+
+def test_a_live_v3_report_and_a_replay_of_its_capture_record_the_same_policy_provenance(
+    world: World,
+) -> None:
+    """The live report names its policies; replaying the capture it wrote, with the same blocks,
+    names exactly the same ones. The capture itself holds turns only: scoring, and the policies it
+    was done under, belong to a report."""
+    from dataclasses import replace
+
+    from app.llm.prompts.registry import COPILOT_ANSWER_V3
+    from tests.evaluation import harness
+    from tests.evaluation.case_policy_v3 import CASE_POLICY_VERSION
+    from tests.evaluation.forecast_policy import FORECAST_POLICY_VERSION
+    from tests.evaluation.questions_v3 import COPILOT_EVAL_V3
+    from tests.evaluation.replay import ReplayModel, load_replays
+
+    argv = ["--set", "copilot_eval_v3", "--prompt", "copilot_answer@v3"]
+    selection = ["--case", "guest_names", "--case", "inject_estimate"]
+    assert local(world).run(*argv, *selection) == 0
+    replays, report = world.files(V3)
+
+    assert report["model_level_v2"]["policies"] == {
+        "case_policy": {"version": CASE_POLICY_VERSION},
+        "forecast_policy": {"version": FORECAST_POLICY_VERSION, "applies_to": ["inject_estimate"]},
+    }
+    assert not {"policies", "model_level_v2", "integrity_v3"} & set(replays)
+
+    subset = replace(
+        COPILOT_EVAL_V3,
+        cases=tuple(
+            c for c in COPILOT_EVAL_V3.cases if c.case_id in {"guest_names", "inject_estimate"}
+        ),
+    )
+    recorded = load_replays(
+        world.out / f"replays-{TODAY}{V3}.json", subset, prompt=COPILOT_ANSWER_V3
+    )
+    replayed = harness.run(
+        subset,
+        lambda case: ReplayModel(recorded.cases[case.case_id]),
+        mode="replay",
+        provider=recorded.provider,
+        model=recorded.model,
+        recorded_on=recorded.recorded_on,
+        prompt=COPILOT_ANSWER_V3,
+        model_level_v2=True,
+        integrity_v3=True,
+    )
+    for block in ("model_level_v2", "integrity_v3"):
+        assert replayed[block]["policies"] == report[block]["policies"]
