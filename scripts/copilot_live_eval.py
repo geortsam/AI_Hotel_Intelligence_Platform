@@ -149,6 +149,35 @@ a derived reading of `run_health`'s recorded diagnostics that changes no outcome
 annotation marks a response cut off while writing tool calls that had already parsed more calls
 than the tool loop accepts in one round.
 
+## Repeated runs (R2.9H)
+
+The same request has been answered differently at temperature 0 with a fixed seed (R2.9F), so one
+run is a sample. `--repeat N` (1 to `MAX_REPEAT`, 10; default 1) runs the selection N times with
+one client, and at most `8 * cases * N` HTTP requests -- each request still retried only as the
+boundary already retries it.
+
+- `--repeat 1` writes exactly the two files a run always wrote, named as before.
+- `--repeat N` (N > 1) writes, per attempt K, a whole standard pair --
+  `replays-<date>[-prompt]-attempt-K.json` and `report-<date>[-prompt]-attempt-K.json`, each
+  loadable and scorable as any capture is, with its own `run_health` -- as soon as that attempt
+  ends, so an attempt that cannot finish never takes an earlier attempt's files with it. Both
+  carry `live_provenance.repetition`: `{"repeat": N, "attempt": K, "attempt_id": ...}`, the id
+  `<date>-<prompt>-attempt-K-of-N` (`attempt_id`). Beside them, `repeats-<date>[-prompt].json`
+  (`copilot_eval_repeats_v1`) lists every attempt's files and SHA-256, one row per attempt and
+  case -- the model's outcome, its error code, the answer source, whether the server intervened,
+  and the case's strict result from that attempt's `model_level_v2`, each in its own field -- and
+  per case the counts across attempts. Counts only, never rates; nothing is merged into one score.
+
+## Local model provenance (R2.9H)
+
+An `ollama` run records `live_provenance.local_model`: the model name; the server's version, from
+`GET /api/version` (a metadata request through the adapter's own loopback opener, which runs no
+model); and the model's manifest digest, its twelve-character id (`ollama list`'s) and its weights'
+layer digest and size, read from the local manifest under Ollama's default `~/.ollama/models`
+-- read, never requested. A field that cannot be established is `{"status": "unavailable",
+"reason": ...}`, never guessed. A run under any other provider records no such key, so its
+provenance is exactly what it was.
+
 The files contain the evaluation questions and the model's answers about a FICTIONAL hotel -- no
 production data -- and are not committed automatically.
 """
@@ -157,11 +186,15 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
+import http.client
 import json
 import os
 import subprocess
 import sys
 import time
+import urllib.request
+from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -188,6 +221,24 @@ PROMPTS = (DEFAULT_PROMPT, V3_ANALYSIS_PROMPT, "copilot_answer@v4")
 
 class RunRefusedError(Exception):
     """A reason not to start. Raised before any provider client is built."""
+
+
+#: R2.9H. The most attempts one run makes of each selected case. Each attempt is a full run of the
+#: selection under the same request bounds, so a run makes at most `8 * cases * repeat` requests.
+MAX_REPEAT = 10
+
+
+def repeat_count(raw: str) -> int:
+    """`--repeat`'s value: a whole number from 1 to `MAX_REPEAT`, or a clear refusal."""
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 0
+    if not 1 <= value <= MAX_REPEAT or str(value) != raw.strip().lstrip("+"):
+        raise argparse.ArgumentTypeError(
+            f"--repeat must be a whole number from 1 to {MAX_REPEAT}, not {raw!r}"
+        )
+    return value
 
 
 def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
@@ -227,6 +278,15 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         choices=list(PROMPTS),
         default=DEFAULT_PROMPT,
         help=f"Which registered prompt to render. Default: {DEFAULT_PROMPT}.",
+    )
+    parser.add_argument(
+        "--repeat",
+        type=repeat_count,
+        default=1,
+        help=(
+            f"Run the selection this many times, 1 to {MAX_REPEAT} (R2.9H). Default: 1, which "
+            "writes exactly the two files a run always wrote."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -302,11 +362,30 @@ def select_cases(full: Any, case_ids: Sequence[str]) -> Any:
     return replace(full, cases=tuple(case for case in full.cases if case.case_id in case_ids))
 
 
-def output_paths(out: Path, recorded_on: str, prompt: str = DEFAULT_PROMPT) -> tuple[Path, Path]:
+def _prompt_suffix(prompt: str) -> str:
+    return "" if prompt == DEFAULT_PROMPT else "-" + prompt.replace("@", "-")
+
+
+def output_paths(
+    out: Path, recorded_on: str, prompt: str = DEFAULT_PROMPT, attempt: int | None = None
+) -> tuple[Path, Path]:
     """The two files a run writes. A run under any prompt but the default names it: `@` becomes
-    `-`, so `copilot_answer@v3` on 2026-10-27 writes `replays-2026-10-27-copilot_answer-v3.json`."""
-    suffix = "" if prompt == DEFAULT_PROMPT else "-" + prompt.replace("@", "-")
+    `-`, so `copilot_answer@v3` on 2026-10-27 writes `replays-2026-10-27-copilot_answer-v3.json`.
+    One attempt of a repeated run (R2.9H) adds its number: `...-copilot_answer-v3-attempt-2.json`.
+    """
+    suffix = _prompt_suffix(prompt) + ("" if attempt is None else f"-attempt-{attempt}")
     return out / f"replays-{recorded_on}{suffix}.json", out / f"report-{recorded_on}{suffix}.json"
+
+
+def repeats_path(out: Path, recorded_on: str, prompt: str = DEFAULT_PROMPT) -> Path:
+    """R2.9H. The aggregate a repeated run writes beside its attempts' files."""
+    return out / f"repeats-{recorded_on}{_prompt_suffix(prompt)}.json"
+
+
+def attempt_id(recorded_on: str, prompt: str, attempt: int, repeat: int) -> str:
+    """R2.9H. One attempt's identity: date, prompt, number and count -- the same for the same run,
+    and never the same for two attempts of it: `2026-11-02-copilot_answer-v4-attempt-2-of-3`."""
+    return f"{recorded_on}-{prompt.replace('@', '-')}-attempt-{attempt}-of-{repeat}"
 
 
 def _comparable(path: Path) -> Path:
@@ -375,6 +454,127 @@ def ollama_options(settings: Any) -> dict[str, Any] | None:
         "seed": settings.ollama_seed,
         "presence_penalty": PRESENCE_PENALTY,
         "think": False if settings.llm_thinking == "disabled" else "provider_default",
+    }
+
+
+#: R2.9H. What a provenance field records when it could not be established. Never a guess.
+UNAVAILABLE = "unavailable"
+#: Where a pulled model's manifest lives under Ollama's models directory, and its weights' layer.
+OLLAMA_REGISTRY = "registry.ollama.ai"
+OLLAMA_MODEL_LAYER = "application/vnd.ollama.image.model"
+#: Ollama's metadata endpoint for its own version: a GET with no body, which runs no model.
+OLLAMA_VERSION_PATH = "/api/version"
+OLLAMA_VERSION_TIMEOUT_SECONDS = 5.0
+#: Far more than `{"version": "..."}` needs; anything longer is not a version reply.
+OLLAMA_VERSION_MAX_BYTES = 4096
+
+VersionGetter = Callable[[str, float], bytes]
+
+
+def ollama_models_dir() -> Path:
+    """Ollama's default models directory, under the home. This script reads no environment
+    variable itself -- configuration arrives through `Settings` only -- and the server's own
+    `OLLAMA_MODELS` need not be this process's anyway; a model kept elsewhere is recorded as
+    `manifest_not_found`, never looked for."""
+    return Path.home() / ".ollama" / "models"
+
+
+def ollama_manifest_path(model: str, models_dir: Path) -> Path | None:
+    """The manifest file `model` names (`qwen3.5:4b`, `user/name:tag`), or `None` for a name that
+    is not a plain model reference -- it is only ever read, never used to build a request."""
+    name, _, tag = model.partition(":")
+    parts = name.split("/")
+    if len(parts) == 1:
+        parts = ["library", *parts]
+    if len(parts) == 2:
+        parts = [OLLAMA_REGISTRY, *parts]
+    tag = tag or "latest"
+    if len(parts) != 3 or any(not p or p in {".", ".."} or "\\" in p for p in (*parts, tag)):
+        return None
+    return models_dir.joinpath("manifests", *parts, tag)
+
+
+def ollama_manifest(model: str, models_dir: Path | None = None) -> dict[str, Any]:
+    """R2.9H. The local manifest's digest and its model layer's, read from disk: no request.
+
+    `manifest_id` is the digest's first twelve characters, the id `ollama list` shows. A field
+    the manifest does not give is absent, and a manifest that cannot be read is `unavailable`
+    with its reason -- never a digest guessed from the name."""
+    path = ollama_manifest_path(
+        model, models_dir if models_dir is not None else ollama_models_dir()
+    )
+    if path is None:
+        return {"status": UNAVAILABLE, "reason": "unrecognised_model_name"}
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return {"status": UNAVAILABLE, "reason": "manifest_not_found"}
+    digest = hashlib.sha256(raw).hexdigest()
+    found: dict[str, Any] = {
+        "status": "available",
+        "source": "local_manifest",
+        "manifest_digest": f"sha256:{digest}",
+        "manifest_id": digest[:12],
+    }
+    try:
+        layers = json.loads(raw).get("layers")
+    except (ValueError, AttributeError):
+        layers = None
+    layer = next(
+        (
+            entry
+            for entry in layers or ()
+            if isinstance(entry, dict) and entry.get("mediaType") == OLLAMA_MODEL_LAYER
+        ),
+        None,
+    )
+    if layer is not None and isinstance(layer.get("digest"), str):
+        found["model_layer_digest"] = layer["digest"]
+        if isinstance(layer.get("size"), int) and not isinstance(layer.get("size"), bool):
+            found["model_layer_bytes"] = layer["size"]
+    else:
+        found["model_layer"] = UNAVAILABLE
+    return found
+
+
+def _get_version(url: str, timeout: float) -> bytes:
+    """GET *url* over the Ollama adapter's own opener: no proxy, no redirect, no body."""
+    from app.llm.providers.ollama_provider import build_loopback_opener
+
+    request = urllib.request.Request(url, method="GET", headers={"Accept": "application/json"})
+    with build_loopback_opener().open(request, timeout=timeout) as response:
+        raw: bytes = response.read(OLLAMA_VERSION_MAX_BYTES + 1)
+    return raw
+
+
+def ollama_server_version(base_url: str, get: VersionGetter | None = None) -> dict[str, Any]:
+    """R2.9H. The local server's version from `GET /api/version`, which asks no model anything.
+
+    Any failure -- not running, refused, a redirect, a malformed or oversized reply -- is
+    `unavailable` with its reason; the run is not stopped for it."""
+    fetch = get if get is not None else _get_version
+    try:
+        raw = fetch(base_url.rstrip("/") + OLLAMA_VERSION_PATH, OLLAMA_VERSION_TIMEOUT_SECONDS)
+    except (OSError, ValueError, http.client.HTTPException):
+        return {"status": UNAVAILABLE, "reason": "unreachable"}
+    try:
+        version = None if len(raw) > OLLAMA_VERSION_MAX_BYTES else json.loads(raw).get("version")
+    except (ValueError, AttributeError):
+        version = None
+    if not isinstance(version, str) or not version or len(version) > 64:
+        return {"status": UNAVAILABLE, "reason": "malformed_reply"}
+    return {"status": "available", "source": f"GET {OLLAMA_VERSION_PATH}", "version": version}
+
+
+def local_model_provenance(settings: Any) -> dict[str, Any] | None:
+    """R2.9H. For an `ollama` run, the model's local identity and the server's version, with no
+    generation request; `None` for any other provider, whose provenance is unchanged."""
+    if settings.llm_provider != "ollama":
+        return None
+    return {
+        "model": settings.effective_llm_model,
+        "server_version": ollama_server_version(settings.ollama_base_url),
+        "manifest": ollama_manifest(settings.effective_llm_model),
     }
 
 
@@ -534,10 +734,21 @@ def live_provenance(
     budget: Any,
     model_options: dict[str, Any] | None = None,
     source: Mapping[str, str] | None = None,
+    local_model: Mapping[str, Any] | None = None,
+    repetition: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """The block both output files carry. Built from public values only; never the settings."""
+    """The block both output files carry. Built from public values only; never the settings.
+
+    *local_model* (R2.9H, `ollama` only) and *repetition* (R2.9H, a repeated run only) are added
+    when given and absent otherwise, so a single run under any other provider records exactly the
+    keys it always did."""
     distinct = sorted({model for models in returned_models.values() for model in models})
-    return {
+    extra: dict[str, Any] = {}
+    if local_model is not None:
+        extra["local_model"] = dict(local_model)
+    if repetition is not None:
+        extra["repetition"] = dict(repetition)
+    return extra | {
         "source": dict(source) if source is not None else None,
         "provider": provider,
         "configured_model": configured_model,
@@ -568,6 +779,119 @@ def write_new(path: Path, text: str) -> None:
     """Create *path*; fail rather than replace it if it appeared since `check_output` ran."""
     with path.open("x", encoding="utf-8") as handle:
         handle.write(text)
+
+
+REPEATS_FORMAT = "copilot_eval_repeats_v1"
+REPEATS_STATEMENT = (
+    "Counts across the attempts of one repeated run, never rates. Each attempt's own report and "
+    "replay file are the record; this file only lists them and counts what they say. The model's "
+    "outcome, the answer the caller was served and whether the server intervened are counted "
+    "apart, and a case's strict result is the one that attempt's model_level_v2 block recorded -- "
+    "passed, failed, or not scored -- never inferred from a served answer."
+)
+
+
+def attempt_rows(attempt: int, identity: str, report: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """R2.9H. One row per case of one attempt's report: what each block it carries recorded for
+    the case, copied, each in its own field. A block the report lacks adds no field."""
+    from tests.evaluation.model_level_v2 import OWN_RESULT
+
+    def by_case(block: str) -> dict[str, Mapping[str, Any]]:
+        found = report.get(block)
+        return {row["case_id"]: row for row in found["cases"]} if found else {}
+
+    served, legacy, level, checked = (
+        by_case(name) for name in ("served", "model_level", "model_level_v2", "integrity_v3")
+    )
+    rows: list[dict[str, Any]] = []
+    for case in report["cases"]:
+        case_id = case["case_id"]
+        row: dict[str, Any] = {
+            "attempt": attempt,
+            "attempt_id": identity,
+            "case_id": case_id,
+            "stop_reason": case["stop_reason"],
+            "complete": case["complete"],
+            "error_code": case["error_code"],
+        }
+        if case_id in served:
+            row["answer_source"] = served[case_id]["answer_source"]
+        if case_id in legacy:
+            row["model_level_outcome"] = legacy[case_id]["outcome"]
+        if case_id in level:
+            assessed = level[case_id]
+            strict = OWN_RESULT[assessed["answer_policy"]]
+            row |= {
+                "model_outcome": assessed["outcome"],
+                "model_error_code": assessed["model_error_code"],
+                "answer_policy": assessed["answer_policy"],
+                "server_intervened": assessed["server_intervened"],
+                "contained": assessed["contained"],
+                "strict_measure": strict,
+                "strict_result": assessed[strict],
+            }
+        if case_id in checked:
+            row["served_text_correct"] = checked[case_id]["served_text_correct"]
+        rows.append(row)
+    return rows
+
+
+def repeats_summary(
+    attempts: Sequence[Mapping[str, Any]], *, repeat: int, header: Mapping[str, Any]
+) -> dict[str, Any]:
+    """R2.9H. The `repeats-*.json` aggregate: each attempt's files, every per-attempt row, and per
+    case the counts across attempts. Each entry of *attempts* names its files and carries its
+    `report`; *header* is what every attempt shares (set, prompt, provider, model, date)."""
+    rows = [
+        row
+        for entry in attempts
+        for row in attempt_rows(entry["attempt"], entry["attempt_id"], entry["report"])
+    ]
+    cases: dict[str, dict[str, Any]] = {}
+    for case_id in dict.fromkeys(row["case_id"] for row in rows):
+        mine = [row for row in rows if row["case_id"] == case_id]
+        outcomes = Counter(row.get("model_outcome", row.get("model_level_outcome")) for row in mine)
+        summary: dict[str, Any] = {
+            "attempts": len(mine),
+            "model_outcomes": dict(sorted((str(k), v) for k, v in outcomes.items())),
+        }
+        if all("answer_source" in row for row in mine):
+            # Nothing served counts as `unavailable`, as the served block's own counts do; the
+            # row keeps the attempt's own value, `None`.
+            summary["answer_sources"] = dict(
+                sorted(Counter(r["answer_source"] or "unavailable" for r in mine).items())
+            )
+        if all("strict_result" in row for row in mine):
+            summary["server_intervened"] = sum(1 for row in mine if row["server_intervened"])
+            summary["strict"] = {
+                "measure": mine[0]["strict_measure"],
+                "passed": sum(1 for row in mine if row["strict_result"] is True),
+                "failed": sum(1 for row in mine if row["strict_result"] is False),
+                "not_scored": dict(
+                    sorted(
+                        Counter(
+                            row["model_outcome"] for row in mine if row["strict_result"] is None
+                        ).items()
+                    )
+                ),
+            }
+        cases[case_id] = summary
+    return {
+        "format": REPEATS_FORMAT,
+        "statement": REPEATS_STATEMENT,
+        **dict(header),
+        "repeat": repeat,
+        "attempts": [
+            {key: value for key, value in entry.items() if key != "report"}
+            | {
+                "run_health": entry["report"]["run_health"]["status"],
+                "requests": entry["report"]["run_health"]["requests"],
+            }
+            for entry in attempts
+        ],
+        "cases": cases,
+        "rows": rows,
+    }
 
 
 def main(
@@ -625,12 +949,26 @@ def main(
         blocks["model_level_v2"] = True
         blocks["integrity_v3"] = True
     recorded_on = today().isoformat()
-    replay_path, report_path = output_paths(options.out, recorded_on, options.prompt)
+    repeat: int = options.repeat
+    # R2.9H: one attempt writes the two files a run always wrote; a repeated run writes them once
+    # per attempt, numbered, and the aggregate beside them. Every one is checked before anything.
+    attempt_files = {
+        attempt: output_paths(
+            options.out, recorded_on, options.prompt, attempt if repeat > 1 else None
+        )
+        for attempt in range(1, repeat + 1)
+    }
+    aggregate_path = repeats_path(options.out, recorded_on, options.prompt) if repeat > 1 else None
     try:
         prompt = resolve_prompt(options.prompt)
         selected = select_cases(full, options.case)
         check_output(
-            options.out, (replay_path, report_path), isolated=options.prompt != DEFAULT_PROMPT
+            options.out,
+            [
+                *(path for pair in attempt_files.values() for path in pair),
+                *([aggregate_path] if aggregate_path is not None else []),
+            ],
+            isolated=options.prompt != DEFAULT_PROMPT,
         )
     except RunRefusedError as refused:
         print(str(refused), file=sys.stderr)
@@ -644,84 +982,132 @@ def main(
     from app.llm.factory import build_chat_model
 
     model = build_chat_model(settings)
-    recordings: dict[str, RecordingModel] = {}
-    requests: list[dict[str, Any]] = []
+    # R2.9H: the local model's identity, once per run, with no generation request.
+    local_model = local_model_provenance(settings)
+    source = source_identity()
+    written: list[dict[str, Any]] = []
 
-    def model_for(case: Any) -> ChatModel:
-        recorder = RecordingModel(TimedModel(model, requests, case.case_id, monotonic))
-        recordings[case.case_id] = recorder
-        print(f"  {case.case_id} ...", flush=True)
-        return recorder
+    for attempt, (replay_path, report_path) in attempt_files.items():
+        recordings: dict[str, RecordingModel] = {}
+        requests: list[dict[str, Any]] = []
+        identity = attempt_id(recorded_on, options.prompt, attempt, repeat)
+        if repeat > 1:
+            print(f"attempt {attempt} of {repeat} ({identity})", flush=True)
 
-    report = runner(
-        selected,
-        model_for,
-        mode="live",
-        provider=settings.llm_provider,
-        model=settings.effective_llm_model,
-        recorded_on=recorded_on,
-        # The prompt `--prompt` named, passed explicitly (R2.7ZN, R2.7ZQ): the run renders the
-        # same record the capture below names.
-        prompt=prompt,
-        budget=budget,
-        **blocks,
-    )
+        def model_for(
+            case: Any,
+            recordings: dict[str, RecordingModel] = recordings,
+            requests: list[dict[str, Any]] = requests,
+        ) -> ChatModel:
+            recorder = RecordingModel(TimedModel(model, requests, case.case_id, monotonic))
+            recordings[case.case_id] = recorder
+            print(f"  {case.case_id} ...", flush=True)
+            return recorder
 
-    provenance = live_provenance(
-        full=full,
-        selected=selected,
-        provider=settings.llm_provider,
-        configured_model=settings.effective_llm_model,
-        thinking=settings.llm_thinking,
-        returned_models={case: rec.returned_models() for case, rec in recordings.items()},
-        sdk=sdk_identity(settings.llm_provider),
-        prompt=prompt,
-        budget=budget,
-        model_options=ollama_options(settings),
-        source=source_identity(),
-    )
-    report["live_provenance"] = provenance
-    report["run_health"] = run_health(requests)
-    # R2.8N-W: a derived reading of run_health's diagnostics; it changes no outcome or score.
-    report["diagnostic_annotations"] = diagnostic_annotations.annotate(report["run_health"])
-    # Only for v3 (R2.8E): the analysis refuses any other prompt, and under v4 that refusal would
-    # come after every model call and before either file was written.
-    if options.prompt == V3_ANALYSIS_PROMPT:
-        report["v3_analysis"] = v3_pilot_analysis.analyse(
-            prompt,
-            report["cases"],
-            final_texts={
-                case_id: recorder.responses[-1].text if recorder.responses else ""
-                for case_id, recorder in recordings.items()
-            },
-            model_calls={case_id: len(rec.responses) for case_id, rec in recordings.items()},
-            served=report.get("served"),
+        report = runner(
+            selected,
+            model_for,
+            mode="live",
+            provider=settings.llm_provider,
+            model=settings.effective_llm_model,
+            recorded_on=recorded_on,
+            # The prompt `--prompt` named, passed explicitly (R2.7ZN, R2.7ZQ): the run renders the
+            # same record the capture below names.
+            prompt=prompt,
+            budget=budget,
+            **blocks,
         )
-    replays = Replays(
-        provider=settings.llm_provider,
-        model=settings.effective_llm_model,
-        recorded_on=recorded_on,
-        question_set=selected.identity,
-        question_set_checksum=selected.checksum,
-        prompt=prompt.identity,
-        prompt_checksum=prompt.checksum,
-        cases={case_id: recorder.turns() for case_id, recorder in recordings.items()},
-        live_provenance=provenance,
-    )
 
-    options.out.mkdir(parents=True, exist_ok=True)
-    write_new(replay_path, json.dumps(replays.as_dict(), indent=2, ensure_ascii=False) + "\n")
-    write_new(report_path, harness.canonical(report))
+        provenance = live_provenance(
+            full=full,
+            selected=selected,
+            provider=settings.llm_provider,
+            configured_model=settings.effective_llm_model,
+            thinking=settings.llm_thinking,
+            returned_models={case: rec.returned_models() for case, rec in recordings.items()},
+            sdk=sdk_identity(settings.llm_provider),
+            prompt=prompt,
+            budget=budget,
+            model_options=ollama_options(settings),
+            source=source,
+            local_model=local_model,
+            repetition=(
+                {"repeat": repeat, "attempt": attempt, "attempt_id": identity}
+                if repeat > 1
+                else None
+            ),
+        )
+        report["live_provenance"] = provenance
+        report["run_health"] = run_health(requests)
+        # R2.8N-W: a derived reading of run_health's diagnostics; it changes no outcome or score.
+        report["diagnostic_annotations"] = diagnostic_annotations.annotate(report["run_health"])
+        # Only for v3 (R2.8E): the analysis refuses any other prompt, and under v4 that refusal
+        # would come after every model call and before either file was written.
+        if options.prompt == V3_ANALYSIS_PROMPT:
+            report["v3_analysis"] = v3_pilot_analysis.analyse(
+                prompt,
+                report["cases"],
+                final_texts={
+                    case_id: recorder.responses[-1].text if recorder.responses else ""
+                    for case_id, recorder in recordings.items()
+                },
+                model_calls={case_id: len(rec.responses) for case_id, rec in recordings.items()},
+                served=report.get("served"),
+            )
+        replays = Replays(
+            provider=settings.llm_provider,
+            model=settings.effective_llm_model,
+            recorded_on=recorded_on,
+            question_set=selected.identity,
+            question_set_checksum=selected.checksum,
+            prompt=prompt.identity,
+            prompt_checksum=prompt.checksum,
+            cases={case_id: recorder.turns() for case_id, recorder in recordings.items()},
+            live_provenance=provenance,
+        )
 
-    print(report["statement"])
-    for measure, counts in report["measures"].items():
-        print(f"  {measure}: {counts['passed']} of {counts['scored']}")
-    health = report["run_health"]
-    print(
-        f"  run health: {health['status']} ({health['unavailable_requests']} of "
-        f"{health['requests']} model requests unavailable, longest streak "
-        f"{health['longest_unavailable_streak']})"
-    )
+        # Each attempt's files are written as soon as it ends: a later attempt that cannot finish
+        # never takes an earlier one's record with it.
+        options.out.mkdir(parents=True, exist_ok=True)
+        write_new(replay_path, json.dumps(replays.as_dict(), indent=2, ensure_ascii=False) + "\n")
+        write_new(report_path, harness.canonical(report))
+        written.append(
+            {
+                "attempt": attempt,
+                "attempt_id": identity,
+                "replay_file": replay_path.name,
+                # The digests of the bytes on disk, which text mode may have given CRLF endings.
+                "replay_sha256": hashlib.sha256(replay_path.read_bytes()).hexdigest(),
+                "report_file": report_path.name,
+                "report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
+                "report": report,
+            }
+        )
+
+        print(report["statement"])
+        for measure, counts in report["measures"].items():
+            print(f"  {measure}: {counts['passed']} of {counts['scored']}")
+        health = report["run_health"]
+        print(
+            f"  run health: {health['status']} ({health['unavailable_requests']} of "
+            f"{health['requests']} model requests unavailable, longest streak "
+            f"{health['longest_unavailable_streak']})"
+        )
+
+    if aggregate_path is not None:
+        aggregate = repeats_summary(
+            written,
+            repeat=repeat,
+            header={
+                "question_set": {"identity": selected.identity, "checksum": selected.checksum},
+                "prompt": {"identity": prompt.identity, "checksum": prompt.checksum},
+                "provider": settings.llm_provider,
+                "model": settings.effective_llm_model,
+                "recorded_on": recorded_on,
+            },
+        )
+        write_new(aggregate_path, json.dumps(aggregate, indent=2, ensure_ascii=False) + "\n")
+        print(f"repeats: {repeat} attempts, aggregate in {aggregate_path.name}")
     return 0
 
 

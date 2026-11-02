@@ -722,6 +722,54 @@ run's report also carries the `served`, `model_level` and `run_health` blocks (Â
 run under `copilot_answer@v3` alone the `v3_analysis` wording block, which is bound to v3's
 sentences. Emitting the new blocks promotes no prompt and changes no question set or token cap.
 
+### Repeated runs and local model provenance (R2.9H)
+
+The same request has been answered differently at temperature 0 with a fixed seed (R2.9F), so a
+single live run is one sample. `--repeat N` (1 to 10, default 1) runs the selection N times:
+
+```bash
+# Three attempts of two cases, under v4, into a new directory outside the repository
+LLM_ENABLED=true LLM_PROVIDER=ollama python scripts/copilot_live_eval.py --set copilot_eval_v3 \
+    --prompt copilot_answer@v4 --out ../copilot-eval/<run-name> --confirm-local-model-call \
+    --case review_text --case inject_missing_tool --repeat 3
+```
+
+| `--repeat` | Files written to `--out` |
+|---|---|
+| 1 (default) | `replays-<date>[-prompt].json`, `report-<date>[-prompt].json` -- exactly as before |
+| N > 1 | per attempt K: `replays-<date>[-prompt]-attempt-K.json`, `report-<date>[-prompt]-attempt-K.json`; and `repeats-<date>[-prompt].json` |
+
+- **Each attempt is a whole run.** Its two files are the standard format -- `load_replays` and the
+  harness read them as any capture -- with its own `run_health`, written as soon as it ends, so
+  a later attempt that cannot finish never removes an earlier one's record. Requests are bounded
+  at `8 * cases * N`, and each is retried only as the boundary already retries it.
+- **Each attempt is named.** Both files carry `live_provenance.repetition`: `repeat`, `attempt`
+  and `attempt_id`, `<date>-<prompt>-attempt-K-of-N` -- the same for the same run, never shared
+  by two of its attempts. A single run carries no `repetition` key.
+- **Aggregation is explicit** (`copilot_eval_repeats_v1`). The `repeats-*.json` file lists every
+  attempt's files with their SHA-256 and run health; `rows` holds one row per attempt and case,
+  copied from that attempt's report -- `model_outcome`, `model_error_code`, `answer_source`,
+  `server_intervened`, `contained`, `strict_measure` and `strict_result`, each in its own field;
+  and `cases` counts them across attempts: model outcomes, answer sources, server interventions,
+  and strict results as passed, failed and not scored (by outcome). Counts only, never rates;
+  the model's output, the served answer and each attempt's verdict are never merged into one
+  score, and each attempt's own report stays the record.
+
+**Local model provenance.** An `ollama` run's `live_provenance.local_model` records:
+
+| Field | Source |
+|---|---|
+| `model` | the configured model (`LLM_MODEL`, or the provider default) |
+| `server_version` | `GET /api/version` on the configured loopback server, through the adapter's own opener (no proxy, no redirect, no body) -- a metadata request that runs no model |
+| `manifest.manifest_digest`, `manifest_id` | SHA-256 of the local manifest file under Ollama's default `~/.ollama/models` (the script reads no environment variable itself, so a server configured with another `OLLAMA_MODELS` gives `manifest_not_found`), and its first twelve characters (`ollama list`'s id) -- read from disk, not requested |
+| `manifest.model_layer_digest`, `model_layer_bytes` | the manifest's model-weights layer, as the manifest states it |
+
+Anything that cannot be established is recorded as `{"status": "unavailable", "reason": ...}`
+(`unreachable`, `malformed_reply`, `manifest_not_found`, `unrecognised_model_name`) or, for a
+manifest without a weights layer, `model_layer: "unavailable"` -- never guessed, and never a
+reason to stop the run. No local path is recorded. A run under any other provider records no
+`local_model` key, so its provenance is exactly as before.
+
 ### Safeguards (R2.6B)
 
 Each of these is checked **before a provider client exists**, so a refusal costs nothing, and

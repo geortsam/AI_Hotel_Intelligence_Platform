@@ -9,6 +9,7 @@ cases it ran, which model ids it records, and that the key appears nowhere it wr
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import importlib.util
 import json
 import os
@@ -93,6 +94,13 @@ class World:
         #: R2.8B: build the REAL guarded provider instead of the stand-in -- only for a test that
         #: has replaced its transport.
         self.real_factory = False
+        #: R2.9H: what an `ollama` run records as its local model's identity. A fixed stand-in,
+        #: so no test reads this machine's Ollama directory or asks a server for its version.
+        self.local_model: dict[str, Any] = {
+            "model": "qwen3.5:4b",
+            "server_version": {"status": "unavailable", "reason": "test_stand_in"},
+            "manifest": {"status": "unavailable", "reason": "test_stand_in"},
+        }
 
     def run(self, *extra: str, **main_options: Any) -> int:
         return int(
@@ -150,6 +158,11 @@ def world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> World:
         return model
 
     monkeypatch.setattr(factory, "build_chat_model", build)
+
+    def local_model(settings: Settings) -> dict[str, Any] | None:
+        return dict(state.local_model) if settings.llm_provider == "ollama" else None
+
+    monkeypatch.setattr(script, "local_model_provenance", local_model)
     return state
 
 
@@ -1705,3 +1718,436 @@ def test_a_live_v3_report_and_a_replay_of_its_capture_record_the_same_policy_pro
     )
     for block in ("model_level_v2", "integrity_v3"):
         assert replayed[block]["policies"] == report[block]["policies"]
+
+
+# --- R2.9H: repeated runs ------------------------------------------------------------------------
+
+#: The live_provenance keys a single run recorded before R2.9H. A single run under any provider but
+#: `ollama` still records exactly these; an `ollama` one adds `local_model`, and nothing else.
+SINGLE_RUN_PROVENANCE_KEYS = {
+    "source",
+    "provider",
+    "configured_model",
+    "prompt",
+    "budget",
+    "thinking",
+    "returned_models",
+    "returned_models_by_case",
+    "sdk_distribution",
+    "sdk_version",
+    "ollama_options",
+    "selection",
+}
+V4_ARGS = ["--set", "copilot_eval_v3", "--prompt", "copilot_answer@v4"]
+REPEATED_CASES = ["--case", "kpis_may_occupancy", "--case", "another_property"]
+
+
+class NumberedModel:
+    """Answers without tools, naming the request it answers -- so every attempt's transcript is
+    its own -- and raises `LlmUnavailableError` on the requests numbered in *unavailable*."""
+
+    def __init__(self, unavailable: frozenset[int] = frozenset()) -> None:
+        self.unavailable = unavailable
+        self.calls = 0
+
+    def complete(self, request: ChatRequest) -> ChatResponse:
+        self.calls += 1
+        if self.calls in self.unavailable:
+            raise LlmUnavailableError()
+        return ChatResponse(
+            text=f"Answer number {self.calls}.",
+            parsed=None,
+            usage=TokenUsage(input_tokens=3, output_tokens=2),
+            latency_ms=0.0,
+            provider="ollama",
+            model=CONFIGURED,
+            finish_reason="stop",
+            prompt_id=request.prompt_id,
+            prompt_version=request.prompt_version,
+        )
+
+
+def repeated(world: World, monkeypatch: pytest.MonkeyPatch, model: NumberedModel) -> World:
+    import app.llm.factory as factory
+
+    monkeypatch.setattr(factory, "build_chat_model", lambda _settings: model)
+    return local(world)
+
+
+def written(world: World) -> list[str]:
+    return sorted(path.name for path in world.out.iterdir())
+
+
+def test_the_default_repeat_is_one_and_writes_exactly_the_two_files_it_always_did(
+    world: World,
+) -> None:
+    assert world.script.parse_arguments(["--out", "x", "--confirm-local-model-call"]).repeat == 1
+    assert world.run("--case", "kpis_may_occupancy") == 0
+    assert written(world) == [f"replays-{TODAY}.json", f"report-{TODAY}.json"]
+    replays, report = world.files()
+    for provenance in (replays["live_provenance"], report["live_provenance"]):
+        assert set(provenance) == SINGLE_RUN_PROVENANCE_KEYS  # anthropic: no new key at all
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "11", "1.5", "two", "", "01", "1e1"])
+def test_an_invalid_repeat_is_refused_before_a_client_exists(
+    world: World, capsys: pytest.CaptureFixture[str], value: str
+) -> None:
+    with pytest.raises(SystemExit) as refused:
+        world.run("--repeat", value)
+    assert refused.value.code == 2
+    assert "--repeat must be a whole number from 1 to 10" in capsys.readouterr().err
+    assert world.built == []
+    assert not world.out.exists()
+
+
+@pytest.mark.parametrize("value", ["1", "2", "10", " 3 ", "+4"])
+def test_a_valid_repeat_is_accepted(value: str) -> None:
+    script = load_script()
+    parsed = script.parse_arguments(["--out", "x", "--confirm-local-model-call", "--repeat", value])
+    assert parsed.repeat == int(value)
+
+
+def test_attempt_identities_and_file_names_are_deterministic_and_distinct() -> None:
+    script = load_script()
+    ids = [script.attempt_id("2026-11-02", "copilot_answer@v4", k, 3) for k in (1, 2, 3)]
+    assert ids == [
+        "2026-11-02-copilot_answer-v4-attempt-1-of-3",
+        "2026-11-02-copilot_answer-v4-attempt-2-of-3",
+        "2026-11-02-copilot_answer-v4-attempt-3-of-3",
+    ]
+    assert ids == [script.attempt_id("2026-11-02", "copilot_answer@v4", k, 3) for k in (1, 2, 3)]
+    # The default prompt is named in the identity even though its file names omit it.
+    assert script.attempt_id("2026-11-02", "copilot_answer@v2", 1, 2) == (
+        "2026-11-02-copilot_answer-v2-attempt-1-of-2"
+    )
+    out = Path("o")
+    assert script.output_paths(out, "2026-11-02", "copilot_answer@v4", 2) == (
+        out / "replays-2026-11-02-copilot_answer-v4-attempt-2.json",
+        out / "report-2026-11-02-copilot_answer-v4-attempt-2.json",
+    )
+    assert script.output_paths(out, "2026-11-02", "copilot_answer@v4") == (
+        out / "replays-2026-11-02-copilot_answer-v4.json",
+        out / "report-2026-11-02-copilot_answer-v4.json",
+    )
+    assert script.repeats_path(out, "2026-11-02", "copilot_answer@v4") == (
+        out / "repeats-2026-11-02-copilot_answer-v4.json"
+    )
+
+
+def test_a_repeated_run_writes_one_standard_pair_per_attempt_and_an_aggregate(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dataclasses import replace
+
+    from app.llm.prompts.registry import COPILOT_ANSWER_V4
+    from tests.evaluation.questions_v3 import COPILOT_EVAL_V3
+    from tests.evaluation.replay import load_replays
+
+    model = NumberedModel()
+    assert repeated(world, monkeypatch, model).run(*V4_ARGS, *REPEATED_CASES, "--repeat", "3") == 0
+    stem = f"{TODAY}{V4}"
+    assert written(world) == sorted(
+        [f"replays-{stem}-attempt-{k}.json" for k in (1, 2, 3)]
+        + [f"report-{stem}-attempt-{k}.json" for k in (1, 2, 3)]
+        + [f"repeats-{stem}.json"]
+    )
+    assert model.calls == 3  # one model case per attempt; the server-guard case asks none
+    subset = replace(
+        COPILOT_EVAL_V3,
+        cases=tuple(c for c in COPILOT_EVAL_V3.cases if c.case_id in REPEATED_CASES),
+    )
+    for k in (1, 2, 3):
+        replays, report = world.files(f"{V4}-attempt-{k}")
+        identity = f"{TODAY}-copilot_answer-v4-attempt-{k}-of-3"
+        expected = {"repeat": 3, "attempt": k, "attempt_id": identity}
+        assert replays["live_provenance"]["repetition"] == expected
+        assert report["live_provenance"]["repetition"] == expected
+        # Each attempt's transcript is its own, and loads as any capture does.
+        assert replays["cases"]["kpis_may_occupancy"][0]["text"] == f"Answer number {k}."
+        loaded = load_replays(
+            world.out / f"replays-{stem}-attempt-{k}.json", subset, prompt=COPILOT_ANSWER_V4
+        )
+        assert loaded.cases["kpis_may_occupancy"][0].text == f"Answer number {k}."
+        # Each attempt's report is a whole report, with every block and its own run health.
+        assert {"model_level_v2", "integrity_v3", "served", "run_health"} <= set(report)
+        assert report["run_health"]["requests"] == 1
+
+
+def test_the_aggregate_agrees_with_every_attempts_own_report(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert (
+        repeated(world, monkeypatch, NumberedModel()).run(
+            *V4_ARGS, *REPEATED_CASES, "--repeat", "2"
+        )
+        == 0
+    )
+    stem = f"{TODAY}{V4}"
+    aggregate = json.loads((world.out / f"repeats-{stem}.json").read_text(encoding="utf-8"))
+    assert (aggregate["format"], aggregate["repeat"]) == ("copilot_eval_repeats_v1", 2)
+    assert aggregate["prompt"]["identity"] == "copilot_answer@v4"
+    for entry in aggregate["attempts"]:
+        k = entry["attempt"]
+        for kind in ("replay", "report"):
+            raw = (world.out / entry[f"{kind}_file"]).read_bytes()
+            assert hashlib.sha256(raw).hexdigest() == entry[f"{kind}_sha256"]
+        _, report = world.files(f"{V4}-attempt-{k}")
+        level = {row["case_id"]: row for row in report["model_level_v2"]["cases"]}
+        served = {row["case_id"]: row for row in report["served"]["cases"]}
+        mine = [row for row in aggregate["rows"] if row["attempt"] == k]
+        assert [row["case_id"] for row in mine] == [c["case_id"] for c in report["cases"]]
+        for row in mine:
+            assessed = level[row["case_id"]]
+            assert row["model_outcome"] == assessed["outcome"]
+            assert row["answer_source"] == served[row["case_id"]]["answer_source"]
+            assert row["strict_result"] == assessed[row["strict_measure"]]
+            assert row["server_intervened"] == assessed["server_intervened"]
+    for case_id, summary in aggregate["cases"].items():
+        rows = [row for row in aggregate["rows"] if row["case_id"] == case_id]
+        assert summary["attempts"] == len(rows) == 2
+        assert sum(summary["model_outcomes"].values()) == 2
+        strict = summary["strict"]
+        assert strict["passed"] + strict["failed"] + sum(strict["not_scored"].values()) == 2
+    # Model outcome and served answer stay apart: the guard case was served, never asked.
+    guard = aggregate["cases"]["another_property"]
+    assert guard["model_outcomes"] == {"not_asked": 2}
+    assert guard["answer_sources"] == {"scope_guard": 2}
+    assert guard["strict"]["not_scored"] == {"not_asked": 2}
+
+
+def test_a_failed_attempt_does_not_erase_the_others(
+    world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The second attempt's only model request is unavailable: that attempt records the failure,
+    the first and third keep their answers, and the aggregate counts all three."""
+    model = NumberedModel(unavailable=frozenset({2}))
+    assert repeated(world, monkeypatch, model).run(*V4_ARGS, *REPEATED_CASES, "--repeat", "3") == 0
+    aggregate = json.loads((world.out / f"repeats-{TODAY}{V4}.json").read_text(encoding="utf-8"))
+    by_attempt = {
+        row["attempt"]: row for row in aggregate["rows"] if row["case_id"] == "kpis_may_occupancy"
+    }
+    assert {k: row["model_outcome"] for k, row in by_attempt.items()} == {
+        1: "final_response",
+        2: "unavailable",
+        3: "final_response",
+    }
+    assert by_attempt[2]["error_code"] == "LLM_UNAVAILABLE"
+    assert aggregate["cases"]["kpis_may_occupancy"]["model_outcomes"] == {
+        "final_response": 2,
+        "unavailable": 1,
+    }
+    _, failed = world.files(f"{V4}-attempt-2")
+    assert failed["run_health"]["unavailable_requests"] == 1
+    replays, _ = world.files(f"{V4}-attempt-3")
+    assert replays["cases"]["kpis_may_occupancy"][0]["text"] == "Answer number 3."
+    assert model.calls == 3  # nothing was retried beyond the existing policy
+
+
+def test_a_repeated_run_refuses_an_output_that_holds_any_attempts_file(world: World) -> None:
+    world.out.mkdir(parents=True)
+    (world.out / f"report-{TODAY}-attempt-2.json").write_text("{}", encoding="utf-8")
+    assert world.run("--case", "kpis_may_occupancy", "--repeat", "2") == 2
+    assert world.built == []
+
+
+# --- R2.9H: local model provenance ---------------------------------------------------------------
+
+MANIFEST = {
+    "schemaVersion": 2,
+    "layers": [
+        {
+            "mediaType": "application/vnd.ollama.image.model",
+            "digest": "sha256:" + "ab" * 32,
+            "size": 123,
+        },
+        {
+            "mediaType": "application/vnd.ollama.image.license",
+            "digest": "sha256:" + "cd" * 32,
+            "size": 9,
+        },
+    ],
+}
+
+
+def write_manifest(models: Path, relative: str, content: bytes) -> Path:
+    path = models / "manifests" / relative
+    path.parent.mkdir(parents=True)
+    path.write_bytes(content)
+    return path
+
+
+def test_the_local_manifest_gives_the_manifest_and_model_layer_digests(tmp_path: Path) -> None:
+    script = load_script()
+    raw = json.dumps(MANIFEST).encode("utf-8")
+    write_manifest(tmp_path, "registry.ollama.ai/library/qwen3.5/4b", raw)
+    digest = hashlib.sha256(raw).hexdigest()
+    assert script.ollama_manifest("qwen3.5:4b", tmp_path) == {
+        "status": "available",
+        "source": "local_manifest",
+        "manifest_digest": f"sha256:{digest}",
+        "manifest_id": digest[:12],
+        "model_layer_digest": "sha256:" + "ab" * 32,
+        "model_layer_bytes": 123,
+    }
+    # A namespaced model and an untagged one ("latest") are found where Ollama keeps them.
+    write_manifest(tmp_path, "registry.ollama.ai/someone/tiny/latest", raw)
+    assert script.ollama_manifest("someone/tiny", tmp_path)["status"] == "available"
+
+
+@pytest.mark.parametrize(
+    ("model", "content", "expected"),
+    [
+        ("qwen3.5:4b", None, {"status": "unavailable", "reason": "manifest_not_found"}),
+        ("../escape:4b", None, {"status": "unavailable", "reason": "unrecognised_model_name"}),
+        ("a/b/c/d:4b", None, {"status": "unavailable", "reason": "unrecognised_model_name"}),
+    ],
+    ids=["absent", "path_traversal", "too_many_parts"],
+)
+def test_an_unreadable_manifest_is_unavailable_never_guessed(
+    tmp_path: Path, model: str, content: bytes | None, expected: dict[str, str]
+) -> None:
+    assert load_script().ollama_manifest(model, tmp_path) == expected
+
+
+def test_a_malformed_manifest_keeps_its_digest_and_marks_the_layer_unavailable(
+    tmp_path: Path,
+) -> None:
+    script = load_script()
+    write_manifest(tmp_path, "registry.ollama.ai/library/qwen3.5/4b", b"not json")
+    found = script.ollama_manifest("qwen3.5:4b", tmp_path)
+    assert found["manifest_digest"] == "sha256:" + hashlib.sha256(b"not json").hexdigest()
+    assert found["model_layer"] == "unavailable"
+    assert "model_layer_digest" not in found
+
+
+class VersionSpy:
+    """Stands in for the HTTP GET: records every URL asked for, and answers or raises."""
+
+    def __init__(self, reply: bytes | Exception) -> None:
+        self.reply = reply
+        self.urls: list[tuple[str, float]] = []
+
+    def __call__(self, url: str, timeout: float) -> bytes:
+        self.urls.append((url, timeout))
+        if isinstance(self.reply, Exception):
+            raise self.reply
+        return self.reply
+
+
+@pytest.mark.parametrize(
+    ("reply", "expected"),
+    [
+        (
+            b'{"version": "0.40.11"}',
+            {"status": "available", "source": "GET /api/version", "version": "0.40.11"},
+        ),
+        (ConnectionRefusedError(), {"status": "unavailable", "reason": "unreachable"}),
+        (b"<html>", {"status": "unavailable", "reason": "malformed_reply"}),
+        (b'{"version": ""}', {"status": "unavailable", "reason": "malformed_reply"}),
+        (
+            b'{"version": "' + b"9" * 5000 + b'"}',
+            {"status": "unavailable", "reason": "malformed_reply"},
+        ),
+    ],
+    ids=["answered", "refused", "not_json", "empty", "oversized"],
+)
+def test_the_server_version_is_read_from_the_version_endpoint_only(
+    reply: bytes | Exception, expected: dict[str, str]
+) -> None:
+    spy = VersionSpy(reply)
+    assert load_script().ollama_server_version("http://127.0.0.1:11434/", spy) == expected
+    assert spy.urls == [("http://127.0.0.1:11434/api/version", 5.0)]
+
+
+def test_the_version_request_is_a_body_less_get_over_the_loopback_opener(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No generation request: one GET to /api/version, with no body, through the adapter's own
+    opener (no proxy, no redirect). The opener is a stand-in -- no socket is opened."""
+    from app.llm.providers import ollama_provider
+
+    sent: list[Any] = []
+
+    class Opener:
+        def open(self, request: Any, timeout: float) -> Any:
+            sent.append((request, timeout))
+
+            class Response:
+                def __enter__(self) -> Any:
+                    return self
+
+                def __exit__(self, *exc: object) -> None:
+                    return None
+
+                def read(self, limit: int) -> bytes:
+                    return b'{"version": "0.40.11"}'
+
+            return Response()
+
+    monkeypatch.setattr(ollama_provider, "build_loopback_opener", lambda *handlers: Opener())
+    script = load_script()
+    assert script.ollama_server_version("http://127.0.0.1:11434")["version"] == "0.40.11"
+    [(request, timeout)] = sent
+    assert (request.get_method(), request.full_url, request.data) == (
+        "GET",
+        "http://127.0.0.1:11434/api/version",
+        None,
+    )
+    assert timeout == 5.0
+
+
+def test_local_provenance_asks_no_model_and_is_absent_for_the_paid_provider(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The only request local provenance makes is the version GET; the manifest is read from disk
+    (here an empty models directory, so it is unavailable). A paid run makes none at all."""
+    script = load_script()
+    spy = VersionSpy(b'{"version": "0.40.11"}')
+    monkeypatch.setattr(script, "_get_version", spy)
+    monkeypatch.setattr(script, "ollama_models_dir", lambda: tmp_path)
+    local_settings = Settings(
+        _env_file=None, environment="test", llm_enabled=True, llm_provider="ollama"
+    )
+    found = script.local_model_provenance(local_settings)
+    assert found == {
+        "model": "qwen3.5:4b",
+        "server_version": {
+            "status": "available",
+            "source": "GET /api/version",
+            "version": "0.40.11",
+        },
+        "manifest": {"status": "unavailable", "reason": "manifest_not_found"},
+    }
+    assert spy.urls == [("http://127.0.0.1:11434/api/version", 5.0)]
+    paid = Settings(
+        _env_file=None,
+        environment="test",
+        llm_enabled=True,
+        llm_provider="anthropic",
+        llm_api_key=SENTINEL_KEY,
+    )
+    assert script.local_model_provenance(paid) is None
+    assert len(spy.urls) == 1  # the paid provider's run asked nothing for it
+
+
+def test_a_local_run_records_its_local_model_and_a_paid_run_does_not(world: World) -> None:
+    world.local_model = {
+        "model": "qwen3.5:4b",
+        "server_version": {
+            "status": "available",
+            "source": "GET /api/version",
+            "version": "0.40.11",
+        },
+        "manifest": {
+            "status": "available",
+            "source": "local_manifest",
+            "manifest_id": "2a654d98e6fb",
+        },
+    }
+    assert local(world).run("--case", "kpis_may_occupancy") == 0
+    replays, report = world.files()
+    for provenance in (replays["live_provenance"], report["live_provenance"]):
+        assert set(provenance) == SINGLE_RUN_PROVENANCE_KEYS | {"local_model"}
+        assert provenance["local_model"] == world.local_model
+    assert "repetition" not in report["live_provenance"]  # a single run records no repetition
