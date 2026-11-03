@@ -61,6 +61,12 @@ guests or who identifies guests, one about how many does not) may be named on th
 *R2.9U.* `copilot_answer@v8` (v7, with one sentence more: a question about what guests wrote in
 their reviews is answered only from review text in the hotel's documents) likewise.
 
+*R2.9X.* `--case-policy` names the case-policy version a `copilot_eval_v3` run's
+`model_level_v2` and `integrity_v3` blocks are scored under: `copilot_eval_v3_case_policy_v1`
+by default, or `copilot_eval_v3_case_policy_v2` (`review_text` tolerates a search rather than
+requiring one). Both blocks name the version used. Any other set has no case policy, so naming
+v2 for one is refused before any client exists.
+
 ## Request bounds (R2.6B)
 
 Per selected case: at most 4 logical model calls (3 tool rounds and a final answer), each at most
@@ -241,6 +247,11 @@ PROMPTS = (
     "copilot_answer@v8",
 )
 
+#: R2.9X. The case-policy versions a `copilot_eval_v3` run may be scored under -- the same
+#: identifiers `case_policy_v3.CASE_POLICY_VERSIONS` registers -- and the default, v1.
+DEFAULT_CASE_POLICY = "copilot_eval_v3_case_policy_v1"
+CASE_POLICIES = (DEFAULT_CASE_POLICY, "copilot_eval_v3_case_policy_v2")
+
 
 class RunRefusedError(Exception):
     """A reason not to start. Raised before any provider client is built."""
@@ -309,6 +320,15 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             f"Run the selection this many times, 1 to {MAX_REPEAT} (R2.9H). Default: 1, which "
             "writes exactly the two files a run always wrote."
+        ),
+    )
+    parser.add_argument(
+        "--case-policy",
+        choices=list(CASE_POLICIES),
+        default=DEFAULT_CASE_POLICY,
+        help=(
+            "The case policy copilot_eval_v3's model_level_v2 and integrity_v3 blocks are scored "
+            f"under (R2.9X). Default: {DEFAULT_CASE_POLICY}."
         ),
     )
     return parser.parse_args(argv)
@@ -971,6 +991,7 @@ def main(
         # one set with a case policy. Added beside the blocks above, never in their place.
         blocks["model_level_v2"] = True
         blocks["integrity_v3"] = True
+        blocks["case_policy"] = options.case_policy  # R2.9X: v1 unless named
     recorded_on = today().isoformat()
     repeat: int = options.repeat
     # R2.9H: one attempt writes the two files a run always wrote; a repeated run writes them once
@@ -984,6 +1005,11 @@ def main(
     aggregate_path = repeats_path(options.out, recorded_on, options.prompt) if repeat > 1 else None
     try:
         prompt = resolve_prompt(options.prompt)
+        if options.case_policy != DEFAULT_CASE_POLICY and full is not COPILOT_EVAL_V3:
+            raise RunRefusedError(
+                f"--case-policy {options.case_policy} applies to copilot_eval_v3 only; "
+                f"{full.identity} has no case policy"
+            )
         selected = select_cases(full, options.case)
         check_output(
             options.out,

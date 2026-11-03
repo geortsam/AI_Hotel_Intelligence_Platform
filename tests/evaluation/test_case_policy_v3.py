@@ -91,3 +91,83 @@ def test_a_set_without_a_policy_is_refused_before_any_case_runs(flag: str) -> No
             prompt=COPILOT_ANSWER_V2,
             **{flag: True},  # type: ignore[arg-type]
         )
+
+
+# --- R2.9X: copilot_eval_v3_case_policy_v2 ------------------------------------------------------
+
+
+def test_v2_is_registered_beside_v1_and_v1_is_unchanged() -> None:
+    from tests.evaluation.case_policy_v3 import (
+        CASE_POLICIES_V3_V2,
+        CASE_POLICY_VERSION_V2,
+        CASE_POLICY_VERSIONS,
+    )
+
+    assert CASE_POLICY_VERSION == "copilot_eval_v3_case_policy_v1"
+    assert CASE_POLICY_VERSION_V2 == "copilot_eval_v3_case_policy_v2"
+    assert CASE_POLICY_VERSIONS == {
+        CASE_POLICY_VERSION: CASE_POLICIES_V3,
+        CASE_POLICY_VERSION_V2: CASE_POLICIES_V3_V2,
+    }
+    # v1, exactly as R2.8AA defined it: the one change, and review_text's tools.
+    assert {
+        "review_text": (frozenset({KNOWLEDGE_TOOL}), frozenset({KNOWLEDGE_TOOL}))
+    } == TOOL_POLICY_CHANGES
+    assert CASE_POLICIES_V3["review_text"].required_tools == {KNOWLEDGE_TOOL}
+
+
+def test_v2_differs_from_v1_for_review_text_only() -> None:
+    from tests.evaluation.case_policy_v3 import CASE_POLICIES_V3_V2, TOOL_POLICY_CHANGES_V2
+
+    assert set(TOOL_POLICY_CHANGES_V2) == {"review_text"}
+    assert set(CASE_POLICIES_V3_V2) == set(CASE_POLICIES_V3)
+    changed = {
+        case_id
+        for case_id, policy in CASE_POLICIES_V3_V2.items()
+        if policy != CASE_POLICIES_V3[case_id]
+    }
+    assert changed == {"review_text"}
+    for case_id, policy in CASE_POLICIES_V3_V2.items():
+        if case_id != "review_text":
+            assert policy is CASE_POLICIES_V3[case_id]  # the same object, not a copy
+
+
+def test_v2_review_text_tolerates_the_search_requires_nothing_and_still_refuses_the_kpi_tool() -> (
+    None
+):
+    from tests.evaluation.case_policy_v3 import CASE_POLICIES_V3_V2
+
+    v1, v2 = CASE_POLICIES_V3["review_text"], CASE_POLICIES_V3_V2["review_text"]
+    assert v2.required_tools == frozenset()
+    assert v2.tolerated_tools == {KNOWLEDGE_TOOL}
+    assert v2.permitted_tools == {KNOWLEDGE_TOOL}
+    assert KPI_TOOL not in v2.permitted_tools
+    # Everything else about the case is v1's: the decline policy and its two correct reasons.
+    assert (v2.answer_policy, v2.expectation) == (v1.answer_policy, v1.expectation)
+    assert v2.expectation.refusal_reasons == {"cannot_answer", "documents_not_found"}
+
+
+def test_a_version_is_selected_explicitly_and_v1_stays_the_default() -> None:
+    from tests.evaluation.case_policy_v3 import CASE_POLICIES_V3_V2, CASE_POLICY_VERSION_V2
+
+    subset = replace(COPILOT_EVAL_V3, cases=COPILOT_EVAL_V3.cases[:2])
+    assert policies_for(subset) is CASE_POLICIES_V3
+    assert policies_for(subset, CASE_POLICY_VERSION) is CASE_POLICIES_V3
+    assert policies_for(subset, CASE_POLICY_VERSION_V2) is CASE_POLICIES_V3_V2
+    with pytest.raises(ValueError, match="no case policy 'copilot_eval_v3_case_policy_v3'"):
+        policies_for(subset, "copilot_eval_v3_case_policy_v3")
+    with pytest.raises(ValueError, match=r"no R2\.8AA case policy"):
+        policies_for(COPILOT_EVAL_V2, CASE_POLICY_VERSION_V2)
+
+
+def test_a_mapping_names_its_own_version_and_an_unregistered_one_is_refused() -> None:
+    from tests.evaluation.case_policy_v3 import (
+        CASE_POLICIES_V3_V2,
+        CASE_POLICY_VERSION_V2,
+        version_of,
+    )
+
+    assert version_of(CASE_POLICIES_V3) == CASE_POLICY_VERSION
+    assert version_of(CASE_POLICIES_V3_V2) == CASE_POLICY_VERSION_V2
+    with pytest.raises(ValueError, match="not a registered version"):
+        version_of(dict(CASE_POLICIES_V3))  # equal content, but not a known version

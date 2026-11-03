@@ -2855,3 +2855,54 @@ def test_a_local_run_records_its_local_model_and_a_paid_run_does_not(world: Worl
         assert set(provenance) == SINGLE_RUN_PROVENANCE_KEYS | {"local_model"}
         assert provenance["local_model"] == world.local_model
     assert "repetition" not in report["live_provenance"]  # a single run records no repetition
+
+
+# --- R2.9X: --case-policy selects the case-policy version a copilot_eval_v3 run is scored under ---
+
+
+def test_the_case_policy_choices_are_the_registered_versions_and_v1_is_the_default() -> None:
+    from tests.evaluation.case_policy_v3 import CASE_POLICY_VERSION, CASE_POLICY_VERSIONS
+
+    script = load_script()
+    assert tuple(CASE_POLICY_VERSIONS) == script.CASE_POLICIES
+    assert script.DEFAULT_CASE_POLICY == CASE_POLICY_VERSION
+    assert script.parse_arguments(["--out", "x", "--confirm-local-model-call"]).case_policy == (
+        CASE_POLICY_VERSION
+    )
+    with pytest.raises(SystemExit):
+        script.parse_arguments(["--out", "x", "--confirm-local-model-call", "--case-policy", "v2"])
+
+
+@pytest.mark.parametrize(
+    ("argv", "version"),
+    [
+        ((), "copilot_eval_v3_case_policy_v1"),
+        (("--case-policy", "copilot_eval_v3_case_policy_v2"), "copilot_eval_v3_case_policy_v2"),
+    ],
+    ids=["default", "v2"],
+)
+def test_a_v3_run_records_the_case_policy_it_was_scored_under(
+    world: World, argv: tuple[str, ...], version: str
+) -> None:
+    from app.llm.prompts.registry import CANNOT_ANSWER
+
+    local(world).text = CANNOT_ANSWER
+    assert world.run("--set", "copilot_eval_v3", "--case", "review_text", *argv) == 0
+    _, report = world.files()
+    for block in ("model_level_v2", "integrity_v3"):
+        assert report[block]["policies"]["case_policy"] == {"version": version}, block
+    [row] = report["model_level_v2"]["cases"]
+    # Under v1 the search is required; under v2 a no-tool cannot-answer decline is a pass.
+    assert row["model_refusal_correct"] is (version == "copilot_eval_v3_case_policy_v2")
+
+
+def test_naming_v2_for_a_set_without_a_case_policy_is_refused_before_a_client_exists(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = local(world).run(
+        "--set", "copilot_eval_v2", "--case-policy", "copilot_eval_v3_case_policy_v2"
+    )
+    assert code == 2
+    assert world.built == []
+    assert not world.out.exists()
+    assert "applies to copilot_eval_v3 only" in capsys.readouterr().err

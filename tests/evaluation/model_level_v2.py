@@ -103,7 +103,9 @@ canonical constants, in `policies` (`policy_provenance`): `case_policy`
 (`forecast_policy.FORECAST_POLICY_VERSION`) governs the `forecast_permitted` cases listed in its
 `applies_to` -- an empty list when the selection has none, so the version is named even where no
 forecast verdict was taken. A case's own `forecast_verdict` stays `None` wherever the forecast
-policy took none. Provenance only: nothing is scored differently.
+policy took none. Provenance only: nothing is scored differently. Since R2.9X the case-policy
+version is the one the block was actually given (`case_policy_v3.version_of`): v1 by default,
+`copilot_eval_v3_case_policy_v2` when a caller selects it -- never a constant.
 """
 
 from __future__ import annotations
@@ -119,6 +121,7 @@ from tests.evaluation.case_policy_v3 import (
     FORECAST_TOOL,
     KNOWLEDGE_TOOL,
     CasePolicy,
+    version_of,
 )
 from tests.evaluation.integrity import CaseEvidence
 from tests.evaluation.questions import EvalCase
@@ -550,12 +553,15 @@ MEASURES: dict[str, tuple[str, Population, Callable[[Any], bool], str, str]] = {
 }
 
 
-def policy_provenance(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+def policy_provenance(
+    rows: Sequence[Mapping[str, Any]], case_policy_version: str = CASE_POLICY_VERSION
+) -> dict[str, dict[str, Any]]:
     """R2.9C. The policies *rows* were scored under, by their canonical versions: the case policy
-    for every row, the forecast policy for the `forecast_permitted` rows it lists -- none, when
-    the selection holds no such case, and its version is named all the same."""
+    for every row (R2.9X: *case_policy_version*, the one they were scored under), the forecast
+    policy for the `forecast_permitted` rows it lists -- none, when the selection holds no such
+    case, and its version is named all the same."""
     return {
-        "case_policy": {"version": CASE_POLICY_VERSION},
+        "case_policy": {"version": case_policy_version},
         "forecast_policy": {
             "version": forecast_policy.FORECAST_POLICY_VERSION,
             "applies_to": [
@@ -588,7 +594,7 @@ def block(
     codes = Counter(row["model_error_code"] for row in rows if row["model_error_code"])
     return {
         "version": MODEL_LEVEL_V2_VERSION,
-        "policies": policy_provenance(rows),
+        "policies": policy_provenance(rows, version_of(policies)),
         "statement": STATEMENT,
         "outcomes": {kind: sum(1 for row in rows if row["outcome"] == kind) for kind in OUTCOMES},
         "model_error_codes": dict(sorted(codes.items())),

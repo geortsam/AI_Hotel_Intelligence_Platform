@@ -4383,6 +4383,64 @@ STAGE_R2_9K = [
 ]
 
 
+# --- R2.9X: copilot_eval_v3_case_policy_v2 and the version each block records -----------------
+
+R29V_TESTS = "tests/evaluation/test_r29v_regressions.py"
+HARNESS = "tests/evaluation/harness.py"
+
+STAGE_R2_9X = [
+    Mutation(
+        "R2.9X-M1",
+        "R2.9X",
+        "case policy v2 requires the document search for review_text again",
+        one(
+            CASE_POLICY_V3,
+            '    "review_text": (frozenset({KNOWLEDGE_TOOL}), frozenset()),\n',
+            '    "review_text": (frozenset({KNOWLEDGE_TOOL}), frozenset({KNOWLEDGE_TOOL})),\n',
+        ),
+        (
+            f"{CASE_POLICY_TESTS}::"
+            "test_v2_review_text_tolerates_the_search_requires_nothing_and_still_refuses_the_kpi_tool",
+            f"{R29V_TESTS}::test_v2_no_tool_and_the_cannot_answer_sentence_is_a_strict_pass",
+        ),
+    ),
+    Mutation(
+        "R2.9X-M2",
+        "R2.9X",
+        "model_level_v2 names case policy v1 whichever version it scored under",
+        one(
+            MODEL_LEVEL_V2,
+            '        "policies": policy_provenance(rows, version_of(policies)),\n',
+            '        "policies": policy_provenance(rows),\n',
+        ),
+        (f"{R29V_TESTS}::test_both_blocks_name_the_case_policy_they_were_scored_under",),
+    ),
+    Mutation(
+        "R2.9X-M3",
+        "R2.9X",
+        "integrity_v3 names case policy v1 whichever version it scored under",
+        one(
+            INTEGRITY_V3,
+            "        | model_level_v2.policy_provenance(rows, version_of(policies)),\n",
+            "        | model_level_v2.policy_provenance(rows),\n",
+        ),
+        (f"{R29V_TESTS}::test_both_blocks_name_the_case_policy_they_were_scored_under",),
+    ),
+    Mutation(
+        "R2.9X-M4",
+        "R2.9X",
+        "the harness ignores the case policy a caller selects",
+        one(
+            HARNESS,
+            "    policies = policies_for(question_set, case_policy) "
+            "if model_level_v2 or integrity_v3 else None\n",
+            "    policies = policies_for(question_set) "
+            "if model_level_v2 or integrity_v3 else None\n",
+        ),
+        (f"{R29V_TESTS}::test_v2_no_tool_and_the_cannot_answer_sentence_is_a_strict_pass",),
+    ),
+]
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -4421,4 +4479,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R2_8AK,
     *STAGE_R2_9B,
     *STAGE_R2_9K,
+    *STAGE_R2_9X,
 )

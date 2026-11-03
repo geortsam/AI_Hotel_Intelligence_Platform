@@ -134,3 +134,21 @@ def test_the_tool_request_denominators_are_stated() -> None:
         assert f"`{measure}`" in text, measure
         assert measure in model_level_v2.MEASURES, measure
     assert "never\ncounted as a pass" in text or "never counted as a pass" in text
+
+
+# --- R2.9X ----------------------------------------------------------------------------------------
+
+
+def test_the_revised_decision_b_names_v2_and_keeps_v1_as_the_recorded_default() -> None:
+    text = addendum()
+    assert f"`{case_policy_v3.CASE_POLICY_VERSION_V2}`" in text
+    assert f"`{case_policy_v3.CASE_POLICY_VERSION}`" in text
+    revised = text.split("**Decision B, revised", 1)[1].split("\n\n**", 1)[0]
+    for phrase in (
+        "only after a\ndocument search that ran and succeeded",
+        "`reviews` table",
+        "`search_hotel_knowledge` is *tolerated*, no longer *required*",
+        "`get_hotel_kpis` is still not\ntolerated",
+        "v1 is unchanged and remains the\ndefault",
+    ):
+        assert phrase in revised, phrase

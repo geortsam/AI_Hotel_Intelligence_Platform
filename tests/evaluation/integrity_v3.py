@@ -50,7 +50,7 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from tests.evaluation import integrity, model_level_v2, scorers, v3_pilot_analysis
-from tests.evaluation.case_policy_v3 import CasePolicy
+from tests.evaluation.case_policy_v3 import CasePolicy, version_of
 from tests.evaluation.integrity import CaseEvidence
 from tests.evaluation.questions import EvalCase
 
@@ -210,7 +210,7 @@ def block(
     return {
         "version": INTEGRITY_V3_VERSION,
         "policies": {"model_level": {"version": model_level_v2.MODEL_LEVEL_V2_VERSION}}
-        | model_level_v2.policy_provenance(rows),
+        | model_level_v2.policy_provenance(rows, version_of(policies)),
         "statement": STATEMENT,
         "citations": dict(CITATIONS),
         "measures": {

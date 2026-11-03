@@ -105,7 +105,7 @@ from tests.evaluation import integrity_v3 as integrity_v3_block
 from tests.evaluation import model_level as model_level_block
 from tests.evaluation import model_level_v2 as model_level_v2_block
 from tests.evaluation import scorers
-from tests.evaluation.case_policy_v3 import policies_for
+from tests.evaluation.case_policy_v3 import CASE_POLICY_VERSION, policies_for
 from tests.evaluation.expectations_v3 import EXPECTATIONS_V3, CaseExpectation
 from tests.evaluation.fixture_documents import FixtureKnowledge
 from tests.evaluation.fixture_hotel import (
@@ -731,6 +731,7 @@ def run(
     server_guard: bool = False,
     model_level_v2: bool = False,
     integrity_v3: bool = False,
+    case_policy: str = CASE_POLICY_VERSION,
 ) -> dict[str, Any]:
     """Run every case under *prompt* and return the report. Deterministic for a replay.
 
@@ -741,11 +742,13 @@ def run(
     `server_guard` block: `copilot_eval_v3_expectations_v2`'s verdict on the cases the server must
     refuse before any model call, for `copilot_eval_v3` or an exact selection of its cases only.
     *model_level_v2* and *integrity_v3* (R2.8AA) add `copilot_model_level_v2` and
-    `copilot_eval_integrity_v3`, scored under `case_policy_v3`, for `copilot_eval_v3` only.
-    All are off by default, so a report without them -- every pinned one -- is exactly what it
-    was. A set a requested block cannot apply to is refused before any case runs."""
+    `copilot_eval_integrity_v3`, scored under `case_policy_v3`, for `copilot_eval_v3` only;
+    *case_policy* (R2.9X) names its version -- `copilot_eval_v3_case_policy_v1` unless a caller
+    selects another, and both blocks record the one used. All are off by default, so a report
+    without them -- every pinned one -- is exactly what it was. A set a requested block cannot
+    apply to is refused before any case runs."""
     expectations = expectations_for(question_set) if integrity else None
-    policies = policies_for(question_set) if model_level_v2 or integrity_v3 else None
+    policies = policies_for(question_set, case_policy) if model_level_v2 or integrity_v3 else None
     if server_guard:
         guard_block.require_selection(question_set)
     registry = build_default_registry()

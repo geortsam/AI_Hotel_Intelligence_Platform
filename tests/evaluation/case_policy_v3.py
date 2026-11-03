@@ -18,11 +18,22 @@ checksum, which binds every recorded replay and report of it (R2.8J, R2.8N-U, R2
 would stop loading, and the legacy blocks would score them differently. So the question set,
 `EXPECTATIONS_V3` and every legacy block stay exactly as they were, and only the R2.8AA blocks
 read this policy. `test_case_policy_v3.py` pins it.
+
+**`copilot_eval_v3_case_policy_v2` (R2.9X).** v1 with one change, to `review_text` only: the
+document search is *tolerated*, no longer *required*, and the KPI tool stays not tolerated. No
+copilot tool returns review text -- `get_hotel_kpis` gives review counts and an average rating,
+and `search_hotel_knowledge` searches uploaded documents, none of which hold reviews (R2.9W) --
+so declining with the cannot-answer sentence and no tool is an honest answer; v1 failed it. The
+documents sentence is still right only after a search that succeeded (`integrity.refusal_verdict`
+checks that, under either version). v1 is kept exactly as it was and stays the default
+(`policies_for`), so every report it scored keeps meaning what it said; a caller selects v2 by its
+version, and the blocks then name v2 in their `policies` (`version_of`).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from tests.evaluation.expectations_v3 import EXPECTATIONS_V3, CaseExpectation
@@ -89,24 +100,80 @@ def _derive() -> dict[str, CasePolicy]:
 CASE_POLICIES_V3 = _derive()
 
 
-def policies_for(question_set: QuestionSet) -> dict[str, CasePolicy]:
+#: R2.9X. The second version of this policy, and its one change. case id -> (tolerated, required).
+CASE_POLICY_VERSION_V2 = "copilot_eval_v3_case_policy_v2"
+TOOL_POLICY_CHANGES_V2: dict[str, tuple[frozenset[str], frozenset[str]]] = {
+    "review_text": (frozenset({KNOWLEDGE_TOOL}), frozenset()),
+}
+
+
+def _derive_v2() -> dict[str, CasePolicy]:
+    """v1's policies, with `TOOL_POLICY_CHANGES_V2` applied and nothing else."""
+    unknown = set(TOOL_POLICY_CHANGES_V2) - set(CASE_POLICIES_V3)
+    if unknown:
+        raise ValueError(f"v2 changes name cases copilot_eval_v3 lacks: {sorted(unknown)}")
+    return {
+        case_id: (
+            replace(
+                policy,
+                tolerated_tools=TOOL_POLICY_CHANGES_V2[case_id][0],
+                required_tools=TOOL_POLICY_CHANGES_V2[case_id][1],
+            )
+            if case_id in TOOL_POLICY_CHANGES_V2
+            else policy
+        )
+        for case_id, policy in CASE_POLICIES_V3.items()
+    }
+
+
+#: case id -> its v2 policy, for every `copilot_eval_v3` case.
+CASE_POLICIES_V3_V2 = _derive_v2()
+
+#: Every version of this policy, by its identifier.
+CASE_POLICY_VERSIONS: dict[str, dict[str, CasePolicy]] = {
+    CASE_POLICY_VERSION: CASE_POLICIES_V3,
+    CASE_POLICY_VERSION_V2: CASE_POLICIES_V3_V2,
+}
+
+
+def policies_for(
+    question_set: QuestionSet, version: str = CASE_POLICY_VERSION
+) -> dict[str, CasePolicy]:
     """The case policy of *question_set*, or a refusal: only `copilot_eval_v3` (or a selection of
-    its cases) has one, and no other set is given guessed metadata."""
+    its cases) has one, and no other set is given guessed metadata. *version* selects which
+    (R2.9X); v1 by default, so a caller that names none scores exactly as before."""
     if question_set.identity != COPILOT_EVAL_V3.identity:
         raise ValueError(f"{question_set.identity} has no R2.8AA case policy")
-    return CASE_POLICIES_V3
+    if version not in CASE_POLICY_VERSIONS:
+        raise ValueError(f"no case policy {version!r}; known: {sorted(CASE_POLICY_VERSIONS)}")
+    return CASE_POLICY_VERSIONS[version]
+
+
+def version_of(policies: Mapping[str, CasePolicy]) -> str:
+    """R2.9X. The version *policies* is -- read from which registered mapping it is, so a block can
+    never name a version other than the one it scored under. A mapping that is not one of them
+    is refused: its version is not known, and is not guessed."""
+    for version, registered in CASE_POLICY_VERSIONS.items():
+        if policies is registered:
+            return version
+    raise ValueError("these case policies are not a registered version")
 
 
 __all__ = [
     "ANSWER_POLICIES",
     "ANSWER_POLICY_CHANGES",
     "CASE_POLICIES_V3",
+    "CASE_POLICIES_V3_V2",
     "CASE_POLICY_VERSION",
+    "CASE_POLICY_VERSIONS",
+    "CASE_POLICY_VERSION_V2",
     "FORECAST_TOOL",
     "KNOWLEDGE_TOOL",
     "KPI_TOOL",
     "TOOL_POLICY_CHANGES",
+    "TOOL_POLICY_CHANGES_V2",
     "AnswerPolicy",
     "CasePolicy",
     "policies_for",
+    "version_of",
 ]
