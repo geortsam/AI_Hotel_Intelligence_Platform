@@ -612,7 +612,8 @@ def test_this_stage_registers_only_what_it_needs() -> None:
     """Stage 7.5 needed no product prompt; Stage 7.7 added exactly one, the copilot's, and
     Stage 7.10 its second version -- v1 kept beside it, unchanged -- and Stage 7.11 the
     conversation prompt; R2.7ZN registered v3 of each, not yet served; R2.8D registered
-    copilot_answer@v4, not yet served."""
+    copilot_answer@v4, not yet served; R2.9K registered copilot_answer@v5, R2.9O v6, R2.9R v7 and
+    R2.9U v8, none yet served."""
     assert set(REGISTRY) == {
         "boundary_probe@v1",
         "copilot_answer@v1",
@@ -621,6 +622,10 @@ def test_this_stage_registers_only_what_it_needs() -> None:
         "copilot_answer@v3",
         "copilot_conversation@v2",
         "copilot_answer@v4",
+        "copilot_answer@v5",
+        "copilot_answer@v6",
+        "copilot_answer@v7",
+        "copilot_answer@v8",
     }
 
 

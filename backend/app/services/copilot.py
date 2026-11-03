@@ -506,7 +506,10 @@ class CopilotService:
 
         offered = self._invocations.permitted_tools(hotel_public_id)
         catalogue = build_catalogue(self._registry, offered)
-        system, current = prompt.render(question=question)
+        # R2.9K: the hotel's own name, only to a prompt that declares it (copilot_answer@v5);
+        # `render` refuses a variable a prompt does not declare, and v2 and v4 declare none.
+        named = {"hotel_name": own_name} if "hotel_name" in prompt.variables else {}
+        system, current = prompt.render(question=question, **named)
         kept = fit(earlier)
         shown: list[Message] = []
         for turn in kept:
@@ -664,10 +667,11 @@ class CopilotService:
 
     @staticmethod
     def _resolve_prompt(identity: tuple[str, str]) -> PromptRecord:
-        """A registered prompt that takes exactly the question. Anything else is a programming
-        error, raised before any model is called."""
+        """A registered prompt that takes exactly the question -- or (R2.9K) the question and the
+        hotel's own name. Anything else is a programming error, raised before any model is
+        called."""
         prompt = get_prompt(*identity)
-        if prompt.variables != ("question",):
+        if prompt.variables not in (("question",), ("hotel_name", "question")):
             raise ValueError(f"{prompt.identity} does not answer a question.")
         return prompt
 

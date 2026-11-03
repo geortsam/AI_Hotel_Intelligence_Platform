@@ -714,7 +714,20 @@ pilots used; `--set copilot_eval_v3` (R2.8C) runs v3's, which separate the serve
 from the model's own compliance -- prefer it for a new live run; `--set copilot_knowledge_eval_v1`
 runs §8's document set instead; and `--case ID` (repeatable) runs only those cases. `--prompt`
 names the prompt rendered: `copilot_answer@v2` by default -- the one production serves -- or,
-for evaluation only, `copilot_answer@v3` or `copilot_answer@v4` (R2.8E). Allowing a prompt here
+for evaluation only, `copilot_answer@v3`, `copilot_answer@v4` (R2.8E), `copilot_answer@v5`
+(R2.9L: v4's system turn, with one sentence before the question naming the evaluated hotel, which
+the copilot fills in from the hotel's own record; checksum `26ffd958…`), `copilot_answer@v6`
+(R2.9O: the same arrangement, with a preamble that names the hotel and places a question about any
+other hotel or property -- identified by name, location or relationship -- out of scope; v4's
+system turn byte for byte; checksum `c2fd9dd3…`), `copilot_answer@v7` (R2.9R: v6 with one
+sentence after its preamble -- a question about which guests or who stayed, booked, arrived or
+left asks for information that identifies guests even when the tools return only totals, and a
+question about how many does not -- so the personal-data rule, not a count, answers it; checksum
+`02787f85…`; piloted once in R2.9S, where `review_text` was answered with review totals) or
+`copilot_answer@v8` (R2.9U: v7 with one sentence more -- a question about what guests wrote in
+their reviews is answered only from review text in the hotel's documents, and review counts and
+ratings do not answer it; the sentence names no reply, so the documents and fallback rules still
+do; checksum `f42d5d90…`; no live behaviour under v8 has been observed yet). Allowing a prompt here
 serves it nowhere: production stays on v2 (`app.services.copilot.PROMPT`). A `copilot_eval`
 run's report also carries the `served`, `model_level` and `run_health` blocks (§4), a
 `copilot_eval_v3` run the `integrity` and `server_guard` blocks (§4, R2.8L, R2.8N-G) and
@@ -789,7 +802,8 @@ with a stand-in model and sockets disabled:
 - **Nothing is overwritten.** If `replays-<date>.json` or `report-<date>.json` already exists,
   the run stops and asks for a new `--out`; files are also created exclusively, so one that
   appears mid-run is not replaced either. Under a non-default prompt both names end in the
-  prompt (`-copilot_answer-v3`, `-copilot_answer-v4`), and `--out` must be new or empty.
+  prompt (`-copilot_answer-v3` ... `-copilot_answer-v8`), and `--out` must be
+  new or empty.
 - **One identity for the cases run.** Both files carry the checksum of the cases actually
   selected, and a `live_provenance.selection` block: the case ids, the selected-set checksum and
   the full set's identity, checksum and size. A one-case capture can therefore never pass as a

@@ -436,6 +436,109 @@ COPILOT_ANSWER_V4 = PromptRecord(
 )
 
 
+#: R2.9K. The one sentence v5 adds: the name of the hotel the request is for, and that no other
+#: property's data is presented as its own, nor its own as another's (R2.9J: the model was never
+#: told which hotel it serves, and answered "the Grand Meridian Hotel" with this hotel's figures).
+HOTEL_IDENTITY_SENTENCE = (
+    "The hotel this request is for is named {{ hotel_name }}; never attribute another "
+    "property's data to it, or its data to another property."
+)
+
+#: R2.9K. `copilot_answer@v4`, with `HOTEL_IDENTITY_SENTENCE` before the question -- and nothing
+#: else changed. The sentence is in the user turn, not the system turn: the name is the hotel's own
+#: record, filled at render time like the question, so the system turn stays v4's fixed text, byte
+#: for byte, and no stored value is ever placed among the rules. The caller fills `hotel_name` with
+#: the authorized hotel's canonical `Hotel.name` (`app.services.copilot`), and passes it to no
+#: prompt that does not declare it. Registered and not served: `app.services.copilot.PROMPT` is
+#: still v2, and whether a model attributes better under v5 is for a live evaluation to show.
+COPILOT_ANSWER_V5 = PromptRecord(
+    prompt_id="copilot_answer",
+    version="v5",
+    system=COPILOT_ANSWER_V4.system,
+    template=HOTEL_IDENTITY_SENTENCE + "\n\n{{ question }}",
+    variables=("hotel_name", "question"),
+)
+
+
+#: R2.9O. What v6 puts before the question in place of v5's identity sentence: the hotel's name, and
+#: that a question about any other hotel or property is out of scope however it is identified. It
+#: says "outside the scope", not v5's "never attribute ... data" (R2.9N: under v5 the model declined
+#: "the Grand Meridian Hotel" and "the place across the road" with the data-cannot-answer sentence,
+#: not the scope one), and names the ways the R2.9M failures identified the other property.
+HOTEL_SCOPE_PREAMBLE = (
+    "The hotel this request is for is {{ hotel_name }}. Questions about a different hotel or "
+    "property are outside the scope of this assistant, including when that hotel or property is "
+    "identified by its name, location, or relationship to this hotel."
+)
+
+#: R2.9O. `copilot_answer@v4`'s system turn, byte for byte, with `HOTEL_SCOPE_PREAMBLE` before the
+#: question -- v5's arrangement, with only the user-turn text changed, so a v5/v6 comparison differs
+#: in that text alone. The caller fills `hotel_name` exactly as for v5. Registered and not served:
+#: `app.services.copilot.PROMPT` is still v2, and whether a model declines better under v6 is for a
+#: live evaluation to show.
+COPILOT_ANSWER_V6 = PromptRecord(
+    prompt_id="copilot_answer",
+    version="v6",
+    system=COPILOT_ANSWER_V4.system,
+    template=HOTEL_SCOPE_PREAMBLE + "\n\n{{ question }}",
+    variables=("hotel_name", "question"),
+)
+
+
+#: R2.9R. The sentence v7 adds after v6's preamble: a question about WHICH guests, or who, asks for
+#: information that identifies guests even when the tools hold only totals, and a question about how
+#: many does not (R2.9Q: under v6, "Which guests stayed with us ...?" was answered with the KPI
+#: tool's arrival and departure counts instead of the personal-data sentence). It classifies the
+#: question only; `PERSONAL_DATA_RULE`, in the system turn, still names the reply.
+GUEST_IDENTITY_SENTENCE = (
+    "A question about which guests or who stayed, booked, arrived or left asks for information "
+    "that identifies guests, even when the tools return only totals; a question about how many "
+    "does not."
+)
+
+#: R2.9R. `copilot_answer@v6` with `GUEST_IDENTITY_SENTENCE` after its preamble, in the same
+#: paragraph -- v4's system turn and v6's preamble byte for byte, so a v6/v7 comparison differs in
+#: that one sentence alone. Registered and not served: `app.services.copilot.PROMPT` is still v2,
+#: and no live behaviour under v7 has been observed.
+COPILOT_ANSWER_V7 = PromptRecord(
+    prompt_id="copilot_answer",
+    version="v7",
+    system=COPILOT_ANSWER_V4.system,
+    template=HOTEL_SCOPE_PREAMBLE + " " + GUEST_IDENTITY_SENTENCE + "\n\n{{ question }}",
+    variables=("hotel_name", "question"),
+)
+
+
+#: R2.9U. The sentence v8 adds after v7's: a question about what guests wrote in their reviews is
+#: answered only from review text in this hotel's documents, and review totals do not answer it
+#: (R2.9T: under v7, "What did guests write in their reviews ...?" was answered with the KPI tool's
+#: review count, rating and published count instead of a decline). It names no reply: the
+#: documents and fallback rules in the system turn still do.
+REVIEW_CONTENT_SENTENCE = (
+    "A question about what guests wrote in their reviews is answered only from review text in "
+    "this hotel's documents; review counts and ratings do not answer it."
+)
+
+#: R2.9U. `copilot_answer@v7` with `REVIEW_CONTENT_SENTENCE` after its guest sentence, in the same
+#: paragraph -- v4's system turn and v7's preamble byte for byte, so a v7/v8 comparison differs in
+#: that one sentence alone. Registered and not served: `app.services.copilot.PROMPT` is still v2,
+#: and no live behaviour under v8 has been observed.
+COPILOT_ANSWER_V8 = PromptRecord(
+    prompt_id="copilot_answer",
+    version="v8",
+    system=COPILOT_ANSWER_V4.system,
+    template=(
+        HOTEL_SCOPE_PREAMBLE
+        + " "
+        + GUEST_IDENTITY_SENTENCE
+        + " "
+        + REVIEW_CONTENT_SENTENCE
+        + "\n\n{{ question }}"
+    ),
+    variables=("hotel_name", "question"),
+)
+
+
 #: Every prompt this application knows, keyed by identity. A registry rather than a module
 #: constant, so that a stored answer's `prompt_id@version` can be resolved back to the content
 #: that produced it -- which is the whole point of versioning them.
@@ -449,6 +552,10 @@ REGISTRY: dict[str, PromptRecord] = {
         COPILOT_ANSWER_V3,
         COPILOT_CONVERSATION_V2,
         COPILOT_ANSWER_V4,
+        COPILOT_ANSWER_V5,
+        COPILOT_ANSWER_V6,
+        COPILOT_ANSWER_V7,
+        COPILOT_ANSWER_V8,
     )
 }
 
@@ -475,14 +582,22 @@ __all__ = [
     "COPILOT_ANSWER_V2",
     "COPILOT_ANSWER_V3",
     "COPILOT_ANSWER_V4",
+    "COPILOT_ANSWER_V5",
+    "COPILOT_ANSWER_V6",
+    "COPILOT_ANSWER_V7",
+    "COPILOT_ANSWER_V8",
     "COPILOT_CONVERSATION_V1",
     "COPILOT_CONVERSATION_V2",
     "DOCUMENTS_NOT_FOUND_RULE",
     "EARLIER_TURNS_RULE",
     "FALLBACK_DECLINE_RULE",
+    "GUEST_IDENTITY_SENTENCE",
+    "HOTEL_IDENTITY_SENTENCE",
+    "HOTEL_SCOPE_PREAMBLE",
     "PERSONAL_DATA_ANSWER",
     "PERSONAL_DATA_RULE",
     "REGISTRY",
+    "REVIEW_CONTENT_SENTENCE",
     "SCOPE_ANSWER",
     "SCOPE_RULE",
     "PromptRecord",

@@ -425,6 +425,7 @@ RECORDED_PER_STAGE = {
     "R2.8AI": 7,
     "R2.8AK": 4,
     "R2.9B": 1,
+    "R2.9K": 1,
 }
 
 

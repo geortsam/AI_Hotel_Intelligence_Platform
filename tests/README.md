@@ -25,9 +25,9 @@ pytest -q
 ## Mutation checks
 
 Stages 7.6–7.14, F2, F16, I4, F1, F2-ADR, M1, M2, F2-COMP, F3, F4, G1, H1–H4, H6–H8, R2.2, R2.2b,
-R2.8AA, R2.8AC, R2.8AE, R2.8AG, R2.8AI, R2.8AK and R2.9B each broke their own guarantees on
-purpose and reported that a test caught every break.
-Those runs are now committed, in `mutation/inventory.py`: 365 mutations across 36 stages, 304
+R2.8AA, R2.8AC, R2.8AE, R2.8AG, R2.8AI, R2.8AK, R2.9B and R2.9K each broke their own guarantees
+on purpose and reported that a test caught every break.
+Those runs are now committed, in `mutation/inventory.py`: 366 mutations across 37 stages, 305
 with pytest killers and 61 with Vitest killers, each an exact edit plus the named tests (its
 *killers*) that must fail when it is applied. The edits are the ones the stages ran; where one
 had to change since, its `note` says how and why. These are counts of the inventory, not of any
@@ -56,8 +56,8 @@ python -m tests.mutation --require-all --database-url postgresql+psycopg://postg
   that into a failure. `TEST_DATABASE_URL` is never inherited, because on a developer machine it
   may point at seeded demo data. These 129 are the mutations flagged `needs_database`, and no
   Vitest mutation is among them, so a local run with `--no-frontend` and no `--database-url`
-  runs 175 mutations and reports the other 190 as *not run* (129 needing a database, 61
-  frontend). CI passes a database and Node, and runs all 365.
+  runs 176 mutations and reports the other 190 as *not run* (129 needing a database, 61
+  frontend). CI passes a database and Node, and runs all 366.
 - **Maintenance.** `test_harness.py` fails in the normal suite as soon as a refactor moves an
   anchor or renames a killer. `python -m tests.mutation --discover --only <id>` then lists every
   test that fails under that mutation, to re-pin it.

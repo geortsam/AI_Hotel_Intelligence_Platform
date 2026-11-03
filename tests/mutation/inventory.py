@@ -4365,6 +4365,24 @@ STAGE_R2_9B = [
 ]
 
 
+# --- R2.9K: copilot_answer@v5, told the hotel's own name ---------------------------------------
+
+STAGE_R2_9K = [
+    Mutation(
+        "R2.9K-M1",
+        "R2.9K",
+        "the hotel's name is passed to every prompt, not only to one that declares it",
+        one(
+            COPILOT_SERVICE,
+            '        named = {"hotel_name": own_name} if "hotel_name" in prompt.variables '
+            "else {}\n",
+            '        named = {"hotel_name": own_name}\n',
+        ),
+        (f"{COPILOT_TESTS}::test_the_service_passes_no_hotel_name_to_v2_or_v4",),
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -4402,4 +4420,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R2_8AI,
     *STAGE_R2_8AK,
     *STAGE_R2_9B,
+    *STAGE_R2_9K,
 )

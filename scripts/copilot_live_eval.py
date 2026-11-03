@@ -47,6 +47,20 @@ before any client exists. A v4 report carries the `served`, `model_level` and `r
 but no `v3_analysis`: that analysis is bound to v3's prompt and refuses any other, so it is added
 for v3 runs only.
 
+*R2.9L.* `copilot_answer@v5` (R2.9K: v4 with one sentence naming the evaluated hotel) may be named
+too, on exactly v4's terms: files named `...-copilot_answer-v5.json`, a new empty `--out`, the
+record resolved from the registry with no fallback, the confirmation flag still required, and no
+`v3_analysis`. The copilot fills the hotel's name in itself; nothing here supplies it.
+
+*R2.9O.* `copilot_answer@v6` (v4's system turn, with a user-turn preamble naming the evaluated hotel
+and placing any other hotel or property out of scope) may be named on the same terms as v5.
+
+*R2.9R.* `copilot_answer@v7` (v6, with one sentence after its preamble: a question about which
+guests or who identifies guests, one about how many does not) may be named on the same terms too.
+
+*R2.9U.* `copilot_answer@v8` (v7, with one sentence more: a question about what guests wrote in
+their reviews is answered only from review text in the hotel's documents) likewise.
+
 ## Request bounds (R2.6B)
 
 Per selected case: at most 4 logical model calls (3 tool rounds and a final answer), each at most
@@ -211,12 +225,21 @@ QUESTION_SETS = (
     "copilot_knowledge_eval_v1",
 )
 
-#: The prompts a run may render (R2.7ZQ): the default, and v3 or (R2.8E) v4 only when named.
-#: Allowing one here makes it renderable in an evaluation run; it does not serve it anywhere.
+#: The prompts a run may render (R2.7ZQ): the default, and v3, (R2.8E) v4, (R2.9L) v5, (R2.9O)
+#: v6, (R2.9R) v7 or (R2.9U) v8 only when named. Allowing one here makes it renderable in an
+#: evaluation run; it does not serve it anywhere.
 DEFAULT_PROMPT = "copilot_answer@v2"
 #: The one prompt `v3_pilot_analysis` is bound to; its block is added for that prompt only.
 V3_ANALYSIS_PROMPT = "copilot_answer@v3"
-PROMPTS = (DEFAULT_PROMPT, V3_ANALYSIS_PROMPT, "copilot_answer@v4")
+PROMPTS = (
+    DEFAULT_PROMPT,
+    V3_ANALYSIS_PROMPT,
+    "copilot_answer@v4",
+    "copilot_answer@v5",
+    "copilot_answer@v6",
+    "copilot_answer@v7",
+    "copilot_answer@v8",
+)
 
 
 class RunRefusedError(Exception):

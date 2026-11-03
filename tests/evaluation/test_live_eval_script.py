@@ -671,9 +671,20 @@ def test_a_v3_run_renders_v3_and_records_it_in_every_file(world: World) -> None:
 
 
 @pytest.mark.parametrize(
-    # R2.8E: v4 is now an allowed choice (below); v5 stands for an unknown version instead.
+    # R2.8E made v4 an allowed choice, R2.9L v5, R2.9O v6, R2.9R v7 and R2.9U v8 (below); v9,
+    # which no stage has registered, stands for an unknown version instead.
     "prompt",
-    ["copilot_answer@v1", "copilot_answer@v5", "v3", "v4", "boundary_probe@v1"],
+    [
+        "copilot_answer@v1",
+        "copilot_answer@v9",
+        "v3",
+        "v4",
+        "v5",
+        "v6",
+        "v7",
+        "v8",
+        "boundary_probe@v1",
+    ],
 )
 def test_an_unknown_prompt_is_refused_by_the_command_line(prompt: str) -> None:
     with pytest.raises(SystemExit):
@@ -687,12 +698,21 @@ def test_a_prompt_outside_the_allowed_ones_is_never_resolved() -> None:
     for identity in (
         "copilot_answer@v1",
         "copilot_conversation@v2",
-        "copilot_answer@v5",
+        "copilot_answer@v9",
         "copilot_conversation@v1",
         "boundary_probe@v1",
     ):
         with pytest.raises(script.RunRefusedError):
             script.resolve_prompt(identity)
+
+
+def test_the_unknown_example_is_registered_nowhere() -> None:
+    """v9 is a genuinely unknown version (R2.9U registered v8, the previous example): if a later
+    stage registers it, these tests need a new example rather than silently testing a known
+    prompt."""
+    from app.llm.prompts.registry import REGISTRY
+
+    assert "copilot_answer@v9" not in REGISTRY
 
 
 # --- R2.8E: copilot_answer@v4, an evaluation-only choice -----------------------------------------
@@ -704,7 +724,15 @@ def test_v4_is_allowed_only_when_named_and_the_default_stays_v2() -> None:
     from app.llm.prompts.registry import COPILOT_ANSWER_V4
 
     script = load_script()
-    assert script.PROMPTS == ("copilot_answer@v2", "copilot_answer@v3", "copilot_answer@v4")
+    assert script.PROMPTS == (
+        "copilot_answer@v2",
+        "copilot_answer@v3",
+        "copilot_answer@v4",
+        "copilot_answer@v5",
+        "copilot_answer@v6",
+        "copilot_answer@v7",
+        "copilot_answer@v8",
+    )
     assert script.DEFAULT_PROMPT == "copilot_answer@v2"
     unnamed = script.parse_arguments(["--out", "x", "--confirm-local-model-call"])
     assert unnamed.prompt == "copilot_answer@v2"
@@ -806,6 +834,682 @@ def test_a_prompt_missing_from_the_registry_is_refused_not_replaced(
     assert world.built == []
     assert not world.out.exists()
     assert "copilot_answer@v3" in capsys.readouterr().err
+
+
+# --- R2.9L: copilot_answer@v5, an evaluation-only choice on v4's terms ----------------------------
+
+V5 = "-copilot_answer-v5"
+V5_ARGS = ("--set", "copilot_eval_v3", "--prompt", "copilot_answer@v5")
+
+
+def test_v5_is_allowed_only_when_named_and_the_default_stays_v2() -> None:
+    from app.llm.prompts.registry import COPILOT_ANSWER_V2, COPILOT_ANSWER_V5
+    from app.services.copilot import PROMPT
+
+    script = load_script()
+    assert "copilot_answer@v5" in script.PROMPTS
+    assert script.parse_arguments(["--out", "x", "--confirm-local-model-call"]).prompt == (
+        "copilot_answer@v2"
+    )
+    named = script.parse_arguments(
+        ["--out", "x", "--confirm-local-model-call", "--prompt", "copilot_answer@v5"]
+    )
+    assert named.prompt == "copilot_answer@v5"
+    assert script.resolve_prompt("copilot_answer@v5") is COPILOT_ANSWER_V5
+    assert PROMPT is COPILOT_ANSWER_V2
+
+
+def test_a_v5_run_renders_v5_with_the_evaluated_hotels_name_and_records_it(world: World) -> None:
+    from app.llm.prompts.registry import (
+        COPILOT_ANSWER_V2,
+        COPILOT_ANSWER_V4,
+        COPILOT_ANSWER_V5,
+        SCOPE_ANSWER,
+    )
+    from app.services.copilot import PROMPT
+    from tests.evaluation.harness import EvalHotel
+    from tests.evaluation.questions_v3 import COPILOT_EVAL_V3
+
+    local(world).text = SCOPE_ANSWER
+    cases = ("--case", "another_property", "--case", "scope_named_competitor")
+    assert world.run(*V5_ARGS, *cases) == 0
+
+    assert sorted(path.name for path in world.out.iterdir()) == [
+        f"replays-{TODAY}{V5}.json",
+        f"report-{TODAY}{V5}.json",
+    ]
+    replays, report = world.files(V5)
+    v5 = {"identity": COPILOT_ANSWER_V5.identity, "checksum": COPILOT_ANSWER_V5.checksum}
+    assert (replays["prompt"], replays["prompt_checksum"]) == (v5["identity"], v5["checksum"])
+    assert report["prompt"] == v5
+    for provenance in (replays["live_provenance"], report["live_provenance"]):
+        assert provenance["prompt"] == v5
+    assert "copilot_answer@v5" in report["statement"]
+    # The one request (the server-guard case never reached a model) rendered v5: v4's system
+    # turn, and the identity sentence naming the evaluated hotel before the question.
+    [question] = [
+        case.question for case in COPILOT_EVAL_V3.cases if case.case_id == "scope_named_competitor"
+    ]
+    [request] = [request for model in world.built for request in model.requests]
+    assert (request.prompt_id, request.prompt_version) == ("copilot_answer", "v5")
+    assert request.messages[0].content == COPILOT_ANSWER_V4.system
+    assert (
+        request.messages[-1].content
+        == COPILOT_ANSWER_V5.render(question=question, hotel_name=EvalHotel.name)[1].content
+    )
+    assert request.messages[-1].content.startswith(
+        "The hotel this request is for is named Evaluation Fixture Hotel;"
+    )
+    assert {"served", "model_level", "run_health", "model_level_v2", "integrity_v3"} <= set(report)
+    assert "v3_analysis" not in report
+    served = {row["case_id"]: row["answer_source"] for row in report["served"]["cases"]}
+    assert served == {"another_property": "scope_guard", "scope_named_competitor": "model"}
+    assert PROMPT is COPILOT_ANSWER_V2
+
+
+def test_v5_file_names_are_its_own_and_carry_the_attempt_of_a_repeated_run() -> None:
+    script = load_script()
+    out = Path("anywhere")
+    assert [p.name for p in script.output_paths(out, "2026-11-02", "copilot_answer@v5")] == [
+        "replays-2026-11-02-copilot_answer-v5.json",
+        "report-2026-11-02-copilot_answer-v5.json",
+    ]
+    assert [p.name for p in script.output_paths(out, "2026-11-02", "copilot_answer@v5", 2)] == [
+        "replays-2026-11-02-copilot_answer-v5-attempt-2.json",
+        "report-2026-11-02-copilot_answer-v5-attempt-2.json",
+    ]
+    assert script.repeats_path(out, "2026-11-02", "copilot_answer@v5").name == (
+        "repeats-2026-11-02-copilot_answer-v5.json"
+    )
+    assert script.attempt_id("2026-11-02", "copilot_answer@v5", 3, 3) == (
+        "2026-11-02-copilot_answer-v5-attempt-3-of-3"
+    )
+
+
+def test_a_v5_run_without_any_confirmation_is_refused_before_a_client_exists(
+    world: World,
+) -> None:
+    local(world)
+    with pytest.raises(SystemExit) as refused:
+        world.script.main(["--out", str(world.out), "--prompt", "copilot_answer@v5"])
+    assert refused.value.code == 2
+    assert world.built == []
+    assert not world.out.exists()
+
+
+def test_a_v5_run_with_the_wrong_confirmation_is_refused_before_a_client_exists(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    local(world).consent = "--confirm-paid-api-call"
+    assert world.run("--prompt", "copilot_answer@v5") == 2
+    assert world.built == []
+    assert not world.out.exists()
+    assert "--confirm-local-model-call" in capsys.readouterr().err
+
+
+def test_a_v5_run_refuses_a_directory_that_already_holds_anything(world: World) -> None:
+    world.out.mkdir(parents=True)
+    (world.out / "notes.txt").write_text("earlier", encoding="utf-8")
+    assert local(world).run("--prompt", "copilot_answer@v5") == 2
+    assert world.built == []
+    assert [path.name for path in world.out.iterdir()] == ["notes.txt"]
+
+
+def test_a_v5_run_is_never_repeated_into_its_own_directory(world: World) -> None:
+    assert local(world).run(*V5_ARGS, "--case", "guest_names") == 0
+    before = {path.name: path.read_bytes() for path in world.out.iterdir()}
+    built = len(world.built)
+
+    assert world.run(*V5_ARGS, "--case", "guest_names") == 2
+    assert len(world.built) == built  # refused before a client existed
+    assert {path.name: path.read_bytes() for path in world.out.iterdir()} == before
+
+
+def test_a_v5_run_inside_the_repository_is_refused(world: World) -> None:
+    for inside in (REPO_ROOT / "tests" / "evaluation", REPO_ROOT / "v5-pilot-must-not-exist"):
+        world.out = inside
+        assert local(world).run("--prompt", "copilot_answer@v5") == 2
+    assert world.built == []
+    assert not (REPO_ROOT / "v5-pilot-must-not-exist").exists()
+
+
+def test_a_v5_run_with_an_invalid_repeat_is_refused_before_a_client_exists(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as refused:
+        local(world).run("--prompt", "copilot_answer@v5", "--repeat", "11")
+    assert refused.value.code == 2
+    assert "--repeat must be a whole number from 1 to 10" in capsys.readouterr().err
+    assert world.built == []
+    assert not world.out.exists()
+
+
+def test_v5_missing_from_the_registry_is_refused_not_replaced(
+    world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from app.llm.prompts import registry
+
+    monkeypatch.delitem(registry.REGISTRY, "copilot_answer@v5")
+
+    assert local(world).run("--prompt", "copilot_answer@v5") == 2
+    assert world.built == []
+    assert not world.out.exists()
+    assert "copilot_answer@v5" in capsys.readouterr().err
+
+
+# --- R2.9O: copilot_answer@v6, on v5's terms ------------------------------------------------------
+
+V6 = "-copilot_answer-v6"
+V6_ARGS = ("--set", "copilot_eval_v3", "--prompt", "copilot_answer@v6")
+
+
+def test_v6_is_allowed_only_when_named_and_the_default_stays_v2() -> None:
+    from app.llm.prompts.registry import COPILOT_ANSWER_V2, COPILOT_ANSWER_V6
+    from app.services.copilot import PROMPT
+
+    script = load_script()
+    assert "copilot_answer@v6" in script.PROMPTS
+    assert script.DEFAULT_PROMPT == "copilot_answer@v2"
+    assert script.parse_arguments(["--out", "x", "--confirm-local-model-call"]).prompt == (
+        "copilot_answer@v2"
+    )
+    named = script.parse_arguments(
+        ["--out", "x", "--confirm-local-model-call", "--prompt", "copilot_answer@v6"]
+    )
+    assert named.prompt == "copilot_answer@v6"
+    assert script.resolve_prompt("copilot_answer@v6") is COPILOT_ANSWER_V6
+    assert PROMPT is COPILOT_ANSWER_V2
+
+
+def test_a_v6_run_renders_v6_with_the_evaluated_hotels_name_and_records_it(world: World) -> None:
+    from app.llm.prompts.registry import (
+        COPILOT_ANSWER_V2,
+        COPILOT_ANSWER_V4,
+        COPILOT_ANSWER_V6,
+        SCOPE_ANSWER,
+    )
+    from app.services.copilot import PROMPT
+    from tests.evaluation.harness import EvalHotel
+    from tests.evaluation.questions_v3 import COPILOT_EVAL_V3
+
+    local(world).text = SCOPE_ANSWER
+    cases = ("--case", "another_property", "--case", "scope_place_across_the_road")
+    assert world.run(*V6_ARGS, *cases) == 0
+
+    assert sorted(path.name for path in world.out.iterdir()) == [
+        f"replays-{TODAY}{V6}.json",
+        f"report-{TODAY}{V6}.json",
+    ]
+    replays, report = world.files(V6)
+    v6 = {"identity": COPILOT_ANSWER_V6.identity, "checksum": COPILOT_ANSWER_V6.checksum}
+    assert (replays["prompt"], replays["prompt_checksum"]) == (v6["identity"], v6["checksum"])
+    assert report["prompt"] == v6
+    for provenance in (replays["live_provenance"], report["live_provenance"]):
+        assert provenance["prompt"] == v6
+        assert provenance["provider"] == "ollama"
+    assert "copilot_answer@v6" in report["statement"]
+    [question] = [
+        case.question
+        for case in COPILOT_EVAL_V3.cases
+        if case.case_id == "scope_place_across_the_road"
+    ]
+    [request] = [request for model in world.built for request in model.requests]
+    assert (request.prompt_id, request.prompt_version) == ("copilot_answer", "v6")
+    assert request.messages[0].content == COPILOT_ANSWER_V4.system
+    assert (
+        request.messages[-1].content
+        == COPILOT_ANSWER_V6.render(question=question, hotel_name=EvalHotel.name)[1].content
+    )
+    assert request.messages[-1].content.startswith(
+        "The hotel this request is for is Evaluation Fixture Hotel. Questions about a different"
+    )
+    assert request.messages[-1].content.endswith(f"\n\n{question}")
+    assert {"served", "model_level", "run_health", "model_level_v2", "integrity_v3"} <= set(report)
+    assert "v3_analysis" not in report
+    served = {row["case_id"]: row["answer_source"] for row in report["served"]["cases"]}
+    assert served == {"another_property": "scope_guard", "scope_place_across_the_road": "model"}
+    assert PROMPT is COPILOT_ANSWER_V2
+
+
+def test_v6_file_names_are_its_own_and_carry_the_attempt_of_a_repeated_run() -> None:
+    script = load_script()
+    out = Path("anywhere")
+    assert [p.name for p in script.output_paths(out, "2026-11-03", "copilot_answer@v6")] == [
+        "replays-2026-11-03-copilot_answer-v6.json",
+        "report-2026-11-03-copilot_answer-v6.json",
+    ]
+    assert [p.name for p in script.output_paths(out, "2026-11-03", "copilot_answer@v6", 3)] == [
+        "replays-2026-11-03-copilot_answer-v6-attempt-3.json",
+        "report-2026-11-03-copilot_answer-v6-attempt-3.json",
+    ]
+    assert script.repeats_path(out, "2026-11-03", "copilot_answer@v6").name == (
+        "repeats-2026-11-03-copilot_answer-v6.json"
+    )
+    assert script.attempt_id("2026-11-03", "copilot_answer@v6", 1, 3) == (
+        "2026-11-03-copilot_answer-v6-attempt-1-of-3"
+    )
+
+
+def test_a_v6_run_without_any_confirmation_is_refused_before_a_client_exists(
+    world: World,
+) -> None:
+    local(world)
+    with pytest.raises(SystemExit) as refused:
+        world.script.main(["--out", str(world.out), "--prompt", "copilot_answer@v6"])
+    assert refused.value.code == 2
+    assert world.built == []
+    assert not world.out.exists()
+
+
+def test_a_v6_run_with_the_wrong_confirmation_is_refused_before_a_client_exists(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    local(world).consent = "--confirm-paid-api-call"
+    assert world.run("--prompt", "copilot_answer@v6") == 2
+    assert world.built == []
+    assert not world.out.exists()
+    assert "--confirm-local-model-call" in capsys.readouterr().err
+
+
+def test_a_v6_run_refuses_a_directory_that_already_holds_anything(world: World) -> None:
+    world.out.mkdir(parents=True)
+    (world.out / "notes.txt").write_text("earlier", encoding="utf-8")
+    assert local(world).run("--prompt", "copilot_answer@v6") == 2
+    assert world.built == []
+    assert [path.name for path in world.out.iterdir()] == ["notes.txt"]
+
+
+def test_a_v6_run_accepts_a_new_empty_directory(world: World) -> None:
+    world.out.mkdir()
+    assert local(world).run(*V6_ARGS, "--case", "guest_names") == 0
+    assert sorted(path.name for path in world.out.iterdir()) == [
+        f"replays-{TODAY}{V6}.json",
+        f"report-{TODAY}{V6}.json",
+    ]
+
+
+def test_a_v6_run_is_never_repeated_into_its_own_directory(world: World) -> None:
+    assert local(world).run(*V6_ARGS, "--case", "guest_names") == 0
+    before = {path.name: path.read_bytes() for path in world.out.iterdir()}
+    built = len(world.built)
+
+    assert world.run(*V6_ARGS, "--case", "guest_names") == 2
+    assert len(world.built) == built  # refused before a client existed
+    assert {path.name: path.read_bytes() for path in world.out.iterdir()} == before
+
+
+def test_a_v6_run_inside_the_repository_is_refused(world: World) -> None:
+    for inside in (REPO_ROOT / "tests" / "evaluation", REPO_ROOT / "v6-pilot-must-not-exist"):
+        world.out = inside
+        assert local(world).run("--prompt", "copilot_answer@v6") == 2
+    assert world.built == []
+    assert not (REPO_ROOT / "v6-pilot-must-not-exist").exists()
+
+
+@pytest.mark.parametrize("value", ["0", "11", "two"])
+def test_a_v6_run_with_an_invalid_repeat_is_refused_before_a_client_exists(
+    world: World, capsys: pytest.CaptureFixture[str], value: str
+) -> None:
+    with pytest.raises(SystemExit) as refused:
+        local(world).run("--prompt", "copilot_answer@v6", "--repeat", value)
+    assert refused.value.code == 2
+    assert "--repeat must be a whole number from 1 to 10" in capsys.readouterr().err
+    assert world.built == []
+    assert not world.out.exists()
+
+
+def test_v6_missing_from_the_registry_is_refused_not_replaced(
+    world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from app.llm.prompts import registry
+
+    monkeypatch.delitem(registry.REGISTRY, "copilot_answer@v6")
+
+    assert local(world).run("--prompt", "copilot_answer@v6") == 2
+    assert world.built == []
+    assert not world.out.exists()
+    assert "copilot_answer@v6" in capsys.readouterr().err
+
+
+# --- R2.9R: copilot_answer@v7, on v6's terms ------------------------------------------------------
+
+V7 = "-copilot_answer-v7"
+V7_ARGS = ("--set", "copilot_eval_v3", "--prompt", "copilot_answer@v7")
+
+
+def test_v7_is_allowed_only_when_named_and_the_default_stays_v2() -> None:
+    from app.llm.prompts.registry import COPILOT_ANSWER_V2, COPILOT_ANSWER_V7
+    from app.services.copilot import PROMPT
+
+    script = load_script()
+    assert "copilot_answer@v7" in script.PROMPTS
+    assert script.DEFAULT_PROMPT == "copilot_answer@v2"
+    assert script.parse_arguments(["--out", "x", "--confirm-local-model-call"]).prompt == (
+        "copilot_answer@v2"
+    )
+    named = script.parse_arguments(
+        ["--out", "x", "--confirm-local-model-call", "--prompt", "copilot_answer@v7"]
+    )
+    assert named.prompt == "copilot_answer@v7"
+    assert script.resolve_prompt("copilot_answer@v7") is COPILOT_ANSWER_V7
+    assert PROMPT is COPILOT_ANSWER_V2
+
+
+def test_a_v7_run_renders_v7_with_the_evaluated_hotels_name_and_records_it(world: World) -> None:
+    from app.llm.prompts.registry import (
+        COPILOT_ANSWER_V2,
+        COPILOT_ANSWER_V4,
+        COPILOT_ANSWER_V7,
+        PERSONAL_DATA_ANSWER,
+    )
+    from app.services.copilot import PROMPT
+    from tests.evaluation.harness import EvalHotel
+    from tests.evaluation.questions_v3 import COPILOT_EVAL_V3
+
+    local(world).text = PERSONAL_DATA_ANSWER
+    assert world.run(*V7_ARGS, "--case", "another_property", "--case", "guest_names") == 0
+
+    assert sorted(path.name for path in world.out.iterdir()) == [
+        f"replays-{TODAY}{V7}.json",
+        f"report-{TODAY}{V7}.json",
+    ]
+    replays, report = world.files(V7)
+    v7 = {"identity": COPILOT_ANSWER_V7.identity, "checksum": COPILOT_ANSWER_V7.checksum}
+    assert (replays["prompt"], replays["prompt_checksum"]) == (v7["identity"], v7["checksum"])
+    assert report["prompt"] == v7
+    for provenance in (replays["live_provenance"], report["live_provenance"]):
+        assert provenance["prompt"] == v7
+        assert provenance["provider"] == "ollama"
+    assert "copilot_answer@v7" in report["statement"]
+    [question] = [case.question for case in COPILOT_EVAL_V3.cases if case.case_id == "guest_names"]
+    [request] = [request for model in world.built for request in model.requests]
+    assert (request.prompt_id, request.prompt_version) == ("copilot_answer", "v7")
+    assert request.messages[0].content == COPILOT_ANSWER_V4.system
+    assert (
+        request.messages[-1].content
+        == COPILOT_ANSWER_V7.render(question=question, hotel_name=EvalHotel.name)[1].content
+    )
+    assert request.messages[-1].content.startswith(
+        "The hotel this request is for is Evaluation Fixture Hotel. Questions about a different"
+    )
+    assert "A question about which guests or who stayed" in request.messages[-1].content
+    assert request.messages[-1].content.endswith(f"\n\n{question}")
+    assert {"served", "model_level", "run_health", "model_level_v2", "integrity_v3"} <= set(report)
+    assert "v3_analysis" not in report
+    served = {row["case_id"]: row["answer_source"] for row in report["served"]["cases"]}
+    assert served == {"another_property": "scope_guard", "guest_names": "model"}
+    assert PROMPT is COPILOT_ANSWER_V2
+
+
+def test_v7_file_names_are_its_own_and_carry_the_attempt_of_a_repeated_run() -> None:
+    script = load_script()
+    out = Path("anywhere")
+    assert [p.name for p in script.output_paths(out, "2026-11-03", "copilot_answer@v7")] == [
+        "replays-2026-11-03-copilot_answer-v7.json",
+        "report-2026-11-03-copilot_answer-v7.json",
+    ]
+    assert [p.name for p in script.output_paths(out, "2026-11-03", "copilot_answer@v7", 2)] == [
+        "replays-2026-11-03-copilot_answer-v7-attempt-2.json",
+        "report-2026-11-03-copilot_answer-v7-attempt-2.json",
+    ]
+    assert script.repeats_path(out, "2026-11-03", "copilot_answer@v7").name == (
+        "repeats-2026-11-03-copilot_answer-v7.json"
+    )
+    assert script.attempt_id("2026-11-03", "copilot_answer@v7", 2, 3) == (
+        "2026-11-03-copilot_answer-v7-attempt-2-of-3"
+    )
+
+
+def test_a_v7_run_without_any_confirmation_is_refused_before_a_client_exists(
+    world: World,
+) -> None:
+    local(world)
+    with pytest.raises(SystemExit) as refused:
+        world.script.main(["--out", str(world.out), "--prompt", "copilot_answer@v7"])
+    assert refused.value.code == 2
+    assert world.built == []
+    assert not world.out.exists()
+
+
+def test_a_v7_run_with_the_wrong_confirmation_is_refused_before_a_client_exists(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    local(world).consent = "--confirm-paid-api-call"
+    assert world.run("--prompt", "copilot_answer@v7") == 2
+    assert world.built == []
+    assert not world.out.exists()
+    assert "--confirm-local-model-call" in capsys.readouterr().err
+
+
+def test_a_v7_run_refuses_a_directory_that_already_holds_anything(world: World) -> None:
+    world.out.mkdir(parents=True)
+    (world.out / "notes.txt").write_text("earlier", encoding="utf-8")
+    assert local(world).run("--prompt", "copilot_answer@v7") == 2
+    assert world.built == []
+    assert [path.name for path in world.out.iterdir()] == ["notes.txt"]
+
+
+def test_a_v7_run_accepts_a_new_empty_directory(world: World) -> None:
+    world.out.mkdir()
+    assert local(world).run(*V7_ARGS, "--case", "guest_names") == 0
+    assert sorted(path.name for path in world.out.iterdir()) == [
+        f"replays-{TODAY}{V7}.json",
+        f"report-{TODAY}{V7}.json",
+    ]
+
+
+def test_a_v7_run_is_never_repeated_into_its_own_directory(world: World) -> None:
+    assert local(world).run(*V7_ARGS, "--case", "guest_names") == 0
+    before = {path.name: path.read_bytes() for path in world.out.iterdir()}
+    built = len(world.built)
+
+    assert world.run(*V7_ARGS, "--case", "guest_names") == 2
+    assert len(world.built) == built  # refused before a client existed
+    assert {path.name: path.read_bytes() for path in world.out.iterdir()} == before
+
+
+def test_a_v7_run_inside_the_repository_is_refused(world: World) -> None:
+    for inside in (REPO_ROOT / "tests" / "evaluation", REPO_ROOT / "v7-pilot-must-not-exist"):
+        world.out = inside
+        assert local(world).run("--prompt", "copilot_answer@v7") == 2
+    assert world.built == []
+    assert not (REPO_ROOT / "v7-pilot-must-not-exist").exists()
+
+
+@pytest.mark.parametrize("value", ["0", "11", "two"])
+def test_a_v7_run_with_an_invalid_repeat_is_refused_before_a_client_exists(
+    world: World, capsys: pytest.CaptureFixture[str], value: str
+) -> None:
+    with pytest.raises(SystemExit) as refused:
+        local(world).run("--prompt", "copilot_answer@v7", "--repeat", value)
+    assert refused.value.code == 2
+    assert "--repeat must be a whole number from 1 to 10" in capsys.readouterr().err
+    assert world.built == []
+    assert not world.out.exists()
+
+
+def test_v7_missing_from_the_registry_is_refused_not_replaced(
+    world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from app.llm.prompts import registry
+
+    monkeypatch.delitem(registry.REGISTRY, "copilot_answer@v7")
+
+    assert local(world).run("--prompt", "copilot_answer@v7") == 2
+    assert world.built == []
+    assert not world.out.exists()
+    assert "copilot_answer@v7" in capsys.readouterr().err
+
+
+# --- R2.9U: copilot_answer@v8, on v7's terms ------------------------------------------------------
+
+V8 = "-copilot_answer-v8"
+V8_ARGS = ("--set", "copilot_eval_v3", "--prompt", "copilot_answer@v8")
+
+
+def test_v8_is_allowed_only_when_named_and_the_default_stays_v2() -> None:
+    from app.llm.prompts.registry import COPILOT_ANSWER_V2, COPILOT_ANSWER_V8
+    from app.services.copilot import PROMPT
+
+    script = load_script()
+    assert "copilot_answer@v8" in script.PROMPTS
+    assert script.DEFAULT_PROMPT == "copilot_answer@v2"
+    assert script.parse_arguments(["--out", "x", "--confirm-local-model-call"]).prompt == (
+        "copilot_answer@v2"
+    )
+    named = script.parse_arguments(
+        ["--out", "x", "--confirm-local-model-call", "--prompt", "copilot_answer@v8"]
+    )
+    assert named.prompt == "copilot_answer@v8"
+    assert script.resolve_prompt("copilot_answer@v8") is COPILOT_ANSWER_V8
+    assert PROMPT is COPILOT_ANSWER_V2
+
+
+def test_a_v8_run_renders_v8_with_the_evaluated_hotels_name_and_records_it(world: World) -> None:
+    from app.llm.prompts.registry import (
+        COPILOT_ANSWER_V2,
+        COPILOT_ANSWER_V4,
+        COPILOT_ANSWER_V8,
+        PERSONAL_DATA_ANSWER,
+    )
+    from app.services.copilot import PROMPT
+    from tests.evaluation.harness import EvalHotel
+    from tests.evaluation.questions_v3 import COPILOT_EVAL_V3
+
+    local(world).text = PERSONAL_DATA_ANSWER
+    assert world.run(*V8_ARGS, "--case", "another_property", "--case", "guest_names") == 0
+
+    assert sorted(path.name for path in world.out.iterdir()) == [
+        f"replays-{TODAY}{V8}.json",
+        f"report-{TODAY}{V8}.json",
+    ]
+    replays, report = world.files(V8)
+    v8 = {"identity": COPILOT_ANSWER_V8.identity, "checksum": COPILOT_ANSWER_V8.checksum}
+    assert (replays["prompt"], replays["prompt_checksum"]) == (v8["identity"], v8["checksum"])
+    assert report["prompt"] == v8
+    for provenance in (replays["live_provenance"], report["live_provenance"]):
+        assert provenance["prompt"] == v8
+        assert provenance["provider"] == "ollama"
+    assert "copilot_answer@v8" in report["statement"]
+    [question] = [case.question for case in COPILOT_EVAL_V3.cases if case.case_id == "guest_names"]
+    [request] = [request for model in world.built for request in model.requests]
+    assert (request.prompt_id, request.prompt_version) == ("copilot_answer", "v8")
+    assert request.messages[0].content == COPILOT_ANSWER_V4.system
+    assert (
+        request.messages[-1].content
+        == COPILOT_ANSWER_V8.render(question=question, hotel_name=EvalHotel.name)[1].content
+    )
+    assert request.messages[-1].content.startswith(
+        "The hotel this request is for is Evaluation Fixture Hotel. Questions about a different"
+    )
+    assert "A question about which guests or who stayed" in request.messages[-1].content
+    assert "A question about what guests wrote in their reviews" in request.messages[-1].content
+    assert request.messages[-1].content.endswith(f"\n\n{question}")
+    assert {"served", "model_level", "run_health", "model_level_v2", "integrity_v3"} <= set(report)
+    assert "v3_analysis" not in report
+    served = {row["case_id"]: row["answer_source"] for row in report["served"]["cases"]}
+    assert served == {"another_property": "scope_guard", "guest_names": "model"}
+    assert PROMPT is COPILOT_ANSWER_V2
+
+
+def test_v8_file_names_are_its_own_and_carry_the_attempt_of_a_repeated_run() -> None:
+    script = load_script()
+    out = Path("anywhere")
+    assert [p.name for p in script.output_paths(out, "2026-11-03", "copilot_answer@v8")] == [
+        "replays-2026-11-03-copilot_answer-v8.json",
+        "report-2026-11-03-copilot_answer-v8.json",
+    ]
+    assert [p.name for p in script.output_paths(out, "2026-11-03", "copilot_answer@v8", 2)] == [
+        "replays-2026-11-03-copilot_answer-v8-attempt-2.json",
+        "report-2026-11-03-copilot_answer-v8-attempt-2.json",
+    ]
+    assert script.repeats_path(out, "2026-11-03", "copilot_answer@v8").name == (
+        "repeats-2026-11-03-copilot_answer-v8.json"
+    )
+    assert script.attempt_id("2026-11-03", "copilot_answer@v8", 2, 3) == (
+        "2026-11-03-copilot_answer-v8-attempt-2-of-3"
+    )
+
+
+def test_a_v8_run_without_any_confirmation_is_refused_before_a_client_exists(
+    world: World,
+) -> None:
+    local(world)
+    with pytest.raises(SystemExit) as refused:
+        world.script.main(["--out", str(world.out), "--prompt", "copilot_answer@v8"])
+    assert refused.value.code == 2
+    assert world.built == []
+    assert not world.out.exists()
+
+
+def test_a_v8_run_with_the_wrong_confirmation_is_refused_before_a_client_exists(
+    world: World, capsys: pytest.CaptureFixture[str]
+) -> None:
+    local(world).consent = "--confirm-paid-api-call"
+    assert world.run("--prompt", "copilot_answer@v8") == 2
+    assert world.built == []
+    assert not world.out.exists()
+    assert "--confirm-local-model-call" in capsys.readouterr().err
+
+
+def test_a_v8_run_refuses_a_directory_that_already_holds_anything(world: World) -> None:
+    world.out.mkdir(parents=True)
+    (world.out / "notes.txt").write_text("earlier", encoding="utf-8")
+    assert local(world).run("--prompt", "copilot_answer@v8") == 2
+    assert world.built == []
+    assert [path.name for path in world.out.iterdir()] == ["notes.txt"]
+
+
+def test_a_v8_run_accepts_a_new_empty_directory(world: World) -> None:
+    world.out.mkdir()
+    assert local(world).run(*V8_ARGS, "--case", "guest_names") == 0
+    assert sorted(path.name for path in world.out.iterdir()) == [
+        f"replays-{TODAY}{V8}.json",
+        f"report-{TODAY}{V8}.json",
+    ]
+
+
+def test_a_v8_run_is_never_repeated_into_its_own_directory(world: World) -> None:
+    assert local(world).run(*V8_ARGS, "--case", "guest_names") == 0
+    before = {path.name: path.read_bytes() for path in world.out.iterdir()}
+    built = len(world.built)
+
+    assert world.run(*V8_ARGS, "--case", "guest_names") == 2
+    assert len(world.built) == built  # refused before a client existed
+    assert {path.name: path.read_bytes() for path in world.out.iterdir()} == before
+
+
+def test_a_v8_run_inside_the_repository_is_refused(world: World) -> None:
+    for inside in (REPO_ROOT / "tests" / "evaluation", REPO_ROOT / "v8-pilot-must-not-exist"):
+        world.out = inside
+        assert local(world).run("--prompt", "copilot_answer@v8") == 2
+    assert world.built == []
+    assert not (REPO_ROOT / "v8-pilot-must-not-exist").exists()
+
+
+@pytest.mark.parametrize("value", ["0", "11", "two"])
+def test_a_v8_run_with_an_invalid_repeat_is_refused_before_a_client_exists(
+    world: World, capsys: pytest.CaptureFixture[str], value: str
+) -> None:
+    with pytest.raises(SystemExit) as refused:
+        local(world).run("--prompt", "copilot_answer@v8", "--repeat", value)
+    assert refused.value.code == 2
+    assert "--repeat must be a whole number from 1 to 10" in capsys.readouterr().err
+    assert world.built == []
+    assert not world.out.exists()
+
+
+def test_v8_missing_from_the_registry_is_refused_not_replaced(
+    world: World, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from app.llm.prompts import registry
+
+    monkeypatch.delitem(registry.REGISTRY, "copilot_answer@v8")
+
+    assert local(world).run("--prompt", "copilot_answer@v8") == 2
+    assert world.built == []
+    assert not world.out.exists()
+    assert "copilot_answer@v8" in capsys.readouterr().err
 
 
 # --- R2.7ZQ: a v3 run's files are its own ---------------------------------------------------------

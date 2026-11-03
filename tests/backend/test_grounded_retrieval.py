@@ -946,7 +946,8 @@ def test_v1_is_unchanged_and_v2_is_registered_beside_it() -> None:
         "6ab8b15ebde62af4b25d0e66de41faeef8970ee167bedbe31b8edea85937e268"
     )
     # Stage 7.11 added copilot_conversation@v1 beside them; R2.7ZN registered v3 of both, and
-    # R2.8D copilot_answer@v4, none yet served (the assertion below still holds).
+    # R2.8D copilot_answer@v4, R2.9K v5, R2.9O v6, R2.9R v7 and R2.9U v8, none yet served (the
+    # assertion below still holds).
     assert set(REGISTRY) == {
         "boundary_probe@v1",
         "copilot_answer@v1",
@@ -955,6 +956,10 @@ def test_v1_is_unchanged_and_v2_is_registered_beside_it() -> None:
         "copilot_answer@v3",
         "copilot_conversation@v2",
         "copilot_answer@v4",
+        "copilot_answer@v5",
+        "copilot_answer@v6",
+        "copilot_answer@v7",
+        "copilot_answer@v8",
     }
     assert PROMPT is COPILOT_ANSWER_V2
 
