@@ -2906,3 +2906,36 @@ def test_naming_v2_for_a_set_without_a_case_policy_is_refused_before_a_client_ex
     assert world.built == []
     assert not world.out.exists()
     assert "applies to copilot_eval_v3 only" in capsys.readouterr().err
+
+
+# --- R2.10A: the diagnostics block is asked for here, for the knowledge set only ------------------
+
+
+def test_a_knowledge_run_carries_the_diagnostics_block_in_its_report_only(world: World) -> None:
+    case = COPILOT_KNOWLEDGE_EVAL_V1.cases[0].case_id
+    assert local(world).run("--set", "copilot_knowledge_eval_v1", "--case", case) == 0
+
+    replays, report = world.files()
+    assert "knowledge_diagnostics" not in replays
+    block = report["knowledge_diagnostics"]
+    assert block["version"] == "copilot_knowledge_diagnostics_v1"
+    [row] = block["cases"]
+    assert (row["case_id"], row["model_text"]) == (case, world.text)
+
+
+@pytest.mark.parametrize("question_set", ["copilot_eval_v1", "copilot_eval_v2", "copilot_eval_v3"])
+def test_no_other_set_carries_the_diagnostics_block(world: World, question_set: str) -> None:
+    assert local(world).run("--set", question_set, "--case", "kpis_may_occupancy") == 0
+
+    _, report = world.files()
+    assert "knowledge_diagnostics" not in report
+
+
+def test_a_repeated_knowledge_run_records_the_block_in_every_attempt(world: World) -> None:
+    case = COPILOT_KNOWLEDGE_EVAL_V1.cases[0].case_id
+    code = local(world).run("--set", "copilot_knowledge_eval_v1", "--case", case, "--repeat", "2")
+    assert code == 0
+    for attempt in (1, 2):
+        path = world.out / f"report-{TODAY}-attempt-{attempt}.json"
+        report = json.loads(path.read_text(encoding="utf-8"))
+        assert [row["case_id"] for row in report["knowledge_diagnostics"]["cases"]] == [case]

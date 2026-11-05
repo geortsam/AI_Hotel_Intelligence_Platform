@@ -72,6 +72,11 @@ ARTIFACT_DIGESTS = {
     "fixtures/reference_replays_v3.json": (
         "f5738946ff9d8f2c0493fb8124fe2443ee71874da58e27a3c1b54e7a39f9ad0d"
     ),
+    # R2.10A: added after R2.8N-C. Neither a reference nor a replay fixture: the verbatim record of
+    # the R2.9Y live runs that `test_r29y_regressions.py` rescores.
+    "fixtures/r29y_knowledge_capture.json": (
+        "6cefba9463356889f3e21471a03c1e807a6386ee1b0894ccbe9dc87901755cd1"
+    ),
 }
 
 

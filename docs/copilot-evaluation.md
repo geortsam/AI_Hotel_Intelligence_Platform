@@ -1257,6 +1257,55 @@ write another hotel's chunk id, and assert exactly that. The scorers import noth
 `app.copilot.citations` or `app.copilot.grounding`. The reference exchanges pass every measure;
 like §1's, they evaluate the pipeline, not a model.
 
+#### The `knowledge_diagnostics` block (`copilot_knowledge_diagnostics_v1`, R2.10A)
+
+The measures above cannot show what the model wrote: `not_found` judges the served text, so a model
+that invents an uncited answer on a not-found case passes it, because the server replaces the
+answer. And `expected_sources` reads the same whether the search found nothing or the model ignored
+what it found. This block records those facts beside the report. It is additive and opt-in:
+`knowledge_harness.run(..., knowledge_diagnostics=True)` adds it, the default does not, and it
+changes no measure and no case row. `scripts/copilot_live_eval.py` asks for it on a
+`copilot_knowledge_eval_v1` run and on no other set. `knowledge_reference_report.json` does not
+carry it.
+
+Per case:
+
+| Field | What it holds |
+|---|---|
+| `model_text` | the model's final text; `""` when no response carries one |
+| `answer_source` | the `CopilotService.answer_turn` branch that produced the served answer; `null` when the request raised. `not_found_replacement` is also taken when the model wrote that sentence itself, so it does not mean the text changed |
+| `server_replaced_text` | the served text differs from the model's, surrounding whitespace aside |
+| `searches` | each search requested, in order: `query`, `outcome` (`returned`, `tool_error`, `no_result_shown`), `hit_titles`, `hit_count` (`null` unless it returned). `no_result_shown` means no later request carried a result, not that the search never ran: the loop stops on `max_rounds` before running a round's calls, but on `tool_failed` after running them |
+| `model_not_found_correct` | not-found cases only, otherwise `null`: the request stopped `completed`, the model's own final text is exactly the documents sentence, and a search returned before it. `not_found` is unchanged |
+| `failure_class` | the first class below that the recorded evidence establishes |
+
+| Class | Evidence |
+|---|---|
+| `ungrounded_figures_withheld` | stop reason `ungrounded_figures` |
+| `request_incomplete` | a declared model error, or any other stop reason but `completed` |
+| `invalid_citation_replaced` | text replaced, evidence `citation_rejected` |
+| `citation_omitted_replaced` | text replaced, evidence `not_found`: a search ran, nothing was cited |
+| `documents_claim_without_search` | text replaced by `cannot_answer_substitution` |
+| `attribution_withheld` | text replaced by `attribution_withheld` |
+| `search_hits_declined` | a cited case, a search returned hits, the model declined |
+| `empty_search_declined` | a cited case, every search returned no hits, the model declined |
+| `search_error_declined` | a cited case, no hits, a search errored, the model declined |
+| `unclassified_measure_failure` | none of the above, but a measure of the case failed |
+| `none` | none of the above |
+
+So `none` can never sit beside a failed measure. A class describes what is recorded, not why:
+`empty_search_declined` does not say whether the stand-in or the query is at fault, and nothing in
+the block judges whether an answer is true. The block also totals `model_not_found_correct`,
+`server_replaced_text` and the classes. A `--repeat` aggregate holds no measures for this set, so
+read the attempts' reports.
+
+A replay file holds the model's turns, not the tool results. Replaying rebuilds them through the
+same tools and fixtures, so a rescored run's `searches` are what the fixture at that checkout
+returns. `test_r29y_regressions.py` holds the rescored rows of both R2.9Y runs to the live ones and
+pins the classes of all 66 case-attempts: `dog_fee` under both prompts is `empty_search_declined`,
+`occupancy_and_parking` under v8 is `citation_omitted_replaced`, `guest_faq_injected` under v8 is
+`invalid_citation_replaced`, and the rest are `none`.
+
 ### 8.2 `knowledge_retrieval_v1` — does full-text search find the right chunk?
 
 **The decision criterion for Stage 7.15, declared before the first measurement:**

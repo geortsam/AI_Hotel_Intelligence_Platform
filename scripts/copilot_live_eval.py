@@ -61,6 +61,11 @@ guests or who identifies guests, one about how many does not) may be named on th
 *R2.9U.* `copilot_answer@v8` (v7, with one sentence more: a question about what guests wrote in
 their reviews is answered only from review text in the hotel's documents) likewise.
 
+*R2.10A.* A `copilot_knowledge_eval_v1` run's report also carries a `knowledge_diagnostics` block
+(`tests/evaluation/knowledge_diagnostics.py`): per case, what the model wrote, what the server did
+with it, what each search returned, a failure class and a model-level not-found result. Its repeat
+aggregate still holds no measures: read the attempts' reports.
+
 *R2.9X.* `--case-policy` names the case-policy version a `copilot_eval_v3` run's
 `model_level_v2` and `integrity_v3` blocks are scored under: `copilot_eval_v3_case_policy_v1`
 by default, or `copilot_eval_v3_case_policy_v2` (`review_text` tolerates a search rather than
@@ -980,9 +985,12 @@ def main(
     runner: Any = knowledge_harness.run if full is COPILOT_KNOWLEDGE_EVAL_V1 else harness.run
     # R2.7ZU: a copilot_eval run also reports each case as the caller saw it, and (R2.8B) the
     # model's final responses alone. The knowledge harness records the served answer in its own
-    # case results already.
+    # case results already, and (R2.10A) what the model wrote and the searches returned in its
+    # own diagnostics block.
     blocks: dict[str, Any] = (
-        {} if full is COPILOT_KNOWLEDGE_EVAL_V1 else {"served": True, "model_level": True}
+        {"knowledge_diagnostics": True}
+        if full is COPILOT_KNOWLEDGE_EVAL_V1
+        else {"served": True, "model_level": True}
     )
     if full is COPILOT_EVAL_V3:
         blocks["integrity"] = True  # R2.8L: only v3 has the expectations it needs

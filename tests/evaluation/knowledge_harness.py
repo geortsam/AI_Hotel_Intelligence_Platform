@@ -35,6 +35,7 @@ from app.llm.prompts.registry import COPILOT_ANSWER_V2
 from app.models.enums import HotelRole
 from app.services.copilot import CopilotService
 from app.services.tool_invocation import ToolInvocationService
+from tests.evaluation import knowledge_diagnostics as diagnostics
 from tests.evaluation import knowledge_scorers as scorers
 from tests.evaluation.fixture_documents import FixtureKnowledge
 from tests.evaluation.fixture_hotel import (
@@ -133,6 +134,7 @@ def run_case(
     provider_name: str,
     model_name: str,
     prompt: PromptRecord,
+    observations: list[diagnostics.CaseObservation] | None = None,
 ) -> KnowledgeCaseResult:
     scope = EvalScope(HotelRole(case.role))
     session = EvalSession()
@@ -165,10 +167,12 @@ def run_case(
     evidence: str | None = None
     served_answer = ""
     served: list[dict[str, Any]] = []
+    answer_source: str | None = None
     try:
-        response = copilot.answer_turn(
+        turn = copilot.answer_turn(
             EVAL_HOTEL, case.question, prompt_identity=(prompt.prompt_id, prompt.version)
-        ).response
+        )
+        response, answer_source = turn.response, turn.answer_source
         stop_reason, complete = response.stop_reason, response.complete
         evidence, served_answer = response.document_evidence, response.answer
         served = [item.model_dump(mode="json") for item in response.citations]
@@ -178,6 +182,15 @@ def run_case(
 
     calls: list[ToolCall] = [call for r in recorder.responses for call in r.tool_calls]
     final_text = recorder.responses[-1].text if recorder.responses else ""
+    if observations is not None:  # R2.10A
+        observations.append(
+            diagnostics.CaseObservation(
+                case_id=case.case_id,
+                model_text=final_text,
+                answer_source=answer_source,
+                searches=diagnostics.searches_in(recorder.requests, recorder.responses),
+            )
+        )
     seen = scorers.labels_seen(recorder.requests)
     structured = [
         json.loads(m.content)
@@ -259,9 +272,14 @@ def run(
     recorded_on: str,
     prompt: PromptRecord,
     budget: Budget | None = None,
+    knowledge_diagnostics: bool = False,
 ) -> dict[str, Any]:
+    """Run every case and return the report. *knowledge_diagnostics* (R2.10A) adds that block,
+    beside the report's measures and changing none of them; off by default, so a report without
+    it -- the pinned reference among them -- is exactly what it was."""
     registry = build_default_registry()
     budget = budget or Budget(timeout_seconds=30.0, max_output_tokens=1024)
+    observations: list[diagnostics.CaseObservation] = []
     results = [
         run_case(
             case,
@@ -271,6 +289,7 @@ def run(
             provider_name=provider,
             model_name=model,
             prompt=prompt,
+            observations=observations if knowledge_diagnostics else None,
         )
         for case in question_set.cases
     ]
@@ -279,7 +298,7 @@ def run(
         if provider == REFERENCE_PROVIDER
         else live_statement(provider, model, recorded_on, len(question_set.cases), prompt=prompt)
     )
-    return {
+    report: dict[str, Any] = {
         "harness": HARNESS_VERSION,
         "mode": mode,
         "question_set": {
@@ -294,6 +313,11 @@ def run(
         "measures": _measures(results),
         "cases": [asdict(result) for result in results],
     }
+    if knowledge_diagnostics:
+        report["knowledge_diagnostics"] = diagnostics.block(
+            question_set.cases, report["cases"], observations
+        )
+    return report
 
 
 def run_replays(

@@ -4441,6 +4441,266 @@ STAGE_R2_9X = [
     ),
 ]
 
+# --- R2.10A: the knowledge_diagnostics block ------------------------------------------------------
+
+KNOWLEDGE_DIAGNOSTICS = "tests/evaluation/knowledge_diagnostics.py"
+KNOWLEDGE_HARNESS = "tests/evaluation/knowledge_harness.py"
+R29Y_TESTS = "tests/evaluation/test_r29y_regressions.py"
+
+STAGE_R2_10A = [
+    Mutation(
+        "R2.10A-M1",
+        "R2.10A",
+        "model_not_found_correct stops requiring a search that returned",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            "    return completed and observed.model_text.strip() == NOT_FOUND and searched\n",
+            "    return completed and observed.model_text.strip() == NOT_FOUND\n",
+        ),
+        (
+            f"{R29Y_TESTS}::test_the_documents_sentence_without_a_search_fails_model_level",
+            f"{R29Y_TESTS}::test_a_search_that_failed_is_a_tool_error_with_no_count",
+        ),
+    ),
+    Mutation(
+        "R2.10A-M2",
+        "R2.10A",
+        "model_not_found_correct stops reading what the model wrote",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            "    return completed and observed.model_text.strip() == NOT_FOUND and searched\n",
+            "    return completed and searched\n",
+        ),
+        (
+            f"{R29Y_TESTS}::"
+            "test_an_invented_uncited_answer_fails_model_level_and_leaves_not_found_as_it_was",
+        ),
+    ),
+    Mutation(
+        "R2.10A-M3",
+        "R2.10A",
+        "the harness records the served text as the model's",
+        one(
+            KNOWLEDGE_HARNESS,
+            "                model_text=final_text,\n",
+            "                model_text=served_answer,\n",
+        ),
+        (
+            f"{R29Y_TESTS}::"
+            "test_an_invented_uncited_answer_fails_model_level_and_leaves_not_found_as_it_was",
+            f"{R29Y_TESTS}::test_model_text_replacement_and_searches_are_the_recorded_ones",
+        ),
+    ),
+    Mutation(
+        "R2.10A-M4",
+        "R2.10A",
+        "one empty search among several makes a decline an empty-search decline",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '        if searches and all(search["hit_count"] == 0 for search in searches):\n',
+            '        if searches and any(search["hit_count"] == 0 for search in searches):\n',
+        ),
+        (
+            f"{R29Y_TESTS}::test_a_decline_after_an_errored_and_an_empty_search_is_not_an_empty_search",
+        ),
+    ),
+    Mutation(
+        "R2.10A-M5",
+        "R2.10A",
+        "a rejected citation no longer classes as invalid_citation_replaced",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '        if result["document_evidence"] == "citation_rejected":\n',
+            "        if False:\n",
+        ),
+        (f"{R29Y_TESTS}::test_all_66_case_attempts_are_classified_as_the_evidence_requires",),
+    ),
+    Mutation(
+        "R2.10A-M6",
+        "R2.10A",
+        "an omitted citation no longer classes as citation_omitted_replaced",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '        if result["document_evidence"] == "not_found":\n',
+            "        if False:\n",
+        ),
+        (
+            f"{R29Y_TESTS}::test_all_66_case_attempts_are_classified_as_the_evidence_requires",
+            f"{R29Y_TESTS}::"
+            "test_an_invented_uncited_answer_fails_model_level_and_leaves_not_found_as_it_was",
+        ),
+    ),
+    Mutation(
+        "R2.10A-M7",
+        "R2.10A",
+        "the documents sentence without a search no longer has its own class",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '        if observed.answer_source == "cannot_answer_substitution":\n',
+            "        if False:\n",
+        ),
+        (
+            f"{R29Y_TESTS}::test_the_documents_sentence_without_a_search_fails_model_level",
+            f"{R29Y_TESTS}::test_a_cited_decline_with_no_search_is_not_an_empty_search",
+        ),
+    ),
+    Mutation(
+        "R2.10A-M8",
+        "R2.10A",
+        "a failed measure no class explains is reported as none",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            "    if any(result[field] is False for field in _MEASURE_FIELDS):\n",
+            "    if False:\n",
+        ),
+        (f"{R29Y_TESTS}::test_a_failed_measure_no_class_explains_is_named_as_such",),
+    ),
+    Mutation(
+        "R2.10A-M9",
+        "R2.10A",
+        "surrounding whitespace counts as the server replacing the text",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            "    return model_text.strip() != served_answer.strip()\n",
+            "    return model_text != served_answer\n",
+        ),
+        (f"{R29Y_TESTS}::test_surrounding_whitespace_is_not_a_replacement",),
+    ),
+    Mutation(
+        "R2.10A-M10",
+        "R2.10A",
+        "a search with no result shown is recorded as having returned",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '                "no_result_shown"\n',
+            '                "returned"\n',
+        ),
+        (f"{R29Y_TESTS}::test_a_search_the_round_cap_stopped_has_no_result_shown",),
+    ),
+    Mutation(
+        "R2.10A-M11",
+        "R2.10A",
+        "an ungrounded figure loses its own class",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '    if result["stop_reason"] == "ungrounded_figures":\n',
+            "    if False:\n",
+        ),
+        (f"{R29Y_TESTS}::test_an_ungrounded_figure_is_its_own_class",),
+    ),
+    Mutation(
+        "R2.10A-M12",
+        "R2.10A",
+        "the block is on by default, so the pinned reference report changes",
+        one(
+            KNOWLEDGE_HARNESS,
+            "    knowledge_diagnostics: bool = False,\n",
+            "    knowledge_diagnostics: bool = True,\n",
+        ),
+        (
+            f"{R29Y_TESTS}::test_the_block_is_off_by_default_and_adds_nothing_else",
+            f"{R29Y_TESTS}::test_the_reference_report_is_byte_identical_with_or_without_the_block",
+        ),
+    ),
+    Mutation(
+        "R2.10A-M13",
+        "R2.10A",
+        "the live script stops asking for the block on a knowledge run",
+        one(
+            LIVE_SCRIPT,
+            '        {"knowledge_diagnostics": True}\n',
+            "        {}\n",
+        ),
+        (
+            f"{LIVE_SCRIPT_TESTS}::"
+            "test_a_knowledge_run_carries_the_diagnostics_block_in_its_report_only",
+            f"{LIVE_SCRIPT_TESTS}::"
+            "test_a_repeated_knowledge_run_records_the_block_in_every_attempt",
+        ),
+    ),
+    # R2.10A.1: the three defects the pre-commit audit found, each put back.
+    Mutation(
+        "R2.10A-M14",
+        "R2.10A",
+        "the sentence on a tool turn of an unfinished request counts as a correct decline",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '    completed: bool = result["stop_reason"] == "completed"\n',
+            "    completed: bool = True\n",
+        ),
+        (
+            f"{R29Y_TESTS}::"
+            "test_the_sentence_on_a_turn_that_never_finished_is_not_correct_at_model_level",
+        ),
+    ),
+    Mutation(
+        "R2.10A-M15",
+        "R2.10A",
+        "a search with no result shown is again reported as never having run",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '                "no_result_shown"\n',
+            '                "not_executed"\n',
+        ),
+        (
+            f"{R29Y_TESTS}::test_a_search_that_ran_before_a_tool_failed_stop_is_not_called_unexecuted",
+            f"{R29Y_TESTS}::test_a_search_the_round_cap_stopped_has_no_result_shown",
+        ),
+    ),
+    Mutation(
+        "R2.10A-M16",
+        "R2.10A",
+        "an errored search counts as an empty one",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '        if searches and all(search["hit_count"] == 0 for search in searches):\n',
+            '        if searches and all(not search["hit_count"] for search in searches):\n',
+        ),
+        (
+            f"{R29Y_TESTS}::test_a_decline_after_an_errored_and_an_empty_search_is_not_an_empty_search",
+        ),
+    ),
+    Mutation(
+        "R2.10A-M17",
+        "R2.10A",
+        "a decline of a search with hits loses its own class",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '        if any(search["hit_count"] for search in searches):\n',
+            "        if False:\n",
+        ),
+        (
+            f"{R29Y_TESTS}::test_a_decline_after_hits_is_not_an_empty_search",
+            f"{R29Y_TESTS}::test_a_decline_after_empty_and_nonempty_searches_is_not_an_empty_search",
+            f"{R29Y_TESTS}::test_a_decline_after_an_errored_search_and_hits_is_a_decline_of_the_hits",
+        ),
+    ),
+    Mutation(
+        "R2.10A-M18",
+        "R2.10A",
+        "a decline after an errored search with no hits loses its own class",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '        if any(search["outcome"] == "tool_error" for search in searches):\n',
+            "        if False:\n",
+        ),
+        (
+            f"{R29Y_TESTS}::test_a_decline_after_an_errored_and_an_empty_search_is_not_an_empty_search",
+        ),
+    ),
+    Mutation(
+        "R2.10A-M19",
+        "R2.10A",
+        "a decline with no search at all counts as an empty search",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '        if searches and all(search["hit_count"] == 0 for search in searches):\n',
+            '        if all(search["hit_count"] == 0 for search in searches):\n',
+        ),
+        (f"{R29Y_TESTS}::test_an_empty_search_decline_needs_a_search",),
+    ),
+]
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -4480,4 +4740,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R2_9B,
     *STAGE_R2_9K,
     *STAGE_R2_9X,
+    *STAGE_R2_10A,
 )
