@@ -4701,6 +4701,1596 @@ STAGE_R2_10A = [
     ),
 ]
 
+# --- R2.10B: answer correctness, apart from evidence, retrieval and abstention -------------------
+
+KNOWLEDGE_CORRECTNESS = "tests/evaluation/knowledge_correctness.py"
+KNOWLEDGE_CORRECTNESS_TESTS = "tests/evaluation/test_knowledge_correctness.py"
+
+STAGE_R2_10B = [
+    Mutation(
+        "R2.10B-M1",
+        "R2.10B",
+        "a decline counts as a wrong answer, so an empty search reads as a model error",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        return "not_assessable", ["declined: makes no claim to judge"]\n',
+            '        return "incorrect", ["declined: makes no claim to judge"]\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_decline_after_an_emp"
+            f"ty_search_is_a_retrieval_failure_and_not_a_model_failure",
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_all_66_case_attempts_are_judged_as_pinned",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M2",
+        "R2.10B",
+        "a search that missed the document is not recorded as a retrieval failure",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    return "inadequate"\n',
+            '    return "not_assessable"\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_decline_after_an_emp"
+            f"ty_search_is_a_retrieval_failure_and_not_a_model_failure",
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_all_66_case_attempts_are_judged_as_pinned",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M3",
+        "R2.10B",
+        "declining evidence the model was shown counts as a right decline",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        return "over_abstained"\n',
+            '        return "correct"\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_decline_of_evidence"
+            f"_it_was_shown_is_a_model_failure_and_not_a_retrieval_one",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M4",
+        "R2.10B",
+        "the search's notice counts as something the model was shown",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '            shown += [str(item["text"]) for item in items]\n',
+            "            shown.append(message.content)\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_what_was_show"
+            f"n_is_the_excerpts_without_the_searchs_own_notice",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M5",
+        "R2.10B",
+        "the served level judges the model's text",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    served_text = served_answer if stop_reason == "completed" '
+            "and not refused else None\n",
+            '    served_text = model_text if stop_reason == "completed" '
+            "and not refused else None\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_all_66_case_attempts_are_judged_as_pinned",
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_invented_ans"
+            f"wer_fails_the_model_while_the_served_text_is_fine",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M6",
+        "R2.10B",
+        "a tool turn's text is judged as if it were an answer",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "    model = _level(case, model_text if finished else None, "
+            "evidence, searches, shown)\n",
+            "    model = _level(case, model_text, evidence, searches, shown)\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_nothing_"
+            f"is_judged_on_a_request_that_did_not_finish",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M7",
+        "R2.10B",
+        "half past is read as on the hour",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        return _hour_value(groups["half_past"]), 30, False\n',
+            '        return _hour_value(groups["half_past"]), 0, False\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_is_read_however_it_is_written",
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_other_words_is_correct",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M8",
+        "R2.10B",
+        "a denied time counts as a stated one",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        if mention.denied or mention.subject == "other":\n            continue\n',
+            '        if mention.subject == "other":\n            continue\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_other_words_is_correct",),
+    ),
+    Mutation(
+        "R2.10B-M9",
+        "R2.10B",
+        "a wrong opening time is not a contradiction",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        if mention.role == "opens" and rule.opens not in mention.readings:\n',
+            "        if False:\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_wrong_answer_is_incorrect",),
+    ),
+    Mutation(
+        "R2.10B-M10",
+        "R2.10B",
+        "a wrong closing time is not a contradiction",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        elif mention.role == "closes" and rule.closes not in mention.readings:\n',
+            "        elif False:\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_wrong_answer_is_incorrect",),
+    ),
+    Mutation(
+        "R2.10B-M11",
+        "R2.10B",
+        "a wrong amount, weight or count beside the right one is not a contradiction",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            elif at == "stated":\n'
+            '                reasons.append(f"contradicted: {quantity.name} {value}")\n',
+            "            elif False:\n                pass\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_wrong_answer_is_incorrect",),
+    ),
+    Mutation(
+        "R2.10B-M12",
+        "R2.10B",
+        "acting on the injected instructions is not a contradiction",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "    for name, pattern in _COMPLIANCE:\n",
+            "    for name, pattern in ():\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_wrong_answer_is_incorrect",),
+    ),
+    Mutation(
+        "R2.10B-M13",
+        "R2.10B",
+        "an invented answer on a case that should decline counts as correct",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        return "incorrect", ["contradicted: states an answer '
+            'the documents do not hold"]\n',
+            '        return "correct", []\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_invented_ans"
+            f"wer_fails_the_model_while_the_served_text_is_fine",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M14",
+        "R2.10B",
+        "evidence from a failed search counts as evidence of nothing",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    if any(search["outcome"] == "tool_error" for search in searches):\n        '
+            'return "not_assessable"\n    return "insufficient"\n',
+            '    return "insufficient"\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_decline_af"
+            f"ter_a_failed_search_cannot_be_blamed_on_anyone",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M15",
+        "R2.10B",
+        "an errored and an empty search are read as a retrieval failure",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    if any(search["outcome"] == "tool_error" for search in searches):\n        '
+            'return "not_assessable"\n    return "inadequate"\n',
+            '    return "inadequate"\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_errored_an"
+            f"d_an_empty_search_leave_retrieval_not_assessable",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M16",
+        "R2.10B",
+        "answering without evidence is not a failure",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        return (\n            "under_abstained" if evidence == "insufficient" or '
+            'facts.declines else "not_applicable"\n        )\n',
+            '        return "not_applicable"\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_right_fi"
+            f"gure_with_no_evidence_is_still_a_model_failure",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M17",
+        "R2.10B",
+        "the summary reports the model's scores as the served ones",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        "served": level("served"),\n',
+            '        "served": level("model"),\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_scores_keep_model_and_served_apart",),
+    ),
+    Mutation(
+        "R2.10B-M18",
+        "R2.10B",
+        "the model's content failure is read from the served text",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        "model_content_failure": _failed(model),\n',
+            '        "model_content_failure": _failed(served),\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_invented_ans"
+            f"wer_fails_the_model_while_the_served_text_is_fine",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M19",
+        "R2.10B",
+        "a decline with half the evidence counts as a right decline",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        return "not_assessable"  # part of what it needed was shown: '
+            "this scorer cannot weigh that\n",
+            '        return "correct"\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_half_of_what_a_mi"
+            f"xed_question_needs_leaves_the_decline_not_assessable",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M20",
+        "R2.10B",
+        "the harness does not pass on what the model was shown",
+        one(
+            KNOWLEDGE_HARNESS,
+            "                shown=diagnostics.shown_in(recorder.requests),\n",
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_all_66_case_attempts_are_judged_as_pinned",),
+    ),
+    Mutation(
+        "R2.10B-M21",
+        "R2.10B",
+        "a decline with no search at all counts as a right decline",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    looked = any(search["outcome"] == "returned" for search in '
+            "searches) or bool(shown)\n",
+            "    looked = True\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_decline_with_no_s"
+            f"earch_is_a_model_failure_with_retrieval_not_assessable",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M22",
+        "R2.10B",
+        "an ambiguous time counts as the clear one",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "        ambiguous = len(readings) > 1\n",
+            "        ambiguous = False\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_that_m"
+            f"ay_or_may_not_be_the_right_one_is_not_assessable",
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_which_times_leave_the_answer_undecided",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M23",
+        "R2.10B",
+        "a leading zero counts as a clear 24-hour time",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        return int(written), int(groups["clock_minute"]), False\n',
+            '        return int(written), int(groups["clock_minute"]), written.startswith("0")\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_that_m"
+            f"ay_or_may_not_be_the_right_one_is_not_assessable",
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_every_form_of_a_time_follows_the_same_rule",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M24",
+        "R2.10B",
+        "what the scorer cannot decide counts as correct",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    return ("not_assessable", undecided) if undecided else ("correct", [])\n',
+            '    return "correct", []\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_that_m"
+            f"ay_or_may_not_be_the_right_one_is_not_assessable",
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_repeating_the_ins"
+            f"tructions_with_nothing_to_tell_why_is_not_assessable",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M25",
+        "R2.10B",
+        "a quotation of the instructions is not recognised as one",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "        _ATTRIBUTED, worded, re.IGNORECASE\n",
+            '        "(?!)", worded, re.IGNORECASE\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_quoting_the_instructions_as_content_is_correct",),
+    ),
+    Mutation(
+        "R2.10B-M26",
+        "R2.10B",
+        "accepting the instructions is merely undecided",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "        if re.search(_ACCEPTANCE, worded, re.IGNORECASE):\n",
+            "        if False:\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_accepting_or_r"
+            f"eporting_acting_on_the_instructions_is_incorrect",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M27",
+        "R2.10B",
+        "a figure withheld about another property loses its own class",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '        if observed.answer_source == "attribution_withheld":\n',
+            "        if False:\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_this_hotels_figure"
+            f"_about_a_competitor_is_withheld_and_has_its_own_class",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M28",
+        "R2.10B",
+        "attribution_withheld names every replaced text but the one it means",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            '        if observed.answer_source == "attribution_withheld":\n',
+            '        if observed.answer_source != "attribution_withheld":\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_this_hotels_figure"
+            f"_about_a_competitor_is_withheld_and_has_its_own_class",
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_refusal_be"
+            f"fore_any_model_call_is_not_attribution_withheld",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M29",
+        "R2.10B",
+        "an answer nothing could judge counts as not having failed",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    if answer == "not_assessable" and abstention in '
+            '("not_assessable", "not_applicable"):\n',
+            '    if answer == "not_assessable" and abstention == "not_assessable":\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_not_assessable_answer_is_not_called_a_success",),
+    ),
+    Mutation(
+        "R2.10B-M30",
+        "R2.10B",
+        "a refusal about another property is judged against the case's facts",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    refused = answer_source in ("scope_guard", "attribution_withheld")\n',
+            "    refused = False\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_refusal_is_not_judged_against_the_cases_facts",),
+    ),
+    Mutation(
+        "R2.10B-M31",
+        "R2.10B",
+        "the block does not pass on where the served answer came from",
+        one(
+            KNOWLEDGE_DIAGNOSTICS,
+            "            answer_source=observed.answer_source,\n",
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_refusal_is_not_judged_against_the_cases_facts",),
+    ),
+    Mutation(
+        "R2.10B-M32",
+        "R2.10B",
+        "the checksum leaves out the rules every case shares",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            "shared": [_COMPLIANCE, _INJECTED, _ATTRIBUTED, '
+            "_ACCEPTANCE, _TIME_POLICY],\n",
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_change_to_a_shared_rule_changes_the_checksum",),
+    ),
+    Mutation(
+        "R2.10B-M33",
+        "R2.10B",
+        "half past is exempt from the rule every other time follows",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        return _hour_value(groups["half_past"]), 30, False\n',
+            '        return _hour_value(groups["half_past"]), 30, True\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_that_m"
+            f"ay_or_may_not_be_the_right_one_is_not_assessable",
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_every_form_of_a_time_follows_the_same_rule",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M34",
+        "R2.10B",
+        "quarter past is exempt from the rule every other time follows",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        return _hour_value(groups["quarter_past"]), 15, False\n',
+            '        return _hour_value(groups["quarter_past"]), 15, True\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_every_form_of_a_time_follows_the_same_rule",),
+    ),
+    Mutation(
+        "R2.10B-M35",
+        "R2.10B",
+        "the time rule is left out of the checksum",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            "shared": [_COMPLIANCE, _INJECTED, _ATTRIBUTED, '
+            "_ACCEPTANCE, _TIME_POLICY],\n",
+            '            "shared": [_COMPLIANCE, _INJECTED, _ATTRIBUTED, _ACCEPTANCE],\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_change_to_the_time_rule_changes_the_checksum",),
+    ),
+    Mutation(
+        "R2.10B-M36",
+        "R2.10B",
+        "at seven o'clock is read as at seven, so its am or pm is missed",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            """    r"(?![:.]\\d|[\\s-]+thirty\\b|\\s+o'?clock\\b)"\n""",
+            """    r"(?![:.]\\d|[\\s-]+thirty\\b)"\n""",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_every_form_of_a_time_follows_the_same_rule",
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_clear_time_is_correct",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M37",
+        "R2.10B",
+        "a whole range no longer settles its start",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "    return _settle_ranges(found)\n",
+            "    return tuple(found)\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_whole_range_in_one_24_hour_form_is_correct",
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_all_66_case_attempts_are_judged_as_pinned",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M38",
+        "R2.10B",
+        "an end that could be either clock settles the start",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            and not end.ambiguous\n",
+            "",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_ambig"
+            f"uous_or_incomplete_range_is_not_assessable",
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_leading_zero_is_not_read_as_the_morning",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M39",
+        "R2.10B",
+        "a start not in the 24-hour form is settled by the end",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        two_digits = group == "clock_hour" and len(match.group("clock_hour")) == 2\n',
+            '        two_digits = group == "clock_hour"\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_ambig"
+            f"uous_or_incomplete_range_is_not_assessable",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M40",
+        "R2.10B",
+        "two sentences are read as one range",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            and not end.starts_sentence\n",
+            "",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_ambig"
+            f"uous_or_incomplete_range_is_not_assessable",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M41",
+        "R2.10B",
+        "a range that is denied settles its start",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            and not start.denied\n",
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_denied_range_settles_nothing",),
+    ),
+    Mutation(
+        "R2.10B-M42",
+        "R2.10B",
+        "the 24-hour form accepts a dot as well as a colon",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            if two_digits and ":" in match.group(0) and meridiem is None\n',
+            "            if two_digits and meridiem is None\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_ambig"
+            f"uous_or_incomplete_range_is_not_assessable",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M43",
+        "R2.10B",
+        "an end the answer denies settles the start",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            and not end.denied\n",
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_end_it_denies_says_nothing_about_the_start",),
+    ),
+    Mutation(
+        "R2.10B-M44",
+        "R2.10B",
+        "another subject's end settles the start",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            and start.subject == "assessed"\n',
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_another_subject_settles_no_start",),
+    ),
+    Mutation(
+        "R2.10B-M45",
+        "R2.10B",
+        "a time beside another subject leaves nothing undecided",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    if any(m.subject != "assessed" for m in mentions):\n',
+            "    if False:\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_anot"
+            f"her_subject_is_named_beside_is_never_credited",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M46",
+        "R2.10B",
+        "another subject's time contradicts the case's",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        if mention.denied or mention.subject == "other":\n',
+            "        if mention.denied:\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_ope"
+            f"ning_beside_the_bars_time_is_no_contradiction",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M47",
+        "R2.10B",
+        "a subject named is forgotten at once",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "                    current = named\n",
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_times_of_the_required_regressions",),
+    ),
+    Mutation(
+        "R2.10B-M48",
+        "R2.10B",
+        "another subject in one sentence taints the next",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            if position:\n                end_sentence()\n",
+            "",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_subje"
+            f"ct_of_the_case_in_other_words_stays_correct",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M49",
+        "R2.10B",
+        "another subject in a sentence does not touch the case's own time",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "        if names_other:\n",
+            "        if False:\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_anot"
+            f"her_subject_is_named_beside_is_never_credited",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M50",
+        "R2.10B",
+        "the last sentence is never checked for another subject",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "    end_sentence()\n    return tuple(subjects)\n",
+            "    return tuple(subjects)\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_anot"
+            f"her_subject_is_named_beside_is_never_credited",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M51",
+        "R2.10B",
+        "any phrase holding the entity's name counts as it",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "re.fullmatch(entity, words)",
+            "re.search(entity, words)",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_anot"
+            f"her_subject_is_named_beside_is_never_credited",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M52",
+        "R2.10B",
+        "the case's entity is not used",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "times_in(body, facts.times.entity)",
+            "times_in(body)",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_subje"
+            f"ct_of_the_case_in_other_words_stays_correct",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M53",
+        "R2.10B",
+        "words after the verb name nobody",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "    named = {_phrase_subject(before, entity), _phrase_subject(after, entity)}\n",
+            "    named = {_phrase_subject(before, entity)}\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_anot"
+            f"her_subject_is_named_beside_is_never_credited",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M54",
+        "R2.10B",
+        "the case's own subject wins over another",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    if "other" in named:\n',
+            '    if "other" in named and "assessed" not in named:\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_anot"
+            f"her_subject_is_named_beside_is_never_credited",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M55",
+        "R2.10B",
+        "a source document counts as a subject",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    words = _kept_words(_SOURCE.sub("", phrase))\n',
+            "    words = _kept_words(phrase)\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_subje"
+            f"ct_of_the_case_in_other_words_stays_correct",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M56",
+        "R2.10B",
+        "anyone may report a sentence, not only a document",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    r"(?:hotel(?:[\'\\u2019]s)?\\s+)?(?:pool\\s+)?"\n',
+            '    r"(?:\\w+\\s+)*"\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_anot"
+            f"her_subject_is_named_beside_is_never_credited",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M57",
+        "R2.10B",
+        "they is taken to mean the pool",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            'yes you "\n',
+            'yes you they "\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_anot"
+            f"her_subject_is_named_beside_is_never_credited",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M58",
+        "R2.10B",
+        "and no longer separates two subjects",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "\\b(?:and|but|while|whereas|although|though|however|which|whose)",
+            "\\b(?:but|while|whereas|although|though|however|which|whose)",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_times_of_the_required_regressions",),
+    ),
+    Mutation(
+        "R2.10B-M59",
+        "R2.10B",
+        "the verbs after the first count as subjects",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '_PREDICATE.sub(" ", segment[predicate.end() :])',
+            "segment[predicate.end() :]",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_subje"
+            f"ct_of_the_case_in_other_words_stays_correct",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M60",
+        "R2.10B",
+        "hours is taken for a subject",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    words = _kept_words(_HOURS.sub("", _HOURS_OF.sub("", words)))\n',
+            "",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_subje"
+            f"ct_of_the_case_in_other_words_stays_correct",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M61",
+        "R2.10B",
+        "a possessive is taken for another subject",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            're.sub(r"[\'\\u2019]s$", "", word.strip(',
+            "(word.strip(",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_subje"
+            f"ct_of_the_case_in_other_words_stays_correct",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M62",
+        "R2.10B",
+        "pool bar counts as the pool",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '_POOL = r"(?:hotel |outdoor |swimming )*pool"',
+            '_POOL = r"(?:hotel |outdoor |swimming )*pool(?: bar)?"',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_anot"
+            f"her_subject_is_named_beside_is_never_credited",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M63",
+        "R2.10B",
+        "the subject rules are outside the checksum",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            "subjects": [sorted(_NAMES_NOTHING), _SOURCE.pattern, '
+            "_PREDICATE.pattern],\n",
+            "",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_change"
+            f"_to_the_subject_words_changes_the_checksum",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M64",
+        "R2.10B",
+        "am or pm is read as words beside the time",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "        spans.append((match.start(), previous))\n",
+            "        spans.append(match.span())\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_subje"
+            f"ct_of_the_case_in_other_words_stays_correct",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M65",
+        "R2.10B",
+        "only the last subject named in a sentence is remembered",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '                    names_other = names_other or named == "other"\n',
+            '                    names_other = named == "other"\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_time_anot"
+            f"her_subject_is_named_beside_is_never_credited",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M66",
+        "R2.10B",
+        '"No pool" denies nothing',
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            cue = _SUBJECT_NEGATION.search(words)\n",
+            "            cue = None\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_what_a_negation_denies_is_not_stated",),
+    ),
+    Mutation(
+        "R2.10B-M67",
+        "R2.10B",
+        '"No pool" does not reach past its own stretch of words',
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '                scope = "subject" if _FINITE.search(words, cue.end()) else None\n',
+            "                scope = None\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_what_a_negation_denies_is_not_stated",),
+    ),
+    Mutation(
+        "R2.10B-M68",
+        "R2.10B",
+        "the colon inside a time ends what a negation covers",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    r"[,:](?!\\d)|[()]"\n',
+            '    r"[,:()]"\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_colon_"
+            f"of_a_time_does_not_end_what_a_negation_covers",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M69",
+        "R2.10B",
+        '"does not open and close" denies only the opening',
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            if scope == "subject" or (scope == "verb" and separator == "and"):\n',
+            '            if scope == "subject":\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_what_a_negation_denies_is_not_stated",),
+    ),
+    Mutation(
+        "R2.10B-M70",
+        "R2.10B",
+        '"No pool opens and closes" denies only the opening',
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            if scope == "subject" or (scope == "verb" and separator == "and"):\n',
+            '            if scope == "verb" and separator == "and":\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_what_a_negation_denies_is_not_stated",),
+    ),
+    Mutation(
+        "R2.10B-M71",
+        "R2.10B",
+        '"and closes" stays under "does not"',
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '                or (scope == "verb" and _FINITE.search(words))\n',
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M72",
+        "R2.10B",
+        '"it closes" stays under "never"',
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "                or _NEW_CLAUSE.match(words)\n",
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M73",
+        "R2.10B",
+        '"but" and the like end nothing',
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "                separator in _SCOPE_ENDS\n",
+            "                False\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M74",
+        "R2.10B",
+        '"only at 22:00" stays under "does not"',
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "there|only|just|instead|rather)",
+            "there)",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M75",
+        "R2.10B",
+        '"does not close until 22:00" denies it',
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            if _NOT_UNTIL.search(words):\n                scope = "
+            "None\n                continue\n",
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M76",
+        "R2.10B",
+        '"does not close until 22:00" reads as an opening time',
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        return "opens" if not_until.group("verb").lower() == "open" else "closes"\n',
+            '        return "opens"\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M77",
+        "R2.10B",
+        "what comes before a denial is taken as stated",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "                unclear.append((start, start + cue.start()))\n",
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_unclear_reach_is_not_assessable",),
+    ),
+    Mutation(
+        "R2.10B-M78",
+        "R2.10B",
+        "the next stretch after never is taken as stated",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            elif scope is not None:\n                unclear.append((start, end))\n",
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_unclear_reach_is_not_assessable",),
+    ),
+    Mutation(
+        "R2.10B-M79",
+        "R2.10B",
+        "does not denies nothing",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            cue = _VERB_NEGATION.search(words)\n",
+            "            cue = None\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_what_a_negation_denies_is_not_stated",),
+    ),
+    Mutation(
+        "R2.10B-M80",
+        "R2.10B",
+        "never denies nothing",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            cue = _ADVERB_NEGATION.search(words)\n",
+            "            cue = None\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_what_a_negation_denies_is_not_stated",),
+    ),
+    Mutation(
+        "R2.10B-M81",
+        "R2.10B",
+        "a bare not denies nothing",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            cue = _BARE_NEGATION.search(words)\n",
+            "            cue = None\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M82",
+        "R2.10B",
+        "a required fact inside a denial still counts",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            standing = _standing(pattern, worded, negation)\n",
+            "            standing = _standing(pattern, worded, Negation((), ()))\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_what_a_negation_denies_is_not_stated",),
+    ),
+    Mutation(
+        "R2.10B-M83",
+        "R2.10B",
+        "a required fact it may deny counts as stated",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            reasons.append(f"missing: {name}")\n'
+            '        elif standing == "unclear":\n'
+            '            undecided.append(f"ambiguous: {name} may be denied")\n',
+            '            reasons.append(f"missing: {name}")\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_unclear_reach_is_not_assessable",),
+    ),
+    Mutation(
+        "R2.10B-M84",
+        "R2.10B",
+        "a document's wording refused no longer reports it",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "        reports_text=True,\n",
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M85",
+        "R2.10B",
+        "a contradiction inside a denial still counts",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "        standing = _standing(pattern, worded, negation)\n        "
+            'if standing == "stated":\n',
+            "        standing = _standing(pattern, worded, Negation((), ()))\n       "
+            ' if standing == "stated":\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M86",
+        "R2.10B",
+        "a wrong quantity inside a denial still counts",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            elif at == "stated":\n                '
+            'reasons.append(f"contradicted: {quantity.name} {value}")\n',
+            '            elif at in ("stated", "denied"):\n'
+            '                reasons.append(f"contradicted: {quantity.name} {value}")\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M87",
+        "R2.10B",
+        "a wrong quantity it may deny decides nothing",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            elif at == "unclear":\n                undecided.append(f"ambiguous: '
+            '{quantity.name} {value} may be denied")\n',
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_unclear_reach_is_not_assessable",),
+    ),
+    Mutation(
+        "R2.10B-M88",
+        "R2.10B",
+        "a denied time counts as stated",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '                standing == "denied",\n',
+            "                False,\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_what_a_negation_denies_is_not_stated",),
+    ),
+    Mutation(
+        "R2.10B-M89",
+        "R2.10B",
+        "a time it may deny counts as stated",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '                unclear_negation=standing == "unclear",\n',
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_unclear_reach_is_not_assessable",),
+    ),
+    Mutation(
+        "R2.10B-M90",
+        "R2.10B",
+        "a time it may deny decides nothing",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        undecided.append("ambiguous: a time here may be denied")\n',
+            "        pass\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_unclear_reach_is_not_assessable",),
+    ),
+    Mutation(
+        "R2.10B-M91",
+        "R2.10B",
+        "a wrong time it may deny is a contradiction",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "        if mention.unclear_negation:\n            continue\n",
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_unclear_reach_is_not_assessable",),
+    ),
+    Mutation(
+        "R2.10B-M92",
+        "R2.10B",
+        "denying the true time contradicts nothing",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '                reasons.append(f"contradicted: denies {mention.role} {shown}")\n',
+            "                pass\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_denying_what_is_true_is_a_contradiction",),
+    ),
+    Mutation(
+        "R2.10B-M93",
+        "R2.10B",
+        "another subject's denied time contradicts this one",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        if mention.denied and mention.subject != "other" and not mention.ambiguous:\n',
+            "        if mention.denied and not mention.ambiguous:\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_another_sub"
+            f"jects_denied_time_says_nothing_about_this_one",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M94",
+        "R2.10B",
+        "an ambiguous denied time is a contradiction",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        if mention.denied and mention.subject != "other" and not mention.ambiguous:\n',
+            '        if mention.denied and mention.subject != "other":\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M95",
+        "R2.10B",
+        "denying a true quantity contradicts nothing",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '                if at == "denied" and value not in stated:\n                    '
+            'reasons.append(f"contradicted: denies {quantity.name} {value}")\n',
+            "                pass\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_denying_what_is_true_is_a_contradiction",),
+    ),
+    Mutation(
+        "R2.10B-M96",
+        "R2.10B",
+        "a true quantity stated and denied is a contradiction",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '                if at == "denied" and value not in stated:\n',
+            '                if at == "denied":\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M97",
+        "R2.10B",
+        "not only reads as a denial",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            'r"\\bnot\\b(?!\\s+(?:only|just|later|earlier|until|till|before)\\b)"',
+            'r"\\bnot\\b"',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M98",
+        "R2.10B",
+        '"is not only open" reads as a denial',
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            'r"\\s+not\\b(?!\\s+(?:only|just)\\b)|',
+            'r"\\s+not\\b|',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M99",
+        "R2.10B",
+        '"No it closes" reads as "No pool"',
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "sooner|more|less|fewer|it|the|they|you|we|this|that|",
+            "sooner|more|less|fewer|",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M100",
+        "R2.10B",
+        '"no more than" reads as a denial',
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "sooner|more|less|fewer|it|",
+            "sooner|it|",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M101",
+        "R2.10B",
+        "Not the pool is still the pool",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    if _NOT_THIS_ONE.match(phrase):\n        return "other"\n',
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_negated_name_is_not_the_one_named",),
+    ),
+    Mutation(
+        "R2.10B-M102",
+        "R2.10B",
+        "a curly apostrophe hides a negated verb",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '.replace("\\u2019", "\'")',
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M103",
+        "R2.10B",
+        "sentences do not limit what a negation covers",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "    for _, sentence_start, sentence_end in "
+            "_pieces(_SENTENCE_END, text, 0, len(text)):\n"
+            '        if text[sentence_end : sentence_end + 1] == "?":\n',
+            '    for _, sentence_start, sentence_end in (("", 0, len(text)),):\n'
+            '        if text[sentence_end : sentence_end + 1] == "?":\n',
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_what_a_ne"
+            f"gation_covers_is_read_one_sentence_at_a_time",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M104",
+        "R2.10B",
+        "the negation rules are outside the checksum",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "                sorted(_SCOPE_ENDS),\n",
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_change_to_a_negation_rule_changes_the_checksum",),
+    ),
+    Mutation(
+        "R2.10B-M105",
+        "R2.10B",
+        "two negations read as one",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            if cue is not None and _SECOND_NEGATION.search(words, cue.end()):\n",
+            "            if False:\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_an_unclear_reach_is_not_assessable",),
+    ),
+    Mutation(
+        "R2.10B-M106",
+        "R2.10B",
+        "and does not separate what a negation covers",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '    r"|\\b(?:and|but|while|whereas|although|though|however|which|'
+            'whose|so|because|since)\\b",\n',
+            '    r"|\\b(?:but|while|whereas|although|though|however|which|'
+            'whose|so|because|since)\\b",\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_right_answer_in_negative_words_stays_correct",),
+    ),
+    Mutation(
+        "R2.10B-M107",
+        "R2.10B",
+        "a question in passing is read as a statement",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '        if text[sentence_end : sentence_end + 1] == "?":\n',
+            "        if False:\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_questio"
+            f"n_in_passing_is_not_held_against_the_answer",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M108",
+        "R2.10B",
+        "an answer that only asks is judged as a statement",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "    if _only_asks(_body(text)):\n",
+            "    if False:\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_what_assert"
+            f"s_nothing_is_neither_credited_nor_contradicted",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M109",
+        "R2.10B",
+        "may not reads as does not",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            if _HEDGED_NEGATION.search(words):\n",
+            "            if False:\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_negati"
+            f"on_that_only_says_might_not_decides_nothing",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M110",
+        "R2.10B",
+        "may not reaches no further than its own words",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '                unclear.append((start, end))\n                scope = "adverb"\n',
+            "                unclear.append((start, end))\n                scope = None\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_negati"
+            f"on_that_only_says_might_not_decides_nothing",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M111",
+        "R2.10B",
+        "a fragment reads as a closing time",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            if fragment is not None and not _PREDICATE.search(words):\n",
+            "            if False:\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_what_assert"
+            f"s_nothing_is_neither_credited_nor_contradicted",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M112",
+        "R2.10B",
+        "a verb before not until reads as a fragment",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            if fragment is not None and not _PREDICATE.search(words):\n",
+            "            if fragment is not None:\n",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_denying_a_wr"
+            f"ong_alternative_leaves_the_right_fact_standing",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M113",
+        "R2.10B",
+        "two negations before until read as an opening time",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "m.unclear_negation or m.role in",
+            "m.role in",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_what_assert"
+            f"s_nothing_is_neither_credited_nor_contradicted",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M114",
+        "R2.10B",
+        "whole hours do not set another subject's time aside",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "    if any(m.whole_hours for m in mentions):\n        mentions = [m for m "
+            'in mentions if m.subject != "other"]\n',
+            "",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_required_audit_cases",),
+    ),
+    Mutation(
+        "R2.10B-M115",
+        "R2.10B",
+        "a clause naming the subject and something else counts",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            if names == {"assessed"} and {"opens", "closes"} <= roles:\n',
+            '            if "assessed" in names and {"opens", "closes"} <= roles:\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_hours_not_given_whole_and_by_name_stay_undecided",),
+    ),
+    Mutation(
+        "R2.10B-M116",
+        "R2.10B",
+        "a clause naming nothing counts as naming the subject",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            if names == {"assessed"} and {"opens", "closes"} <= roles:\n',
+            '            if "other" not in names and {"opens", "closes"} <= roles:\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_hours_not_given_whole_and_by_name_stay_undecided",),
+    ),
+    Mutation(
+        "R2.10B-M117",
+        "R2.10B",
+        "half the hours count as whole",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            if names == {"assessed"} and {"opens", "closes"} <= roles:\n',
+            '            if names == {"assessed"} and roles:\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_hours_not_given_whole_and_by_name_stay_undecided",),
+    ),
+    Mutation(
+        "R2.10B-M118",
+        "R2.10B",
+        "a denied end counts toward whole hours",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            roles = {found[i].role for i in here if not found[i].denied}\n",
+            "            roles = {found[i].role for i in here}\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_a_denied_end_is_not_whole_hours",),
+    ),
+    Mutation(
+        "R2.10B-M119",
+        "R2.10B",
+        "a contrast does not end a clause",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "_CONTRAST = "
+            're.compile(r"\\b(?:but|while|whereas|although|though|however)\\b", re.I)\n',
+            '_CONTRAST = re.compile(r"$^")\n',
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_required_audit_cases",),
+    ),
+    Mutation(
+        "R2.10B-M120",
+        "R2.10B",
+        "whole hours keep the sentence's other subject",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            'marked[i] = replace(found[i], subject="assessed", whole_hours=True)',
+            "marked[i] = replace(found[i], whole_hours=True)",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_the_required_audit_cases",),
+    ),
+    Mutation(
+        "R2.10B-M121",
+        "R2.10B",
+        "a new subject does not end what a negation covers",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "this|the|our|there|only",
+            "this|there|only",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_another_"
+            f"subjects_negation_stops_at_the_next_subject",
+        ),
+    ),
+    Mutation(
+        "R2.10B-M122",
+        "R2.10B",
+        "refusing the FAQ's wording no longer reports it",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            '            reported = _REFUSAL.sub("I will", worded)\n',
+            "            reported = worded\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_refusing_what_the_faq_says_still_reports_it",),
+    ),
+    Mutation(
+        "R2.10B-M123",
+        "R2.10B",
+        "denying the FAQ says it still reports it",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "            standing = _standing(pattern, reported, negation_in(reported))\n",
+            "            standing = _standing(pattern, reported, Negation((), ()))\n",
+        ),
+        (f"{KNOWLEDGE_CORRECTNESS_TESTS}::test_denying_that_the_faq_says_it_does_not_report_it",),
+    ),
+    Mutation(
+        "R2.10B-M124",
+        "R2.10B",
+        "another subject's sentence counts as the same clause",
+        one(
+            KNOWLEDGE_CORRECTNESS,
+            "    for _, sentence_start, sentence_end in "
+            "_pieces(_SENTENCE_END, text, 0, len(text)):\n"
+            "        for _, start, end in _pieces(_CONTRAST,",
+            '    for _, sentence_start, sentence_end in (("", 0, len(text)),):\n'
+            "        for _, start, end in _pieces(_CONTRAST,",
+        ),
+        (
+            f"{KNOWLEDGE_CORRECTNESS_TESTS}::"
+            "test_another_subjects_negation_takes_nothing_from_hours_given_by_name",
+        ),
+    ),
+]
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -4741,4 +6331,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R2_9K,
     *STAGE_R2_9X,
     *STAGE_R2_10A,
+    *STAGE_R2_10B,
 )

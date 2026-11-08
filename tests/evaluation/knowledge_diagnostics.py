@@ -1,4 +1,4 @@
-"""`copilot_knowledge_diagnostics_v1`: what happened in each knowledge-eval case (R2.10A).
+"""`copilot_knowledge_diagnostics_v2`: what happened in each knowledge-eval case (R2.10A, R2.10B).
 
 The knowledge report scores each case but keeps neither what the model wrote, nor what the server
 did with it, nor what each search returned. So R2.9Y's `dog_fee` -- an empty result from the
@@ -26,6 +26,9 @@ reference among them -- is exactly what it was.
   `completed`, so the text is a final answer and not a tool turn's, the model's own text is exactly
   the documents sentence, and a search returned before it. `not_found` stays what it was, a
   judgement of the served text.
+- **`correctness`** (v2) -- what `knowledge_correctness.py` makes of the model's text and of the
+  served text, and whether the evidence and the search allowed an answer. Nothing else in this
+  block depends on it, and it depends on no measure.
 - **`failure_class`** -- the first of these that the recorded evidence establishes:
 
   | Class | Evidence |
@@ -60,15 +63,17 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.llm.base import ChatRequest, ChatResponse, Message
+from tests.evaluation import knowledge_correctness as correctness
 from tests.evaluation.knowledge_questions import SEARCH, KnowledgeCase
 from tests.evaluation.knowledge_scorers import NOT_FOUND
 
-KNOWLEDGE_DIAGNOSTICS_VERSION = "copilot_knowledge_diagnostics_v1"
+KNOWLEDGE_DIAGNOSTICS_VERSION = "copilot_knowledge_diagnostics_v2"
 
 STATEMENT = (
     "What the model wrote, what the server did with it and what each search returned, for each "
     "case, beside the report's measures and changing none of them. A failure class describes the "
-    "recorded evidence, not its cause, and none of this judges whether an answer is true."
+    "recorded evidence, not its cause. Only `correctness` judges what an answer states, and only "
+    "as far as its statement says."
 )
 
 FAILURE_CLASSES = (
@@ -107,6 +112,23 @@ class CaseObservation:
     model_text: str
     answer_source: str | None
     searches: tuple[dict[str, Any], ...]
+    #: R2.10B: what the model was shown. Used to judge, and not recorded in the block.
+    shown: tuple[str, ...] = ()
+
+
+def shown_in(requests: Sequence[ChatRequest]) -> tuple[str, ...]:
+    """The excerpts and tool outputs the last request carried, without the search's own notice --
+    which mentions instructions and citations in every search result, whatever it found."""
+    shown: list[str] = []
+    for message in requests[-1].messages if requests else ():
+        if message.role != "tool" or message.is_error:
+            continue
+        try:
+            items = json.loads(message.content)["untrusted_retrieved_content"]
+            shown += [str(item["text"]) for item in items]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            shown.append(message.content)
+    return tuple(shown)
 
 
 def _hits(message: Message) -> list[str] | None:
@@ -212,6 +234,15 @@ def _row(
         "searches": list(observed.searches),
         "failure_class": failure_class(case, result, observed),
         "model_not_found_correct": model_not_found_correct(case, result, observed),
+        "correctness": correctness.assess(
+            case,
+            model_text=observed.model_text,
+            served_answer=result["served_answer"],
+            stop_reason=result["stop_reason"],
+            searches=observed.searches,
+            shown=observed.shown,
+            answer_source=observed.answer_source,
+        ),
     }
 
 
@@ -242,6 +273,7 @@ def block(
         },
         "server_replaced_text": sum(1 for row in rows if row["server_replaced_text"]),
         "failure_classes": {name: classes[name] for name in FAILURE_CLASSES},
+        "correctness": correctness.summary([row["correctness"] for row in rows]),
         "cases": rows,
     }
 
@@ -256,4 +288,5 @@ __all__ = [
     "model_not_found_correct",
     "replaced_text",
     "searches_in",
+    "shown_in",
 ]

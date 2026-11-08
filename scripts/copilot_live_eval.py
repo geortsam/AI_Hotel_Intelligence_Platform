@@ -63,8 +63,9 @@ their reviews is answered only from review text in the hotel's documents) likewi
 
 *R2.10A.* A `copilot_knowledge_eval_v1` run's report also carries a `knowledge_diagnostics` block
 (`tests/evaluation/knowledge_diagnostics.py`): per case, what the model wrote, what the server did
-with it, what each search returned, a failure class and a model-level not-found result. Its repeat
-aggregate still holds no measures: read the attempts' reports.
+with it, what each search returned, a failure class and a model-level not-found result, and
+(R2.10B) whether the answer is right, kept apart from what the evidence and the search allowed. Its
+repeat aggregate still holds no measures: read the attempts' reports.
 
 *R2.9X.* `--case-policy` names the case-policy version a `copilot_eval_v3` run's
 `model_level_v2` and `integrity_v3` blocks are scored under: `copilot_eval_v3_case_policy_v1`

@@ -189,6 +189,7 @@ def run_case(
                 model_text=final_text,
                 answer_source=answer_source,
                 searches=diagnostics.searches_in(recorder.requests, recorder.responses),
+                shown=diagnostics.shown_in(recorder.requests),
             )
         )
     seen = scorers.labels_seen(recorder.requests)

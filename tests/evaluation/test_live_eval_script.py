@@ -2918,9 +2918,11 @@ def test_a_knowledge_run_carries_the_diagnostics_block_in_its_report_only(world:
     replays, report = world.files()
     assert "knowledge_diagnostics" not in replays
     block = report["knowledge_diagnostics"]
-    assert block["version"] == "copilot_knowledge_diagnostics_v1"
+    assert block["version"] == "copilot_knowledge_diagnostics_v2"
+    assert block["correctness"]["version"] == "copilot_knowledge_correctness_v1"
     [row] = block["cases"]
     assert (row["case_id"], row["model_text"]) == (case, world.text)
+    assert row["correctness"]["model"]["answer_correctness"] == "incorrect"  # world.text
 
 
 @pytest.mark.parametrize("question_set", ["copilot_eval_v1", "copilot_eval_v2", "copilot_eval_v3"])
