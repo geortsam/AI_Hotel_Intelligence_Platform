@@ -495,6 +495,10 @@ def test_only_the_top_five_are_scored_but_everything_returned_is_checked() -> No
         (dict(FULL, **{"q-hours": [("gym", 0)]}), "is not a chunk of the corpus"),
         (dict(FULL, **{"q-hours": [("pool", 0), ("pool", 0)]}), "ranked twice"),
         (dict(FULL, **{"q-hours": pairs(*FILLER, POOL, POOL)}), "ranked twice"),
+        (
+            dict(FULL, **{"q-dog": pairs(PETS, POOL, TOWELS, PARKING, FAQ, PISINA)}),
+            "exceed its limit of 5",
+        ),
     ],
     ids=[
         "missing-query",
@@ -509,6 +513,7 @@ def test_only_the_top_five_are_scored_but_everything_returned_is_checked() -> No
         "unknown-document",
         "duplicate",
         "duplicate-past-the-cutoff",
+        "more-than-its-limit",
     ],
 )
 def test_invalid_results_are_refused(results: dict[str, Any], expected: str) -> None:
@@ -687,3 +692,91 @@ def test_the_resampling_unit_is_the_query_not_the_chunk() -> None:
     assert block["interval"] is not None
     for mean in ("mrr_at_5", "ndcg_at_5"):
         assert report["overall"][mean]["bootstrap_95"]["n"] == 12
+
+
+# --- the approved v2 configuration (R2.10C.3a, decisions A and B) ---------------------------------
+
+
+def test_the_approved_v2_configuration() -> None:
+    config = metrics.V2_METRIC_CONFIG
+    assert (config.mrr_min_grade, config.ndcg_gains, config.no_answer_lenient_min_grade) == (
+        2,
+        (0, 1, 3),
+        1,
+    )
+
+
+@pytest.mark.parametrize(
+    "ranked",
+    [
+        (),
+        (TOWELS,),
+        (PISINA,),
+        (POOL,),
+        (PISINA, POOL),
+        (*FILLER[:4], POOL),
+        (*FILLER, POOL),
+        (PARKING, PISINA, FAQ),
+    ],
+    ids=[
+        "empty",
+        "grade-0",
+        "grade-1",
+        "grade-2",
+        "grade-1-then-2",
+        "grade-2-at-rank-5",
+        "grade-2-at-rank-6",
+        "no-2",
+    ],
+)
+def test_under_the_v2_configuration_mrr_is_positive_exactly_when_success_holds(
+    ranked: tuple[ChunkRef, ...],
+) -> None:
+    item = metrics.outcome(DATASET, HOURS, ranked, metrics.V2_METRIC_CONFIG)
+    assert item.reciprocal_rank is not None
+    assert (item.reciprocal_rank > 0) is item.success
+
+
+@pytest.mark.parametrize(
+    ("ranked", "success"),
+    [
+        ((PARKING, POOL), True),
+        ((TOWELS, PETS, PARKING), True),
+        ((TOWELS, PETS, FAQ, PISINA, ROOF, POOL, PARKING), False),
+        ((TOWELS, PETS, FAQ, PISINA), False),
+    ],
+    ids=["both-sufficient", "one-sufficient-at-rank-3", "sufficient-only-past-rank-5", "none"],
+)
+def test_the_invariant_holds_for_a_query_with_two_sufficient_chunks(
+    ranked: tuple[ChunkRef, ...], success: bool
+) -> None:
+    item = metrics.outcome(DATASET, BOTH, ranked, metrics.V2_METRIC_CONFIG)
+    assert item.success is success
+    assert item.reciprocal_rank is not None
+    assert (item.reciprocal_rank > 0) is item.success
+
+
+# --- F3: query-specific limits (R2.10C.3a remediation) --------------------------------------------
+
+
+def test_a_ranking_exactly_at_its_limit_is_accepted() -> None:
+    """q-dog's limit is 5: five results are accepted. Six are refused, in
+    `test_invalid_results_are_refused[more-than-its-limit]`."""
+    row = row_of("q-dog", {"q-dog": pairs(PETS, POOL, TOWELS, PARKING, FAQ)})
+    assert (row["returned"], len(row["top"]), row["success"]) == (5, 5, True)
+
+
+def test_queries_with_different_limits_are_evaluated_together() -> None:
+    assert (HOURS.limit, BOTH.limit) == (20, 5)
+    results = dict(
+        FULL,
+        **{
+            "q-hours": pairs(TOWELS, PARKING, PETS, FAQ, PISINA, POOL, OLD),
+            "q-both": pairs(PARKING, POOL, TOWELS, PETS),
+        },
+    )
+    rows = {row["query_id"]: row for row in metrics.evaluate(DATASET, results, CONFIG)["queries"]}
+    assert (rows["q-hours"]["returned"], rows["q-both"]["returned"]) == (7, 4)
+    longer = dict(results, **{"q-both": pairs(TOWELS, PARKING, PETS, FAQ, PISINA, POOL, OLD)})
+    with pytest.raises(ResultsError, match="q-both: 7 results exceed its limit of 5"):
+        metrics.evaluate(DATASET, longer, CONFIG)

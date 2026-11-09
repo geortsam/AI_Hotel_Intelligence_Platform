@@ -56,9 +56,13 @@ change its value. Queries are reported by `query_id`, families by name.
 
 **Invalid results are refused, never repaired** (`ResultsError`): a query of the dataset with no
 results entry, an entry for a query the dataset does not have, an item that is not a
-`(doc_id, ordinal)` pair, a chunk the corpus does not hold, or the same chunk twice in one ranking.
-A duplicate is refused rather than dropped because production search cannot return one, so it can
-only mean the harness is wrong.
+`(doc_id, ordinal)` pair, a chunk the corpus does not hold, the same chunk twice in one ranking,
+or more results than the query's `limit` (R2.10C.3a). A duplicate or an overlong ranking is
+refused rather than trimmed because production search cannot return one, so it can only mean the
+harness is wrong.
+
+**The approved configuration** for `knowledge_retrieval_v2` is `V2_METRIC_CONFIG`: MRR@5 at grade
+2, nDCG@5 gains (0, 1, 3), the lenient check at grade 1 (decision record §4, decisions A and B).
 
 **`forbidden` is an annotation.** It names the scope traps a query was written to spring. Each
 report row lists the ones returned (`trap_hits`). Leaving a chunk out of it cannot hide leakage:
@@ -194,6 +198,14 @@ class MetricConfig:
         }
 
 
+#: The configuration approved for `knowledge_retrieval_v2` (decision record §4, decisions A and
+#: B): MRR@5 counts grade 2 only, so it is non-zero exactly when Success@5 holds; nDCG@5 gains
+#: 2^grade - 1, so (0, 1, 3); the lenient no-answer check counts grade 1 and above.
+V2_METRIC_CONFIG: Final = MetricConfig(
+    mrr_min_grade=2, ndcg_gains=(0, 1, 3), no_answer_lenient_min_grade=1
+)
+
+
 # --- validating supplied results ------------------------------------------------------------------
 
 
@@ -211,11 +223,16 @@ def located(
     if extra:
         raise ResultsError(f"results for queries the dataset does not have: {extra}")
     corpus = dataset.chunks()
+    limits = {query.query_id: query.limit for query in dataset.queries}
     ranked: dict[str, tuple[ChunkRef, ...]] = {}
     for query_id in sorted(expected):
         items = results[query_id]
         if not isinstance(items, list | tuple):
             raise ResultsError(f"{query_id}: results must be a ranked list")
+        if len(items) > limits[query_id]:
+            raise ResultsError(
+                f"{query_id}: {len(items)} results exceed its limit of {limits[query_id]}"
+            )
         chunks: list[ChunkRef] = []
         for rank, item in enumerate(items, start=1):
             if (
@@ -595,6 +612,7 @@ __all__ = [
     "DISCOUNT",
     "LENIENT_MIN_GRADE",
     "METRICS_VERSION",
+    "V2_METRIC_CONFIG",
     "WILSON_Z_95",
     "ConfigurationError",
     "MetricConfig",
