@@ -178,7 +178,7 @@ included **verbatim**, as the model wrote them.
 | `origin` | as in §3.3, with provenance |
 | `answerable` | whether the corpus holds the answer |
 | `relevant` | a list of `{doc_id, ordinal, grade}` |
-| `forbidden` | chunks that must never appear: inactive versions, the neighbour hotel |
+| `forbidden` | an annotation: the scope traps this query was written to spring (inactive versions, the neighbour hotel). Leakage does not depend on it (§3.7) |
 | `rationale` | why each judgment was made |
 
 ### 3.5 Relevance grades
@@ -205,12 +205,16 @@ judgments in C.3 before C.4 measures anything.
 - **Answerable** queries form the denominator of Success@5, Recall@5, MRR@5, nDCG@5 and the
   empty-result rate.
 - **No-answer** queries have their own denominator and never enter those metrics. Each is scored
-  two ways: **strict** (nothing returned) and **lenient** (nothing relevant returned).
+  two ways: **strict** (nothing returned) and **lenient** (nothing of grade 1 or above returned).
 
-  > **Unresolved:** whether "relevant" in the lenient rule means grade 1 or above. It is to be
-  > fixed in C.2 together with the MRR@5 question in §4.
-- **Forbidden** chunks are checked on **every** query, answerable or not. Returning one is scope
-  leakage (§5.1).
+  > **Resolved in R2.10C.2.1:** the lenient threshold is grade 1, and only grade 1. A no-answer
+  > query cannot hold a grade-2 chunk (§3.4), so a threshold of 2 could never fail.
+- **Scope leakage is derived from the corpus**, on **every** query, answerable or not. A query
+  leaks when anything it returns, at any rank, is a chunk of a document that is not an active
+  document of the evaluated hotel: its `hotel` is not `evaluated`, or its `status` is not `active`.
+  A chunk the corpus does not hold is refused, not counted. `forbidden` (§3.4) is an annotation,
+  reported beside leakage as the traps a query sprang; leaving a chunk out of it cannot hide
+  leakage (R2.10C.2.1).
 
 ## 4. Metrics
 
@@ -219,14 +223,29 @@ All metrics are computed by a pure scorer, independent of the search, over the f
 | Metric | Definition |
 |---|---|
 | **Success@5** | share of answerable queries with at least one grade-2 chunk in the top 5. This is what v1 calls "recall@5", defined exactly; the comparison with a threshold uses integer arithmetic, as `real_retrieval.below_threshold` does |
-| **Recall@5** | per query, the share of its grade-2 chunks in the top 5; averaged over answerable queries. It matters when a question needs more than one chunk |
+| **Recall@5** | per query, the share of its grade-2 chunks in the top 5; averaged over answerable queries (a macro average: each query counts once, however many chunks it needs). It matters when a question needs more than one chunk |
 | **MRR@5** | mean of 1 / (rank of the first relevant chunk), 0 if none in the top 5 |
 | **nDCG@5** | graded discounted cumulative gain over the top 5, normalised by the ideal ordering of the judged chunks |
 | **Empty-result rate** | share of answerable queries that return no result at all: the key diagnostic for the all-terms rule |
 | **No-answer correctness** | strict and lenient, as §3.7 |
-| **Scope leakage** | number of queries that return any forbidden chunk |
+| **Scope leakage** | number of queries that return, at any rank, a chunk of a document that is not active at the evaluated hotel; over all queries (§3.7) |
 
-Every figure is reported overall and **per family**, each with its n and a **Wilson 95% interval**.
+Every figure is reported overall and **per family**, each with its n and an interval. This
+replaces the C.1 wording "each with its n and a Wilson 95% interval": a Wilson interval describes a
+rate of successes and cannot describe a mean (R2.10C.2.1):
+
+- **Rates** -- Success@5, the empty-result rate, both no-answer checks and scope leakage -- carry a
+  **Wilson 95%** interval.
+- **Means** -- Recall@5, MRR@5 and nDCG@5 -- are averages of per-query values in [0, 1], not counts
+  of successes, so Wilson does not apply. They carry a **percentile bootstrap 95%** interval: the
+  query-level values are resampled with replacement **10,000** times, from
+  `random.Random(20261108)`, and the interval is the 2.5th and 97.5th percentiles of the resampled
+  means by nearest rank. The unit resampled is the query, never a chunk, so each resample keeps the
+  macro average.
+- **Below n = 10** a mean carries no interval, and the report says why. An interval whose two ends
+  are equal is reported and flagged `zero_width`.
+- The bootstrap interval is **descriptive**. It assumes the queries are exchangeable; queries that
+  share a document, or that were captured from the same case, weaken that assumption.
 
 > **Unresolved:** whether "relevant" in MRR@5 means grade 2 only or grade 1 or above, and the gain
 > function of nDCG@5 (the grade itself, or 2^grade − 1). The assessment says only "rank of the first
@@ -251,7 +270,8 @@ These are declared here, **before the first v2 measurement**, and are not change
 
 ### 5.1 Hard gates (fail CI)
 
-1. **Scope leakage = 0.**
+1. **Scope leakage = 0**, as §3.7 defines it: from the corpus, so it cannot be passed by leaving
+   a chunk out of a query's `forbidden` list.
 2. **The measured report equals the pinned report exactly.** This is the regression gate: a query
    that changes result fails CI until the change is reviewed and the report deliberately
    regenerated.
@@ -285,6 +305,7 @@ Each v2 report records:
 | PostgreSQL server version and image digest | stemmers and stop words come with the server |
 | text-search configurations used | `english`, `greek` and the rest |
 | scorer version | which metric definitions |
+| bootstrap method, resample count and seed | that the mean intervals can be recomputed exactly |
 | a fingerprint of the retrieval implementation (`backend/app/repositories/knowledge.py`) | that the search under test is the one recorded |
 
 Reports are written twice: as **canonical JSON** (sorted keys, pinned in the repository, compared
@@ -349,9 +370,20 @@ Any retrieval change is a later stage, to be authorised separately and measured 
 | Risk | Safeguard |
 |---|---|
 | **Developer bias.** The same author writes the queries and the judgments, and could write queries today's search passes | judgments before measurement, frozen by checksum; captured model queries used verbatim; a written rubric (§3.5); your sign-off |
-| **Small samples.** On 23 queries one query moves a rate by about 4.3 points, and the interval for 16 of 23 spans about 0.49 to 0.84 | Wilson intervals on every figure; family targets only at n ≥ 10 |
+| **Small samples.** On 23 queries one query moves a rate by about 4.3 points, and the interval for 16 of 23 spans about 0.49 to 0.84 | Wilson intervals on rates and bootstrap intervals on means (§4); family targets only at n ≥ 10 |
 | **Synthetic corpus.** Invented documents say nothing about real hotels' wording | stated in every report; Layer 3 is the only route to the Stage 7.15 decision |
 | **PostgreSQL configuration drift.** A server or dictionary upgrade can change stemming and stop words, and so results | image pinned by digest; server version and configurations recorded in each report; the pinned-report gate surfaces any change |
 | **CI-only database tests.** Layer 2 cannot be run on this machine | keep as much as possible in Layer 1; budget extra CI rounds |
 | **Snapshot versus live.** A snapshot records one commit's results; live search can move on | the drift gate (§5.1.3); explicit source labels in every report, so the stand-in, the snapshot and live search are never confused |
 | **Real documents in the repository** | Layer 3 keeps them outside it, as `real_retrieval.py` already enforces |
+
+## 11. Amendments
+
+| Stage | Date | Change |
+|---|---|---|
+| R2.10C.2.1 | 2026-11-08 | **Intervals (§4):** Wilson 95% for rates only; a query-level percentile bootstrap (10,000 resamples, seed 20261108, nearest-rank percentiles, none below n = 10, `zero_width` flagged) for Recall@5, MRR@5 and nDCG@5. Replaces "a Wilson 95% interval" on every figure. **Leakage (§3.7, §4, §5.1):** derived from document `hotel` and `status` on everything returned; `forbidden` becomes an annotation. Replaces "a query that returns any forbidden chunk". **Lenient no-answer (§3.7):** grade 1 only; resolves the open item. |
+
+No measurement has used these definitions. Nothing in this record's measured results changes:
+`knowledge_retrieval_v1`'s 16 of 23 and its Wilson interval, and every R2.9Y result, were produced
+before them and stay exactly as recorded. The MRR@5 grade and the nDCG@5 gains (§4) remain open and
+are given explicitly to every computation.

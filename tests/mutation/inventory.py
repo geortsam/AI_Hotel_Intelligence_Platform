@@ -6291,6 +6291,509 @@ STAGE_R2_10B = [
     ),
 ]
 
+# --- R2.10C: retrieval metrics and the dataset schema, before any dataset ------------------------
+
+RETRIEVAL_METRICS = "tests/evaluation/retrieval_metrics.py"
+RETRIEVAL_METRICS_TESTS = "tests/evaluation/test_retrieval_metrics.py"
+RETRIEVAL_SCHEMA = "tests/evaluation/retrieval_schema.py"
+RETRIEVAL_SCHEMA_TESTS = "tests/evaluation/test_retrieval_schema.py"
+_RM = f"{RETRIEVAL_METRICS_TESTS}::"
+_RS = f"{RETRIEVAL_SCHEMA_TESTS}::"
+_REFUSED = f"{_RS}test_a_malformed_or_inconsistent_dataset_is_refused"
+_DENOMINATORS = f"{_RM}test_each_metric_has_its_own_denominator"
+_NO_ANSWER = f"{_RM}test_strict_and_lenient_no_answer_checks_are_different_checks"
+_AT_RANK = f"{_RM}test_a_sufficient_chunk_at_each_rank_inside_the_cutoff"
+_WILSON = f"{_RM}test_wilson_intervals_match_their_known_values"
+
+
+def _r210c(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R2.10C-M{number}", "R2.10C", breaks, one(path, old, new), killers)
+
+
+STAGE_R2_10C = [
+    _r210c(
+        1,
+        "the cut-off keeps one result too few",
+        RETRIEVAL_METRICS,
+        "    return ranked[:cutoff]\n",
+        "    return ranked[: cutoff - 1]\n",
+        f"{_AT_RANK}[5]",
+    ),
+    _r210c(
+        2,
+        "results past the cut-off are scored",
+        RETRIEVAL_METRICS,
+        "    return ranked[:cutoff]\n",
+        "    return ranked\n",
+        f"{_RM}test_a_sufficient_chunk_at_rank_six_is_a_miss",
+    ),
+    _r210c(
+        3,
+        "Success@5 counts a grade-1 chunk as sufficient",
+        RETRIEVAL_METRICS,
+        "    return any(query.grade_of(chunk) >= SUFFICIENT for chunk in _top(ranked, cutoff))\n",
+        "    return any(query.grade_of(chunk) >= 1 for chunk in _top(ranked, cutoff))\n",
+        f"{_RM}test_grade_1_and_grade_2_are_not_the_same_to_success_or_recall",
+    ),
+    _r210c(
+        4,
+        "Recall@5 divides by the cut-off, not by the query's grade-2 chunks",
+        RETRIEVAL_METRICS,
+        "    return Fraction(len(found), len(required))\n",
+        "    return Fraction(len(found), cutoff)\n",
+        f"{_RM}test_partial_retrieval_of_two_sufficient_chunks",
+        f"{_RM}test_perfect_retrieval_scores_one_everywhere",
+    ),
+    _r210c(
+        5,
+        "Recall@5 counts every judged chunk, grade 1 and 0 included",
+        RETRIEVAL_METRICS,
+        "    required = query.sufficient\n",
+        "    required = frozenset(item.ref for item in query.relevant)\n",
+        f"{_RM}test_grade_1_and_grade_2_are_not_the_same_to_success_or_recall",
+    ),
+    _r210c(
+        6,
+        "ranks start at 2, so every reciprocal rank is one place too low",
+        RETRIEVAL_METRICS,
+        "    for rank, chunk in enumerate(_top(ranked, cutoff), start=1):\n"
+        "        if query.grade_of(chunk) >= min_grade:\n",
+        "    for rank, chunk in enumerate(_top(ranked, cutoff), start=2):\n"
+        "        if query.grade_of(chunk) >= min_grade:\n",
+        f"{_AT_RANK}[1]",
+        f"{_AT_RANK}[5]",
+        f"{_RM}test_the_mrr_threshold_is_the_configured_one",
+    ),
+    _r210c(
+        7,
+        "MRR@5 ignores its configured grade and counts grade 2 only",
+        RETRIEVAL_METRICS,
+        '    rank = first_rank_at(query, ranked, cutoff, _threshold(min_grade, "min_grade"))\n',
+        "    rank = first_rank_at(query, ranked, cutoff, SUFFICIENT)\n",
+        f"{_RM}test_the_mrr_threshold_is_the_configured_one",
+    ),
+    _r210c(
+        8,
+        "nDCG@5 uses the grade itself, whatever gains were configured",
+        RETRIEVAL_METRICS,
+        "    actual = [gains[query.grade_of(chunk)] for chunk in _top(ranked, cutoff)]\n",
+        "    actual = [query.grade_of(chunk) for chunk in _top(ranked, cutoff)]\n",
+        f"{_RM}test_the_gains_are_the_configured_ones",
+    ),
+    _r210c(
+        9,
+        "the ideal ordering puts the lowest grade first",
+        RETRIEVAL_METRICS,
+        "for item in query.relevant), reverse=True)[:cutoff]\n",
+        "for item in query.relevant), reverse=False)[:cutoff]\n",
+        f"{_RM}test_the_ideal_ordering_puts_the_highest_grade_first",
+        f"{_RM}test_perfect_retrieval_scores_one_everywhere",
+    ),
+    _r210c(
+        10,
+        "the discount is log2(rank + 2): one rank off",
+        RETRIEVAL_METRICS,
+        "    return math.fsum(gain / math.log2(rank + 1) for rank,",
+        "    return math.fsum(gain / math.log2(rank + 2) for rank,",
+        f"{_AT_RANK}[1]",
+        f"{_RM}test_the_gains_are_the_configured_ones",
+    ),
+    _r210c(
+        11,
+        "an out-of-scope chunk past the cut-off is not leakage",
+        RETRIEVAL_METRICS,
+        "    for chunk in ranked:\n        document = documents.get(chunk.doc_id)\n",
+        "    for chunk in ranked[:5]:\n        document = documents.get(chunk.doc_id)\n",
+        f"{_RM}test_leakage_is_found_past_the_cutoff",
+    ),
+    _r210c(
+        12,
+        "leakage is never detected",
+        RETRIEVAL_METRICS,
+        "            found.append(chunk)\n",
+        "            pass\n",
+        f"{_RM}test_a_neighbour_chunk_leaks_even_when_no_forbidden_list_names_it",
+        f"{_DENOMINATORS}",
+    ),
+    _r210c(
+        13,
+        "the strict no-answer check is the lenient one",
+        RETRIEVAL_METRICS,
+        "    return not ranked\n",
+        "    return not any(query.grade_of(chunk) >= 1 for chunk in ranked)\n",
+        f"{_NO_ANSWER}[grade-0]",
+    ),
+    _r210c(
+        14,
+        "the lenient no-answer check lets its own threshold grade through",
+        RETRIEVAL_METRICS,
+        "    return not any(query.grade_of(chunk) >= threshold for chunk in ranked)\n",
+        "    return not any(query.grade_of(chunk) > threshold for chunk in ranked)\n",
+        f"{_NO_ANSWER}[grade-1]",
+    ),
+    _r210c(
+        15,
+        "the lenient no-answer check reads only the top five",
+        RETRIEVAL_METRICS,
+        "    return not any(query.grade_of(chunk) >= threshold for chunk in ranked)\n",
+        "    return not any(query.grade_of(chunk) >= threshold for chunk in ranked[:5])\n",
+        f"{_NO_ANSWER}[grade-1-past-the-cutoff]",
+    ),
+    _r210c(
+        16,
+        "Success@5 is divided by every query, no-answer ones included",
+        RETRIEVAL_METRICS,
+        "            sum(bool(item.success) for item in answerable), len(answerable)\n",
+        "            sum(bool(item.success) for item in answerable), len(outcomes)\n",
+        _DENOMINATORS,
+    ),
+    _r210c(
+        17,
+        "the empty-result rate counts no-answer queries",
+        RETRIEVAL_METRICS,
+        '        "empty_result_rate": _proportion(sum(item.empty for item in answerable), '
+        "len(answerable)),\n",
+        '        "empty_result_rate": _proportion(sum(item.empty for item in outcomes), '
+        "len(outcomes)),\n",
+        _DENOMINATORS,
+    ),
+    _r210c(
+        18,
+        "no-answer queries enter Recall@5 as zeros",
+        RETRIEVAL_METRICS,
+        '        "recall_at_5": _mean_exact([item.recall for item in answerable '
+        "if item.recall is not None]),\n",
+        '        "recall_at_5": _mean_exact([item.recall or Fraction(0) for item in outcomes]),\n',
+        _DENOMINATORS,
+    ),
+    _r210c(
+        19,
+        "every family is reported with every query",
+        RETRIEVAL_METRICS,
+        "            family: aggregate([item for item in outcomes if item.family == family])\n",
+        "            family: aggregate(list(outcomes))\n",
+        f"{_RM}test_metrics_are_reported_per_family",
+    ),
+    _r210c(
+        20,
+        "the Wilson interval uses the 90% quantile",
+        RETRIEVAL_METRICS,
+        "WILSON_Z_95: Final = 1.959963984540054\n",
+        "WILSON_Z_95: Final = 1.6448536269514722\n",
+        _WILSON + "[5-10-expected2]",
+        f"{_RM}test_the_report_records_its_configuration",
+    ),
+    _r210c(
+        21,
+        "the Wilson half-width drops its z^2 / 4n^2 term",
+        RETRIEVAL_METRICS,
+        "    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denominator\n",
+        "    half = z * math.sqrt(p * (1 - p) / n) / denominator\n",
+        _WILSON + "[5-10-expected2]",
+        _WILSON + "[16-23-expected3]",
+    ),
+    _r210c(
+        22,
+        "the Wilson interval is centred on the raw proportion",
+        RETRIEVAL_METRICS,
+        "    centre = (p + z * z / (2 * n)) / denominator\n",
+        "    centre = p\n",
+        _WILSON + "[16-23-expected3]",
+    ),
+    _r210c(
+        23,
+        "a chunk ranked twice is accepted",
+        RETRIEVAL_METRICS,
+        "        if len(set(chunks)) != len(chunks):\n",
+        "        if False:\n",
+        f"{_RM}test_invalid_results_are_refused[duplicate]",
+        f"{_RM}test_invalid_results_are_refused[duplicate-past-the-cutoff]",
+    ),
+    _r210c(
+        24,
+        "a result that is no chunk of the corpus is accepted",
+        RETRIEVAL_METRICS,
+        "            if chunk not in corpus:\n",
+        "            if False:\n",
+        f"{_RM}test_invalid_results_are_refused[unknown-ordinal]",
+        f"{_RM}test_invalid_results_are_refused[unknown-document]",
+    ),
+    _r210c(
+        25,
+        "a no-answer query is scored as if it had an answer",
+        RETRIEVAL_METRICS,
+        "    if not query.answerable:\n"
+        '        raise ValueError(f"{query.query_id} is a no-answer '
+        'query; it has no score here")\n',
+        "    if False:\n"
+        '        raise ValueError(f"{query.query_id} is a no-answer '
+        'query; it has no score here")\n',
+        f"{_RM}test_answerable_and_no_answer_functions_refuse_each_others_queries",
+    ),
+    _r210c(
+        26,
+        "grade 0 may gain, so an irrelevant chunk raises nDCG",
+        RETRIEVAL_METRICS,
+        "        if gains[0] != 0:\n",
+        "        if False:\n",
+        f"{_RM}test_a_malformed_configuration_is_refused[grade-0-gains]",
+    ),
+    _r210c(
+        27,
+        "grade 1 may gain more than grade 2",
+        RETRIEVAL_METRICS,
+        "        if not 0 <= gains[1] <= gains[2] or gains[2] <= 0:\n",
+        "        if gains[2] <= 0:\n",
+        f"{_RM}test_a_malformed_configuration_is_refused[grade-1-above-grade-2]",
+        f"{_RM}test_a_malformed_configuration_is_refused[negative-gain]",
+    ),
+    _r210c(
+        28,
+        "the schema accepts grade 3",
+        RETRIEVAL_SCHEMA,
+        "GRADES: Final = (0, 1, 2)\n",
+        "GRADES: Final = (0, 1, 2, 3)\n",
+        f"{_REFUSED}[grade-3]",
+    ),
+    _r210c(
+        29,
+        "an answerable query needs no grade-2 chunk",
+        RETRIEVAL_SCHEMA,
+        "        if self.answerable and not sufficient:\n",
+        "        if False:\n",
+        f"{_REFUSED}[an-answerable-query-with-no-grade-2-chunk]",
+        f"{_RS}test_construction_is_validated_like_loading",
+    ),
+    _r210c(
+        30,
+        "a no-answer query may hold a grade-2 chunk",
+        RETRIEVAL_SCHEMA,
+        "        if not self.answerable and sufficient:\n",
+        "        if False:\n",
+        f"{_REFUSED}[a-no-answer-query-with-a-grade-2-chunk]",
+    ),
+    _r210c(
+        31,
+        "an unknown field is silently ignored",
+        RETRIEVAL_SCHEMA,
+        "    if unknown:\n",
+        "    if False:\n",
+        f"{_REFUSED}[unknown-top-level-field]",
+        f"{_REFUSED}[unknown-query-field]",
+    ),
+    _r210c(
+        32,
+        "true and false pass as integers",
+        RETRIEVAL_SCHEMA,
+        "    if isinstance(value, bool) or not isinstance(value, int):\n"
+        '        raise DatasetError(f"{where} must be an integer")\n',
+        "    if not isinstance(value, int):\n"
+        '        raise DatasetError(f"{where} must be an integer")\n',
+        f"{_REFUSED}[a-boolean-grade]",
+        f"{_REFUSED}[a-boolean-cutoff]",
+    ),
+    _r210c(
+        33,
+        "a judged chunk may lie out of scope",
+        RETRIEVAL_SCHEMA,
+        "                if not self._resolve(documents, chunk, where).in_scope:\n",
+        "                if not self._resolve(documents, chunk, where).in_scope and False:\n",
+        f"{_REFUSED}[a-judged-chunk-out-of-scope]",
+        f"{_REFUSED}[a-judged-inactive-version]",
+    ),
+    _r210c(
+        34,
+        "a forbidden chunk may lie in scope",
+        RETRIEVAL_SCHEMA,
+        "                if self._resolve(documents, chunk, where).in_scope:\n",
+        "                if self._resolve(documents, chunk, where).in_scope and False:\n",
+        f"{_REFUSED}[a-forbidden-chunk-in-scope]",
+    ),
+    _r210c(
+        35,
+        "the neighbour hotel's active documents count as in scope",
+        RETRIEVAL_SCHEMA,
+        '        return self.hotel == "evaluated" and self.status == "active"\n',
+        '        return self.status == "active"\n',
+        f"{_RS}test_a_valid_dataset_loads_with_everything_it_declared",
+    ),
+    _r210c(
+        36,
+        "the canonical form keeps keys in insertion order",
+        RETRIEVAL_SCHEMA,
+        '            self.as_mapping(), sort_keys=True, separators=(",", '
+        '":"), ensure_ascii=False\n',
+        '            self.as_mapping(), sort_keys=False, separators=(",", '
+        '":"), ensure_ascii=False\n',
+        f"{_RS}test_the_checksum_is_pinned",
+        f"{_RS}test_the_canonical_json_has_sorted_keys_and_compact_separators",
+    ),
+    _r210c(
+        37,
+        "the canonical form escapes non-ASCII text",
+        RETRIEVAL_SCHEMA,
+        '            self.as_mapping(), sort_keys=True, separators=(",", '
+        '":"), ensure_ascii=False\n',
+        '            self.as_mapping(), sort_keys=True, separators=(",", ":"), ensure_ascii=True\n',
+        f"{_RS}test_the_checksum_is_pinned",
+        f"{_RS}test_the_canonical_json_has_sorted_keys_and_compact_separators",
+    ),
+    _r210c(
+        38,
+        "judgments keep their authoring order, so reordering them changes the checksum",
+        RETRIEVAL_SCHEMA,
+        '            self, "relevant", tuple(sorted(self.relevant, key=lambda item: item.ref))\n',
+        '            self, "relevant", tuple(self.relevant)\n',
+        f"{_RS}test_the_checksum_ignores_the_order_of_keys_and_of_judgments",
+        f"{_RS}test_the_judgment_lists_are_stored_sorted",
+    ),
+    _r210c(
+        39,
+        "a duplicate JSON key silently replaces the first",
+        RETRIEVAL_SCHEMA,
+        "    if duplicated:\n",
+        "    if False:\n",
+        f"{_RS}test_duplicate_json_keys_are_refused_not_resolved",
+    ),
+    _r210c(
+        40,
+        "a model-captured query needs no provenance",
+        RETRIEVAL_SCHEMA,
+        '        if (self.origin == "model_captured") != (self.provenance is not None):\n',
+        "        if False:\n",
+        f"{_REFUSED}[model_captured-with-no-provenance]",
+        f"{_REFUSED}[a-developer-query-with-provenance]",
+    ),
+    # R2.10C.2.1: corpus-derived leakage, the grade-1-only lenient check, the bootstrap.
+    _r210c(
+        41,
+        "leakage ignores status, so a superseded or withdrawn version passes",
+        RETRIEVAL_METRICS,
+        '        if document.hotel != "evaluated" or document.status != "active":\n',
+        '        if document.hotel != "evaluated":\n',
+        f"{_RM}test_a_superseded_version_leaks",
+        f"{_RM}test_a_withdrawn_document_leaks",
+    ),
+    _r210c(
+        42,
+        "leakage ignores the hotel, so the neighbour's active document passes",
+        RETRIEVAL_METRICS,
+        '        if document.hotel != "evaluated" or document.status != "active":\n',
+        '        if document.status != "active":\n',
+        f"{_RM}test_a_neighbour_chunk_leaks_even_when_no_forbidden_list_names_it",
+        f"{_RM}test_emptying_every_forbidden_list_cannot_pass_the_leakage_gate",
+    ),
+    _r210c(
+        43,
+        "leakage is read from the query's forbidden list again",
+        RETRIEVAL_METRICS,
+        "        leaked=leaked(dataset, ranked),\n",
+        "        leaked=trap_hits(query, ranked),\n",
+        f"{_RM}test_a_neighbour_chunk_leaks_even_when_no_forbidden_list_names_it",
+        f"{_RM}test_emptying_every_forbidden_list_cannot_pass_the_leakage_gate",
+    ),
+    _r210c(
+        44,
+        "leakage counts leaking chunks, not leaking queries",
+        RETRIEVAL_METRICS,
+        '        "scope_leakage": _proportion(sum(bool(item.leaked) for item in outcomes), '
+        "len(outcomes)),\n",
+        '        "scope_leakage": _proportion(sum(len(item.leaked) for item in outcomes), '
+        "len(outcomes)),\n",
+        f"{_RM}test_a_query_with_several_leaking_chunks_counts_once",
+    ),
+    _r210c(
+        45,
+        "no-answer queries are left out of the leakage rate",
+        RETRIEVAL_METRICS,
+        '        "scope_leakage": _proportion(sum(bool(item.leaked) for item in outcomes), '
+        "len(outcomes)),\n",
+        '        "scope_leakage": _proportion(sum(bool(item.leaked) for item in answerable), '
+        "len(answerable)),\n",
+        f"{_RM}test_no_answer_queries_are_in_the_leakage_denominator",
+    ),
+    _r210c(
+        46,
+        "the lenient no-answer check accepts grade 2, which can never fail",
+        RETRIEVAL_METRICS,
+        "    if isinstance(value, bool) or not isinstance(value, int) or "
+        "value != LENIENT_MIN_GRADE:\n",
+        "    if isinstance(value, bool) or not isinstance(value, int) or value not in (1, 2):\n",
+        f"{_RM}test_a_malformed_configuration_is_refused[lenient-2]",
+        f"{_RM}test_a_threshold_passed_directly_is_checked_too",
+    ),
+    _r210c(
+        47,
+        "the bootstrap ignores its seed",
+        RETRIEVAL_METRICS,
+        "    generator = random.Random(seed)\n",
+        "    generator = random.Random()\n",
+        f"{_RM}test_the_same_seed_gives_the_same_interval",
+        f"{_RM}test_another_seed_is_supported_and_recorded",
+    ),
+    _r210c(
+        48,
+        "the bootstrap ignores the resample count it was given",
+        RETRIEVAL_METRICS,
+        "        for _ in range(resamples)\n",
+        "        for _ in range(BOOTSTRAP_RESAMPLES)\n",
+        f"{_RM}test_another_seed_is_supported_and_recorded",
+    ),
+    _r210c(
+        49,
+        "the lower percentile is one rank too high",
+        RETRIEVAL_METRICS,
+        "    return ordered[low_rank - 1], ordered[high_rank - 1]\n",
+        "    return ordered[low_rank], ordered[high_rank - 1]\n",
+        f"{_RM}test_the_percentiles_are_the_nearest_ranks",
+    ),
+    _r210c(
+        50,
+        "the upper percentile is one rank too high",
+        RETRIEVAL_METRICS,
+        "    return ordered[low_rank - 1], ordered[high_rank - 1]\n",
+        "    return ordered[low_rank - 1], ordered[high_rank]\n",
+        f"{_RM}test_the_percentiles_are_the_nearest_ranks",
+    ),
+    _r210c(
+        51,
+        "fewer than ten queries still get an interval",
+        RETRIEVAL_METRICS,
+        "    if n < min_n:\n",
+        "    if n < 1:\n",
+        f"{_RM}test_below_ten_queries_there_is_no_interval",
+    ),
+    _r210c(
+        52,
+        "a zero-width interval is never flagged",
+        RETRIEVAL_METRICS,
+        '    block["zero_width"] = low == high\n',
+        '    block["zero_width"] = False\n',
+        f"{_RM}test_a_zero_width_interval_is_flagged",
+    ),
+    _r210c(
+        53,
+        "the bootstrap does not resample: every resample is the sample itself",
+        RETRIEVAL_METRICS,
+        "        math.fsum(observations[generator.randrange(n)] for _ in range(n)) / n\n",
+        "        math.fsum(observations) / n\n",
+        f"{_RM}test_the_same_seed_gives_the_same_interval",
+        f"{_RM}test_the_interval_lies_around_the_mean_and_inside_the_values",
+    ),
+    _r210c(
+        54,
+        "a mean is resampled over more observations than it has queries",
+        RETRIEVAL_METRICS,
+        '        "value": round(float(sum(values) / len(values)), DIGITS) if values else None,\n'
+        '        "bootstrap_95": bootstrap_interval(list(values)),\n',
+        '        "value": round(float(sum(values) / len(values)), DIGITS) if values else None,\n'
+        '        "bootstrap_95": bootstrap_interval(list(values) * 2),\n',
+        f"{_RM}test_the_resampling_unit_is_the_query_not_the_chunk",
+        f"{_RM}test_rates_carry_a_wilson_interval_and_means_a_bootstrap_block",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -6332,4 +6835,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R2_9X,
     *STAGE_R2_10A,
     *STAGE_R2_10B,
+    *STAGE_R2_10C,
 )
