@@ -6297,8 +6297,15 @@ RETRIEVAL_METRICS = "tests/evaluation/retrieval_metrics.py"
 RETRIEVAL_METRICS_TESTS = "tests/evaluation/test_retrieval_metrics.py"
 RETRIEVAL_SCHEMA = "tests/evaluation/retrieval_schema.py"
 RETRIEVAL_SCHEMA_TESTS = "tests/evaluation/test_retrieval_schema.py"
+RETRIEVAL_V2 = "tests/evaluation/retrieval_v2.py"
+RETRIEVAL_V2_TESTS = "tests/evaluation/test_retrieval_v2.py"
 _RM = f"{RETRIEVAL_METRICS_TESTS}::"
 _RS = f"{RETRIEVAL_SCHEMA_TESTS}::"
+_RV = f"{RETRIEVAL_V2_TESTS}::"
+MUTATION_HARNESS = "tests/mutation/harness.py"
+_HT = "tests/mutation/test_harness.py::"
+_DIFFERS = f"{_RV}test_a_dataset_that_differs_from_the_capture_is_reported"
+_DRIFT = f"{_RV}test_a_copy_that_differs_from_its_source_is_reported"
 _REFUSED = f"{_RS}test_a_malformed_or_inconsistent_dataset_is_refused"
 _DENOMINATORS = f"{_RM}test_each_metric_has_its_own_denominator"
 _NO_ANSWER = f"{_RM}test_strict_and_lenient_no_answer_checks_are_different_checks"
@@ -6961,6 +6968,168 @@ STAGE_R2_10C = [
         "    mrr_min_grade=2, ndcg_gains=(0, 1, 3), no_answer_lenient_min_grade=1\n",
         "    mrr_min_grade=2, ndcg_gains=(0, 1, 2), no_answer_lenient_min_grade=1\n",
         f"{_RM}test_the_approved_v2_configuration",
+    ),
+    # R2.10C.3b: the knowledge_retrieval_v2 snapshot, its sources and the R2.9Y capture.
+    _r210c(
+        75,
+        "a snapshot whose checksum is not the pinned one is loaded",
+        RETRIEVAL_V2,
+        '    if actual != expected_sha256:\n        raise SnapshotError(f"snapshot checksum',
+        '    if False:\n        raise SnapshotError(f"snapshot checksum',
+        f"{_RV}test_a_changed_snapshot_is_refused",
+    ),
+    _r210c(
+        76,
+        "a capture whose bytes are not the pinned ones is read",
+        RETRIEVAL_V2,
+        '    if actual != expected_sha256:\n        raise SnapshotError(f"capture SHA-256',
+        '    if False:\n        raise SnapshotError(f"capture SHA-256',
+        f"{_RV}test_the_capture_is_the_pinned_one",
+    ),
+    _r210c(
+        77,
+        "a search repeated within one attempt is merged instead of refused",
+        RETRIEVAL_V2,
+        "                    if occurrence in seen:\n",
+        "                    if False:\n",
+        f"{_RV}test_a_repeat_within_one_attempt_is_refused_not_merged",
+    ),
+    _r210c(
+        78,
+        "captured searches are grouped without their limit",
+        RETRIEVAL_V2,
+        "                    seen = groups.setdefault((case, query, limit), [])\n",
+        "                    seen = groups.setdefault((case, query, 5), [])\n",
+        f"{_RV}test_the_captured_ids_follow_first_occurrence",
+        f"{_RV}test_the_dataset_holds_exactly_the_captured_queries",
+    ),
+    _r210c(
+        79,
+        "captured ids are numbered against first-occurrence order",
+        RETRIEVAL_V2,
+        '    return f"r29y.{item.case}.{same_case.index(item) + 1}"\n',
+        '    return f"r29y.{item.case}.{len(same_case) - same_case.index(item)}"\n',
+        f"{_RV}test_the_captured_ids_follow_first_occurrence",
+    ),
+    _r210c(
+        80,
+        "occurrences that differ from the capture go unreported",
+        RETRIEVAL_V2,
+        "        if recorded != sorted(item.occurrences):\n",
+        "        if False:\n",
+        f"{_DIFFERS}[dropped-occurrence]",
+        f"{_DIFFERS}[changed-run]",
+    ),
+    _r210c(
+        81,
+        "a limit that differs from the capture goes unreported",
+        RETRIEVAL_V2,
+        "        if query.limit != item.limit or provenance.limit != item.limit:\n",
+        "        if False:\n",
+        f"{_DIFFERS}[changed-limit]",
+    ),
+    _r210c(
+        82,
+        "a captured query missing from the dataset goes unreported",
+        RETRIEVAL_V2,
+        "    for query_id in sorted(set(expected) - set(actual_ids)):\n",
+        "    for query_id in []:\n",
+        f"{_DIFFERS}[missing-query]",
+        f"{_RV}test_a_search_the_dataset_lacks_is_reported",
+    ),
+    _r210c(
+        83,
+        "a dataset query the capture lacks goes unreported",
+        RETRIEVAL_V2,
+        "    for query_id in sorted(set(actual_ids) - set(expected)):\n",
+        "    for query_id in []:\n",
+        f"{_DIFFERS}[extra-query]",
+    ),
+    _r210c(
+        84,
+        "a provenance naming another capture checksum goes unreported",
+        RETRIEVAL_V2,
+        "        if provenance.capture_sha256 != capture_sha256:\n",
+        "        if False:\n",
+        f"{_DIFFERS}[wrong-capture-sha]",
+    ),
+    _r210c(
+        85,
+        "a provenance naming another capture file goes unreported",
+        RETRIEVAL_V2,
+        "        if provenance.capture_file != CAPTURE_FILE:\n",
+        "        if False:\n",
+        f"{_DIFFERS}[wrong-capture-file]",
+    ),
+    _r210c(
+        86,
+        "a copy whose fields differ from its source goes unreported",
+        RETRIEVAL_V2,
+        "            if getattr(document, field) != getattr(source, field):\n",
+        "            if False:\n",
+        f"{_DRIFT}[title]",
+        f"{_DRIFT}[status]",
+    ),
+    _r210c(
+        87,
+        "every fixture document is read as the evaluated hotel's",
+        RETRIEVAL_V2,
+        '    hotel = "neighbour" if item.hotel == NEIGHBOUR_HOTEL else "evaluated"\n',
+        '    hotel = "evaluated"\n',
+        f"{_RV}test_every_document_matches_its_source",
+    ),
+    _r210c(
+        88,
+        "every fixture document is read as active",
+        RETRIEVAL_V2,
+        '    return SourceDocument(item.title, "english", item.status, hotel, (item.text,))\n',
+        '    return SourceDocument(item.title, "english", "active", hotel, (item.text,))\n',
+        f"{_RV}test_every_document_matches_its_source",
+    ),
+    _r210c(
+        89,
+        "the snapshot is rendered without sorted keys",
+        RETRIEVAL_V2,
+        "indent=2, sort_keys=True, ensure_ascii=False) + ",
+        "indent=2, sort_keys=False, ensure_ascii=False) + ",
+        f"{_RV}test_the_file_is_exactly_its_canonical_rendering",
+    ),
+    _r210c(
+        90,
+        "the capture is hashed as checked out, so a CRLF checkout is refused",
+        RETRIEVAL_V2,
+        '    content = raw.replace(b"\\r\\n", b"\\n")\n',
+        "    content = raw\n",
+        f"{_RV}test_a_crlf_checkout_of_the_capture_is_the_same_capture",
+    ),
+    # R2.10C.3b: the harness batches pytest killers (WinError 206).
+    _r210c(
+        91,
+        "the last, partly filled batch of killers is dropped",
+        MUTATION_HARNESS,
+        "    if current:\n        batches.append(current)\n",
+        "",
+        f"{_HT}test_killers_are_split_into_batches_within_the_bound",
+        f"{_HT}test_no_killers_make_no_batch_and_a_few_make_one",
+    ),
+    _r210c(
+        92,
+        "each batch's verdicts replace the earlier batches' instead of joining them",
+        MUTATION_HARNESS,
+        "                results.update(parse_pytest_summary(completed.stdout, batch))\n",
+        "                results = parse_pytest_summary(completed.stdout, batch)\n",
+        f"{_HT}test_verdicts_are_gathered_from_every_batch",
+    ),
+    _r210c(
+        93,
+        "the database is rebuilt only before the first batch",
+        MUTATION_HARNESS,
+        '                    run_in_copy(copy, env, RESET_DATABASE, "could '
+        'not reset the test database")\n',
+        "                    if not results:\n"
+        '                        run_in_copy(copy, env, RESET_DATABASE, "could '
+        'not reset the test database")\n',
+        f"{_HT}test_a_database_backed_run_is_rebuilt_before_every_batch",
     ),
 ]
 

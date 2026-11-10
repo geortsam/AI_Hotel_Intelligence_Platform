@@ -193,9 +193,26 @@ included **verbatim**, as the model wrote them.
 > returned; a ranking longer than its limit is refused. Whether Layer 1 snapshots are keyed by query
 > and limit is still settled in C.5.
 >
-> **Unresolved: family sizes and the total number of queries.** The assessment requires enough
-> queries per family to report on, and the n ≥ 10 rule in §5 applies, but it fixes no counts. They
-> are decided while authoring (C.3b) and reviewed at sign-off (§3.6).
+> **Resolved (R2.10C.3b): family sizes and the total number of queries.** v2 holds 57 queries:
+>
+> | Family | Queries |
+> |---|---|
+> | `shared_words` | 17 |
+> | `paraphrase` | 10 |
+> | `multi_idea` | 6 |
+> | `cross_language` | 6 |
+> | `title_only` | 6 |
+> | `no_answer` | 6 |
+> | `scope_trap` | 6 |
+>
+> - **Answerable:** 46; the other 11 are the six `no_answer` queries and five of the six scope
+>   traps.
+> - **Origin:** 46 developer queries (the 24 v1 queries carried over verbatim and 22 new ones) and
+>   the 11 model-captured R2.9Y queries.
+> - **Family targets:** only `shared_words` and `paraphrase` reach n ≥ 10, so only they are
+>   reported against a family target (§5.2). The other families report counts and intervals
+>   without one.
+> - **Review:** the sizes, like every judgment, are reviewed at sign-off (§3.6).
 
 ### 3.4 Schema for each query
 
@@ -437,6 +454,7 @@ Any retrieval change is a later stage, to be authorised separately and measured 
 | R2.10C.2.1 | 2026-11-08 | **Intervals (§4):** Wilson 95% for rates only; a query-level percentile bootstrap (10,000 resamples, seed 20261108, nearest-rank percentiles, none below n = 10, `zero_width` flagged) for Recall@5, MRR@5 and nDCG@5. Replaces "a Wilson 95% interval" on every figure. **Leakage (§3.7, §4, §5.1):** derived from document `hotel` and `status` on everything returned; `forbidden` becomes an annotation. Replaces "a query that returns any forbidden chunk". **Lenient no-answer (§3.7):** grade 1 only; resolves the open item. |
 | R2.10C.3a | 2026-11-09 | **Decisions A–F approved and recorded.** A: MRR@5 at grade 2 (§4). B: nDCG@5 gains (0, 1, 3) (§4). C: the corpus copied into an immutable JSON snapshot, with per-document `source` and `supersedes` (§3.2). D: the 11 R2.9Y queries with every occurrence in their provenance, and a per-query `limit` (§3.3). E: a sign-off file bound to the dataset checksum (§3.6). F: the fingerprint and measurement integrity (§12). Schema v2 (`knowledge_retrieval_schema_v2`) implements C and D; `V2_METRIC_CONFIG` implements A and B. **Still open:** family sizes (§3.3); whether the C.5 snapshot uses the copilot corpus on its own and is keyed by query and limit; whether reports also break figures down by origin; the stage that implements §12.5. |
 | R2.10C.3a (F4) | 2026-11-09 | **Occurrence identity: Option A reviewed and approved (§3.3).** An occurrence stays `(run, attempt)`; the exact call order comes from the checksum-pinned capture file; schema v2 adds no `call_index`. A repeat of the same search within one run and attempt cannot be recorded separately (the R2.9Y capture has none); a future capture that needs it gets `call_index` in a new schema version. Option B (a `call_index` in v2 now) was considered and not adopted. |
+| R2.10C.3b | 2026-11-09 | **Dataset v2 authored, not yet reviewed or signed off.** The snapshot is `tests/evaluation/datasets/knowledge_retrieval_v2.json`, canonical SHA-256 `35a968055c790628c2bd9c20ee48913eca0dcd9b0929df30f140c81370a6d5ed`. It holds 17 documents and 26 chunks, copied from `retrieval.py` (10) and `fixture_documents.py` (7, with the superseded pool policy, the withdrawn spa page and the neighbour's rooftop bar), and 57 queries. The 11 R2.9Y queries and their 60 occurrences are extracted from the hash-checked capture. `tests/evaluation/retrieval_v2.py` refuses a snapshot or capture that isn't the pinned one, reports any copy that differs from its source, and reports any difference from the capture. **Every grade, family and rationale is a developer proposal written from the copied text:** it is not reviewed (C.3c), not signed off (C.3d), and no retrieval has been measured on it. Family sizes are resolved (§3.3). **Still open:** the C.5 snapshot's corpus and keying; a breakdown by origin; the stage that implements §12.5. |
 
 No measurement has used these definitions. Nothing in this record's measured results changes:
 `knowledge_retrieval_v1`'s 16 of 23 and its Wilson interval, and every R2.9Y result, were produced

@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from collections import Counter
 from collections.abc import Sequence
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -429,7 +431,7 @@ RECORDED_PER_STAGE = {
     "R2.9X": 4,
     "R2.10A": 19,
     "R2.10B": 124,
-    "R2.10C": 74,
+    "R2.10C": 93,
 }
 
 
@@ -572,3 +574,145 @@ def test_a_failed_reset_stops_the_run(monkeypatch: pytest.MonkeyPatch, tmp_path:
         harness.make_executor("postgresql+psycopg://u:p@localhost:5432/scratch_test")(
             tmp_path, harness.Runner.PYTEST, ["tests/x.py::test_a"], True
         )
+
+
+# --- killers are batched so no command line outgrows Windows' limit (R2.10C.3b) -----------------
+
+
+def _node(index: int) -> str:
+    return f"tests/evaluation/test_example.py::test_case_{index:04d}"
+
+
+def _chars(batch: Sequence[str]) -> int:
+    return sum(len(killer) + 1 for killer in batch)
+
+
+def test_killers_are_split_into_batches_within_the_bound() -> None:
+    killers = [_node(index) for index in range(300)]
+    batches = harness.killer_batches(killers, limit=2_000)
+    assert len(batches) > 1
+    assert [killer for batch in batches for killer in batch] == killers  # order; each exactly once
+    assert all(_chars(batch) <= 2_000 for batch in batches)
+    for first, second in pairwise(batches):  # greedy: the next killer would not have fitted
+        assert _chars(first) + len(second[0]) + 1 > 2_000
+
+
+def test_no_killers_make_no_batch_and_a_few_make_one() -> None:
+    assert harness.killer_batches([]) == []
+    assert harness.killer_batches(["a.py::t"]) == [["a.py::t"]]
+    assert harness.killer_batches(["a.py::t", "b.py::u"], limit=100) == [["a.py::t", "b.py::u"]]
+
+
+def test_a_killer_longer_than_the_bound_is_a_batch_of_its_own() -> None:
+    long = "t.py::" + "x" * 50
+    assert harness.killer_batches(["a.py::t", long, "b.py::u"], limit=20) == [
+        ["a.py::t"],
+        [long],
+        ["b.py::u"],
+    ]
+
+
+def test_the_bound_must_be_positive() -> None:
+    with pytest.raises(ValueError, match="at least one character"):
+        harness.killer_batches(["a.py::t"], limit=0)
+
+
+def test_every_batch_command_stays_far_below_the_windows_limit() -> None:
+    killers = [
+        "tests/evaluation/test_retrieval_v2.py::"
+        f"test_a_dataset_that_differs_from_the_capture_is_reported[case-{index:04d}]"
+        for index in range(2_000)
+    ]
+    batches = harness.killer_batches(killers)
+    assert len(batches) > 1
+    for batch in batches:
+        line = subprocess.list2cmdline(
+            [sys.executable, "-m", "pytest", *batch, "-p", "no:cacheprovider", "--no-header"]
+        )
+        assert len(line) < harness.WINDOWS_COMMAND_LINE_LIMIT // 2
+
+
+class BatchReplies:
+    """Stands in for ``subprocess.run``: answers each pytest batch with the verdicts it is given,
+    and records the batches. ``silent`` batches (by index) print nothing, as a crash would."""
+
+    def __init__(self, verdicts: dict[str, str], silent: Sequence[int] = ()) -> None:
+        self.verdicts = verdicts
+        self.silent = set(silent)
+        self.batches: list[list[str]] = []
+        self.snippets: list[str] = []
+
+    def __call__(self, args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[1] == "-c":
+            self.snippets.append(args[2])
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+        batch = args[3 : args.index("-p")]
+        self.snippets.append("pytest")
+        self.batches.append(batch)
+        if len(self.batches) - 1 in self.silent:
+            return subprocess.CompletedProcess(args, 2, stdout="", stderr="crashed")
+        lines = [f"{self.verdicts[killer].upper()} {killer}" for killer in batch]
+        return subprocess.CompletedProcess(args, 1, stdout="\n".join(lines), stderr="")
+
+
+TEN = [f"tests/x.py::test_{index}" for index in range(10)]  # 18 or 19 characters each
+
+
+def test_verdicts_are_gathered_from_every_batch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(harness, "MAX_KILLER_CHARS_PER_RUN", 60)
+    verdicts = {
+        killer: "failed" if index % 3 == 0 else "passed" for index, killer in enumerate(TEN)
+    }
+    replies = BatchReplies(verdicts)
+    monkeypatch.setattr(harness.subprocess, "run", replies)
+    results = harness.make_executor(None)(tmp_path, Runner.PYTEST, TEN, False)
+    assert len(replies.batches) == 4
+    assert [killer for batch in replies.batches for killer in batch] == TEN
+    assert results == verdicts
+
+
+def test_an_incomplete_batch_fails_the_baseline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(harness, "MAX_KILLER_CHARS_PER_RUN", 60)
+    replies = BatchReplies(dict.fromkeys(TEN, "passed"), silent=[1])
+    monkeypatch.setattr(harness.subprocess, "run", replies)
+    failures = harness.baseline(
+        tmp_path, [mutation(killers=tuple(TEN))], harness.make_executor(None)
+    )
+    assert failures == replies.batches[1]  # the silent batch's killers did not run: not passed
+    assert failures
+
+
+def test_a_batch_that_cannot_start_stops_the_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(harness, "MAX_KILLER_CHARS_PER_RUN", 60)
+    started: list[int] = []
+
+    def refuse_the_second(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        started.append(1)
+        if len(started) == 2:
+            raise OSError(206, "The filename or extension is too long")
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(harness.subprocess, "run", refuse_the_second)
+    with pytest.raises(OSError, match="too long"):
+        harness.make_executor(None)(tmp_path, Runner.PYTEST, TEN, False)
+
+
+def test_a_database_backed_run_is_rebuilt_before_every_batch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(harness, "MAX_KILLER_CHARS_PER_RUN", 60)
+    replies = BatchReplies(dict.fromkeys(TEN, "passed"))
+    monkeypatch.setattr(harness.subprocess, "run", replies)
+    harness.make_executor("postgresql+psycopg://u:p@localhost:5432/scratch_test")(
+        tmp_path, Runner.PYTEST, TEN, True
+    )
+    assert replies.snippets == [
+        harness.VERIFY_DATABASE,
+        *[step for _ in range(4) for step in (harness.RESET_DATABASE, "pytest")],
+    ]

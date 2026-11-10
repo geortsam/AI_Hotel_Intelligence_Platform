@@ -42,6 +42,20 @@ made a no-op still stamps the head -- and the next run's ``downgrade base`` woul
 setup, which counts here as its killers failing. Each run must start where a freshly created
 database starts, whatever the previous one left. The full guard runs once, before the first
 rebuild, while the database is still as it was handed over; each rebuild re-checks the name.
+
+## Batching (R2.10C.3b)
+
+Killers are passed to pytest as node ids on its command line, and Windows refuses a command line
+longer than 32,767 characters (`WinError 206`). The baseline passes every killer of the inventory
+at once, which outgrew that limit at 603 mutations. So killers are split into consecutive batches
+of at most `MAX_KILLER_CHARS_PER_RUN` characters of node ids, a fixed bound well below the limit
+that leaves room for the interpreter path, the options and quoting, and each batch is its own
+pytest run. The split is deterministic: greedy, in the given order, every killer in exactly one
+batch, and a single node id longer than the bound in a batch of its own. Verdicts are gathered
+from every batch; a killer a batch did not report stays absent, which is "did not run" exactly as
+before, so an incomplete batch fails the baseline and leaves a mutation not killed. A batch that
+cannot start raises, as one run always did. The database is rebuilt before every database-backed
+batch, as before every database-backed pytest run. No killers at all start nothing.
 """
 
 from __future__ import annotations
@@ -63,6 +77,12 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 #: Generous: the slowest killer (the Stage 7.14 refit) takes about a minute on a laptop.
 SUBPROCESS_TIMEOUT_SECONDS = 1200
+
+#: Windows' longest command line, program and arguments included.
+WINDOWS_COMMAND_LINE_LIMIT = 32_767
+#: Node-id characters per pytest run (one separator counted per id): a quarter of the limit, so a
+#: batch's command line stays far below it whatever the interpreter path. See "Batching" above.
+MAX_KILLER_CHARS_PER_RUN = 8_000
 
 
 class Runner(StrEnum):
@@ -221,6 +241,28 @@ Results = dict[str, str]
 Execute = Callable[[Path, Runner, Sequence[str], bool], Results]
 
 
+def killer_batches(killers: Sequence[str], limit: int | None = None) -> list[list[str]]:
+    """*killers* split into consecutive batches of at most *limit* node-id characters, counting one
+    separator per id; a single longer id is a batch of its own. Order is kept and every killer is
+    in exactly one batch. No killers make no batch."""
+    bound = MAX_KILLER_CHARS_PER_RUN if limit is None else limit
+    if bound < 1:
+        raise ValueError("the batch bound must be at least one character")
+    batches: list[list[str]] = []
+    current: list[str] = []
+    size = 0
+    for killer in killers:
+        cost = len(killer) + 1
+        if current and size + cost > bound:
+            batches.append(current)
+            current, size = [], 0
+        current.append(killer)
+        size += cost
+    if current:
+        batches.append(current)
+    return batches
+
+
 def child_environment(database_url: str | None) -> dict[str, str]:
     env = {key: value for key, value in os.environ.items() if key != "TEST_DATABASE_URL"}
     # A mutation of the same size written within the same second as the original could be
@@ -361,32 +403,37 @@ def make_executor(database_url: str | None) -> Execute:
         nonlocal verified
         env = child_environment(database_url if database else None)
         if runner is Runner.PYTEST:
-            if database:
-                if not verified:
-                    run_in_copy(copy, env, VERIFY_DATABASE, "the test database is not disposable")
-                    verified = True
-                run_in_copy(copy, env, RESET_DATABASE, "could not reset the test database")
-            completed = subprocess.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "pytest",
-                    *killers,
-                    "-p",
-                    "no:cacheprovider",
-                    "--no-header",
-                    "-rA",
-                    "--tb=no",
-                ],
-                cwd=copy,
-                env=env,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=SUBPROCESS_TIMEOUT_SECONDS,
-            )
-            return parse_pytest_summary(completed.stdout, killers)
+            results: Results = {}
+            for batch in killer_batches(killers):
+                if database:
+                    if not verified:
+                        run_in_copy(
+                            copy, env, VERIFY_DATABASE, "the test database is not disposable"
+                        )
+                        verified = True
+                    run_in_copy(copy, env, RESET_DATABASE, "could not reset the test database")
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "pytest",
+                        *batch,
+                        "-p",
+                        "no:cacheprovider",
+                        "--no-header",
+                        "-rA",
+                        "--tb=no",
+                    ],
+                    cwd=copy,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=SUBPROCESS_TIMEOUT_SECONDS,
+                )
+                results.update(parse_pytest_summary(completed.stdout, batch))
+            return results
 
         node = shutil.which("node")
         frontend = copy / "frontend"
