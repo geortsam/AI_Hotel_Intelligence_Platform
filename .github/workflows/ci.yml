@@ -466,23 +466,26 @@ jobs:
   # ---------------------------------------------------------------------------------------
   # The recorded mutation checks, re-run on every push.
   #
-  # Stages 7.6-7.14, F2, F16, I4, F1, F2-ADR, M1, M2, F2-COMP, F3, F4, G1, H1, H2, H3, H4, H6,
-  # H7, H8, R2.2 and R2.2b each broke their own guarantees on purpose and reported that a test
+  # The 41 stages 7.6-7.14, F2, F16, I4, F1, F2-ADR, M1, M2, F2-COMP, F3, F4, G1, H1, H2, H3, H4,
+  # H6, H7, H8, R2.2, R2.2b, R2.8AA, R2.8AC, R2.8AE, R2.8AG, R2.8AI, R2.8AK, R2.9B, R2.9K, R2.9X,
+  # R2.10A, R2.10B and R2.10C each broke their own guarantees on purpose and reported that a test
   # caught every break.
-  # `python -m tests.mutation` re-applies those 365 edits from tests/mutation/inventory.py -- in
+  # `python -m tests.mutation` re-applies those 606 edits from tests/mutation/inventory.py -- in
   # a throwaway copy of the tracked files, never in this checkout -- and fails unless every named
   # killer fails under its mutation and passes without it. See tests/mutation/harness.py.
   #
   # A job of its own, parallel to the others, so its run -- 20m23s and 31m06s in two runs on
   # 2026-10-29; it varies -- happens beside quality-gates rather than after it. It needs both
-  # toolchains (365 mutations span Python and Vitest) and its own disposable PostgreSQL for the
-  # 129 mutations whose killers are integration tests.
+  # toolchains (606 mutations span Python and Vitest; 61 are Vitest) and its own disposable
+  # PostgreSQL for the 129 mutations whose killers are integration tests.
+  # The limit is 90 minutes: the mutation step took 32m20s for 389 mutations (2026-11-05), and
+  # at 606 it outgrew the earlier 45-minute limit and was cancelled (run 42885849036, 2026-11-10).
   # `--require-all` makes a mutation that could not run a failure, not a skip. Nothing here
   # builds or touches an image.
   mutation-checks:
     name: Mutation checks
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
 
     services:
       # Same image, digest and credentials as quality-gates; see the comments there.
