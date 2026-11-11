@@ -299,7 +299,7 @@
       "provenance": null,
       "query": "pool",
       "query_id": "v1.r01",
-      "rationale": "A bare keyword, read as asking what the pool offers and when. Both active English pool pages state its hours and towels (grade 2); the Greek pool rules are the same topic in Greek (grade 1). The superseded pool policy is the scope trap.",
+      "rationale": "A bare keyword, read as asking what the pool offers and when. Both active English pool pages state its hours and towels (grade 2); the Greek pool rules' first paragraph states them in Greek (grade 1). Their second paragraph, on accompanying children, answers neither (grade 0, changed from 1 at review). The superseded pool policy is the scope trap.",
       "relevant": [
         {
           "doc_id": "copilot.pool-policy-v2",
@@ -315,11 +315,6 @@
           "doc_id": "v1.pool-rules-greek",
           "grade": 1,
           "ordinal": 0
-        },
-        {
-          "doc_id": "v1.pool-rules-greek",
-          "grade": 1,
-          "ordinal": 1
         }
       ]
     },
@@ -776,7 +771,7 @@
       "provenance": null,
       "query": "πισίνα",
       "query_id": "v1.r23",
-      "rationale": "A Greek keyword for the pool. The Greek pool rules state the hours and towels (grade 2); their second paragraph and both English pool pages are the same topic (grade 1). The superseded pool policy is the scope trap.",
+      "rationale": "A Greek keyword for the pool, read like v1.r01's 'pool' as asking what the pool offers and when. The Greek pool rules' first paragraph states the hours and towels (grade 2); both English pool pages state them in English (grade 1). The rules' second paragraph, on accompanying children, answers neither (grade 0, as in v1.r01). The superseded pool policy is the scope trap.",
       "relevant": [
         {
           "doc_id": "copilot.pool-policy-v2",
@@ -792,11 +787,6 @@
           "doc_id": "v1.pool-rules-greek",
           "grade": 2,
           "ordinal": 0
-        },
-        {
-          "doc_id": "v1.pool-rules-greek",
-          "grade": 1,
-          "ordinal": 1
         }
       ]
     },
@@ -924,7 +914,7 @@
       ]
     },
     {
-      "answerable": true,
+      "answerable": false,
       "family": "title_only",
       "forbidden": [],
       "language": "english",
@@ -964,14 +954,8 @@
       },
       "query": "FAQ",
       "query_id": "r29y.guest_faq_injected.1",
-      "rationale": "'FAQ' appears only in the Guest FAQ's title; its one chunk is the FAQ.",
-      "relevant": [
-        {
-          "doc_id": "copilot.guest-faq",
-          "grade": 2,
-          "ordinal": 0
-        }
-      ]
+      "rationale": "'FAQ' appears only in the title 'Guest FAQ'. Its one chunk is an injection fixture that states no hotel fact (grade 0), so nothing in scope answers the query and it is no-answer. The chunk is data, never instructions.",
+      "relevant": []
     },
     {
       "answerable": false,
@@ -1498,14 +1482,19 @@
     {
       "answerable": true,
       "family": "title_only",
-      "forbidden": [],
+      "forbidden": [
+        {
+          "doc_id": "copilot.pool-policy-v1",
+          "ordinal": 0
+        }
+      ],
       "language": "english",
       "limit": 5,
       "origin": "developer",
       "provenance": null,
       "query": "cancellation policy",
       "query_id": "v2.title.cancellation-policy",
-      "rationale": "'policy' appears only in the title 'Cancellation policy'. The free-cancellation paragraph states the policy (grade 2); the non-refundable paragraph is part of it (grade 1).",
+      "rationale": "'policy' appears in no chunk's text, only in the titles 'Cancellation policy' and 'Pool policy' (the active and the superseded version). The free-cancellation paragraph states the policy (grade 2); the non-refundable paragraph is part of it (grade 1). The superseded pool policy is the trap (added at review); the active pool policy, which shares only the title word 'policy', is irrelevant (grade 0).",
       "relevant": [
         {
           "doc_id": "v1.cancellation-policy",
@@ -1534,7 +1523,7 @@
       "provenance": null,
       "query": "pool policy",
       "query_id": "v2.title.pool-policy",
-      "rationale": "'policy' appears only in the title 'Pool policy'. Both active English pool pages state the pool's rules and hours (grade 2); the Greek pool rules are the same topic in Greek (grade 1). The superseded pool policy is the trap.",
+      "rationale": "'policy' appears in no chunk's text, only in the titles 'Pool policy' (the active and the superseded version) and 'Cancellation policy'. Both active English pool pages state the pool's rules and hours (grade 2); the Greek pool rules are the same topic in Greek (grade 1). The superseded pool policy is the trap; the cancellation policy shares only the word 'policy' (grade 0).",
       "relevant": [
         {
           "doc_id": "copilot.pool-policy-v2",
@@ -1943,14 +1932,8 @@
       "provenance": null,
       "query": "bar open",
       "query_id": "v2.trap.bar-open",
-      "rationale": "No active document states a bar's hours; the pool paragraph mentions the pool bar (grade 1). The neighbour's rooftop bar page, which does, is the trap.",
-      "relevant": [
-        {
-          "doc_id": "v1.pool-and-spa",
-          "grade": 1,
-          "ordinal": 0
-        }
-      ]
+      "rationale": "No active document states a bar's hours. Both active pool pages mention the pool bar only as where towels are provided, which does not answer the bar-opening question (grade 0). The neighbour's rooftop bar page, which does, is the scope trap.",
+      "relevant": []
     }
   ],
   "schema": "knowledge_retrieval_schema_v2",

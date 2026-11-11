@@ -1,0 +1,1170 @@
+{
+  "form": "knowledge_retrieval_review_v1",
+  "dataset": {
+    "identity": "knowledge_retrieval_v2",
+    "schema": "knowledge_retrieval_schema_v2",
+    "sha256": "7f35b8a473c73f6d318e48ce5cc2667294f0d50816c511cfaf7851585c617031"
+  },
+  "review_sheet_sha256": "fb79c2fb5d0744e315853cf70ed8b43a7d54a510536452f5aa031c0ee22e7908",
+  "reviewer": {
+    "name": null,
+    "reviewed_on": null
+  },
+  "queries": [
+    {
+      "query_id": "v1.r01",
+      "query": "pool",
+      "query_decision": "accept",
+      "query_rationale": "Accepted after revision: family shared_words, english, answerable, limit 5, forbidden copilot.pool-policy-v1#0; the text is as written. The review changed v1.pool-rules-greek#1 from grade 1 to 0: it only states that children under 12 must be accompanied and answers neither pool hours nor towels. The two active English pool pages stay grade 2, the Greek hours-and-towels paragraph grade 1, and the superseded pool policy stays forbidden.",
+      "judgments": [
+        {
+          "chunk": "copilot.pool-policy-v2#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'pool' asks for: the outdoor pool is open from 07:30 to 22:00 daily and towels are provided at the pool bar."
+        },
+        {
+          "chunk": "v1.pool-and-spa#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'pool' asks for: the outdoor pool is open daily from 07:30 to 22:00 between May and October, towels are provided at the pool bar, and children under 12 must be accompanied."
+        },
+        {
+          "chunk": "v1.pool-rules-greek#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in Greek, that the pool is open daily from 07:30 to 22:00 and towels are provided at the pool bar, which bears on 'pool'; the query is English, and §3.5 grades a chunk in another language 1, never a required alternative."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r02",
+      "query": "pool opening hours",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family paraphrase, english, answerable, limit 5, forbidden copilot.pool-policy-v1#0; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "copilot.pool-policy-v2#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'pool opening hours' asks for: the outdoor pool is open from 07:30 to 22:00 daily and towels are provided at the pool bar."
+        },
+        {
+          "chunk": "v1.pool-and-spa#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'pool opening hours' asks for: the outdoor pool is open daily from 07:30 to 22:00 between May and October, towels are provided at the pool bar, and children under 12 must be accompanied."
+        },
+        {
+          "chunk": "v1.pool-rules-greek#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in Greek, that the pool is open daily from 07:30 to 22:00 and towels are provided at the pool bar, which bears on 'pool opening hours'; the query is English, and §3.5 grades a chunk in another language 1, never a required alternative."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r03",
+      "query": "breakfast",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.breakfast-and-dining#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'breakfast' asks for: breakfast is served in the Olive Room from 07:00 to 10:30 on weekdays and until 11:00 at weekends, and is included in every room rate."
+        },
+        {
+          "chunk": "v1.breakfast-greek#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in Greek, that breakfast is served from 07:00 to 10:30 and is included in the room price, which bears on 'breakfast'; the query is English, and §3.5 grades a chunk in another language 1, never a required alternative."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r04",
+      "query": "breakfast included",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.breakfast-and-dining#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'breakfast included' asks for: breakfast is served in the Olive Room from 07:00 to 10:30 on weekdays and until 11:00 at weekends, and is included in every room rate."
+        },
+        {
+          "chunk": "v1.breakfast-greek#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in Greek, that breakfast is served from 07:00 to 10:30 and is included in the room price, which bears on 'breakfast included'; the query is English, and §3.5 grades a chunk in another language 1, never a required alternative."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r05",
+      "query": "dinner restaurant",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.breakfast-and-dining#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'dinner restaurant' asks for: the restaurant serves dinner from 19:00 to 23:00, with vegetarian, vegan and gluten-free dishes marked."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r06",
+      "query": "room service",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.breakfast-and-dining#2",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'room service' asks for: room service is available from 11:00 to 23:00 for 5.00 EUR per order."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r07",
+      "query": "check-in time",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family paraphrase, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.check-in-and-check-out#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'check-in time' asks for: check-in starts at 15:00, and early check-in from 12:00 costs 20.00 EUR."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r08",
+      "query": "late check-out",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.check-in-and-check-out#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'late check-out' asks for: check-out is by 11:00, late check-out until 14:00 costs 25.00 EUR, and luggage is stored at reception free of charge on the day of departure."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r09",
+      "query": "luggage storage",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family paraphrase, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.check-in-and-check-out#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'luggage storage' asks for: check-out is by 11:00, late check-out until 14:00 costs 25.00 EUR, and luggage is stored at reception free of charge on the day of departure."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r10",
+      "query": "parking price",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family paraphrase, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "copilot.parking#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'parking price' asks for: parking costs 15.00 EUR per night and the garage has 40 spaces."
+        },
+        {
+          "chunk": "v1.parking-and-transport#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'parking price' asks for: the garage has 40 spaces, parking costs 15.00 EUR per night and must be booked, and electric vehicles can charge at two stations."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r11",
+      "query": "airport shuttle",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.parking-and-transport#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'airport shuttle' asks for: an airport shuttle runs every two hours from 06:00 to 22:00 for 12.00 EUR per person each way, and taxis can be ordered at reception."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r12",
+      "query": "electric car charging",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family paraphrase, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.parking-and-transport#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'electric car charging' asks for: the garage has 40 spaces, parking costs 15.00 EUR per night and must be booked, and electric vehicles can charge at two stations."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r13",
+      "query": "pet policy",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family paraphrase, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "copilot.pets#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: it states only that dogs up to 10 kg are welcome for 20.00 EUR per stay: part of the pet policy, without cats, the rooms or where pets may not go."
+        },
+        {
+          "chunk": "v1.pets#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'pet policy' asks for: dogs and cats up to 10 kg are welcome in ground-floor rooms for 20.00 EUR per stay, but not in the restaurant or the pool area."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r14",
+      "query": "dogs allowed",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "copilot.pets#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'dogs allowed' asks for: dogs up to 10 kg are welcome for a fee of 20.00 EUR per stay."
+        },
+        {
+          "chunk": "v1.pets#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'dogs allowed' asks for: dogs and cats up to 10 kg are welcome in ground-floor rooms for 20.00 EUR per stay, but not in the restaurant or the pool area."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r15",
+      "query": "wifi password",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family paraphrase, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.wifi-and-business-services#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'wifi password' asks for: Wi-Fi is free throughout the hotel and the network name and password are printed on the key card holder."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r16",
+      "query": "meeting room",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.wifi-and-business-services#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'meeting room' asks for: the meeting room seats 12 and is booked by the hour, and a printer is available at reception."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r17",
+      "query": "free cancellation",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.cancellation-policy#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'free cancellation' asks for: bookings can be cancelled free of charge up to 48 hours before arrival, and later cancellations and no-shows are charged the first night."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r18",
+      "query": "non-refundable",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.cancellation-policy#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'non-refundable' asks for: non-refundable rates cannot be cancelled or changed."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r19",
+      "query": "smoking",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.house-rules#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'smoking' asks for: smoking is not permitted anywhere inside, balconies included, with a 150.00 EUR cleaning fee."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r20",
+      "query": "quiet hours",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.house-rules#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'quiet hours' asks for: quiet hours are 23:00 to 07:00, and parties and events in rooms are not allowed."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r21",
+      "query": "spa massage",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden copilot.spa#0; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.pool-and-spa#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'spa massage' asks for: the spa offers massages and facial treatments by appointment, booked at reception 24 hours ahead, and the sauna and steam room are free for guests aged 16 and over."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r22",
+      "query": "gym opening times",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family no_answer, english, no-answer, and stays no-answer, limit 5, forbidden none; the text is as written.",
+      "judgments": [],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r23",
+      "query": "πισίνα",
+      "query_decision": "accept",
+      "query_rationale": "Accepted after revision: family cross_language, greek, answerable, limit 5, forbidden copilot.pool-policy-v1#0; the text is as written. The adjudication (R1) changed v1.pool-rules-greek#1 from grade 1 to 0, as in v1.r01: 'πισίνα' is the Greek word for 'pool' and asks the same, and the children rule answers neither the pool's hours nor its towels. The other judgments and the forbidden superseded pool policy stay.",
+      "judgments": [
+        {
+          "chunk": "copilot.pool-policy-v2#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in English, that the outdoor pool is open from 07:30 to 22:00 daily and towels are provided at the pool bar, which bears on 'πισίνα'; the query is Greek, and §3.5 grades a chunk in another language 1, never a required alternative."
+        },
+        {
+          "chunk": "v1.pool-and-spa#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in English, that the outdoor pool is open daily from 07:30 to 22:00 between May and October, towels are provided at the pool bar, and children under 12 must be accompanied, which bears on 'πισίνα'; the query is Greek, and §3.5 grades a chunk in another language 1, never a required alternative."
+        },
+        {
+          "chunk": "v1.pool-rules-greek#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'πισίνα' asks for: the pool is open daily from 07:30 to 22:00 and towels are provided at the pool bar."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v1.r24",
+      "query": "πρωινό",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family cross_language, greek, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.breakfast-and-dining#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in English, that breakfast is served in the Olive Room from 07:00 to 10:30 on weekdays and until 11:00 at weekends, and is included in every room rate, which bears on 'πρωινό'; the query is Greek, and §3.5 grades a chunk in another language 1, never a required alternative."
+        },
+        {
+          "chunk": "v1.breakfast-greek#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'πρωινό' asks for: breakfast is served from 07:00 to 10:30 and is included in the room price."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "r29y.casino.1",
+      "query": "casino",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family no_answer, english, no-answer, and stays no-answer, limit 5, forbidden none; the text is verbatim from the R2.9Y capture.",
+      "judgments": [],
+      "added_judgments": []
+    },
+    {
+      "query_id": "r29y.dog_fee.1",
+      "query": "dog pet cost",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family multi_idea, english, answerable, limit 5, forbidden none; the text is verbatim from the R2.9Y capture.",
+      "judgments": [
+        {
+          "chunk": "copilot.pets#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states both facts 'dog pet cost' asks for: dogs up to 10 kg are accepted, and the fee is 20.00 EUR per stay."
+        },
+        {
+          "chunk": "v1.pets#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states both facts 'dog pet cost' asks for: dogs (and cats) up to 10 kg are accepted, in ground-floor rooms, and the fee is 20.00 EUR per stay; pets are not allowed in the restaurant or the pool area."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "r29y.guest_faq_injected.1",
+      "query": "FAQ",
+      "query_decision": "accept",
+      "query_rationale": "Accepted after revision: family title_only, english, no-answer, limit 20, forbidden none; the text is verbatim from the R2.9Y capture. The adjudication (R2) changed copilot.guest-faq#0 from grade 2 to 0 and made the query no-answer: its one chunk is an injection fixture that states no hotel fact, and neither the document's title nor its being the only FAQ document is answer-bearing content.",
+      "judgments": [],
+      "added_judgments": []
+    },
+    {
+      "query_id": "r29y.neighbour_rooftop_bar.1",
+      "query": "rooftop bar open hours",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family scope_trap, english, no-answer, and stays no-answer, limit 5, forbidden neighbour.rooftop-bar#0; the text is verbatim from the R2.9Y capture.",
+      "judgments": [],
+      "added_judgments": []
+    },
+    {
+      "query_id": "r29y.occupancy_and_parking.1",
+      "query": "parking cost",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is verbatim from the R2.9Y capture.",
+      "judgments": [
+        {
+          "chunk": "copilot.parking#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'parking cost' asks for: parking costs 15.00 EUR per night and the garage has 40 spaces."
+        },
+        {
+          "chunk": "v1.parking-and-transport#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'parking cost' asks for: the garage has 40 spaces, parking costs 15.00 EUR per night and must be booked, and electric vehicles can charge at two stations."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "r29y.parking_price.1",
+      "query": "parking cost per night",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is verbatim from the R2.9Y capture.",
+      "judgments": [
+        {
+          "chunk": "copilot.parking#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'parking cost per night' asks for: parking costs 15.00 EUR per night and the garage has 40 spaces."
+        },
+        {
+          "chunk": "v1.parking-and-transport#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'parking cost per night' asks for: the garage has 40 spaces, parking costs 15.00 EUR per night and must be booked, and electric vehicles can charge at two stations."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "r29y.pool_closing_changed.1",
+      "query": "pool closing time hours",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family paraphrase, english, answerable, limit 5, forbidden copilot.pool-policy-v1#0; the text is verbatim from the R2.9Y capture.",
+      "judgments": [
+        {
+          "chunk": "copilot.pool-policy-v2#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'pool closing time hours' asks for: the outdoor pool is open from 07:30 to 22:00 daily and towels are provided at the pool bar."
+        },
+        {
+          "chunk": "v1.pool-and-spa#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'pool closing time hours' asks for: the outdoor pool is open daily from 07:30 to 22:00 between May and October, towels are provided at the pool bar, and children under 12 must be accompanied."
+        },
+        {
+          "chunk": "v1.pool-rules-greek#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in Greek, that the pool is open daily from 07:30 to 22:00 and towels are provided at the pool bar, which bears on 'pool closing time hours'; the query is English, and §3.5 grades a chunk in another language 1, never a required alternative."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "r29y.pool_hours.1",
+      "query": "pool open hours",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family paraphrase, english, answerable, limit 5, forbidden copilot.pool-policy-v1#0; the text is verbatim from the R2.9Y capture.",
+      "judgments": [
+        {
+          "chunk": "copilot.pool-policy-v2#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'pool open hours' asks for: the outdoor pool is open from 07:30 to 22:00 daily and towels are provided at the pool bar."
+        },
+        {
+          "chunk": "v1.pool-and-spa#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'pool open hours' asks for: the outdoor pool is open daily from 07:30 to 22:00 between May and October, towels are provided at the pool bar, and children under 12 must be accompanied."
+        },
+        {
+          "chunk": "v1.pool-rules-greek#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in Greek, that the pool is open daily from 07:30 to 22:00 and towels are provided at the pool bar, which bears on 'pool open hours'; the query is English, and §3.5 grades a chunk in another language 1, never a required alternative."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "r29y.pool_towels_injected.1",
+      "query": "towels provided at the pool",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family shared_words, english, answerable, limit 5, forbidden none; the text is verbatim from the R2.9Y capture.",
+      "judgments": [
+        {
+          "chunk": "copilot.pool-policy-v2#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'towels provided at the pool' asks for: the outdoor pool is open from 07:30 to 22:00 daily and towels are provided at the pool bar."
+        },
+        {
+          "chunk": "v1.pool-and-spa#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'towels provided at the pool' asks for: the outdoor pool is open daily from 07:30 to 22:00 between May and October, towels are provided at the pool bar, and children under 12 must be accompanied."
+        },
+        {
+          "chunk": "v1.pool-rules-greek#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in Greek, that the pool is open daily from 07:30 to 22:00 and towels are provided at the pool bar, which bears on 'towels provided at the pool'; the query is English, and §3.5 grades a chunk in another language 1, never a required alternative."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "r29y.spa_hours_withdrawn.1",
+      "query": "spa opening hours",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family scope_trap, english, no-answer, and stays no-answer, limit 5, forbidden copilot.spa#0; the text is verbatim from the R2.9Y capture.",
+      "judgments": [
+        {
+          "chunk": "v1.pool-and-spa#1",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the active spa paragraph is on the topic but states no opening hours, so it does not answer and the query stays no-answer."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "r29y.pool_closing_changed.2",
+      "query": "pool closing time",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family paraphrase, english, answerable, limit 5, forbidden copilot.pool-policy-v1#0; the text is verbatim from the R2.9Y capture.",
+      "judgments": [
+        {
+          "chunk": "copilot.pool-policy-v2#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'pool closing time' asks for: the outdoor pool is open from 07:30 to 22:00 daily and towels are provided at the pool bar."
+        },
+        {
+          "chunk": "v1.pool-and-spa#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'pool closing time' asks for: the outdoor pool is open daily from 07:30 to 22:00 between May and October, towels are provided at the pool bar, and children under 12 must be accompanied."
+        },
+        {
+          "chunk": "v1.pool-rules-greek#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in Greek, that the pool is open daily from 07:30 to 22:00 and towels are provided at the pool bar, which bears on 'pool closing time'; the query is English, and §3.5 grades a chunk in another language 1, never a required alternative."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.title.transport",
+      "query": "transport",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family title_only, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.parking-and-transport#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: parking and car charging are related to transport, but the shuttle-and-taxi paragraph is what answers a transport question."
+        },
+        {
+          "chunk": "v1.parking-and-transport#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'transport' asks for: an airport shuttle runs every two hours from 06:00 to 22:00 for 12.00 EUR per person each way, and taxis can be ordered at reception."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.title.business-services",
+      "query": "business services",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family title_only, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.wifi-and-business-services#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: Wi-Fi sits under the same title, but the business service itself is the meeting room and printer."
+        },
+        {
+          "chunk": "v1.wifi-and-business-services#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'business services' asks for: the meeting room seats 12 and is booked by the hour, and a printer is available at reception."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.title.dining",
+      "query": "dining",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family title_only, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.breakfast-and-dining#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: breakfast is part of dining, but the restaurant paragraph is what answers 'dining'."
+        },
+        {
+          "chunk": "v1.breakfast-and-dining#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'dining' asks for: the restaurant serves dinner from 19:00 to 23:00, with vegetarian, vegan and gluten-free dishes marked."
+        },
+        {
+          "chunk": "v1.breakfast-and-dining#2",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: room service is related to dining but is not the restaurant."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.title.cancellation-policy",
+      "query": "cancellation policy",
+      "query_decision": "accept",
+      "query_rationale": "Accepted after revision: family title_only, english, answerable, limit 5, forbidden copilot.pool-policy-v1#0; the text is as written. The review added the superseded pool policy (copilot.pool-policy-v1#0), whose title also says 'policy', as forbidden: it is out of scope. The active copilot.pool-policy-v2#0 is not forbidden; it is in scope and irrelevant (grade 0). The adjudication (R3) corrected the rationale: 'policy' appears in no chunk's text, only in the titles 'Cancellation policy' and 'Pool policy'. The grades stay.",
+      "judgments": [
+        {
+          "chunk": "v1.cancellation-policy#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'cancellation policy' asks for: bookings can be cancelled free of charge up to 48 hours before arrival, and later cancellations and no-shows are charged the first night."
+        },
+        {
+          "chunk": "v1.cancellation-policy#1",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the non-refundable rule is part of the cancellation policy, but not its main rule."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.title.pool-policy",
+      "query": "pool policy",
+      "query_decision": "accept",
+      "query_rationale": "Accepted after revision: family title_only, english, answerable, limit 5, forbidden copilot.pool-policy-v1#0; the text is as written. The adjudication (R4) corrected the rationale: 'policy' appears in no chunk's text, only in the titles 'Pool policy' and 'Cancellation policy'. The grades and the forbidden superseded pool policy stay.",
+      "judgments": [
+        {
+          "chunk": "copilot.pool-policy-v2#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'pool policy' asks for: the outdoor pool is open from 07:30 to 22:00 daily and towels are provided at the pool bar."
+        },
+        {
+          "chunk": "v1.pool-and-spa#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'pool policy' asks for: the outdoor pool is open daily from 07:30 to 22:00 between May and October, towels are provided at the pool bar, and children under 12 must be accompanied."
+        },
+        {
+          "chunk": "v1.pool-rules-greek#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in Greek, that the pool is open daily from 07:30 to 22:00 and towels are provided at the pool bar, which bears on 'pool policy'; the query is English, and §3.5 grades a chunk in another language 1, never a required alternative."
+        },
+        {
+          "chunk": "v1.pool-rules-greek#1",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in Greek, that children under 12 must be accompanied by an adult, which bears on 'pool policy'; the query is English, and §3.5 grades a chunk in another language 1, never a required alternative."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.multi.check-in-and-check-out",
+      "query": "check-in and check-out times",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family multi_idea, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.check-in-and-check-out#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: on its own the chunk states one of the facts 'check-in and check-out times' asks for: check-in starts at 15:00, and early check-in from 12:00 costs 20.00 EUR."
+        },
+        {
+          "chunk": "v1.check-in-and-check-out#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: on its own the chunk states one of the facts 'check-in and check-out times' asks for: check-out is by 11:00, late check-out until 14:00 costs 25.00 EUR, and luggage is stored at reception free of charge on the day of departure."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.multi.wifi-and-meeting-room",
+      "query": "wifi password and meeting room",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family multi_idea, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.wifi-and-business-services#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: on its own the chunk states one of the facts 'wifi password and meeting room' asks for: Wi-Fi is free throughout the hotel and the network name and password are printed on the key card holder."
+        },
+        {
+          "chunk": "v1.wifi-and-business-services#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: on its own the chunk states one of the facts 'wifi password and meeting room' asks for: the meeting room seats 12 and is booked by the hour, and a printer is available at reception."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.multi.smoking-fee-and-quiet-hours",
+      "query": "smoking fee and quiet hours",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family multi_idea, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.house-rules#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: on its own the chunk states one of the facts 'smoking fee and quiet hours' asks for: smoking is not permitted anywhere inside, balconies included, with a 150.00 EUR cleaning fee."
+        },
+        {
+          "chunk": "v1.house-rules#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: on its own the chunk states one of the facts 'smoking fee and quiet hours' asks for: quiet hours are 23:00 to 07:00, and parties and events in rooms are not allowed."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.multi.breakfast-and-parking",
+      "query": "breakfast included and parking price",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family multi_idea, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "copilot.parking#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: on its own the chunk states one of the facts 'breakfast included and parking price' asks for: parking costs 15.00 EUR per night and the garage has 40 spaces."
+        },
+        {
+          "chunk": "v1.breakfast-and-dining#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: on its own the chunk states one of the facts 'breakfast included and parking price' asks for: breakfast is served in the Olive Room from 07:00 to 10:30 on weekdays and until 11:00 at weekends, and is included in every room rate."
+        },
+        {
+          "chunk": "v1.breakfast-greek#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in Greek, that breakfast is served from 07:00 to 10:30 and is included in the room price, which bears on 'breakfast included and parking price'; the query is English, and §3.5 grades a chunk in another language 1, never a required alternative."
+        },
+        {
+          "chunk": "v1.parking-and-transport#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: on its own the chunk states one of the facts 'breakfast included and parking price' asks for: the garage has 40 spaces, parking costs 15.00 EUR per night and must be booked, and electric vehicles can charge at two stations."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.multi.shuttle-and-taxi",
+      "query": "airport shuttle and taxi",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family multi_idea, english, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.parking-and-transport#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states both facts 'airport shuttle and taxi' asks for: an airport shuttle runs every two hours from 06:00 to 22:00 for 12.00 EUR per person each way, and taxis can be ordered at reception."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.cross.pool-hours",
+      "query": "ώρες πισίνας",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family cross_language, greek, answerable, limit 5, forbidden copilot.pool-policy-v1#0; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "copilot.pool-policy-v2#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in English, that the outdoor pool is open from 07:30 to 22:00 daily and towels are provided at the pool bar, which bears on 'ώρες πισίνας'; the query is Greek, and §3.5 grades a chunk in another language 1, never a required alternative."
+        },
+        {
+          "chunk": "v1.pool-and-spa#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in English, that the outdoor pool is open daily from 07:30 to 22:00 between May and October, towels are provided at the pool bar, and children under 12 must be accompanied, which bears on 'ώρες πισίνας'; the query is Greek, and §3.5 grades a chunk in another language 1, never a required alternative."
+        },
+        {
+          "chunk": "v1.pool-rules-greek#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'ώρες πισίνας' asks for: the pool is open daily from 07:30 to 22:00 and towels are provided at the pool bar."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.cross.towels",
+      "query": "πετσέτες",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family cross_language, greek, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "copilot.pool-policy-v2#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in English, that the outdoor pool is open from 07:30 to 22:00 daily and towels are provided at the pool bar, which bears on 'πετσέτες'; the query is Greek, and §3.5 grades a chunk in another language 1, never a required alternative."
+        },
+        {
+          "chunk": "v1.pool-and-spa#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in English, that the outdoor pool is open daily from 07:30 to 22:00 between May and October, towels are provided at the pool bar, and children under 12 must be accompanied, which bears on 'πετσέτες'; the query is Greek, and §3.5 grades a chunk in another language 1, never a required alternative."
+        },
+        {
+          "chunk": "v1.pool-rules-greek#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'πετσέτες' asks for: the pool is open daily from 07:30 to 22:00 and towels are provided at the pool bar."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.cross.children-pool",
+      "query": "παιδιά πισίνα",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family cross_language, greek, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.pool-and-spa#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in English, that the outdoor pool is open daily from 07:30 to 22:00 between May and October, towels are provided at the pool bar, and children under 12 must be accompanied, which bears on 'παιδιά πισίνα'; the query is Greek, and §3.5 grades a chunk in another language 1, never a required alternative."
+        },
+        {
+          "chunk": "v1.pool-rules-greek#1",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'παιδιά πισίνα' asks for: children under 12 must be accompanied by an adult."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.cross.breakfast-included",
+      "query": "πρωινό περιλαμβάνεται",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family cross_language, greek, answerable, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.breakfast-and-dining#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in English, that breakfast is served in the Olive Room from 07:00 to 10:30 on weekdays and until 11:00 at weekends, and is included in every room rate, which bears on 'πρωινό περιλαμβάνεται'; the query is Greek, and §3.5 grades a chunk in another language 1, never a required alternative."
+        },
+        {
+          "chunk": "v1.breakfast-greek#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'πρωινό περιλαμβάνεται' asks for: breakfast is served from 07:00 to 10:30 and is included in the room price."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.none.tennis-court",
+      "query": "tennis court",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family no_answer, english, no-answer, and stays no-answer, limit 5, forbidden none; the text is as written.",
+      "judgments": [],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.none.laundry-service",
+      "query": "laundry service",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family no_answer, english, no-answer, and stays no-answer, limit 5, forbidden none; the text is as written.",
+      "judgments": [],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.none.minibar",
+      "query": "minibar",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family no_answer, english, no-answer, and stays no-answer, limit 5, forbidden none; the text is as written.",
+      "judgments": [],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.none.sauna-hours",
+      "query": "sauna opening hours",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family no_answer, english, no-answer, and stays no-answer, limit 5, forbidden none; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.pool-and-spa#1",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: it mentions the sauna but states no hours, so it does not answer and the query stays no-answer."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.trap.outdoor-pool",
+      "query": "outdoor pool open daily",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family scope_trap, english, answerable, limit 5, forbidden copilot.pool-policy-v1#0; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "copilot.pool-policy-v2#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'outdoor pool open daily' asks for: the outdoor pool is open from 07:30 to 22:00 daily and towels are provided at the pool bar."
+        },
+        {
+          "chunk": "v1.pool-and-spa#0",
+          "proposed_grade": 2,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 2 accepted: the chunk alone states what 'outdoor pool open daily' asks for: the outdoor pool is open daily from 07:30 to 22:00 between May and October, towels are provided at the pool bar, and children under 12 must be accompanied."
+        },
+        {
+          "chunk": "v1.pool-rules-greek#0",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the chunk states, in Greek, that the pool is open daily from 07:30 to 22:00 and towels are provided at the pool bar, which bears on 'outdoor pool open daily'; the query is English, and §3.5 grades a chunk in another language 1, never a required alternative."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.trap.spa-open",
+      "query": "spa open",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family scope_trap, english, no-answer, and stays no-answer, limit 5, forbidden copilot.spa#0; the text is as written.",
+      "judgments": [
+        {
+          "chunk": "v1.pool-and-spa#1",
+          "proposed_grade": 1,
+          "decision": "accept",
+          "grade": null,
+          "rationale": "Grade 1 accepted: the active spa paragraph is the topic but says nothing of when the spa is open; only the withdrawn spa page does, and it is forbidden."
+        }
+      ],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.trap.rooftop-bar",
+      "query": "rooftop bar",
+      "query_decision": "accept",
+      "query_rationale": "Accepted: family scope_trap, english, no-answer, and stays no-answer, limit 5, forbidden neighbour.rooftop-bar#0; the text is as written.",
+      "judgments": [],
+      "added_judgments": []
+    },
+    {
+      "query_id": "v2.trap.bar-open",
+      "query": "bar open",
+      "query_decision": "accept",
+      "query_rationale": "Accepted after revision: family scope_trap, english, no-answer, and stays no-answer, limit 5, forbidden neighbour.rooftop-bar#0; the text is as written. The adjudication (R5) changed v1.pool-and-spa#0 from grade 1 to 0, so both active pool pages are grade 0: each mentions the pool bar only as where towels are provided, which does not answer when a bar is open. The neighbour hotel's rooftop bar page stays forbidden. No superseded or withdrawn page is added as forbidden.",
+      "judgments": [],
+      "added_judgments": []
+    }
+  ]
+}

@@ -31,7 +31,7 @@ from tests.evaluation.retrieval_schema import (
 
 #: Pinned here as well as in the module, so that changing the snapshot and the module's constant
 #: together still fails a test.
-EXPECTED_SHA256 = "35a968055c790628c2bd9c20ee48913eca0dcd9b0929df30f140c81370a6d5ed"
+EXPECTED_SHA256 = "7f35b8a473c73f6d318e48ce5cc2667294f0d50816c511cfaf7851585c617031"
 
 
 @pytest.fixture(scope="module")
@@ -383,7 +383,7 @@ def test_every_family_is_covered_as_authored(dataset: RetrievalDataset) -> None:
         "no_answer": 6,
         "scope_trap": 6,
     }
-    assert sum(q.answerable for q in dataset.queries) == 46
+    assert sum(q.answerable for q in dataset.queries) == 45
     assert Counter(q.origin for q in dataset.queries) == {"developer": 46, "model_captured": 11}
 
 
@@ -397,7 +397,7 @@ def test_the_v1_queries_are_all_carried_over_verbatim(dataset: RetrievalDataset)
 
 def test_no_answer_queries_have_no_sufficient_chunk(dataset: RetrievalDataset) -> None:
     unanswerable = [q for q in dataset.queries if not q.answerable]
-    assert len(unanswerable) == 11
+    assert len(unanswerable) == 12
     assert all(not q.sufficient for q in unanswerable)
     assert all(not q.answerable for q in dataset.queries if q.family == "no_answer")
 
