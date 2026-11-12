@@ -6302,6 +6302,9 @@ RETRIEVAL_V2_TESTS = "tests/evaluation/test_retrieval_v2.py"
 _RM = f"{RETRIEVAL_METRICS_TESTS}::"
 _RS = f"{RETRIEVAL_SCHEMA_TESTS}::"
 _RV = f"{RETRIEVAL_V2_TESTS}::"
+RETRIEVAL_REVIEW = "tests/evaluation/retrieval_review.py"
+RETRIEVAL_REVIEW_TESTS = "tests/evaluation/test_retrieval_review.py"
+_RR = f"{RETRIEVAL_REVIEW_TESTS}::"
 MUTATION_HARNESS = "tests/mutation/harness.py"
 _HT = "tests/mutation/test_harness.py::"
 _DIFFERS = f"{_RV}test_a_dataset_that_differs_from_the_capture_is_reported"
@@ -7130,6 +7133,135 @@ STAGE_R2_10C = [
         '                        run_in_copy(copy, env, RESET_DATABASE, "could '
         'not reset the test database")\n',
         f"{_HT}test_a_database_backed_run_is_rebuilt_before_every_batch",
+    ),
+    # R2.10C.3c: the review sheet and the review form.
+    _r210c(
+        94,
+        "a form made for another dataset checksum is accepted",
+        RETRIEVAL_REVIEW,
+        '            if form["dataset"][field] != value:\n',
+        "            if False:\n",
+        f"{_RR}test_a_form_claiming_another_checksum_is_refused",
+        f"{_RR}test_a_review_of_another_dataset_is_refused",
+    ),
+    _r210c(
+        95,
+        "a form made against another review sheet is accepted",
+        RETRIEVAL_REVIEW,
+        '    if form["review_sheet_sha256"] != review_sheet_sha256:\n',
+        "    if False:\n",
+        f"{_RR}test_a_review_against_another_sheet_is_refused",
+    ),
+    _r210c(
+        96,
+        "a changed grade needs no rationale",
+        RETRIEVAL_REVIEW,
+        "        if not _explained(rationale):\n"
+        '            problems.append(f"{where}: a change needs a rationale")\n',
+        '        if False:\n            problems.append(f"{where}: a change needs a rationale")\n',
+        f"{_RR}test_a_malformed_review_is_refused[change-no-rationale]",
+        f"{_RR}test_a_malformed_review_is_refused[change-blank-rationale]",
+    ),
+    _r210c(
+        97,
+        "a 'change' to the proposed grade is accepted",
+        RETRIEVAL_REVIEW,
+        "        elif grade == proposed[1]:\n",
+        "        elif False:\n",
+        f"{_RR}test_a_malformed_review_is_refused[same-grade]",
+    ),
+    _r210c(
+        98,
+        "an undecided judgment is not reported as outstanding",
+        RETRIEVAL_REVIEW,
+        '            if judgment["decision"] is None:\n',
+        "            if False:\n",
+        f"{_RR}test_a_partial_review_lists_exactly_what_is_outstanding",
+        f"{_RR}test_a_blank_form_is_not_a_review",
+    ),
+    _r210c(
+        99,
+        "an added judgment may name an out-of-scope chunk",
+        RETRIEVAL_REVIEW,
+        "    elif not found[0].in_scope:\n",
+        "    elif False:\n",
+        f"{_RR}test_a_malformed_review_is_refused[added-out-of-scope]",
+        f"{_RR}test_a_malformed_review_is_refused[added-neighbour]",
+    ),
+    _r210c(
+        100,
+        "the sheet is hashed as checked out, so a CRLF checkout is another sheet",
+        RETRIEVAL_REVIEW,
+        '    return hashlib.sha256(text.replace("\\r\\n", "\\n").encode("utf-8")).hexdigest()\n',
+        '    return hashlib.sha256(text.encode("utf-8")).hexdigest()\n',
+        f"{_RR}test_a_crlf_checkout_of_the_sheet_is_the_same_sheet",
+    ),
+    _r210c(
+        101,
+        "true is accepted as grade 1",
+        RETRIEVAL_REVIEW,
+        "    return isinstance(value, int) and not isinstance(value, bool) and value in GRADES\n",
+        "    return isinstance(value, int) and value in GRADES\n",
+        f"{_RR}test_a_malformed_review_is_refused[grade-bool]",
+        f"{_RR}test_a_malformed_review_is_refused[added-grade-bool]",
+    ),
+    _r210c(
+        102,
+        "a review date that is no calendar date is accepted",
+        RETRIEVAL_REVIEW,
+        "                dt.date.fromisoformat(str(reviewed_on))\n",
+        "                pass\n",
+        f"{_RR}test_a_malformed_review_is_refused[bad-date]",
+    ),
+    _r210c(
+        103,
+        "a chunk may be added at grade 0",
+        RETRIEVAL_REVIEW,
+        "    if not _is_grade(grade) or grade == 0:\n",
+        "    if not _is_grade(grade):\n",
+        f"{_RR}test_a_malformed_review_is_refused[added-grade-0]",
+    ),
+    _r210c(
+        104,
+        "a chunk in another language graded 2 is not flagged",
+        RETRIEVAL_REVIEW,
+        '        "CROSS-LANGUAGE-GRADE-2": any(item.grade == 2 for item in foreign),\n',
+        '        "CROSS-LANGUAGE-GRADE-2": False,\n',
+        f"{_RR}test_a_chunk_in_another_language_graded_2_is_flagged",
+    ),
+    _r210c(
+        105,
+        "a query revision needs no rationale",
+        RETRIEVAL_REVIEW,
+        '    if decision == "revise" and not _explained(rationale):\n',
+        "    if False:\n",
+        f"{_RR}test_a_malformed_review_is_refused[revise-no-rationale]",
+    ),
+    _r210c(
+        106,
+        "stopwords are not folded, so a Greek final sigma escapes them",
+        RETRIEVAL_REVIEW,
+        "word not in _FOLDED_STOPWORDS and",
+        "word not in STOPWORDS and",
+        f"{_RR}test_words_are_whole_case_folded_words_without_stopwords_or_numbers",
+    ),
+    _r210c(
+        107,
+        "write-form overwrites a review in progress",
+        RETRIEVAL_REVIEW,
+        "        if FORM_PATH.exists():\n",
+        "        if False:\n",
+        f"{_RR}test_write_form_never_overwrites_a_review",
+    ),
+    _r210c(
+        108,
+        "an accepted grade needs no rationale",
+        RETRIEVAL_REVIEW,
+        '        if decision == "accept" and not _explained(rationale):\n',
+        "        if False:\n",
+        f"{_RR}test_a_malformed_review_is_refused[accept-no-rationale]",
+        f"{_RR}test_a_malformed_review_is_refused[accept-blank-rationale]",
+        f"{_RR}test_every_judgment_decision_needs_a_rationale",
     ),
 ]
 
