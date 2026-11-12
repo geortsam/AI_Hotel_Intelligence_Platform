@@ -345,9 +345,14 @@ def test_a_blank_form_is_not_a_review(
     assert "undecided: 152" in report
 
 
-def test_no_sign_off_exists_before_c3d() -> None:
-    """Decision E: the sign-off is C.3d's, written by you or on your explicit approval in chat."""
-    assert not rr.SIGNOFF_PATH.exists()
+def test_the_review_tooling_never_writes_the_sign_off(
+    dataset: RetrievalDataset, sheet: str
+) -> None:
+    """Decision E: the sign-off is C.3d's record (test_retrieval_signoff.py), written on your
+    explicit approval in chat. Checking the review leaves it exactly as it was."""
+    before = rr.SIGNOFF_PATH.read_bytes()
+    rr.check(dataset, sheet, rr.FORM_PATH.read_bytes().decode("utf-8"))
+    assert rr.SIGNOFF_PATH.read_bytes() == before
 
 
 def test_a_partial_review_lists_exactly_what_is_outstanding(
@@ -383,12 +388,13 @@ def test_a_complete_review_lists_its_revisions_and_is_not_a_sign_off(
         "query v1.r22: revise -- say 'gym' only",
         "query v2.trap.bar-open: add copilot.pool-policy-v2#0 grade 1 -- mentions the pool bar",
     ]
+    signoff = rr.SIGNOFF_PATH.read_bytes()
     code, report = rr.check(dataset, sheet, rr.render_form(form))
     assert code == 0
     assert (
         report[-1] == "This is the review, not the sign-off: the sign-off is C.3d's (decision E)."
     )
-    assert not rr.SIGNOFF_PATH.exists()
+    assert rr.SIGNOFF_PATH.read_bytes() == signoff
 
 
 def test_a_review_of_another_dataset_is_refused(

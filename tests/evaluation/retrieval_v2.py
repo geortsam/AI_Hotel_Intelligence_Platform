@@ -11,11 +11,12 @@ written once and never regenerated: `load()` refuses it unless its canonical SHA
 canonical mapping with sorted keys and two-space indentation (`render`); a test holds it to that
 form so it cannot drift into a hand-edited layout either.
 
-**The judgments are the developer's, reviewed by you in C.3c and not yet signed off.** Every
+**The judgments are the developer's, reviewed by you in C.3c and signed off in C.3d.** Every
 grade, rationale and family was written in C.3b from the copied text; the C.3c review accepted
 them with two revisions, and its adjudication made five more (R1-R5, decision record §11),
-which made this version. They stay unsigned until C.3d's sign-off (§3.6); nothing here, and no
-test, stands in for it.
+which made this version. The reviewer signed this version off in C.3d (§3.6,
+`datasets/knowledge_retrieval_v2.signoff.json`); nothing here, and no test, stands in for that
+review.
 
 ## Copied documents and drift (decision C)
 
