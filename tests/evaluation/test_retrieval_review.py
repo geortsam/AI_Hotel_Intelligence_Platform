@@ -620,10 +620,17 @@ def test_duplicate_keys_and_invalid_json_are_refused(
 # --- the command line -----------------------------------------------------------------------------
 
 
-def test_write_form_never_overwrites_a_review(capsys: pytest.CaptureFixture[str]) -> None:
+def test_write_form_never_overwrites_a_review(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A copy of the real form: were the guard gone (R2.10C-M107), the write would land in
+    # tmp_path, never on the signed form every later test and mutation reads.
     before = rr.FORM_PATH.read_bytes()
+    form = tmp_path / rr.FORM_PATH.name
+    form.write_bytes(before)
+    monkeypatch.setattr(rr, "FORM_PATH", form)
     assert rr.main(["write-form"]) == 1
-    assert rr.FORM_PATH.read_bytes() == before
+    assert form.read_bytes() == before
     assert "never overwritten" in capsys.readouterr().out
 
 

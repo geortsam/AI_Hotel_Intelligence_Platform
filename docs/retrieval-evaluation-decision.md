@@ -423,7 +423,9 @@ Each step is its own reviewed stage. None starts without authorization.
 
 Throughout: `FixtureKnowledge` stays the default for R2.9Y replays, and the R2.9Y reference report
 must remain byte-identical. Switching the default is a separate decision. The stage that
-implements the numeric contract (§12.5) is not yet scheduled; it must land before C.4.
+implements the numeric contract (§12.5) and the one that implements the fingerprint machinery
+with its `ci.yml` and `.gitattributes` prerequisites (§12.1-12.4, §12.6, §12.7) are both
+implemented (§11, R2.10C numeric contract and fingerprint); they come before C.4.
 
 ## 9. Non-goals
 
@@ -464,6 +466,11 @@ Any retrieval change is a later stage, to be authorised separately and measured 
 | R2.10C.3c (review) | 2026-11-11 | **Your review applied; not signed off.** You reviewed all 57 queries in chat and approved them; your decisions were recorded on the form of dataset `35a968055c790628c2bd9c20ee48913eca0dcd9b0929df30f140c81370a6d5ed` (sheet `b3e310ff590a86cc9dc724d5959790e12d258e233bb93f6fc3f4c9de108c8fd5`): 96 judgments accepted and one changed, 56 queries accepted and one revised. **Revisions applied, the only ones:** `v1.r01`'s `v1.pool-rules-greek#1` from grade 1 to 0 (it only states that children under 12 must be accompanied and answers neither pool hours nor towels), so it is no longer judged; `v2.title.cancellation-policy` gains the superseded `copilot.pool-policy-v1#0` as forbidden (out of scope; its title also says 'policy'), while the active `copilot.pool-policy-v2#0` stays unjudged. Both queries' rationales say so. The revised dataset is `bb2466278ca15ee4a53c91ee81c889f837bb797937f75fe8a90061ad14400919` (57 queries, 96 judgments: 64 of grade 2, 32 of grade 1; 16 forbidden annotations; 11 no-answer queries, unchanged), its sheet `1a9db9d1de8b5ef04b1065a38cf00ca581ef269546015c9ac1a786898baab406`, and its form records your final review: all 57 queries and all 96 judgments accepted, each judgment with a rationale written from the chunk text on your instruction. The reviewer's name and date are left for you; no sign-off exists. C.3d binds your attestation to these two checksums. |
 | R2.10C.3c (adjudication) | 2026-11-11 | **Adjudication revisions R1-R7 applied, on your approval in chat; not signed off.** A read-only audit of all 96 judgment rationales and its adjudication found one rubric violation, four objective errors and one rubric gap on dataset `bb2466278ca15ee4a53c91ee81c889f837bb797937f75fe8a90061ad14400919` (sheet `1a9db9d1de8b5ef04b1065a38cf00ca581ef269546015c9ac1a786898baab406`). **R1** `v1.r23` ('πισίνα', the Greek word for 'pool'): `v1.pool-rules-greek#1` from grade 1 to 0, agreeing with `v1.r01`, since the children rule answers neither the pool's hours nor its towels. **R2** `r29y.guest_faq_injected.1`: `copilot.guest-faq#0` from grade 2 to 0 and the query made no-answer, since the chunk is an injection fixture that states no hotel fact, and a title or a document's being the only FAQ is not answer-bearing content (§3.5 grade 2). **R3**, **R4** `v2.title.cancellation-policy`, `v2.title.pool-policy`: rationales corrected; 'policy' appears in no chunk's text, only in the titles 'Cancellation policy' and 'Pool policy' (both versions); grades unchanged. **R5** `v2.trap.bar-open`: `v1.pool-and-spa#0` from grade 1 to 0, so both active pool pages, which mention the pool bar only as where towels are, are grade 0; the neighbour's rooftop bar stays forbidden. **R6** review-form wording only: the `r29y.dog_fee.1` and `v2.multi.shuttle-and-taxi` chunks state every requested fact, not 'one of the facts'. **R7** §3.5 clarified for multi-idea queries (each requested fact is a fact the question needs; a chunk stating one in full is grade 2; such a query is answerable only when every fact has a grade-2 chunk), in §3.5, the review sheet's rubric and the schema docstrings; a test pins each multi-idea query's facts to their grade-2 chunks. The nine partial-fact multi-idea grade-2 judgments are unchanged, as are the grades' meaning, the metrics and retrieval. The revised dataset is `7f35b8a473c73f6d318e48ce5cc2667294f0d50816c511cfaf7851585c617031` (57 queries: 45 answerable, 12 no-answer; 93 judgments: 63 of grade 2, 30 of grade 1; 16 forbidden annotations), its sheet `fb79c2fb5d0744e315853cf70ed8b43a7d54a510536452f5aa031c0ee22e7908`, and its form records the review: all 57 queries and all 93 judgments accepted, each judgment with a rationale. The reviewer's name and date are left for you; no sign-off exists. C.3d binds your attestation to these two checksums. |
 | R2.10C.3d | 2026-11-12 | **Signed off: approved, without reservations.** The reviewer, Georgios Tsamoglou, approved dataset `knowledge_retrieval_v2` (`7f35b8a473c73f6d318e48ce5cc2667294f0d50816c511cfaf7851585c617031`, schema `knowledge_retrieval_schema_v2`) and its review sheet (`fb79c2fb5d0744e315853cf70ed8b43a7d54a510536452f5aa031c0ee22e7908`) in chat on 2026-11-12; the record `tests/evaluation/datasets/knowledge_retrieval_v2.signoff.json` was written on that approval. It binds the review form recorded in C.3c (`92d21865258c1086a903d16f43e6a7cf813bbcef3e4400666cd47140dc8b01f1`, LF), the rubric as §3.5's text (`c86149e5e421a8016d3b4228e2ef0edc32f8b3cc8e804f31999b5e1972141458`) and the commit that recorded it (`9ac08b2c9873d245c9d2bb39fa9c770a936b47e6`, the C.3c commit), all 57 query ids, and CI run 43092333518 on that commit (success, 7 of 7 jobs, 621 of 621 mutations killed). `tests/evaluation/test_retrieval_signoff.py` requires the record to match the dataset, sheet, form and rubric in the tree and refuses any other hash, rubric commit or decision; with Git history it also checks that commit's §3.5, dataset, sheet and form. The sign-off approves the judgments for measurement; it does not validate retrieval accuracy, which C.4 measures. |
+| R2.10C (numeric contract) | 2026-11-12 | **§12.5 implemented, before C.4; nothing measured.** `tests/evaluation/retrieval_numerics.py` (`retrieval_numerics_v1`) gives the nDCG discounts log2(rank + 1) as exact 1.0 and 2.0 at ranks 1 and 3 and certified binary64 hex literals at ranks 2, 4 and 5, and Wilson's square root as a certified `Decimal` square root, each computed at P1/P2 (80/160 digits for ln(k)/ln(2), 60/120 for square roots) in a local `_decimal` context and accepted only through the certificate; anything else raises `NumericVerificationError`. `retrieval_metrics.py` takes both from it, replacing `math.log2` and `math.sqrt`. **Results are unchanged:** the certified discounts equal `math.log2` here and every Wilson interval for n <= 200 equals the `math.sqrt` formula, so no Wilson, nDCG or bootstrap pin moved. **Two clarifications of §12.5, approved by you on 2026-11-12:** (A) the radicand is converted with `Decimal.from_float(x)`, because the literal `Decimal(x)` sets `FloatOperation`, which the rule that only `Inexact` and `Rounded` may be set forbids, and constructing it outside the local context would break "used only in local contexts": the two readings were contradictory, and the value is identical; (B) the hash-seed test verifies that numeric outputs are independent of `PYTHONHASHSEED`. 16 mutations (R2.10C-M109 to M124) and M10/M21 re-anchored: 637 in all. |
+| R2.10C (fingerprint) | 2026-11-12 | **§12.1-12.4, §12.6 and §12.7 implemented, before C.4; nothing measured, nothing downloaded.** `retrieval_canonical.py` is §12.2: the writer refuses float objects and writes binary64 as `float.hex`, the reader accepts only bytes it would write, and every field is checked against a declared type, `null` being declared only for `supersedes`. `retrieval_fingerprint.py` builds the manifest (fingerprint = SHA-256 of the canonical `inputs`, one component per group, the sign-off beside it) and the `sources`, `python`, `dataset`, `metrics` and Docker `engine` groups; `retrieval_probes.py` the database groups and §12.4's state, plan comparison and served-result checks, through one injected `fetch`; `retrieval_artifacts.py` the measurement path C.4 calls, which writes `report.json`, `environment.json` and `report.json.sha256` (last) atomically before any assertion, or `refusal.json` with one of §12.7's nine reasons, and `verify`, pinning step 2 run offline on files you have downloaded. **The C.4 harness** in §12.3's sources is those four modules and the modules they load the dataset, sign-off, review and numeric contract through; the C.4 integration test is reserved as `tests/integration/test_knowledge_retrieval_v2_eval.py`, so until C.4 writes it every measurement refuses with a missing source. **`ci.yml`:** the quality-gates variable `RETRIEVAL_EVAL_POSTGRES_IMAGE` (equal to the service image, both read from the measured blob); in shard 1, a step before pytest writing `docker.json` to `$RETRIEVAL_EVAL_OUT`, and two `if: always()` steps after it printing every file's SHA-256 and uploading with `actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02` (v4.6.2), named `retrieval-eval-<run id>-<attempt>`, `if-no-files-found: error`. **`.gitattributes`:** `tests/evaluation/retrieval_report_v2.json -text`, the path pinning copies the report to. 43 mutations (R2.10C-M125 to M167): 680 in all. **Open before C.4, for your decision:** PostgreSQL stores `NULL` in `pg_database.datlocale` under the `libc` provider (the official image's default) and in `pg_ts_dict.dictinitoption` for the built-in `simple` dictionary, which every configuration maps some tokens to; §12.7 refuses every `NULL`, so as written the measurement refuses on that image. An image without a variant is recorded with `variant` `""`, OCI's meaning of an absent field. The upload action's SHA was not checked online. |
+| R2.10C (catalog NULLs) | 2026-11-13 | **Two catalog exceptions and the upload action's SHA, approved by you on 2026-11-13; nothing measured, nothing downloaded.** PostgreSQL defines two NULLs the probes read (its bootstrap catalog and documentation, PostgreSQL 18.6): `pg_database.datlocale` under the `libc` provider, the official image's default, and `pg_ts_dict.dictinitoption` of the built-in `pg_catalog.simple`, which every built-in configuration maps number and similar tokens to. No configuration removes them without changing the measured locale or text-search configuration, so §12.2, §12.3 and §12.7 now record them as typed `null`, part of the fingerprint: `datlocale` is `null` if and only if the provider is `libc`, and `dictinitoption` may be `null` only for `pg_catalog.simple`; an empty string refuses for every dictionary (the declared type had accepted one). Every other NULL still refuses. The probes enforce both rules, and the manifest check enforces them again, so `verify` holds a downloaded report to them. **The upload action's SHA:** `refs/tags/v4.6.2` of `actions/upload-artifact`, read with `gh api` (a lightweight tag), is `ea165f8d65b6e75b540449e92b4886f43607fa02`; the SHA recorded in the row above was written from memory and was wrong after its first 15 characters. `ci.yml` and that row now carry the verified SHA, and the workflow test asserts it exactly. 11 mutations (R2.10C-M168 to M178): 691 in all. |
+| R2.10C (final specification) | 2026-11-13 | **The final specification audit's plan, approved by you on 2026-11-13; nothing measured, nothing downloaded, C.4 not started.** **(A) The Docker variant:** `engine.platform.variant` is a typed `null` if and only if Docker's image inspection has no `Variant`, and otherwise a non-empty string kept unchanged; a present `""` or a non-string refuses (`image_identity`). It replaces the `""` the R2.10C (fingerprint) row recorded for an absent variant, which stood in for absence; §12.2 now has four nulls. **(B) The sources:** the 13 package `__init__.py` files that run before the fingerprinted modules are fingerprinted; the C.4 harness is named module by module, `retrieval_review.py` and `retrieval_signoff.py` kept because they decide which sign-off is accepted. §12.3 excluded `models/base.py`, which does not exist; the declarative base is `db/base.py`, now excluded under that reason. A fresh interpreter importing the measurement path loads 61 repository files; the 45 that were neither fingerprinted nor excluded are now accounted for: 7 package `__init__.py` files fingerprinted and 38 modules excluded, each by one of §12.3's reasons; a test holds that import closure to the inventory, so a new module cannot enter it silently. Every excluded file must exist at the measured commit, and the measured tree may hold no untracked file and no ignored file Python could execute outside the cache and environment directories (§12.6). **(C) Empty strings:** a template's `lexize` and a token type's description must be non-empty; a tsquery may be empty. **(D) The artifacts:** the layout and pinned paths of §12.6 are fixed constants; `$RETRIEVAL_EVAL_OUT` must be absolute and resolve (symlinks followed) outside the repository, or the run refuses and writes nothing; a run starts with `docker.json` alone and leaves exactly the success or the refusal set; `verify` reports a refusal first, refuses extra, stale, partial or irregular files, and checks `environment.json` against its own job-log digest (`--environment-log-digest`). The pinned environment record, `tests/evaluation/retrieval_report_v2.environment.json`, is `-text` like the report. **(E) The tree:** the environment record carries the measured commit's tree id, and `verify` trusts it only after the environment digest matches, then requires the checked-out commit to have exactly that tree, so a pull request's merge commit qualifies when, and only when, its tree is the measured one. The import-closure test covers the measurement path; the C.4 integration test's own closure (the application through `app.main`) is checked when C.4 writes it. 37 mutations (R2.10C-M179 to M215) and three re-anchored (M164, M166, M167): 728 in all. |
+| R2.10C (exclusion audit) | 2026-11-17 | **The 38 exclusions accepted, on three conditions; nothing measured, C.4 not started.** A read-only audit traced each of the 38 modules §12.3 excludes beyond its original three through the measurement's real call paths: the schema comes from the migrations, the teardown is SQL, none of the 38 registers event listeners, reads the environment or imports dynamically, no model relates to the knowledge tables, and the production session factory is reached only through `get_db`, which the conftest overrides. You accepted all 38 on 2026-11-17, subject to three mandatory C.4 requirements, now §12.6's "C.4's requirements": one engine, the conftest's, with no fallback to the production session factory (A); hotel ownership by SQL (B); an explicit HTTP status for every ingest and search response (C). The harness provides `EngineFetch`, `require_measurement_wiring`, `production_sessions_forbidden`, `checked_json` and `probes.hotel_ids`; `tests/evaluation/test_retrieval_c4_requirements.py` holds them and the audit's four static findings by AST inspection. The session-settings difference (production `autoflush=False`, the conftest's `autoflush=True`) is recorded. `SOURCE_FILES` and `EXCLUDED_SOURCES` are unchanged. 15 mutations (R2.10C-M216 to M230): 743 in all. |
 
 No measurement has used these definitions. Nothing in this record's measured results changes:
 `knowledge_retrieval_v1`'s 16 of 23 and its Wilson interval, and every R2.9Y result, were produced
@@ -472,9 +479,11 @@ still open; R2.10C.3a resolved them (§4). Neither amendment changes a measured 
 
 ## 12. Retrieval fingerprint and measurement integrity (decision F)
 
-Approved 2026-11-09 and recorded here in R2.10C.3a. **Nothing in this section is implemented
-yet.** The numeric contract (§12.5) and the fingerprint machinery are built before the first C.4
-measurement.
+Approved 2026-11-09 and recorded here in R2.10C.3a. **Implemented, nothing measured:** the
+numeric contract (§12.5, `tests/evaluation/retrieval_numerics.py`) and the fingerprint
+machinery (§12.1-12.4, §12.6, §12.7: `retrieval_canonical.py`, `retrieval_fingerprint.py`,
+`retrieval_probes.py`, `retrieval_artifacts.py`, the `ci.yml` steps and the `.gitattributes`
+entry). The baseline itself is C.4's (§11, R2.10C fingerprint).
 
 ### 12.1 What is compared
 
@@ -503,28 +512,54 @@ can be obtained, and times.
   `float.hex(float(v))` strings and read with `float.fromhex`. They are accepted only if finite and
   if they round-trip exactly. Integers and binary64 are never interchangeable: a gain of 3 is always
   `"0x1.8000000000000p+1"`. The writer refuses any float object.
-- `null` appears only in the document state's `supersedes`.
+- `null` appears in exactly four places, each written as a typed JSON `null` that the
+  fingerprint covers, never omitted and never written as `""`:
+  - the document state's `supersedes`;
+  - `database.locale` (`pg_database.datlocale`), if and only if the locale provider is `libc`,
+    under which PostgreSQL defines it as NULL;
+  - the init options (`pg_ts_dict.dictinitoption`) of the dictionary `pg_catalog.simple` alone,
+    which PostgreSQL creates without options;
+  - `engine.platform.variant`, if and only if Docker's image inspection has no `Variant` field
+    (an image without a variant). A present `Variant` must be a non-empty string.
+- `""` never stands for absence. It is a value only where §12.3 says so.
 - Unordered lists are sorted; ordered lists keep their order.
 
 ### 12.3 Inputs
 
 | Group | Contents |
 |---|---|
-| engine | the declared image reference and digest, read from the `ci.yml` blob at the measured commit and matched by a workflow variable; the local image id, with the Docker image-store type that gives it meaning; os, architecture and variant; `server_version_num` and `version()`; extensions |
-| database | server and client encoding, locale provider, collate, ctype, locale, collation version |
-| text search | the effective `search_path` (`current_schemas(true)`) and each configuration's schema; configurations, parsers, token types, mappings, dictionaries, templates, init options; the SHA-256 of every referenced stop-word file (read as a superuser) |
+| engine | the declared image reference and digest, read from the `ci.yml` blob at the measured commit and matched by a workflow variable; the local image id, with the Docker image-store type that gives it meaning; os, architecture and variant (`null` if and only if Docker reports no `Variant`; a present empty or non-string variant refuses); `server_version_num` and `version()`; extensions |
+| database | server and client encoding, locale provider, collate, ctype, locale (`null` if and only if the provider is `libc`), collation version |
+| text search | the effective `search_path` (`current_schemas(true)`) and each configuration's schema; configurations, parsers, token types (descriptions never empty), mappings, dictionaries, templates (`lexize` functions never empty), init options (`null` only for `pg_catalog.simple`, never empty); the SHA-256 of every referenced stop-word file (read as a superuser) |
 | document state, chunk state | §12.4 |
-| query parsing | `(query_id, configuration, limit, websearch_to_tsquery(configuration, query)::text)` for every query and every language of the evaluated hotel's active documents |
+| query parsing | `(query_id, configuration, limit, websearch_to_tsquery(configuration, query)::text)` for every query and every language of the evaluated hotel's active documents; the tsquery may be empty, which PostgreSQL returns for a query of stop words alone |
 | schema | the Alembic head; a canonical digest of the live definitions of `hotel_documents` and `hotel_document_chunks` |
-| sources | Git blob content (§12.6) of `.github/workflows/ci.yml`, `.gitattributes`, `pyproject.toml`, `alembic.ini`; `backend/app/main.py`, `api/deps.py`, `api/v1/endpoints/knowledge.py`, `services/knowledge.py`, `services/scope.py`, `repositories/hotel.py`, `repositories/knowledge.py`, `knowledge/chunking.py`, `schemas/knowledge.py`, `models/knowledge.py`, `models/enums.py`; `database/migrations/env.py` and every file under `database/migrations/versions/`; `tests/conftest.py`, `tests/integration/conftest.py`, `tests/evaluation/retrieval.py`, `retrieval_schema.py`, `retrieval_metrics.py`, the C.4 harness and integration test, the dataset JSON; `backend/requirements-lock.txt` and `backend/requirements-dev-lock.txt` |
+| sources | Git blob content (§12.6) of `.github/workflows/ci.yml`, `.gitattributes`, `pyproject.toml`, `alembic.ini`; `backend/app/main.py`, `api/deps.py`, `api/v1/endpoints/knowledge.py`, `services/knowledge.py`, `services/scope.py`, `repositories/hotel.py`, `repositories/knowledge.py`, `knowledge/chunking.py`, `schemas/knowledge.py`, `models/knowledge.py`, `models/enums.py`; `database/migrations/env.py` and every file under `database/migrations/versions/`; `tests/conftest.py`, `tests/integration/conftest.py`, `tests/evaluation/retrieval.py`, `retrieval_schema.py`, `retrieval_metrics.py`; the C.4 harness, `tests/evaluation/retrieval_canonical.py`, `retrieval_fingerprint.py`, `retrieval_probes.py`, `retrieval_artifacts.py`, `retrieval_numerics.py`, `retrieval_review.py`, `retrieval_signoff.py` and `retrieval_v2.py`; the C.4 integration test `tests/integration/test_knowledge_retrieval_v2_eval.py`; the dataset JSON; the package `__init__.py` files of `tests/`, `tests/evaluation/`, `tests/integration/`, `backend/app/` and its `api/`, `api/v1/`, `api/v1/endpoints/`, `services/`, `repositories/`, `knowledge/`, `schemas/`, `models/` and `db/`; `backend/requirements-lock.txt` and `backend/requirements-dev-lock.txt` |
 | python | CPython 3.14.7 and its build string; the float format (53-bit mantissa, radix 2, maximum exponent 1024, short repr); the `_decimal` and libmpdec versions; the SHA-256 of the canonical installed set |
 | dataset | identity, schema version, canonical SHA-256 |
 | metrics | the metrics version; `V2_METRIC_CONFIG` in full, bootstrap settings included; the discount table and the numeric contract's identifier |
 
-**Excluded, each by reason:**
+`retrieval_review.py` and `retrieval_signoff.py` feed no input group; they are fingerprinted
+because they decide which sign-off is accepted.
+
+**Excluded, each by reason.** Every excluded file must exist at the measured commit. Every
+repository file a fresh interpreter loads to import the measurement path is fingerprinted or
+excluded here, and a test holds that import closure to this list.
 - `database/migrations/script.py.mako`: never executed.
-- `core/config.py`, the scope policy and `tests/db_safety.py`: they can only refuse.
-- `models/base.py`: identity generation is defined in the fingerprinted migration DDL.
+- `core/config.py`, `core/client_address.py`, `core/errors.py`, `core/request_id.py`,
+  `core/security_headers.py`, the scope policy and `tests/db_safety.py`: they can only refuse.
+- `core/__init__.py`: a docstring; its package holds no fingerprinted module.
+- `db/base.py` (the declarative base, identity key and timestamp mixin): the tables' DDL,
+  identity generation included, is defined in the fingerprinted migrations and read from the
+  live definitions. (This record once named `models/base.py`, which does not exist.)
+- `db/session.py`: the application's engine. The measurement's sessions are the fingerprinted
+  integration conftest's, which overrides `get_db`.
+- `models/audit.py`, `models/booking.py`, `models/copilot_conversation.py`, `models/demand_observation.py`, `models/finance.py`, `models/guest.py`, `models/hotel.py`, `models/llm_invocation.py`, `models/membership.py`, `models/metrics.py`, `models/payment.py`, `models/platform.py`, `models/prediction.py`, `models/review.py`, `models/room.py` and `models/user.py`: they map tables outside §12.4's measured state, so they can only
+  refuse.
+- `schemas/common.py`: the error and page envelopes. An error can only refuse, and the
+  measurement's responses are knowledge schemas.
+- `schemas/amenity.py`, `schemas/analytics.py`, `schemas/auth.py`, `schemas/booking.py`, `schemas/finance.py`, `schemas/guest.py`, `schemas/health.py`, `schemas/hotel.py`, `schemas/intelligence.py`, `schemas/meta.py`, `schemas/payment.py`, `schemas/review.py`, `schemas/room.py` and `schemas/room_type.py`: models of other endpoints, loaded by the package's
+  `__init__`. No measured value passes through them.
 
 **Installed set.** It must equal exactly the pins of `requirements-dev-lock.txt` whose markers hold
 on the interpreter:
@@ -583,7 +618,11 @@ Reports compare each query's ordered `(doc_id, ordinal)` list, plus each result'
 
 - **The nDCG discounts.** Ranks 1 and 3 are exactly 1.0 and 2.0. Ranks 2, 4 and 5 are binary64 hex
   literals for log₂3, log₂5 and log₂6, each certified. They replace `math.log2`.
-- **Wilson's square root.** `Decimal(x).sqrt()`, certified. It replaces `math.sqrt`.
+- **Wilson's square root.** `Decimal.from_float(x).sqrt()`, certified. Convert the binary
+  floating-point radicand exactly using `Decimal.from_float(x)`, then calculate its square root
+  using the certified local Decimal context. This replaces `math.sqrt`. The conversion must not
+  set the `FloatOperation` signal. Only `Inexact` and `Rounded` may be set during the certified
+  calculation.
 - **Decimal.**
   - CPython's `_decimal` is required, used only in local contexts, with `ROUND_HALF_EVEN`, `Emin`
     −999999, `Emax` 999999 and `clamp` 0.
@@ -609,7 +648,17 @@ Reports compare each query's ordered `(doc_id, ordinal)` list, plus each result'
   - Certificates at both precisions; context isolation; every refusal path.
   - The existing Wilson and nDCG pins are re-checked: any difference is reported, never quietly
     re-pinned. The bootstrap pins stay unchanged.
-  - The hash-seed test.
+  - The hash-seed test. It verifies that numeric evaluation outputs are independent of
+    `PYTHONHASHSEED`: fresh Python subprocesses with the explicit seeds `0`, `1`, `4294967295`
+    and `random` run the identical numeric evaluation, and their canonical JSON outputs are
+    compared byte for byte, execution metadata excluded; any differing numeric output fails.
+> **Clarified (2026-11-12, approved by you).** Two clarifications, nothing else changed. (A)
+> The text read `Decimal(x).sqrt()`. In CPython, `Decimal(x)` sets `FloatOperation`: inside the
+> local context that breaks "only `Inexact` and `Rounded` may be set", and outside it breaks
+> "used only in local contexts". `Decimal.from_float(x)` gives the identical exact value and
+> sets no flag. (B) "The hash-seed test" had no further definition; it is the
+> `PYTHONHASHSEED`-independence test above. Every other requirement of this section stands.
+
 - **The claim.** Results are correctly rounded and reproducible within the fingerprinted runtime.
   They rely on the documented correct rounding of `_decimal`. There is no cross-platform proof.
 
@@ -621,27 +670,93 @@ Reports compare each query's ordered `(doc_id, ordinal)` list, plus each result'
 - Every source must be a blob at that commit. Its hash is the SHA-256 of
   `git cat-file blob <commit>:<path>`, recorded with the blob id. No line-ending conversion is
   involved.
-- Every fingerprinted Python module must be imported from its repository path.
+- Every fingerprinted Python module must be imported from its repository path, and every
+  excluded source (§12.3) must be a blob at that commit.
+- The measured tree holds no untracked file, and no ignored file Python could execute: `.py`
+  files (`conftest.py`, `sitecustomize.py` and `usercustomize.py` among them), `.pyc`, `.pyd`,
+  `.so` and `.pth`. Only the cache and environment directories `.git`, `.venv`, `venv`,
+  `__pycache__`, `node_modules`, `.mypy_cache`, `.pytest_cache` and `.ruff_cache` are exempt.
+- The measured commit's tree id is recorded in the environment record.
 
 **Artifacts.**
 - Before the tests, a workflow step writes the Docker metadata file (from `docker inspect`,
   `docker image inspect` and `docker info`).
-- The C.4 integration test writes `report.json`, `environment.json` and `report.json.sha256`
-  (written last) to `$RETRIEVAL_EVAL_OUT`, atomically and before any assertion. On refusal it
-  writes `refusal.json` instead.
+- The C.4 integration test writes to `$RETRIEVAL_EVAL_OUT`, which the workflow sets to
+  `$RUNNER_TEMP/retrieval-eval`. It must be an absolute path that resolves, symlinks followed,
+  outside the repository; otherwise the run refuses and writes nothing, since no directory is
+  safe to write to. When the run starts the directory holds `docker.json` and nothing else.
+- On success the test writes `report.json`, `environment.json` and `report.json.sha256`
+  (written last), atomically and before any assertion. On refusal it writes `refusal.json`
+  instead. A run leaves exactly `docker.json`, `report.json`, `environment.json` and
+  `report.json.sha256`, or exactly `docker.json` and `refusal.json`.
+- Every file name and pinned path is a constant; no argument or variable overrides one.
+
+| Artifact | CI path | Pinned path |
+|---|---|---|
+| report | `$RUNNER_TEMP/retrieval-eval/report.json` | `tests/evaluation/retrieval_report_v2.json` |
+| environment | `$RUNNER_TEMP/retrieval-eval/environment.json` | `tests/evaluation/retrieval_report_v2.environment.json` |
+| report digest | `$RUNNER_TEMP/retrieval-eval/report.json.sha256` | not committed; its value is in the pin commit's message |
+| refusal | `$RUNNER_TEMP/retrieval-eval/refusal.json` | never pinned |
+
 - A shard-1 step with `if: always()` prints every file's SHA-256 to the log and uploads the files
   with `actions/upload-artifact`, pinned by SHA, with `if-no-files-found: error`, named by run id
   and attempt.
 
 **Pinning.**
-1. Download with `gh run download`. That uses the network and needs your authorisation each time.
-2. Check that:
-   - the report's SHA-256 equals both its `.sha256` file and the digest in the job log;
+1. Download with `gh run download <run> -n retrieval-eval-<run>-<attempt> -D <directory outside
+   the repository>`. That uses the network and needs your authorisation each time.
+2. Check, with `python -m tests.evaluation.retrieval_artifacts verify <directory> --log-digest
+   <report SHA-256> --environment-log-digest <environment SHA-256>`, both digests read from the
+   job log, that:
+   - the run did not refuse (reported first), and the directory holds exactly the four files of
+     a successful run, as regular files, with nothing extra, stale or partial;
+   - the report's SHA-256 equals both its `.sha256` file and the report's digest in the job log;
+   - `environment.json`'s SHA-256 equals its digest in the job log. Only then is its tree id
+     trusted;
    - the fingerprint equals SHA-256(canonical(`inputs`));
-   - the repository-derived components recompute identically offline at the run's commit.
-3. Copy the bytes unchanged and commit them alone (the report and its environment record), with the
-   report SHA-256, the fingerprint, the CI run and the artifact digest in the commit message.
-4. The report is marked `-text` in `.gitattributes`.
+   - the checked-out commit's tree is exactly the recorded tree id. A different commit with that
+     tree, such as a pull request's merge commit, qualifies; a branch name or a commit message
+     never does;
+   - the repository-derived components recompute identically offline at that commit.
+3. Copy the bytes unchanged to the two pinned paths and commit them alone (the report and its
+   environment record), with the report SHA-256, the fingerprint, the CI run and the artifact
+   digest in the commit message.
+4. Both pinned files are marked `-text` in `.gitattributes`.
+
+**C.4's requirements** (approved 2026-11-17, after the audit of §12.3's exclusions). The 38
+modules §12.3 excludes beyond its original three were audited one by one and are accepted on
+three conditions the C.4 integration test must meet. Each is mandatory; the harness provides
+the means (`retrieval_artifacts.py`, `retrieval_probes.py`), and offline tests hold them.
+- **A. One engine, the conftest's.** The test builds its application with the integration
+  conftest's `create_test_app`, so every request reaches the database through the conftest's
+  `get_db` override. It reads the database through `EngineFetch` over the same conftest engine,
+  and calls `require_measurement_wiring(app, fetch)` before measuring, which refuses a missing
+  override or one bound to another engine. It measures inside `production_sessions_forbidden()`,
+  under which the production session factory refuses, so a request that bypasses the override
+  stops the run instead of falling back to it.
+- **B. Hotel ownership by SQL.** `UploadRecord.hotels` is built with `probes.hotel_ids`: each
+  harness hotel's internal id read by SQL from the public id the API returned, never through the
+  ORM `Hotel` model. §12.4's state comparison then holds every document to its role, so a wrong
+  hotel resolution refuses rather than scoring another hotel's documents.
+- **C. An explicit status for every response.** Every ingest and search response passes
+  `checked_json(response, <expected status>, <what>)`. A different status, a body that is not a
+  JSON object, or an exception the client raises stops the run (`unmeasurable`); none becomes a
+  result.
+
+**Session settings.** The production session factory (`app.db.session`) uses `autoflush=False`;
+the integration conftest's override uses SQLAlchemy's default, `autoflush=True`. C.4 measures the
+conftest-controlled environment, whose implementation (`tests/integration/conftest.py`) is
+fingerprinted. Neither setting changes.
+
+**C.4 acceptance tests**, written with the C.4 test because they inspect it:
+- it calls `create_test_app`, builds `EngineFetch` from the conftest `engine`, calls
+  `require_measurement_wiring` before ingesting, and measures inside
+  `production_sessions_forbidden()`;
+- it builds `UploadRecord.hotels` with `probes.hotel_ids` and nothing else;
+- every client request's response is the first argument of a `checked_json` call with a literal
+  status;
+- the import-closure test extends to the application (`app.main`), the integration conftest and
+  the C.4 test.
 
 **Order.** The `ci.yml` steps and the `.gitattributes` entry are committed before the baseline
 measurement, which runs on a commit that already contains them. The pin commit changes no
@@ -652,18 +767,38 @@ permanent record.
 
 A measurement refuses (writing `refusal.json` and no report) on any of:
 - a required input that can't be measured, or a probe that fails;
-- a NULL, an expected-versus-actual mismatch, a vector-binding failure, or a `content_checksum` or
-  `supersedes` mismatch;
+- a NULL other than the two catalog exceptions below, an expected-versus-actual mismatch, a
+  vector-binding failure, or a `content_checksum` or `supersedes` mismatch;
 - a hotel-scope violation, a broken bijection, a served field that differs, a wrong echo, or more
   results than the limit;
-- an image-identity failure;
+- an image-identity failure, a present Docker `Variant` that is empty or not a string included;
 - a stop-word file that can't be read;
 - an installed-set, constraint, `RECORD` or marker failure;
 - a numeric certificate failure;
-- no Git, a dirty tracked tree, or a source that is missing, untracked or imported from elsewhere;
+- no Git, a dirty tracked tree, an untracked file or an ignored file Python could execute (§12.6),
+  a source that is missing, untracked or imported from elsewhere, or an excluded source missing
+  at the commit;
+- an output directory that already holds anything but `docker.json`;
 - a sign-off that is missing or doesn't match.
 
-No `null`, "unknown" or placeholder value ever enters `inputs`.
+An output directory that is relative or resolves inside the repository refuses as well, but
+writes nothing at all, not even `refusal.json`.
+
+**Empty strings.** A token type's description, a template's `lexize` function and every init
+options value must be non-empty; an empty one refuses. A tsquery may be empty.
+
+**The two catalog exceptions** (approved 2026-11-13). PostgreSQL defines these NULLs; each is
+recorded as a typed `null` (§12.2):
+- `pg_database.datlocale` is `null` if and only if the locale provider is `libc`. A value under
+  `libc`, or a NULL under `builtin` or `icu`, refuses. `datcollate`, `datctype` and the
+  collation version stay required.
+- `pg_ts_dict.dictinitoption` may be `null` only for `pg_catalog.simple`. A NULL for any other
+  dictionary refuses, and so does an empty string for any dictionary.
+
+The fourth `null` of §12.2, `engine.platform.variant`, is Docker's absent field, not a catalog
+NULL.
+
+No "unknown" or placeholder value ever enters `inputs`, and no `null` beyond §12.2's four.
 
 ### 12.8 Limits
 

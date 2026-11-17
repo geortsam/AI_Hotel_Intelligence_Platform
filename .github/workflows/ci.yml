@@ -135,6 +135,11 @@ jobs:
       # nothing but tables the suite creates and drops. No application credential, and no
       # credential of any real environment, appears anywhere in this repository.
       POSTGRES_PASSWORD: ci-ephemeral-postgres-password
+      # Decision F §12.3 (engine): the PostgreSQL image the retrieval fingerprint declares.
+      # It must equal `services.postgres.image` below character for character. The
+      # measurement reads both from this file's blob at the measured commit and compares
+      # them with this variable; any difference refuses the run. Change all three together.
+      RETRIEVAL_EVAL_POSTGRES_IMAGE: postgres:18.6@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
 
     services:
       # The three values below repeat the job-level `env` on purpose. GitHub does not expose
@@ -376,6 +381,40 @@ jobs:
           echo "$current" | grep -q "${expected} (head)" \
             || { echo "::error::database is not at ${expected}: ${current}"; exit 1; }
 
+      - name: Record the PostgreSQL container's Docker metadata
+        # Decision F §12.6 "Artifacts": before the tests, the image identity the retrieval
+        # measurement checks (§12.3 engine) -- `docker inspect` of the service container,
+        # `docker image inspect` of its image and `docker info` -- is written to
+        # $RETRIEVAL_EVAL_OUT/docker.json. The measurement refuses if the container's image is
+        # not the inspected one, if that image does not list postgres@<declared digest>, or if
+        # its architecture disagrees with version(). Shard 1 only: the C.4 integration test
+        # lands there by construction. $RETRIEVAL_EVAL_OUT is exported for the later steps.
+        if: matrix.shard == 1
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/retrieval-eval"
+          mkdir -p "$out"
+          echo "RETRIEVAL_EVAL_OUT=$out" >> "$GITHUB_ENV"
+          RETRIEVAL_EVAL_DOCKER_FILE="$out/docker.json" python - <<'PY'
+          import json, os, subprocess
+
+          def docker(*args):
+              done = subprocess.run(["docker", *args], check=True, capture_output=True, text=True)
+              return json.loads(done.stdout)
+
+          [container] = docker("inspect", os.environ["POSTGRES_CONTAINER"])
+          [image] = docker("image", "inspect", container["Image"])
+          info = docker("info", "--format", "{{json .}}")
+          with open(os.environ["RETRIEVAL_EVAL_DOCKER_FILE"], "w", encoding="utf-8") as handle:
+              json.dump({"container": container, "image": image, "info": info}, handle,
+                        sort_keys=True, indent=1)
+          print("container image", container["Image"])
+          print("repo digests   ", image.get("RepoDigests"))
+          print("platform       ", image.get("Os"), image.get("Architecture"), image.get("Variant", ""))
+          PY
+
       - name: pytest
         env:
           TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
@@ -395,6 +434,27 @@ jobs:
             3) python -m pytest "${shard3[@]}" ;;
             *) echo "::error::unknown shard '$SHARD'"; exit 1 ;;
           esac
+
+      - name: Print the retrieval evaluation artifacts' SHA-256
+        # Decision F §12.6 "Artifacts" and "Pinning": every file's SHA-256 goes to the job
+        # log, so a downloaded report can be checked against a digest that was published
+        # before anyone downloaded it. Runs whatever the tests did; until C.4 lands, the
+        # directory holds docker.json alone.
+        if: always() && matrix.shard == 1
+        run: |
+          set -euo pipefail
+          cd "$RETRIEVAL_EVAL_OUT"
+          find . -type f -print0 | sort -z | xargs -0 sha256sum
+
+      - name: Upload the retrieval evaluation artifacts
+        # Pinned by commit SHA (§12.6), named by run id and attempt, and an empty directory is
+        # an error. The artifact expires; a report that is pinned is committed byte for byte.
+        if: always() && matrix.shard == 1
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: retrieval-eval-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.RETRIEVAL_EVAL_OUT }}
+          if-no-files-found: error
 
   frontend-quality-gates:
     name: Frontend quality gates
@@ -470,13 +530,13 @@ jobs:
   # H6, H7, H8, R2.2, R2.2b, R2.8AA, R2.8AC, R2.8AE, R2.8AG, R2.8AI, R2.8AK, R2.9B, R2.9K, R2.9X,
   # R2.10A, R2.10B and R2.10C each broke their own guarantees on purpose and reported that a test
   # caught every break.
-  # `python -m tests.mutation` re-applies those 621 edits from tests/mutation/inventory.py -- in
+  # `python -m tests.mutation` re-applies those 743 edits from tests/mutation/inventory.py -- in
   # a throwaway copy of the tracked files, never in this checkout -- and fails unless every named
   # killer fails under its mutation and passes without it. See tests/mutation/harness.py.
   #
   # A job of its own, parallel to the others, so its run -- 20m23s and 31m06s in two runs on
   # 2026-10-29; it varies -- happens beside quality-gates rather than after it. It needs both
-  # toolchains (621 mutations span Python and Vitest; 61 are Vitest) and its own disposable
+  # toolchains (743 mutations span Python and Vitest; 61 are Vitest) and its own disposable
   # PostgreSQL for the 129 mutations whose killers are integration tests.
   # The limit is 90 minutes: the mutation step took 32m20s for 389 mutations (2026-11-05), and
   # at 606 it outgrew the earlier 45-minute limit and was cancelled (run 42885849036, 2026-11-10).
