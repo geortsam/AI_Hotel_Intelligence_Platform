@@ -18,6 +18,10 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import json
+import os
+import subprocess
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -28,6 +32,7 @@ from sqlalchemy.orm import configure_mappers
 
 from tests.evaluation import fingerprint_fixtures as ff
 from tests.evaluation import retrieval_artifacts as ra
+from tests.evaluation import retrieval_canonical as canon
 from tests.evaluation import retrieval_fingerprint as fp
 from tests.evaluation import retrieval_probes as rp
 from tests.evaluation import retrieval_v2 as v2
@@ -338,7 +343,8 @@ def test_the_production_engine_is_reached_only_through_get_db_and_the_jobs() -> 
             assert path in allowed or path.startswith("jobs/"), path
 
 
-#: The 38 exclusions the audit accepted: every exclusion but the three §12.3 named before it.
+#: The exclusions the audits accepted: every exclusion but the three §12.3 named before them --
+#: 38 from the exclusion audit and 130 from the application-wide closure audit (C.4).
 AUDITED = tuple(
     path
     for path in fp.EXCLUDED_SOURCES
@@ -381,7 +387,7 @@ def forbidden_uses(tree: ast.AST) -> list[str]:
 
 
 def test_the_audited_exclusions_register_no_listeners_read_no_environment_import_nothing() -> None:
-    assert len(AUDITED) == 38
+    assert len(AUDITED) == 168
     for path in AUDITED:
         tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
         assert forbidden_uses(tree) == [], path
@@ -414,3 +420,331 @@ def test_the_knowledge_models_have_no_relationships_and_none_point_at_them() -> 
     for mapper in Base.registry.mappers:
         for relationship in mapper.relationships:
             assert relationship.mapper.class_ not in knowledge, (mapper.class_, relationship.key)
+
+
+# --- §5.1's hard gates on a measured report (C.4) -------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def measured_report(
+    dataset: RetrievalDataset, repository: Path, tmp_path_factory: pytest.TempPathFactory
+) -> dict[str, Any]:
+    out = tmp_path_factory.mktemp("gates")
+    return measure_with(dataset, repository, out / "out", ff.database(dataset))
+
+
+def test_a_report_equal_to_its_pin_passes_both_gates(measured_report: dict[str, Any]) -> None:
+    assert measured_report["results"]["metrics"]["overall"]["scope_leakage"]["count"] == 0
+    assert ra.gate_problems(measured_report, canon.dumps(measured_report)) == []
+
+
+def test_with_no_pinned_report_the_baseline_fails_the_gate(measured_report: dict[str, Any]) -> None:
+    problems = ra.gate_problems(measured_report, None)
+    assert len(problems) == 1 and problems[0].startswith("no pinned report at ")
+    assert ra.PINNED_REPORT in problems[0]
+
+
+def test_the_pinned_report_is_read_from_its_pinned_path(tmp_path: Path) -> None:
+    assert ra.pinned_report_bytes(tmp_path) is None
+    pinned = tmp_path / ra.PINNED_REPORT
+    pinned.parent.mkdir(parents=True)
+    pinned.write_bytes(b'{"a":1}')
+    assert ra.pinned_report_bytes(tmp_path) == b'{"a":1}'
+
+
+def test_scope_leakage_fails_the_gate_from_the_count_or_any_query_row(
+    measured_report: dict[str, Any],
+) -> None:
+    pinned = canon.dumps(measured_report)
+    counted = canon.loads(pinned)
+    counted["results"]["metrics"]["overall"]["scope_leakage"]["count"] = 1
+    rowed = canon.loads(pinned)
+    rowed["results"]["metrics"]["queries"][0]["leaked"] = [{"doc_id": "x", "ordinal": 0}]
+    for leaking in (counted, rowed):
+        problems = ra.gate_problems(leaking, canon.dumps(leaking))
+        assert problems and problems[0].startswith("scope leakage is "), problems
+
+
+def test_a_report_that_differs_from_its_pin_fails_and_says_how(
+    measured_report: dict[str, Any],
+) -> None:
+    pinned = canon.dumps(measured_report)
+    results = canon.loads(pinned)
+    results["results"]["served"] = {}
+    assert ra.gate_problems(results, pinned) == ["results changed with unchanged inputs"]
+    inputs = canon.loads(pinned)
+    inputs["fingerprint"] = "0" * 64
+    inputs["components"]["engine"] = "0" * 64
+    assert ra.gate_problems(inputs, pinned) == ["inputs changed: engine"]
+    signoff = canon.loads(pinned)
+    signoff["signoff"]["sha256"] = "e" * 64
+    assert ra.gate_problems(signoff, pinned) == [
+        "the measured report differs from the pinned report byte for byte"
+    ]
+
+
+def test_a_pinned_report_that_is_not_a_valid_report_fails(
+    measured_report: dict[str, Any],
+) -> None:
+    problems = ra.gate_problems(measured_report, b"{ not json")
+    assert len(problems) == 1 and problems[0].startswith("the pinned report is not canonical")
+    broken = canon.loads(canon.dumps(measured_report))
+    broken["fingerprint"] = "0" * 64
+    assert ra.gate_problems(measured_report, canon.dumps(broken)) == [
+        "the pinned report: fingerprint is not SHA-256(canonical(inputs))"
+    ]
+
+
+# --- the Docker variant, from docker.json as the workflow writes it ------------------------------
+
+
+IMAGE = fp.DeclaredImage("postgres:18.6", ff.DIGEST)
+
+
+def variant_from_file(tmp_path: Path, **image: Any) -> Any:
+    """`docker.json` written as the workflow does (`json.dump` of `docker image inspect`), read
+    back by the measurement, and the variant the engine group records."""
+    metadata = ff.docker_metadata()
+    metadata["image"].update(image)
+    ff.write_docker(tmp_path, metadata)
+    return fp.docker_identity(ra.read_docker_metadata(tmp_path), IMAGE)["platform"]["variant"]
+
+
+def test_a_variant_absent_from_docker_json_is_a_typed_null(tmp_path: Path) -> None:
+    assert variant_from_file(tmp_path) is None
+    written = json.loads((tmp_path / ra.DOCKER_FILE).read_text(encoding="utf-8"))
+    assert "Variant" not in written["image"]  # absent from the file, not present and empty
+
+
+def test_a_named_variant_in_docker_json_is_recorded_unchanged(tmp_path: Path) -> None:
+    assert variant_from_file(tmp_path, Architecture="arm64", Variant="v8") == "v8"
+
+
+def test_an_empty_variant_in_docker_json_refuses(tmp_path: Path) -> None:
+    with refused("image_identity", "Variant"):
+        variant_from_file(tmp_path, Variant="")
+    written = json.loads((tmp_path / ra.DOCKER_FILE).read_text(encoding="utf-8"))
+    assert written["image"]["Variant"] == ""  # present and empty, not absent
+
+
+@pytest.mark.parametrize("variant", [None, 8, True, ["v8"], {"name": "v8"}])
+def test_a_variant_of_another_type_in_docker_json_refuses(tmp_path: Path, variant: Any) -> None:
+    with refused("image_identity", "Variant"):
+        variant_from_file(tmp_path, Variant=variant)
+
+
+# --- §12.6's C.4 acceptance tests: the C.4 test itself, by AST -----------------------------------
+
+
+def c4_tree() -> ast.Module:
+    return ast.parse((ROOT / fp.INTEGRATION_TEST).read_text(encoding="utf-8"))
+
+
+def called(node: ast.Call) -> str:
+    """The called name: `f(...)` is `f`, `a.b.f(...)` is `f`."""
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    return ""
+
+
+def calls(tree: ast.AST, name: str) -> list[ast.Call]:
+    return [n for n in ast.walk(tree) if isinstance(n, ast.Call) and called(n) == name]
+
+
+def test_the_c4_test_is_wired_to_the_conftest_engine_with_no_fallback() -> None:
+    """Requirement A: `create_test_app(engine)`, `EngineFetch(engine)`, the wiring checked before
+    the measurement, and the measurement inside `production_sessions_forbidden()`."""
+    tree = c4_tree()
+    measured = [
+        function
+        for function in ast.walk(tree)
+        if isinstance(function, ast.FunctionDef) and calls(function, "run_measurement")
+    ]
+    assert len(measured) == 1
+    function = measured[0]
+    for name in ("create_test_app", "EngineFetch"):
+        made = calls(function, name)
+        assert len(made) == 1, name
+        assert [ast.unparse(arg) for arg in made[0].args] == ["engine"], name
+    (wiring,) = calls(function, "require_measurement_wiring")
+    (measurement,) = calls(function, "run_measurement")
+    assert wiring.lineno < measurement.lineno
+    guarded = [
+        node
+        for node in ast.walk(function)
+        if isinstance(node, ast.With)
+        and any(
+            isinstance(item.context_expr, ast.Call)
+            and called(item.context_expr) == "production_sessions_forbidden"
+            for item in node.items
+        )
+    ]
+    assert any(measurement in list(ast.walk(node)) for node in guarded)
+
+
+def test_the_c4_test_maps_hotels_by_sql_only() -> None:
+    """Requirement B: every `UploadRecord` takes `hotels=probes.hotel_ids(...)`; nothing from the
+    application's modules, and none of the conftest's ORM hotel builders."""
+    tree = c4_tree()
+    records = calls(tree, "UploadRecord")
+    assert records
+    for record in records:
+        hotels = [keyword.value for keyword in record.keywords if keyword.arg == "hotels"]
+        assert len(hotels) == 1 and isinstance(hotels[0], ast.Call)
+        assert called(hotels[0]) == "hotel_ids"
+    imported = [node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
+    imported += [
+        a.name for node in ast.walk(tree) if isinstance(node, ast.Import) for a in node.names
+    ]
+    assert not [name for name in imported if name.startswith("app.")]
+    names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+    names |= {
+        a.name for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) for a in node.names
+    }
+    assert not names & {"make_hotel", "grant_membership", "Hotel", "register_and_login"}
+
+
+HTTP_VERBS = frozenset({"get", "post", "put", "patch", "delete", "request", "head", "options"})
+
+
+def test_every_c4_request_has_an_explicit_status() -> None:
+    """Requirement C: every client request is the first argument of `checked_json` with a literal
+    integer status, so no response is read unchecked."""
+    tree = c4_tree()
+    checked = calls(tree, "checked_json")
+    for check in checked:
+        assert len(check.args) == 3, ast.unparse(check)
+        status = check.args[1]
+        assert isinstance(status, ast.Constant) and type(status.value) is int, ast.unparse(check)
+    first_arguments = {id(check.args[0]) for check in checked}
+    requests = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in HTTP_VERBS
+        and "client" in ast.unparse(node.func.value)
+    ]
+    assert len(requests) >= 7  # register, login, hotel, upload, version, withdrawal, search
+    unchecked = [ast.unparse(node)[:80] for node in requests if id(node) not in first_arguments]
+    assert unchecked == []
+
+
+# --- where C.4 measures: skipped outside CI, refused in CI without its directory -----------------
+
+
+def c4_module() -> Any:
+    from tests.integration import test_knowledge_retrieval_v2_eval as c4
+
+    return c4
+
+
+def test_outside_ci_without_the_directory_the_measurement_is_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(ra.OUT_VARIABLE, raising=False)
+    monkeypatch.delenv("CI", raising=False)
+    with pytest.raises(pytest.skip.Exception, match=r"C\.4 measures in CI shard 1"):
+        c4_module().measurement_directory()
+
+
+def test_in_ci_a_missing_directory_refuses_and_is_never_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(ra.OUT_VARIABLE, raising=False)
+    monkeypatch.setenv("CI", "true")
+    try:
+        with refused("unmeasurable", "RETRIEVAL_EVAL_OUT is not set"):
+            c4_module().measurement_directory()
+    except pytest.skip.Exception:  # a skip here would pass unseen, so it is a failure
+        pytest.fail("in CI the measurement skipped instead of refusing")
+
+
+def test_a_set_directory_is_used_and_still_checked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setenv(ra.OUT_VARIABLE, str(tmp_path / "retrieval-eval"))
+    assert c4_module().measurement_directory() == tmp_path / "retrieval-eval"
+    monkeypatch.setenv(ra.OUT_VARIABLE, str(ROOT / "retrieval-eval"))
+    with refused("unmeasurable", "inside the repository"):
+        c4_module().measurement_directory()
+
+
+def test_the_c4_test_applies_both_hard_gates_to_what_it_measured() -> None:
+    """§5.1: the measured report goes through `gate_problems` with the pinned report's bytes, and
+    the test fails on any problem: `assert problems == []`, after the measurement wrote it."""
+    tree = c4_tree()
+    (function,) = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and calls(node, "run_measurement")
+    ]
+    (gate,) = calls(function, "gate_problems")
+    (measurement,) = calls(function, "run_measurement")
+    assert gate.lineno > measurement.lineno
+    assert ast.unparse(gate.args[0]) == "report"
+    assert [called(arg) for arg in gate.args[1:] if isinstance(arg, ast.Call)] == [
+        "pinned_report_bytes"
+    ]
+    asserted = [
+        ast.unparse(node.test) for node in ast.walk(function) if isinstance(node, ast.Assert)
+    ]
+    assert "problems == []" in asserted
+    assigned = [
+        node for node in ast.walk(function) if isinstance(node, ast.Assign) and node.value is gate
+    ]
+    assert [ast.unparse(target) for node in assigned for target in node.targets] == ["problems"]
+
+
+# --- the application-wide import closure (§12.6 C.4 acceptance) -----------------------------------
+
+#: What a fresh interpreter loads to run the C.4 test: the application, both conftests and the test.
+_APPLICATION_CLOSURE = """
+import json, pathlib, sys
+import app.main
+import tests.conftest
+import tests.integration.conftest
+import tests.integration.test_knowledge_retrieval_v2_eval
+root = pathlib.Path.cwd().resolve()
+found = set()
+for module in list(sys.modules.values()):
+    file = getattr(module, "__file__", None)
+    if file and pathlib.Path(file).resolve().is_relative_to(root):
+        found.add(pathlib.Path(file).resolve().relative_to(root).as_posix())
+sys.stdout.write(json.dumps(sorted(found)))
+"""
+
+
+def application_import_closure() -> list[str]:
+    """Every repository file a fresh interpreter loads to import the C.4 test and its app."""
+    done = subprocess.run(
+        [sys.executable, "-B", "-c", _APPLICATION_CLOSURE],
+        capture_output=True,
+        check=True,
+        cwd=ROOT,
+        env={**os.environ, "PYTHONPATH": f"backend{os.pathsep}."},
+    )
+    loaded = json.loads(done.stdout)
+    # A virtual environment inside the checkout is not the repository's code.
+    return [path for path in loaded if not set(path.split("/")) & fp.EXEMPT_DIRECTORIES]
+
+
+def test_the_application_import_closure_is_fingerprinted_or_excluded_by_reason() -> None:
+    """§12.6: the closure extends to `app.main`, the integration conftest and the C.4 test, and
+    every file it loads is fingerprinted or excluded by reason -- the route table the measured
+    requests are dispatched through among the fingerprinted ones."""
+    loaded = application_import_closure()
+    assert {
+        "backend/app/main.py",
+        "backend/app/api/v1/router.py",
+        "tests/conftest.py",
+        "tests/integration/conftest.py",
+        fp.INTEGRATION_TEST,
+    } <= set(loaded)
+    assert "backend/app/api/v1/router.py" in fp.SOURCE_FILES
+    assert fp.unaccounted_modules(loaded) == []
+    inits = {path for path in loaded if path.endswith("/__init__.py")}
+    assert inits <= set(fp.PACKAGE_INITS) | set(fp.EXCLUDED_SOURCES)

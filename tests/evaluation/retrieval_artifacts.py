@@ -271,6 +271,57 @@ def checked_json(response: Any, expected_status: int, what: str) -> dict[str, An
     return body
 
 
+# --- §5.1's hard gates on a measured report ------------------------------------------------------
+
+
+def pinned_report_bytes(repository: Path = fp.REPOSITORY_ROOT) -> bytes | None:
+    """The pinned report's bytes, or None while no report is pinned (the baseline run).
+
+    The measurement has already refused any untracked file or dirty tracked tree, so the file
+    read here is the blob at the measured commit.
+    """
+    path = repository / PINNED_REPORT
+    return path.read_bytes() if path.is_file() else None
+
+
+def gate_problems(report: Mapping[str, Any], pinned: bytes | None) -> list[str]:
+    """§5.1 hard gates 1 and 2 on a measured report. Empty is the only pass.
+
+    1. Scope leakage is 0, from the overall count and from every query's own row.
+    2. The report equals the pinned report exactly: fingerprint first, then results (§12.1),
+       then byte for byte. With no pinned report the gate fails: the run is the baseline, and
+       only pinning it (§12.6) can make the gate pass. Gate 3, the Layer 1 snapshot, is C.5's.
+    """
+    problems: list[str] = []
+    metrics = report["results"]["metrics"]
+    count = metrics["overall"]["scope_leakage"]["count"]
+    leaking = [row["query_id"] for row in metrics["queries"] if row["leaked"]]
+    if count != 0 or leaking:
+        problems.append(f"scope leakage is {count}, not 0; leaking queries: {leaking}")
+    if pinned is None:
+        problems.append(
+            f"no pinned report at {PINNED_REPORT}: this run is the baseline; pin it (§12.6) "
+            "before this gate can pass"
+        )
+        return problems
+    try:
+        pinned_report = canon.loads(pinned)
+    except canon.CanonicalError as exc:
+        return [*problems, f"the pinned report is not canonical: {exc}"]
+    found = report_problems(pinned_report)
+    if found:
+        return [*problems, *(f"the pinned report: {problem}" for problem in found)]
+    # Both sides as canonical JSON reads them back: the measured report in memory carries
+    # Binary64 objects where the pinned bytes carry their `float.hex` strings.
+    measured_bytes = canon.dumps(report)
+    change = fp.compare(pinned_report, canon.loads(measured_bytes))
+    if change is not None:
+        problems.append(change)
+    elif measured_bytes != pinned:
+        problems.append("the measured report differs from the pinned report byte for byte")
+    return problems
+
+
 SETTINGS_SQL: Final = (
     "SELECT name, setting, source FROM pg_settings "
     "WHERE source <> 'default' OR name = 'search_path' ORDER BY name"
@@ -648,9 +699,11 @@ __all__ = [
     "digest_problems",
     "environment_digest_problems",
     "float_free",
+    "gate_problems",
     "main",
     "out_directory",
     "output_directory_problem",
+    "pinned_report_bytes",
     "production_sessions_forbidden",
     "read_docker_metadata",
     "report_problems",

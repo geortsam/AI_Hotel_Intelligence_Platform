@@ -31,10 +31,10 @@ measurement's own modules: this one, the canonical form, the probes, the artifac
 modules they load the dataset, the sign-off and the numeric contract through. `retrieval_review`
 and `retrieval_signoff` decide which sign-off is accepted, so they stay although they feed no
 input group. `PACKAGE_INITS` are the package `__init__.py` files that run before the fingerprinted
-modules. Every other repository module the harness loads is in `EXCLUDED_SOURCES`, by reason,
-and a test holds the import closure to that. The C.4 integration
-test, `INTEGRATION_TEST`, is not written yet (C.4 writes it); until it exists every measurement
-refuses with "source missing", which is the intended state before C.4.
+modules. Every other repository module that the harness loads, or that the application loads
+with the integration conftest and the C.4 test, is in `EXCLUDED_SOURCES`, by reason, and tests
+hold both import closures to that. The C.4 integration test, `INTEGRATION_TEST`, is
+fingerprinted like every other source; a tree without it refuses with "source missing".
 
 Offline except for `git` subprocesses on the local repository. No database, no network.
 """
@@ -451,6 +451,7 @@ SOURCE_FILES: Final = (
     "alembic.ini",
     "backend/app/main.py",
     "backend/app/api/deps.py",
+    "backend/app/api/v1/router.py",
     "backend/app/api/v1/endpoints/knowledge.py",
     "backend/app/services/knowledge.py",
     "backend/app/services/scope.py",
@@ -475,13 +476,29 @@ SOURCE_FILES: Final = (
 )
 _REFUSE_ONLY = "can only refuse"
 _OTHER_TABLE = "maps a table outside §12.4's measured state, so it can only refuse"
+#: The application-wide closure's reasons (C.4 audit, approved 2026-11-17): a trace of the live
+#: harness found which of these files run on the measured requests and what they do there.
+_IDENTITY = (
+    "registers and signs in the harness user and creates its two hotels: it writes only users, "
+    "memberships, hotels and audit events, outside §12.4's measured state, and otherwise can only "
+    "refuse"
+)
+_HEADERS = "adds response headers, never the body"
+_OPENAPI = "changes only the OpenAPI document"
+_CONSTRUCTED = (
+    "constructed by a dependency the measured routes share; none of its methods is called"
+)
+_NOT_RUN = (
+    "loaded by the application's imports; only its import-time definitions run, and nothing in it "
+    "runs on a measured request"
+)
 _OTHER_SCHEMA = (
     "models of other endpoints, loaded by the package's __init__; no measured value passes "
     "through them"
 )
-#: §12.3 "Excluded, each by reason": every repository module the harness loads that is not
-#: fingerprinted, and the files §12.3 names. Each must exist at the measured commit, and a test
-#: proves none is fingerprinted and the harness's import closure has nothing else.
+#: §12.3 "Excluded, each by reason": every repository module the harness or the application
+#: loads that is not fingerprinted, and the files §12.3 names. Each must exist at the measured
+#: commit, and tests prove none is fingerprinted and neither import closure has anything else.
 EXCLUDED_SOURCES: Final = {
     "database/migrations/script.py.mako": "never executed",
     "tests/db_safety.py": _REFUSE_ONLY,
@@ -541,6 +558,218 @@ EXCLUDED_SOURCES: Final = {
             "review",
             "room",
             "room_type",
+        )
+    },
+    # The application-wide closure (C.4): what `app.main`, the integration conftest and the C.4
+    # test load beyond the harness.
+    **{
+        f"backend/app/api/v1/endpoints/{name}.py": _IDENTITY
+        for name in (
+            "auth",
+            "hotels",
+        )
+    },
+    **{
+        f"backend/app/services/{name}.py": _IDENTITY
+        for name in (
+            "auth",
+            "hotel",
+            "audit",
+        )
+    },
+    **{
+        f"backend/app/repositories/{name}.py": _IDENTITY
+        for name in (
+            "user",
+            "membership",
+            "audit",
+        )
+    },
+    **{
+        f"backend/app/core/{name}.py": _REFUSE_ONLY
+        for name in (
+            "security",
+            "rate_limit",
+        )
+    },
+    "backend/app/services/authorization.py": _REFUSE_ONLY,
+    "backend/app/middleware/request_size.py": _REFUSE_ONLY,
+    **{
+        f"backend/app/middleware/{name}.py": _HEADERS
+        for name in (
+            "request_id",
+            "security_headers",
+        )
+    },
+    "backend/app/api/openapi.py": _OPENAPI,
+    **{
+        f"backend/app/repositories/{name}.py": _CONSTRUCTED
+        for name in (
+            "room_type",
+            "ml_prediction_removal",
+        )
+    },
+    "backend/app/api/preconditions.py": _NOT_RUN,
+    **{
+        f"backend/app/api/routes/{name}.py": _NOT_RUN
+        for name in (
+            "__init__",
+            "health",
+        )
+    },
+    **{
+        f"backend/app/api/v1/endpoints/{name}.py": _NOT_RUN
+        for name in (
+            "amenities",
+            "analytics",
+            "audit",
+            "availability",
+            "bookings",
+            "copilot",
+            "copilot_conversations",
+            "expense_categories",
+            "expenses",
+            "guests",
+            "intelligence",
+            "members",
+            "meta",
+            "ml_performance",
+            "ml_predictions",
+            "payments",
+            "platform_audit",
+            "priorities",
+            "revenue",
+            "revenue_categories",
+            "reviews",
+            "room_type_amenities",
+            "room_types",
+            "rooms",
+        )
+    },
+    **{
+        f"backend/app/copilot/{name}.py": _NOT_RUN
+        for name in (
+            "__init__",
+            "catalogue",
+            "citations",
+            "contracts",
+            "grounding",
+            "history",
+            "loop",
+            "registry",
+        )
+    },
+    **{
+        f"backend/app/copilot/tools/{name}.py": _NOT_RUN
+        for name in (
+            "__init__",
+            "knowledge_search",
+        )
+    },
+    "backend/app/core/logging.py": _NOT_RUN,
+    **{
+        f"backend/app/llm/{name}.py": _NOT_RUN
+        for name in (
+            "__init__",
+            "base",
+            "boundary",
+            "circuit",
+            "errors",
+            "factory",
+        )
+    },
+    **{
+        f"backend/app/llm/prompts/{name}.py": _NOT_RUN
+        for name in (
+            "__init__",
+            "registry",
+        )
+    },
+    "backend/app/middleware/__init__.py": _NOT_RUN,
+    **{
+        f"backend/app/ml/{name}.py": _NOT_RUN
+        for name in (
+            "__init__",
+            "accuracy",
+            "accuracy_protocol",
+            "artifact_store",
+            "dataset",
+            "drift",
+            "drift_protocol",
+            "ranking_protocol",
+            "serving",
+            "timeseries",
+        )
+    },
+    **{
+        f"backend/app/repositories/{name}.py": _NOT_RUN
+        for name in (
+            "amenity",
+            "analytics",
+            "booking",
+            "copilot_conversation",
+            "demand_observation",
+            "finance",
+            "guest",
+            "health",
+            "llm_invocation",
+            "ml_demand",
+            "ml_prediction",
+            "payment",
+            "platform_admin",
+            "pricing",
+            "review",
+            "room",
+        )
+    },
+    **{
+        f"backend/app/schemas/{name}.py": _NOT_RUN
+        for name in (
+            "audit",
+            "availability",
+            "copilot",
+            "copilot_conversation",
+            "insight",
+            "membership",
+            "ml_accuracy",
+            "ml_drift",
+            "ml_performance",
+            "ml_prediction_read",
+            "ml_serving",
+            "reconciliation",
+        )
+    },
+    **{
+        f"backend/app/services/{name}.py": _NOT_RUN
+        for name in (
+            "amenity",
+            "analytics",
+            "availability",
+            "booking",
+            "business_day",
+            "concurrency",
+            "copilot",
+            "copilot_conversation",
+            "finance",
+            "guest",
+            "health",
+            "insight",
+            "intelligence",
+            "llm_invocation_log",
+            "membership",
+            "ml_accuracy",
+            "ml_drift",
+            "ml_performance",
+            "ml_prediction_read",
+            "ml_serving",
+            "payment",
+            "pricing",
+            "reconciliation",
+            "repricing",
+            "review",
+            "room",
+            "room_type",
+            "tool_invocation",
         )
     },
 }

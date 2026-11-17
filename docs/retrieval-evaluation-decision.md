@@ -471,6 +471,8 @@ Any retrieval change is a later stage, to be authorised separately and measured 
 | R2.10C (catalog NULLs) | 2026-11-13 | **Two catalog exceptions and the upload action's SHA, approved by you on 2026-11-13; nothing measured, nothing downloaded.** PostgreSQL defines two NULLs the probes read (its bootstrap catalog and documentation, PostgreSQL 18.6): `pg_database.datlocale` under the `libc` provider, the official image's default, and `pg_ts_dict.dictinitoption` of the built-in `pg_catalog.simple`, which every built-in configuration maps number and similar tokens to. No configuration removes them without changing the measured locale or text-search configuration, so §12.2, §12.3 and §12.7 now record them as typed `null`, part of the fingerprint: `datlocale` is `null` if and only if the provider is `libc`, and `dictinitoption` may be `null` only for `pg_catalog.simple`; an empty string refuses for every dictionary (the declared type had accepted one). Every other NULL still refuses. The probes enforce both rules, and the manifest check enforces them again, so `verify` holds a downloaded report to them. **The upload action's SHA:** `refs/tags/v4.6.2` of `actions/upload-artifact`, read with `gh api` (a lightweight tag), is `ea165f8d65b6e75b540449e92b4886f43607fa02`; the SHA recorded in the row above was written from memory and was wrong after its first 15 characters. `ci.yml` and that row now carry the verified SHA, and the workflow test asserts it exactly. 11 mutations (R2.10C-M168 to M178): 691 in all. |
 | R2.10C (final specification) | 2026-11-13 | **The final specification audit's plan, approved by you on 2026-11-13; nothing measured, nothing downloaded, C.4 not started.** **(A) The Docker variant:** `engine.platform.variant` is a typed `null` if and only if Docker's image inspection has no `Variant`, and otherwise a non-empty string kept unchanged; a present `""` or a non-string refuses (`image_identity`). It replaces the `""` the R2.10C (fingerprint) row recorded for an absent variant, which stood in for absence; §12.2 now has four nulls. **(B) The sources:** the 13 package `__init__.py` files that run before the fingerprinted modules are fingerprinted; the C.4 harness is named module by module, `retrieval_review.py` and `retrieval_signoff.py` kept because they decide which sign-off is accepted. §12.3 excluded `models/base.py`, which does not exist; the declarative base is `db/base.py`, now excluded under that reason. A fresh interpreter importing the measurement path loads 61 repository files; the 45 that were neither fingerprinted nor excluded are now accounted for: 7 package `__init__.py` files fingerprinted and 38 modules excluded, each by one of §12.3's reasons; a test holds that import closure to the inventory, so a new module cannot enter it silently. Every excluded file must exist at the measured commit, and the measured tree may hold no untracked file and no ignored file Python could execute outside the cache and environment directories (§12.6). **(C) Empty strings:** a template's `lexize` and a token type's description must be non-empty; a tsquery may be empty. **(D) The artifacts:** the layout and pinned paths of §12.6 are fixed constants; `$RETRIEVAL_EVAL_OUT` must be absolute and resolve (symlinks followed) outside the repository, or the run refuses and writes nothing; a run starts with `docker.json` alone and leaves exactly the success or the refusal set; `verify` reports a refusal first, refuses extra, stale, partial or irregular files, and checks `environment.json` against its own job-log digest (`--environment-log-digest`). The pinned environment record, `tests/evaluation/retrieval_report_v2.environment.json`, is `-text` like the report. **(E) The tree:** the environment record carries the measured commit's tree id, and `verify` trusts it only after the environment digest matches, then requires the checked-out commit to have exactly that tree, so a pull request's merge commit qualifies when, and only when, its tree is the measured one. The import-closure test covers the measurement path; the C.4 integration test's own closure (the application through `app.main`) is checked when C.4 writes it. 37 mutations (R2.10C-M179 to M215) and three re-anchored (M164, M166, M167): 728 in all. |
 | R2.10C (exclusion audit) | 2026-11-17 | **The 38 exclusions accepted, on three conditions; nothing measured, C.4 not started.** A read-only audit traced each of the 38 modules §12.3 excludes beyond its original three through the measurement's real call paths: the schema comes from the migrations, the teardown is SQL, none of the 38 registers event listeners, reads the environment or imports dynamically, no model relates to the knowledge tables, and the production session factory is reached only through `get_db`, which the conftest overrides. You accepted all 38 on 2026-11-17, subject to three mandatory C.4 requirements, now §12.6's "C.4's requirements": one engine, the conftest's, with no fallback to the production session factory (A); hotel ownership by SQL (B); an explicit HTTP status for every ingest and search response (C). The harness provides `EngineFetch`, `require_measurement_wiring`, `production_sessions_forbidden`, `checked_json` and `probes.hotel_ids`; `tests/evaluation/test_retrieval_c4_requirements.py` holds them and the audit's four static findings by AST inspection. The session-settings difference (production `autoflush=False`, the conftest's `autoflush=True`) is recorded. `SOURCE_FILES` and `EXCLUDED_SOURCES` are unchanged. 15 mutations (R2.10C-M216 to M230): 743 in all. |
+| R2.10C (C.4 harness) | 2026-11-17 | **The C.4 integration test and its gates, implemented; nothing measured, no baseline, nothing pinned.** `tests/integration/test_knowledge_retrieval_v2_eval.py` measures `knowledge_retrieval_v2` through the real API under §12.6's three requirements, and `retrieval_artifacts.gate_problems` applies §5.1's gates 1 and 2 to what it wrote (§12.6 "The C.4 test"). Your decisions of 2026-11-17: with no pinned report the gate fails, so the baseline run is red until pinned; the measurement is skipped outside CI and refused in CI without its directory; the application-wide import closure (131 unaccounted files) is audited and approved before any baseline. The Docker `Variant` rule is held from the workflow's `docker.json` itself: absent is `null`, a non-empty string is kept, `""` and any other type refuse. Locally the live harness ran against a scratch database (`scripts/testdb.py`), never the demo data. 15 mutations (R2.10C-M231 to M245): 758 in all. |
+| R2.10C (application closure) | 2026-11-17 | **The application-wide import-closure audit, approved by you on 2026-11-17; nothing measured, no baseline, nothing pinned.** `app.main`, both conftests and the C.4 test load 209 repository files; 131 were neither fingerprinted nor excluded. A coverage trace of the live harness on a scratch database showed 17 of them run during the live harness and 114 only at import. `api/v1/router.py`, which dispatches every measured request, is now fingerprinted (47 sources); the other 130 are excluded under six reasons (§12.3): 171 exclusions. `test_the_application_import_closure_is_fingerprinted_or_excluded_by_reason` holds the closure to the lists, and the forbidden-use check now covers 168 audited exclusions. 4 mutations (R2.10C-M246 to M249): 762 in all. |
 
 No measurement has used these definitions. Nothing in this record's measured results changes:
 `knowledge_retrieval_v1`'s 16 of 23 and its Wilson interval, and every R2.9Y result, were produced
@@ -534,7 +536,7 @@ can be obtained, and times.
 | document state, chunk state | §12.4 |
 | query parsing | `(query_id, configuration, limit, websearch_to_tsquery(configuration, query)::text)` for every query and every language of the evaluated hotel's active documents; the tsquery may be empty, which PostgreSQL returns for a query of stop words alone |
 | schema | the Alembic head; a canonical digest of the live definitions of `hotel_documents` and `hotel_document_chunks` |
-| sources | Git blob content (§12.6) of `.github/workflows/ci.yml`, `.gitattributes`, `pyproject.toml`, `alembic.ini`; `backend/app/main.py`, `api/deps.py`, `api/v1/endpoints/knowledge.py`, `services/knowledge.py`, `services/scope.py`, `repositories/hotel.py`, `repositories/knowledge.py`, `knowledge/chunking.py`, `schemas/knowledge.py`, `models/knowledge.py`, `models/enums.py`; `database/migrations/env.py` and every file under `database/migrations/versions/`; `tests/conftest.py`, `tests/integration/conftest.py`, `tests/evaluation/retrieval.py`, `retrieval_schema.py`, `retrieval_metrics.py`; the C.4 harness, `tests/evaluation/retrieval_canonical.py`, `retrieval_fingerprint.py`, `retrieval_probes.py`, `retrieval_artifacts.py`, `retrieval_numerics.py`, `retrieval_review.py`, `retrieval_signoff.py` and `retrieval_v2.py`; the C.4 integration test `tests/integration/test_knowledge_retrieval_v2_eval.py`; the dataset JSON; the package `__init__.py` files of `tests/`, `tests/evaluation/`, `tests/integration/`, `backend/app/` and its `api/`, `api/v1/`, `api/v1/endpoints/`, `services/`, `repositories/`, `knowledge/`, `schemas/`, `models/` and `db/`; `backend/requirements-lock.txt` and `backend/requirements-dev-lock.txt` |
+| sources | Git blob content (§12.6) of `.github/workflows/ci.yml`, `.gitattributes`, `pyproject.toml`, `alembic.ini`; `backend/app/main.py`, `api/deps.py`, `api/v1/router.py`, `api/v1/endpoints/knowledge.py`, `services/knowledge.py`, `services/scope.py`, `repositories/hotel.py`, `repositories/knowledge.py`, `knowledge/chunking.py`, `schemas/knowledge.py`, `models/knowledge.py`, `models/enums.py`; `database/migrations/env.py` and every file under `database/migrations/versions/`; `tests/conftest.py`, `tests/integration/conftest.py`, `tests/evaluation/retrieval.py`, `retrieval_schema.py`, `retrieval_metrics.py`; the C.4 harness, `tests/evaluation/retrieval_canonical.py`, `retrieval_fingerprint.py`, `retrieval_probes.py`, `retrieval_artifacts.py`, `retrieval_numerics.py`, `retrieval_review.py`, `retrieval_signoff.py` and `retrieval_v2.py`; the C.4 integration test `tests/integration/test_knowledge_retrieval_v2_eval.py`; the dataset JSON; the package `__init__.py` files of `tests/`, `tests/evaluation/`, `tests/integration/`, `backend/app/` and its `api/`, `api/v1/`, `api/v1/endpoints/`, `services/`, `repositories/`, `knowledge/`, `schemas/`, `models/` and `db/`; `backend/requirements-lock.txt` and `backend/requirements-dev-lock.txt` |
 | python | CPython 3.14.7 and its build string; the float format (53-bit mantissa, radix 2, maximum exponent 1024, short repr); the `_decimal` and libmpdec versions; the SHA-256 of the canonical installed set |
 | dataset | identity, schema version, canonical SHA-256 |
 | metrics | the metrics version; `V2_METRIC_CONFIG` in full, bootstrap settings included; the discount table and the numeric contract's identifier |
@@ -543,8 +545,9 @@ can be obtained, and times.
 because they decide which sign-off is accepted.
 
 **Excluded, each by reason.** Every excluded file must exist at the measured commit. Every
-repository file a fresh interpreter loads to import the measurement path is fingerprinted or
-excluded here, and a test holds that import closure to this list.
+repository file a fresh interpreter loads to import the measurement path, or to import the
+application (`app.main`), both conftests and the C.4 test, is fingerprinted or excluded here,
+and two tests hold those import closures to this list.
 - `database/migrations/script.py.mako`: never executed.
 - `core/config.py`, `core/client_address.py`, `core/errors.py`, `core/request_id.py`,
   `core/security_headers.py`, the scope policy and `tests/db_safety.py`: they can only refuse.
@@ -560,6 +563,30 @@ excluded here, and a test holds that import closure to this list.
   measurement's responses are knowledge schemas.
 - `schemas/amenity.py`, `schemas/analytics.py`, `schemas/auth.py`, `schemas/booking.py`, `schemas/finance.py`, `schemas/guest.py`, `schemas/health.py`, `schemas/hotel.py`, `schemas/intelligence.py`, `schemas/meta.py`, `schemas/payment.py`, `schemas/review.py`, `schemas/room.py` and `schemas/room_type.py`: models of other endpoints, loaded by the package's
   `__init__`. No measured value passes through them.
+
+The application-wide closure (C.4 audit, approved 2026-11-17) adds 130 exclusions. A trace of
+the live harness over a scratch database (coverage, per test) showed which files run on the
+measured requests; no file outside the import closure ran. `api/v1/router.py`, which builds the
+route table every measured request is dispatched through, is fingerprinted instead.
+- `api/v1/endpoints/auth.py`, `api/v1/endpoints/hotels.py`, `services/auth.py`,
+  `services/hotel.py`, `services/audit.py`, `repositories/user.py`, `repositories/membership.py`
+  and `repositories/audit.py`: they register and sign in the harness user and create its two
+  hotels. They write only users, memberships, hotels and audit events, outside §12.4's measured
+  state, and otherwise can only refuse; the knowledge service uses only the hotel's `id`, which
+  the fingerprinted resolver and repository return.
+- `core/security.py`, `core/rate_limit.py`, `services/authorization.py` and
+  `middleware/request_size.py`: they run on the measured requests but can only refuse.
+- `middleware/request_id.py` and `middleware/security_headers.py`: they add response headers,
+  never the body.
+- `api/openapi.py`: it changes only the OpenAPI document.
+- `repositories/room_type.py` and `repositories/ml_prediction_removal.py`: constructed by a
+  dependency the measured routes share; none of their methods is called.
+- The other 113, every remaining module of `api/` (`preconditions.py`, `routes/`, the 24 other
+  endpoint modules), `copilot/`, `llm/`, `ml/`, `core/logging.py`, `middleware/__init__.py`,
+  16 repositories, 12 schemas and 28 services: loaded by the application's imports; only their
+  import-time definitions run, and nothing in them runs on a measured request. That is what the
+  trace observed, not what the code guarantees: if a later change made one of them run and alter
+  a result, gate 2 still fails, as "results changed with unchanged inputs".
 
 **Installed set.** It must equal exactly the pins of `requirements-dev-lock.txt` whose markers hold
 on the interpreter:
@@ -748,15 +775,37 @@ the integration conftest's override uses SQLAlchemy's default, `autoflush=True`.
 conftest-controlled environment, whose implementation (`tests/integration/conftest.py`) is
 fingerprinted. Neither setting changes.
 
-**C.4 acceptance tests**, written with the C.4 test because they inspect it:
+**C.4 acceptance tests**, which inspect the C.4 test (`tests/evaluation/test_retrieval_c4_requirements.py`,
+by AST):
 - it calls `create_test_app`, builds `EngineFetch` from the conftest `engine`, calls
   `require_measurement_wiring` before ingesting, and measures inside
   `production_sessions_forbidden()`;
 - it builds `UploadRecord.hotels` with `probes.hotel_ids` and nothing else;
 - every client request's response is the first argument of a `checked_json` call with a literal
   status;
-- the import-closure test extends to the application (`app.main`), the integration conftest and
-  the C.4 test.
+- it passes what it measured, with the pinned report's bytes, to `gate_problems` and fails on any
+  problem;
+- the import-closure test extends to the application (`app.main`), both conftests and the C.4
+  test (`test_the_application_import_closure_is_fingerprinted_or_excluded_by_reason`): 209
+  repository files, each fingerprinted or excluded by reason (§12.3, the application-wide
+  closure audit approved 2026-11-17).
+
+**The C.4 test** (`tests/integration/test_knowledge_retrieval_v2_eval.py`, approved 2026-11-17).
+Through the real API it registers one user, creates the evaluated and the neighbour hotel
+(`POST /api/v1/hotels`, 201), uploads in `probes.plan` order (201), posts the new version through
+the supersede route (201) and the withdrawal (200), and searches the evaluated hotel (200), every
+response through `checked_json`. `run_measurement` writes the artifacts; then `gate_problems`
+applies §5.1's gates 1 and 2: scope leakage = 0, from the overall count and every query's row,
+and the report equal to the pinned one, compared as canonical JSON reads both back (fingerprint,
+then results, then byte for byte). Gate 3 is C.5's.
+- **The first run.** With no report pinned, gate 2 fails after the artifacts are written: that
+  run is the baseline, and its CI is red until the report is pinned (§12.6 "Pinning"); the pin
+  commit changes no fingerprinted file, so its CI measures the same inputs and compares.
+- **Where it measures.** Only in CI shard 1, which provides `$RETRIEVAL_EVAL_OUT` and
+  `docker.json`. Outside CI (no `CI=true`) the measurement is skipped with that reason; in CI a
+  missing directory refuses, so moving the test out of shard 1 cannot pass unseen.
+- **Without measuring**, a second test drives the same live harness through the real API and
+  PostgreSQL (state comparison, every served result), wherever a test database is.
 
 **Order.** The `ci.yml` steps and the `.gitattributes` entry are committed before the baseline
 measurement, which runs on a commit that already contains them. The pin commit changes no

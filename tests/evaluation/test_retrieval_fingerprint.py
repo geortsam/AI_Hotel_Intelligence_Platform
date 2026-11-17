@@ -407,6 +407,7 @@ SPEC_SOURCES = (
     "alembic.ini",
     "backend/app/main.py",
     "backend/app/api/deps.py",
+    "backend/app/api/v1/router.py",
     "backend/app/api/v1/endpoints/knowledge.py",
     "backend/app/services/knowledge.py",
     "backend/app/services/scope.py",
@@ -483,6 +484,104 @@ EXCLUDED = (
             "room_type",
         )
     ),
+    # The application-wide closure (C.4 audit, approved 2026-11-17).
+    *(
+        f"backend/app/api/{name}.py"
+        for name in (
+            "openapi", "preconditions",
+        )
+    ),
+    *(
+        f"backend/app/api/routes/{name}.py"
+        for name in (
+            "__init__", "health",
+        )
+    ),
+    *(
+        f"backend/app/api/v1/endpoints/{name}.py"
+        for name in (
+            "auth", "hotels", "amenities", "analytics", "audit", "availability",
+            "bookings", "copilot", "copilot_conversations", "expense_categories",
+            "expenses", "guests", "intelligence", "members", "meta", "ml_performance",
+            "ml_predictions", "payments", "platform_audit", "priorities", "revenue",
+            "revenue_categories", "reviews", "room_type_amenities", "room_types",
+            "rooms",
+        )
+    ),
+    *(
+        f"backend/app/copilot/{name}.py"
+        for name in (
+            "__init__", "catalogue", "citations", "contracts", "grounding", "history",
+            "loop", "registry",
+        )
+    ),
+    *(
+        f"backend/app/copilot/tools/{name}.py"
+        for name in (
+            "__init__", "knowledge_search",
+        )
+    ),
+    *(
+        f"backend/app/core/{name}.py"
+        for name in (
+            "security", "rate_limit", "logging",
+        )
+    ),
+    *(
+        f"backend/app/llm/{name}.py"
+        for name in (
+            "__init__", "base", "boundary", "circuit", "errors", "factory",
+        )
+    ),
+    *(
+        f"backend/app/llm/prompts/{name}.py"
+        for name in (
+            "__init__", "registry",
+        )
+    ),
+    *(
+        f"backend/app/middleware/{name}.py"
+        for name in (
+            "request_size", "request_id", "security_headers", "__init__",
+        )
+    ),
+    *(
+        f"backend/app/ml/{name}.py"
+        for name in (
+            "__init__", "accuracy", "accuracy_protocol", "artifact_store", "dataset",
+            "drift", "drift_protocol", "ranking_protocol", "serving", "timeseries",
+        )
+    ),
+    *(
+        f"backend/app/repositories/{name}.py"
+        for name in (
+            "user", "membership", "audit", "room_type", "ml_prediction_removal",
+            "amenity", "analytics", "booking", "copilot_conversation",
+            "demand_observation", "finance", "guest", "health", "llm_invocation",
+            "ml_demand", "ml_prediction", "payment", "platform_admin", "pricing",
+            "review", "room",
+        )
+    ),
+    *(
+        f"backend/app/schemas/{name}.py"
+        for name in (
+            "audit", "availability", "copilot", "copilot_conversation", "insight",
+            "membership", "ml_accuracy", "ml_drift", "ml_performance",
+            "ml_prediction_read", "ml_serving", "reconciliation",
+        )
+    ),
+    *(
+        f"backend/app/services/{name}.py"
+        for name in (
+            "auth", "hotel", "audit", "authorization", "amenity", "analytics",
+            "availability", "booking", "business_day", "concurrency", "copilot",
+            "copilot_conversation", "finance", "guest", "health", "insight",
+            "intelligence", "llm_invocation_log", "membership", "ml_accuracy",
+            "ml_drift", "ml_performance", "ml_prediction_read", "ml_serving", "payment",
+            "pricing", "reconciliation", "repricing", "review", "room", "room_type",
+            "tool_invocation",
+        )
+    ),
 )  # fmt: skip
 
 
@@ -490,12 +589,12 @@ def test_the_source_inventory_is_exactly_12_3s() -> None:
     assert fp.HARNESS_SOURCES == HARNESS
     assert fp.PACKAGE_INITS == INITS
     assert sorted(fp.SOURCE_FILES) == sorted((*SPEC_SOURCES, *HARNESS, fp.INTEGRATION_TEST, *INITS))
-    assert len(fp.SOURCE_FILES) == 46
+    assert len(fp.SOURCE_FILES) == 47
 
 
 def test_the_exclusions_are_exactly_12_3s_each_with_a_reason() -> None:
     assert sorted(fp.EXCLUDED_SOURCES) == sorted(EXCLUDED)
-    assert len(fp.EXCLUDED_SOURCES) == 41
+    assert len(fp.EXCLUDED_SOURCES) == 171
     assert all(reason.strip() for reason in fp.EXCLUDED_SOURCES.values())
     # §12.3 once named this path; the declarative base lives in app/db/base.py.
     assert "backend/app/models/base.py" not in fp.EXCLUDED_SOURCES
@@ -569,9 +668,10 @@ def test_every_source_of_12_3_is_fingerprinted_and_no_excluded_one() -> None:
     assert not any(path.startswith(fp.MIGRATIONS_DIR) for path in fp.SOURCE_FILES)
 
 
-def test_every_source_but_the_c4_integration_test_exists_in_this_tree() -> None:
+def test_every_source_exists_in_this_tree() -> None:
+    """C.4 wrote the integration test, so every fingerprinted source now exists."""
     missing = [path for path in fp.SOURCE_FILES if not (ROOT / path).is_file()]
-    assert missing == [fp.INTEGRATION_TEST]
+    assert missing == []
 
 
 @pytest.fixture(scope="module")

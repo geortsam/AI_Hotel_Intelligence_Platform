@@ -8326,6 +8326,184 @@ STAGE_R2_10C = [
         "    pass\n",
         f"{_C4R}test_the_conftest_app_reads_through_the_conftest_engine",
     ),
+    _r210c(
+        231,
+        "scope leakage never fails the gate",
+        RETRIEVAL_ARTIFACTS,
+        "    if count != 0 or leaking:\n",
+        "    if False:\n",
+        f"{_C4R}test_scope_leakage_fails_the_gate_from_the_count_or_any_query_row",
+    ),
+    _r210c(
+        232,
+        "a query row that leaks passes when the overall count is 0",
+        RETRIEVAL_ARTIFACTS,
+        "    if count != 0 or leaking:\n",
+        "    if count != 0:\n",
+        f"{_C4R}test_scope_leakage_fails_the_gate_from_the_count_or_any_query_row",
+    ),
+    _r210c(
+        233,
+        "a baseline with no pinned report passes the gate",
+        RETRIEVAL_ARTIFACTS,
+        "    if pinned is None:\n",
+        ("    if pinned is None:\n        return []\n    if False:\n"),
+        f"{_C4R}test_with_no_pinned_report_the_baseline_fails_the_gate",
+    ),
+    _r210c(
+        234,
+        "a pinned report that is not a valid report is trusted",
+        RETRIEVAL_ARTIFACTS,
+        ("    found = report_problems(pinned_report)\n    if found:\n"),
+        ("    found = report_problems(pinned_report)\n    if False:\n"),
+        f"{_C4R}test_a_pinned_report_that_is_not_a_valid_report_fails",
+    ),
+    _r210c(
+        235,
+        "the in-memory report is compared with the read-back pin",
+        RETRIEVAL_ARTIFACTS,
+        "    change = fp.compare(pinned_report, canon.loads(measured_bytes))\n",
+        "    change = fp.compare(pinned_report, report)\n",
+        f"{_C4R}test_a_report_equal_to_its_pin_passes_both_gates",
+    ),
+    _r210c(
+        236,
+        "a changed fingerprint or result is not reported",
+        RETRIEVAL_ARTIFACTS,
+        "    if change is not None:\n",
+        "    if False:\n",
+        f"{_C4R}test_a_report_that_differs_from_its_pin_fails_and_says_how",
+    ),
+    _r210c(
+        237,
+        "a report that differs only byte for byte passes",
+        RETRIEVAL_ARTIFACTS,
+        "    elif measured_bytes != pinned:\n",
+        "    elif False:\n",
+        f"{_C4R}test_a_report_that_differs_from_its_pin_fails_and_says_how",
+    ),
+    _r210c(
+        238,
+        "the pinned report is never read",
+        RETRIEVAL_ARTIFACTS,
+        "    return path.read_bytes() if path.is_file() else None\n",
+        "    return None\n",
+        f"{_C4R}test_the_pinned_report_is_read_from_its_pinned_path",
+    ),
+    _r210c(
+        239,
+        "the C.4 test ignores the hard gates",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        "    problems = ra.gate_problems(report, ra.pinned_report_bytes())\n",
+        "    problems: list[str] = []\n",
+        f"{_C4R}test_the_c4_test_applies_both_hard_gates_to_what_it_measured",
+    ),
+    _r210c(
+        240,
+        "the C.4 measurement may fall back to the production session factory",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        ("    with ra.production_sessions_forbidden():\n        report = ra.run_measurement(\n"),
+        ("    if True:\n        report = ra.run_measurement(\n"),
+        f"{_C4R}test_the_c4_test_is_wired_to_the_conftest_engine_with_no_fallback",
+    ),
+    _r210c(
+        241,
+        "the C.4 measurement runs without checking its wiring",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        (
+            "    ra.require_measurement_wiring(app, fetch)\n"
+            "    live = LiveHarness(TestClient(app), fetch)\n"
+            "    with ra.production_sessions_forbidden():\n"
+            "        report = ra.run_measurement(\n"
+        ),
+        (
+            "    live = LiveHarness(TestClient(app), fetch)\n"
+            "    with ra.production_sessions_forbidden():\n"
+            "        report = ra.run_measurement(\n"
+        ),
+        f"{_C4R}test_the_c4_test_is_wired_to_the_conftest_engine_with_no_fallback",
+    ),
+    _r210c(
+        242,
+        "C.4's hotel ownership does not come from SQL",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        (
+            "            hotels=rp.hotel_ids(self._fetch, se"
+            "lf.hotels), documents=documents, chunks=chunks\n"
+        ),
+        "            hotels={}, documents=documents, chunks=chunks\n",
+        f"{_C4R}test_the_c4_test_maps_hotels_by_sql_only",
+    ),
+    _r210c(
+        243,
+        "the search status is not a literal",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        ('            200,\n            "search",\n'),
+        ('            int("200"),\n            "search",\n'),
+        f"{_C4R}test_every_c4_request_has_an_explicit_status",
+    ),
+    _r210c(
+        244,
+        "the withdrawal response is not checked",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        (
+            "                ra.checked_json(\n"
+            "                    self._client.post(\n"
+            '                        f"/api/v1/hotels/{self.hotels[document.hotel]}/documents/"\n'
+        ),
+        (
+            "                (\n"
+            "                    self._client.post(\n"
+            '                        f"/api/v1/hotels/{self.hotels[document.hotel]}/documents/"\n'
+        ),
+        f"{_C4R}test_every_c4_request_has_an_explicit_status",
+    ),
+    _r210c(
+        245,
+        "C.4 is skipped in CI too when its directory is missing",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        '    if os.environ.get(ra.OUT_VARIABLE) is None and os.environ.get("CI") != "true":\n',
+        "    if os.environ.get(ra.OUT_VARIABLE) is None:\n",
+        f"{_C4R}test_in_ci_a_missing_directory_refuses_and_is_never_skipped",
+    ),
+    _r210c(
+        246,
+        "the route table that dispatches the measured requests is not fingerprinted",
+        RETRIEVAL_FINGERPRINT,
+        ('    "backend/app/api/v1/router.py",\n    "backend/app/api/v1/endpoints/knowledge.py",\n'),
+        '    "backend/app/api/v1/endpoints/knowledge.py",\n',
+        f"{_C4R}test_the_application_import_closure_is_fingerprinted_or_excluded_by_reason",
+    ),
+    _r210c(
+        247,
+        "an application file is neither fingerprinted nor excluded",
+        RETRIEVAL_FINGERPRINT,
+        ('            "request_id",\n            "security_headers",\n'),
+        '            "security_headers",\n',
+        f"{_C4R}test_the_application_import_closure_is_fingerprinted_or_excluded_by_reason",
+    ),
+    _r210c(
+        248,
+        "the application closure leaves out the C.4 test",
+        "tests/evaluation/test_retrieval_c4_requirements.py",
+        ("import tests.integration.test_knowledge_retrieval_v2_eval\nroot = "),
+        "root = ",
+        f"{_C4R}test_the_application_import_closure_is_fingerprinted_or_excluded_by_reason",
+    ),
+    _r210c(
+        249,
+        "the application closure exempts the application like a virtual environment",
+        "tests/evaluation/test_retrieval_c4_requirements.py",
+        (
+            '    return [path for path in loaded if not set(path.split("/")) '
+            "& fp.EXEMPT_DIRECTORIES]\n"
+        ),
+        (
+            '    return [path for path in loaded if not set(path.split("/")) '
+            '& (fp.EXEMPT_DIRECTORIES | {"backend"})]\n'
+        ),
+        f"{_C4R}test_the_application_import_closure_is_fingerprinted_or_excluded_by_reason",
+    ),
 ]
 
 
