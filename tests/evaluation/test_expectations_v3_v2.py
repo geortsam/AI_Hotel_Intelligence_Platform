@@ -22,6 +22,7 @@ from app.llm.testing import ScriptedModel
 from app.services.copilot import ANOTHER_HOTEL_REFUSAL
 from tests.evaluation import expectations_v3_v2 as v2
 from tests.evaluation import harness, integrity, transcribed_r28j
+from tests.evaluation import retrieval_artifacts as ra
 from tests.evaluation.expectations_v3 import EXPECTATIONS_V3
 from tests.evaluation.questions import COPILOT_EVAL_V1, EvalCase
 from tests.evaluation.questions_v2 import COPILOT_EVAL_V2
@@ -76,6 +77,17 @@ ARTIFACT_DIGESTS = {
     # the R2.9Y live runs that `test_r29y_regressions.py` rescores.
     "fixtures/r29y_knowledge_capture.json": (
         "6cefba9463356889f3e21471a03c1e807a6386ee1b0894ccbe9dc87901755cd1"
+    ),
+}
+#: R2.10C: the `knowledge_retrieval_v2` baseline Decision F §12.6 pins, from CI run 44194081637
+#: (artifact `retrieval-eval-44194081637-1`). Both files are absent until pinned, then present
+#: together with exactly these bytes (`-text`, so not LF-normalised); a re-pin updates them here.
+PINNED_RETRIEVAL_V2 = {
+    "retrieval_report_v2.json": (
+        "a6ddeec598d264ff48d39f73f607d797f2d4da15be8252a6c0774ba9a78b0c15"
+    ),
+    "retrieval_report_v2.environment.json": (
+        "6836b5a378a3022a5b81555cff864ccc80fcb790c679b238cb37e9595468cbf7"
     ),
 }
 
@@ -133,10 +145,20 @@ def test_every_reference_report_and_replay_fixture_is_byte_identical() -> None:
         path.relative_to(HERE).as_posix()
         for path in [*HERE.glob("*.json"), *(HERE / "fixtures").glob("*.json")]
     }
-    assert on_disk == set(ARTIFACT_DIGESTS)  # no artifact added, none removed
+    pinned = on_disk & set(PINNED_RETRIEVAL_V2)
+    assert on_disk - pinned == set(ARTIFACT_DIGESTS)  # no artifact added, none removed
     for name, expected in ARTIFACT_DIGESTS.items():
         content = (HERE / name).read_bytes().replace(b"\r\n", b"\n")
         assert hashlib.sha256(content).hexdigest() == expected, name
+    # Decision F's pinned report and environment record: both or neither, each exactly as pinned.
+    assert {f"tests/evaluation/{name}" for name in PINNED_RETRIEVAL_V2} == {
+        ra.PINNED_REPORT,
+        ra.PINNED_ENVIRONMENT,
+    }
+    assert pinned in (set(), set(PINNED_RETRIEVAL_V2))
+    for name in pinned:
+        content = (HERE / name).read_bytes()
+        assert hashlib.sha256(content).hexdigest() == PINNED_RETRIEVAL_V2[name], name
 
 
 def test_version_1_still_has_the_case_reach_the_model() -> None:
