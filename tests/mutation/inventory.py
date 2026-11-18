@@ -6314,6 +6314,8 @@ _RF = "tests/evaluation/test_retrieval_fingerprint.py::"
 _RP = "tests/evaluation/test_retrieval_probes.py::"
 _RA = "tests/evaluation/test_retrieval_artifacts.py::"
 _C4R = "tests/evaluation/test_retrieval_c4_requirements.py::"
+COPILOT_SNAPSHOT = "tests/evaluation/copilot_retrieval_snapshot.py"
+_C5 = "tests/evaluation/test_copilot_retrieval_snapshot.py::"
 RETRIEVAL_REVIEW = "tests/evaluation/retrieval_review.py"
 RETRIEVAL_REVIEW_TESTS = "tests/evaluation/test_retrieval_review.py"
 _RR = f"{RETRIEVAL_REVIEW_TESTS}::"
@@ -8503,6 +8505,172 @@ STAGE_R2_10C = [
             '& (fp.EXEMPT_DIRECTORIES | {"backend"})]\n'
         ),
         f"{_C4R}test_the_application_import_closure_is_fingerprinted_or_excluded_by_reason",
+    ),
+    _r210c(
+        250,
+        "a search the snapshot does not hold is answered with no results",
+        COPILOT_SNAPSHOT,
+        "        if chunks is None:\n",
+        ("        if chunks is None:\n            chunks = ()\n        if False:\n"),
+        f"{_C5}test_a_search_the_snapshot_does_not_hold_refuses_and_is_recorded",
+    ),
+    _r210c(
+        251,
+        "the snapshot is keyed by the query alone",
+        COPILOT_SNAPSHOT,
+        "        chunks = self.snapshot.searches.get((query, limit))\n",
+        (
+            "        chunks = next((c for (q, _), c in self."
+            "snapshot.searches.items() if q == query), None)\n"
+        ),
+        f"{_C5}test_the_limit_is_part_of_the_key",
+    ),
+    _r210c(
+        252,
+        "the snapshot serves another hotel",
+        COPILOT_SNAPSHOT,
+        "        if hotel_public_id != EVAL_HOTEL:\n",
+        "        if False:\n",
+        f"{_C5}test_another_hotel_refuses_and_is_recorded",
+    ),
+    _r210c(
+        253,
+        "a snapshot miss does not refuse the run",
+        KNOWLEDGE_HARNESS,
+        "        if knowledge is not None and knowledge.misses:\n",
+        "        if False:\n",
+        f"{_C5}test_a_snapshot_miss_refuses_the_run",
+    ),
+    _r210c(
+        254,
+        "the snapshot becomes the default document search",
+        KNOWLEDGE_HARNESS,
+        ("    knowledge_diagnostics: bool = False,\n    knowledge_source: str = FIXTURE,\n"),
+        ("    knowledge_diagnostics: bool = False,\n    knowledge_source: str = SNAPSHOT,\n"),
+        f"{_C5}test_the_stand_in_stays_the_default",
+    ),
+    _r210c(
+        255,
+        "a snapshot run's report is not labelled",
+        KNOWLEDGE_HARNESS,
+        ('    if snapshot is not None:\n        report["knowledge_source"] = {\n'),
+        ('    if False:\n        report["knowledge_source"] = {\n'),
+        f"{_C5}test_a_snapshot_run_is_labelled_and_says_what_its_search_was",
+    ),
+    _r210c(
+        256,
+        "a snapshot run's statement says the stand-in searched",
+        KNOWLEDGE_HARNESS,
+        (
+            "        statement = REFERENCE_STATEMENT if snap"
+            "shot is None else SNAPSHOT_REFERENCE_STATEMENT\n"
+        ),
+        "        statement = REFERENCE_STATEMENT\n",
+        f"{_C5}test_a_snapshot_run_is_labelled_and_says_what_its_search_was",
+    ),
+    _r210c(
+        257,
+        "a snapshot that leaks is loaded",
+        COPILOT_SNAPSHOT,
+        "            if item is None or not _in_scope(item):\n",
+        "            if item is None:\n",
+        f"{_C5}test_a_result_outside_the_evaluated_hotels_active_documents_refuses",
+    ),
+    _r210c(
+        258,
+        "a snapshot entry longer than its limit is loaded",
+        COPILOT_SNAPSHOT,
+        '        if len(entry["results"]) > key[1]:\n',
+        "        if False:\n",
+        f"{_C5}test_more_results_than_the_limit_refuse",
+    ),
+    _r210c(
+        259,
+        "a served hash that is not the fixture chunk is loaded",
+        COPILOT_SNAPSHOT,
+        '            if row["served_sha256"] != identity:\n',
+        "            if False:\n",
+        f"{_C5}test_a_served_hash_that_is_not_the_fixture_chunk_refuses",
+    ),
+    _r210c(
+        260,
+        "a snapshot that does not hold exactly the copilot's searches is loaded",
+        COPILOT_SNAPSHOT,
+        "    if sorted(searches) != list(copilot_searches()):\n",
+        "    if False:\n",
+        f"{_C5}test_a_missing_or_an_extra_search_refuses",
+    ),
+    _r210c(
+        261,
+        "the snapshot is read without its pinned digest",
+        COPILOT_SNAPSHOT,
+        "    if actual != SNAPSHOT_SHA256:\n",
+        "    if False:\n",
+        f"{_C5}test_the_snapshot_is_pinned_by_its_bytes",
+    ),
+    _r210c(
+        262,
+        "a leaking live result can be written as the snapshot",
+        COPILOT_SNAPSHOT,
+        "            if served is None or not _in_scope(served):\n",
+        "            if served is None:\n",
+        f"{_C5}test_building_refuses_a_leak_a_long_list_or_other_searches",
+    ),
+    _r210c(
+        263,
+        "a copy that is not its fixture chunk is accepted",
+        COPILOT_SNAPSHOT,
+        (
+            "        if copied != (role, chunk.status, chun"
+            "k.title, (chunk.text,)) or chunk.ordinal != 0:\n"
+        ),
+        "        if False:\n",
+        f"{_C5}test_a_copy_that_is_not_its_fixture_chunk_refuses",
+    ),
+    _r210c(
+        264,
+        "a replayed search's limit is not the tool's",
+        COPILOT_SNAPSHOT,
+        '    return {_effective(a, REPLAYS_FILE) for a in _search_arguments(replays["cases"])}\n',
+        (
+            '    return {(str(a["query"]), int(a.get("limit", 6'
+            '))) for a in _search_arguments(replays["cases"])}\n'
+        ),
+        f"{_C5}test_a_replay_without_a_limit_gets_the_tools_default",
+    ),
+    _r210c(
+        265,
+        "the snapshot may be regenerated in CI",
+        COPILOT_SNAPSHOT,
+        '    if environ.get("CI") == "true":\n',
+        "    if False:\n",
+        f"{_C5}test_the_snapshot_is_regenerated_only_on_an_explicit_request_outside_ci",
+    ),
+    _r210c(
+        266,
+        "the replays are read without their pinned digest",
+        COPILOT_SNAPSHOT,
+        "    if actual != REPLAYS_SHA256:\n",
+        "    if False:\n",
+        f"{_C5}test_replays_that_are_not_the_pinned_file_refuse",
+    ),
+    Mutation(
+        "R2.10C-M267",
+        "R2.10C",
+        "search drops its language's stemming, which gate 3 must see",
+        one(
+            "backend/app/repositories/knowledge.py",
+            (
+                "        tsquery = func.websearch_to_tsquery(ca"
+                "st(HotelDocument.language, REGCONFIG), query)\n"
+            ),
+            '        tsquery = func.websearch_to_tsquery(cast("simple", REGCONFIG), query)\n',
+        ),
+        (
+            "tests/integration/test_copilot_retrieval_snapshot.py::"
+            "test_gate_3_the_pinned_snapshot_equals_live_search",
+        ),
+        needs_database=True,
     ),
 ]
 
