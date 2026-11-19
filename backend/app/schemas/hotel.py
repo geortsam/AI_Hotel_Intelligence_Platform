@@ -32,15 +32,22 @@ LongitudeField = Annotated[decimal.Decimal, Field(ge=-180, le=180, max_digits=9,
 StarRatingField = Annotated[int, Field(ge=1, le=5)]
 
 
+#: Names a zone search path can hold that are not a place's zone, refused whatever the host
+#: lists: ``localtime`` (on Debian a link to the host's own ``/etc/localtime``, so it means
+#: "wherever this server is"), ``posixrules`` (a template for POSIX TZ strings) and IANA's
+#: ``Factory`` (its placeholder for "no zone has been set").
+NOT_A_PLACE = frozenset({"localtime", "posixrules", "Factory"})
+
+
 @functools.cache
 def iana_zone_names() -> frozenset[str]:
-    """Every zone name the IANA time zone database installed here defines (R1.5).
+    """Every place's zone name the IANA time zone database installed here defines (R1.5).
 
     The system database where there is one -- the backend image's base installs Debian's
-    `tzdata` -- and the `tzdata` package otherwise. Read once: it does not change while the
-    process runs.
+    `tzdata` -- and the `tzdata` package otherwise, less :data:`NOT_A_PLACE`. Read once: it
+    does not change while the process runs.
     """
-    return frozenset(zoneinfo.available_timezones())
+    return frozenset(zoneinfo.available_timezones()) - NOT_A_PLACE
 
 
 def _iana_zone(value: str) -> str:
@@ -164,4 +171,4 @@ class HotelResponse(BaseModel):
     updated_at: dt.datetime
 
 
-__all__ = ["HotelCreate", "HotelResponse", "HotelUpdate", "iana_zone_names"]
+__all__ = ["NOT_A_PLACE", "HotelCreate", "HotelResponse", "HotelUpdate", "iana_zone_names"]

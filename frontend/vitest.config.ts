@@ -36,5 +36,11 @@ export default defineConfig({
      */
     css: false,
     include: ['src/**/*.test.{ts,tsx}'],
+    /*
+     * Half the machine's cores, not all but one (Vitest's default). Every worker boots its own
+     * jsdom, and on a loaded machine a full set of them starved one another until tests hit
+     * their timeouts; `--maxWorkers=2` by hand was the workaround. A CLI flag still overrides.
+     */
+    maxWorkers: '50%',
   },
 })

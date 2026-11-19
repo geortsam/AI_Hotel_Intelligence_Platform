@@ -42,7 +42,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **7984 backend tests and 1346 frontend tests pass in CI.** Schema head is
+> **The backend and frontend suites run in CI on every push.** Schema head is
 > `0020_guest_email_rules` across 20 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
@@ -321,7 +321,7 @@ Full detail, including the rules later stages must follow:
 |---|---|---|
 | Backend | Python 3.14, FastAPI, Uvicorn | Async HTTP API, OpenAPI generated from types |
 | Validation | Pydantic v2, pydantic-settings | Request/response schemas, environment config |
-| ORM | SQLAlchemy 2.0 | Data mapping across 15 model modules |
+| ORM | SQLAlchemy 2.0 | Data mapping across 17 model modules |
 | Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
 | Migrations | Alembic | 20 linear revisions, head `0020_guest_email_rules` |
 | Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
@@ -614,7 +614,7 @@ shards, so GitHub Actions shows seven job runs per workflow run.
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 | `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical |
-| `Mutation checks` | re-applies the 803 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Mutation checks` | re-applies the 813 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that

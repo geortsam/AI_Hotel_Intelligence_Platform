@@ -8884,7 +8884,7 @@ STAGE_R1_5 = [
         5,
         "only a fixed subset of the IANA database is accepted",
         HOTEL_SCHEMA,
-        "    return frozenset(zoneinfo.available_timezones())\n",
+        "    return frozenset(zoneinfo.available_timezones()) - NOT_A_PLACE\n",
         '    return frozenset({"UTC", "Europe/Athens"})\n',
         f"{_TZ}test_every_iana_name_is_accepted",
         f"{_TZ}test_the_check_is_the_installed_iana_database",
@@ -8896,6 +8896,104 @@ STAGE_R1_5 = [
         "    timezone: str\n    currency: str\n",
         "    timezone: TimezoneField\n    currency: str\n",
         f"{_TZ}test_a_row_written_before_r1_5_still_reads",
+    ),
+    _r15(
+        7,
+        "a host alias such as Debian's localtime is accepted as a zone",
+        HOTEL_SCHEMA,
+        "    return frozenset(zoneinfo.available_timezones()) - NOT_A_PLACE\n",
+        "    return frozenset(zoneinfo.available_timezones())\n",
+        f"{_TZ}test_a_name_the_iana_database_does_not_define_is_refused_on_create[Factory]",
+        f"{_TZ}test_a_host_alias_is_refused_even_where_the_host_lists_it",
+    ),
+]
+
+
+# --- R6.2 (v2.0 roadmap, E3): every count the README states is computed from the code ---------
+
+README = "README.md"
+PRODUCTION_BUILDER = "ml/pipelines/build_production_artifact.py"
+_README_COUNTS = "tests/backend/test_readme_counts.py::"
+
+
+def _r62(number: int, breaks: str, path: str, old: str, new: str, killer: str) -> Mutation:
+    return Mutation(
+        f"R6.2-M{number}", "R6.2", breaks, one(path, old, new), (f"{_README_COUNTS}{killer}",)
+    )
+
+
+STAGE_R6_2 = [
+    _r62(
+        1,
+        "the README's API path count goes stale",
+        README,
+        "**65 API paths / 101 operations**",
+        "**64 API paths / 101 operations**",
+        "test_api_paths_and_operations",
+    ),
+    _r62(
+        2,
+        "the Swagger row's operation count goes stale",
+        README,
+        "Swagger UI — 65 paths, 101 operations.",
+        "Swagger UI — 65 paths, 100 operations.",
+        "test_api_paths_and_operations",
+    ),
+    _r62(
+        3,
+        "the README's authenticated-operation count goes stale",
+        README,
+        "**96 require authentication**",
+        "**97 require authentication**",
+        "test_operations_that_require_authentication",
+    ),
+    _r62(
+        4,
+        "the architecture diagram's table count goes stale",
+        README,
+        "<br/>28 application tables<br/>",
+        "<br/>29 application tables<br/>",
+        "test_application_tables",
+    ),
+    _r62(
+        5,
+        "the README's model-module count goes stale again",
+        README,
+        "| Data mapping across 17 model modules |",
+        "| Data mapping across 15 model modules |",
+        "test_model_modules",
+    ),
+    _r62(
+        6,
+        "the README's migration count goes stale",
+        README,
+        "| 20 linear revisions, head",
+        "| 19 linear revisions, head",
+        "test_migrations_and_head",
+    ),
+    _r62(
+        7,
+        "the README states test-suite sizes again",
+        README,
+        "> **The backend and frontend suites run in CI on every push.**",
+        "> **7984 backend tests and 1346 frontend tests pass in CI.**",
+        "test_no_test_suite_size_is_stated",
+    ),
+    _r62(
+        8,
+        "the README's approved-value count goes stale",
+        README,
+        "verified against 22 approved values before",
+        "verified against 21 approved values before",
+        "test_approved_values_the_production_build_verifies",
+    ),
+    _r62(
+        9,
+        "the production build verifies one approved value fewer than the README says",
+        PRODUCTION_BUILDER,
+        '    checks.equal("artifact format", ARTIFACT_FORMAT, artifact_block.get("format"))\n',
+        "",
+        "test_approved_values_the_production_build_verifies",
     ),
 ]
 
@@ -8944,4 +9042,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R2_10C,
     *STAGE_R1_4,
     *STAGE_R1_5,
+    *STAGE_R6_2,
 )

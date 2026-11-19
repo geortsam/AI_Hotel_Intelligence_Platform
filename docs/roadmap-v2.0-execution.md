@@ -57,8 +57,8 @@ policy, Ext = external service, Rel = release.
 | **R4.3b** SBOM, image signing | none | SBOM partly; signing no | CI, Ext | a signing identity and a registry | — | §3.12 |
 | **R5** portfolio view, exports, payments, OTA import, sentiment, housekeeping | none | no | — | the audience (roadmap §5) | — | **decision** — §3.13 |
 | **R6.1** consolidate the stage-snapshot documents | 36 files under `docs/` | yes | — | — | links resolve; doc tests pass | this file and §4 |
-| **R6.2** README counts that cannot go stale | hand-maintained, and stale (`7984 backend tests`) | yes | — | — | a test computes each count from the code | **E3** |
-| §2.5 frontend suite on a loaded machine | `--maxWorkers=2` by hand | yes | — | — | Vitest config, frontend CI job | with E3 |
+| **R6.2** README counts that cannot go stale | hand-maintained, and stale (`7984 backend tests`) | yes | — | — | a test computes each count from the code | **done in E3**: paths, operations, authenticated operations, tables, model modules (was stale: 15, really 17), migrations and head, approved values; test-suite sizes removed and forbidden |
+| §2.5 frontend suite on a loaded machine | `--maxWorkers=2` by hand | yes | — | — | Vitest config, frontend CI job | **done in E3**: `maxWorkers: '50%'` in `vitest.config.ts` |
 
 ## 3. Decision briefs
 
@@ -175,4 +175,5 @@ you would have to do.
 | Stage | Tasks | Commit | CI |
 |---|---|---|---|
 | E1 | this matrix and the decision briefs | `6cc1d62` | see E2's row |
-| E2 | R1.5 IANA time zones on create and update; R1.4c every limited route declares 429 (pinned); 8 mutations (R1.4-M1–M2, R1.5-M1–M6): 803 in all | (this commit) | — |
+| E2 | R1.5 IANA time zones on create and update; R1.4c every limited route declares 429 (pinned); 8 mutations (R1.4-M1–M2, R1.5-M1–M6): 803 in all | `1210746` | [44590050067](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/44590050067): red on shard 1 (`localtime` accepted on Linux), fixed in E3 |
+| E3 | R6.2 README counts computed from the code, test-suite sizes removed; §2.5 Vitest worker cap; 9 mutations (R6.2-M1–M9); R1.5 fix: Debian's `localtime`, `posixrules` and `Factory` are not places and are refused (R1.5-M7), found by E2's CI on Linux: 813 in all | (this commit) | — |

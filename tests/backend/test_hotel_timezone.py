@@ -17,7 +17,14 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.hotel import HotelCreate, HotelResponse, HotelUpdate, iana_zone_names
+from app.schemas import hotel as hotel_schema
+from app.schemas.hotel import (
+    NOT_A_PLACE,
+    HotelCreate,
+    HotelResponse,
+    HotelUpdate,
+    iana_zone_names,
+)
 
 REQUIRED: dict[str, Any] = {
     "slug": "acropolis-view",
@@ -38,6 +45,10 @@ INVALID = [
     "EUROPE/ATHENS",
     "utc",
     "localtime",
+    "posixrules",
+    "Factory",
+    "posix/Europe/Athens",
+    "right/UTC",
     "Europe/Athens/",
     "Europe/../UTC",
     "../../etc/passwd",
@@ -94,14 +105,34 @@ def test_an_omitted_zone_on_update_is_left_alone() -> None:
 
 
 def test_the_check_is_the_installed_iana_database() -> None:
-    assert iana_zone_names() == frozenset(zoneinfo.available_timezones())
+    assert iana_zone_names() == frozenset(zoneinfo.available_timezones()) - NOT_A_PLACE
     assert iana_zone_names() is iana_zone_names()
 
 
+def test_a_host_alias_is_refused_even_where_the_host_lists_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Debian's zone directory holds `localtime`; Windows' `tzdata` package does not.
+
+    So the refusal cannot rest on what this machine happens to list: given a host that lists
+    every name in NOT_A_PLACE, each is still refused.
+    """
+    monkeypatch.setattr(hotel_schema.zoneinfo, "available_timezones", lambda: {"UTC", *NOT_A_PLACE})
+    iana_zone_names.cache_clear()
+    try:
+        assert iana_zone_names() == frozenset({"UTC"})
+        for name in sorted(NOT_A_PLACE):
+            with pytest.raises(ValidationError):
+                HotelUpdate(timezone=name)
+    finally:
+        monkeypatch.undo()
+        iana_zone_names.cache_clear()
+
+
 def test_every_iana_name_is_accepted() -> None:
-    """Not a sample: the whole database, so no defined zone is refused by a stricter rule."""
+    """Not a sample: the whole database, so no place's zone is refused by a stricter rule."""
     refused = []
-    for zone in sorted(zoneinfo.available_timezones()):
+    for zone in sorted(zoneinfo.available_timezones() - NOT_A_PLACE):
         if len(zone) > 64:
             continue
         try:
