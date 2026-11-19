@@ -764,6 +764,26 @@ recall@5 is 0.6957 against a pgvector threshold of 0.90 declared beforehand: a s
 paraphrased queries miss, not evidence about real documents. See
 [docs/copilot-evaluation.md](docs/copilot-evaluation.md) §8.
 
+**Layered retrieval evaluation (R2.10C).** The copilot evaluation's searches are answered by a
+word-overlap stand-in, so its document results said nothing about production search. A decision
+record declared three layers, their metrics and their thresholds before anything was measured,
+and each is now built. **Real PostgreSQL (C.4):** `knowledge_retrieval_v2` -- 17 documents and
+57 queries, 45 answerable and 12 with no answer, 11 of them queries a model actually sent,
+reviewed and signed off before measurement -- runs through the real upload and search routes in
+CI and is pinned byte for byte with a fingerprint of the database configuration, so any changed
+result fails CI. Measured: Success@5 **23 of 45 (0.51; Wilson 95% 0.37 to 0.65)** against a
+0.90 target that is reported, not gated; all 17 shared-word queries are found, **no paraphrase
+or title-only query is** (0 of 10 and 0 of 5, each returning nothing), multi-idea queries 1 of
+6; and 0 of 57 queries return another hotel's or an inactive document, which is a hard gate.
+**A snapshot (C.5):** real search's results for every search the copilot evaluation makes,
+pinned by checksum and held equal to live search in CI; the evaluation can run on it instead
+of the stand-in. **Side by side (C.6):** an opt-in block judges a run's retrieval twice by the
+same rule; on the six recorded model runs it fails 1 of 10 cases with the stand-in and 4 of 10
+with real search. The corpus and most queries are invented, so this is regression evidence
+about the search as configured, not about real hotels, and it neither triggers nor rules out
+Stage 7.15. See [docs/retrieval-evaluation-decision.md](docs/retrieval-evaluation-decision.md)
+§1.4.
+
 **Conversations (Stage 7.11).** `…/copilot/conversations` holds multi-turn conversations: start,
 list, read, continue, delete. Each belongs to one hotel and its creator -- anyone else gets 404 --
 and expires, turns included, 30 days after it was last used: unreachable at once (enforced in

@@ -1,8 +1,8 @@
 # Layered retrieval evaluation — decision record (R2.10C.1)
 
 > **Status.** Architecture approved: Option C, a layered retrieval evaluation (2026-11-08). This
-> record is the declaration the later stages are held to. **Nothing in it is implemented yet**, and
-> nothing in it changes the application, the prompts, retrieval, an existing measure, or any frozen
+> record is the declaration the later stages are held to. When it was written nothing in it was
+> implemented, and nothing in it changes the application, the prompts, retrieval, an existing measure, or any frozen
 > artifact. It is written from the read-only R2.10C assessment; where that assessment did not
 > settle a detail, the detail is marked **Unresolved** below instead of being decided here.
 >
@@ -13,6 +13,13 @@
 > pinned in the repository. Every statement marked *predicted* is reasoning about PostgreSQL's text
 > search configuration that no run has confirmed. Stage C.4 is where predictions are replaced by
 > measurements; until then none of them is evidence.
+>
+> **Status at C.7 (2026-11-19).** Every step of §8, C.1 to C.7, is implemented, and §11 records
+> each. C.4 measured `knowledge_retrieval_v2` on real PostgreSQL in CI and pinned the report;
+> C.5 recorded real search's results for the copilot evaluation's searches and holds them to
+> live search; C.6 judges the copilot runs' retrieval on that snapshot beside the stand-in's.
+> §1.4 is what was measured. The application, its retrieval, its prompts and every frozen
+> artifact are unchanged.
 
 ## 1. The problem
 
@@ -107,6 +114,52 @@ Two consequences, both *predicted*:
 - **The injection cases reach the model only because the stand-in matches loosely.** In production
   `FAQ` would not retrieve the Guest FAQ, so whether injected text reaches the model depends on
   which query the model writes. R2.9Y's injection results describe the stand-in.
+
+### 1.4 What C.4 and C.5 measured
+
+**`knowledge_retrieval_v2`, real PostgreSQL** (*measured*; `tests/evaluation/retrieval_report_v2.json`, SHA-256
+`a6ddeec598d264ff48d39f73f607d797f2d4da15be8252a6c0774ba9a78b0c15`, fingerprint `8871ff66…`;
+produced by `tests/integration/test_knowledge_retrieval_v2_eval.py` in CI run 44194081637 and
+pinned, bytes unchanged, in `b6defd7`; CI run 44210410736 then reproduced it exactly). The
+signed-off dataset (§3.6): 17 documents, 26 chunks, 57 queries, 45 answerable and 12 with no
+answer. Intervals are §4's: Wilson 95% on rates, the seeded query bootstrap on means.
+
+| Measure | Result | 95% interval | §5 |
+|---|---|---|---|
+| Success@5 | 23 of 45 = 0.5111 | 0.3700 to 0.6504 | target ≥ 0.90: **not met** |
+| Recall@5 | 0.5000 | 0.3556 to 0.6444 | — |
+| MRR@5 | 0.5111 | 0.3778 to 0.6444 | — |
+| nDCG@5 | 0.4687 | 0.3368 to 0.6020 | — |
+| Empty-result rate | 22 of 45 = 0.4889 | 0.3496 to 0.6300 | target ≤ 0.10: **not met** |
+| No-answer, strict | 11 of 12 | 0.6461 to 0.9851 | — |
+| No-answer, lenient | 12 of 12 | 0.7575 to 1.0000 | — |
+| Scope leakage | 0 of 57 | 0.0000 to 0.0631 | gate 1: **passes** |
+
+| Family | Answerable | Success@5 | Empty results | §5.2 family target |
+|---|---|---|---|---|
+| shared words | 17 | 17 of 17 | 0 of 17 | ≥ 0.80: **met** |
+| paraphrase | 10 | 0 of 10 | 10 of 10 | ≥ 0.80: **not met** |
+| title only | 5 (and 1 no-answer) | 0 of 5 | 5 of 5 | n < 10: no verdict |
+| multi-idea | 6 | 1 of 6 | 5 of 6 | n < 10: no verdict |
+| cross-language | 6 | 4 of 6 | 2 of 6 | n < 10: no verdict |
+| scope trap | 1 (and 5 no-answer) | 1 of 1 | 0 of 1 | n < 10: no verdict |
+| no answer | 0 (6 no-answer) | — | — | — |
+
+What it confirms: §1.2's finding at a larger scale. The search finds a chunk that shares the
+query's words and almost nothing else; every paraphrase and title-only query returns nothing at
+all, so the failure is the all-terms rule and the untitled index, not ranking. Nothing leaked.
+What it does not: the corpus and most queries are invented, so it is regression evidence about
+the search as configured, not about real hotels, and §5.3 holds: it neither authorises nor
+rules out Stage 7.15.
+
+**§1.3's predictions, recorded** (*measured*; C.5's `copilot_retrieval_snapshot_v1`, SHA-256
+`92f0000da79ab72b0ea80e3a097bb3722864868562fbbe88ea83eda7b2acba93`, held to live search by
+gate 3 in CI run 44396391885). Real search returned exactly what §1.3 predicted for all ten of
+its queries: nothing for `pool open hours`, `pool closing time`, `pool closing time hours`,
+`FAQ`, `dog pet cost`, `spa opening hours`, `rooftop bar open hours` and `casino`; Pool
+policy alone for `towels provided at the pool`; Parking alone for `parking cost per night` and
+`parking cost`. C.6 turns this into the copilot runs' `retrieval_failure` (§11, R2.10C.6): on
+the six R2.9Y attempts, 1 of 10 judged cases with the stand-in and 4 of 10 with real search.
 
 ## 2. The decision: three layers
 
@@ -411,8 +464,11 @@ report carries a fixed statement of what it is not evidence of.
   committed before the first baseline, because both files are fingerprinted.
 - **Layer 3** must never run automatically in CI. It stays the operator command
   `python -m tests.evaluation.real_retrieval`, with documents outside the repository.
-- **Locally,** every database test skips here, so Layer 2 can be verified only in CI. The pinned v2
-  report therefore has to be produced from a CI run.
+- **Locally,** database tests skip unless a disposable scratch database is provided
+  (`scripts/testdb.py`; never the demo data). C.4's harness and C.5's gate 3 were run so before
+  CI, but the C.4 measurement itself is skipped outside CI and refused in CI without its
+  directory (§12.6), so the pinned v2 report is a CI run's, as it has to be.
+  *(Until C.4 this bullet said every database test skips here, which was true when written.)*
 
 > **Resolved (R2.10C.3a, decision F):** §12.6.
 
@@ -432,6 +488,9 @@ Each step is its own reviewed stage. None starts without authorization.
 | **C.5** | the pinned snapshot of real results for the copilot corpus, an opt-in `SnapshotKnowledge`, and the live-versus-snapshot drift test | CI for the drift test |
 | **C.6** | opt-in diagnostics: `retrieval_failure` computed from the snapshot, beside the stand-in's | none |
 | **C.7** | final documentation and README updates, including links to this record | none |
+
+**Status (C.7, 2026-11-19):** all seven steps are done; §11 records each, and §1.4 what C.4 and
+C.5 measured.
 
 Throughout: `FixtureKnowledge` stays the default for R2.9Y replays, and the R2.9Y reference report
 must remain byte-identical. Switching the default is a separate decision. The stage that
@@ -485,10 +544,13 @@ Any retrieval change is a later stage, to be authorised separately and measured 
 | R2.10C (exclusion audit) | 2026-11-17 | **The 38 exclusions accepted, on three conditions; nothing measured, C.4 not started.** A read-only audit traced each of the 38 modules §12.3 excludes beyond its original three through the measurement's real call paths: the schema comes from the migrations, the teardown is SQL, none of the 38 registers event listeners, reads the environment or imports dynamically, no model relates to the knowledge tables, and the production session factory is reached only through `get_db`, which the conftest overrides. You accepted all 38 on 2026-11-17, subject to three mandatory C.4 requirements, now §12.6's "C.4's requirements": one engine, the conftest's, with no fallback to the production session factory (A); hotel ownership by SQL (B); an explicit HTTP status for every ingest and search response (C). The harness provides `EngineFetch`, `require_measurement_wiring`, `production_sessions_forbidden`, `checked_json` and `probes.hotel_ids`; `tests/evaluation/test_retrieval_c4_requirements.py` holds them and the audit's four static findings by AST inspection. The session-settings difference (production `autoflush=False`, the conftest's `autoflush=True`) is recorded. `SOURCE_FILES` and `EXCLUDED_SOURCES` are unchanged. 15 mutations (R2.10C-M216 to M230): 743 in all. |
 | R2.10C (C.4 harness) | 2026-11-17 | **The C.4 integration test and its gates, implemented; nothing measured, no baseline, nothing pinned.** `tests/integration/test_knowledge_retrieval_v2_eval.py` measures `knowledge_retrieval_v2` through the real API under §12.6's three requirements, and `retrieval_artifacts.gate_problems` applies §5.1's gates 1 and 2 to what it wrote (§12.6 "The C.4 test"). Your decisions of 2026-11-17: with no pinned report the gate fails, so the baseline run is red until pinned; the measurement is skipped outside CI and refused in CI without its directory; the application-wide import closure (131 unaccounted files) is audited and approved before any baseline. The Docker `Variant` rule is held from the workflow's `docker.json` itself: absent is `null`, a non-empty string is kept, `""` and any other type refuse. Locally the live harness ran against a scratch database (`scripts/testdb.py`), never the demo data. 15 mutations (R2.10C-M231 to M245): 758 in all. |
 | R2.10C (application closure) | 2026-11-17 | **The application-wide import-closure audit, approved by you on 2026-11-17; nothing measured, no baseline, nothing pinned.** `app.main`, both conftests and the C.4 test load 209 repository files; 131 were neither fingerprinted nor excluded. A coverage trace of the live harness on a scratch database showed 17 of them run during the live harness and 114 only at import. `api/v1/router.py`, which dispatches every measured request, is now fingerprinted (47 sources); the other 130 are excluded under six reasons (§12.3): 171 exclusions. `test_the_application_import_closure_is_fingerprinted_or_excluded_by_reason` holds the closure to the lists, and the forbidden-use check now covers 168 audited exclusions. 4 mutations (R2.10C-M246 to M249): 762 in all. |
+| R2.10C.4 (baseline) | 2026-11-18 | **Measured and pinned; recorded here at C.7.** CI run 44194081637 on `3a5f49a` measured `knowledge_retrieval_v2` and was red only on the no-pin gate, as decided on 2026-11-17; its other six jobs passed. The artifact `retrieval-eval-44194081637-1` was verified with `python -m tests.evaluation.retrieval_artifacts verify` and its two files pinned, bytes unchanged, in `b6defd7` (after `b9c56e2` admitted the pin by exact digest): report SHA-256 `a6ddeec598d264ff48d39f73f607d797f2d4da15be8252a6c0774ba9a78b0c15`, environment `6836b5a378a3022a5b81555cff864ccc80fcb790c679b238cb37e9595468cbf7`, fingerprint `8871ff6632a1fcd280beaf94865e65e7ceecc01948be281492681aec40141204`. CI run 44210410736 on `b6defd7` passed all 7 jobs, its measured report byte-identical to the pin: gate 2 holds. Nothing was tuned. The results, and §5's targets against them, are §1.4: Success@5 23 of 45, every paraphrase and title-only query empty, scope leakage 0 of 57. |
 | R2.10C.5 | 2026-11-18 | **Layer 1's snapshot, `SnapshotKnowledge` and gate 3, implemented; verified locally, not yet in CI.** Your decisions of 2026-11-18 settle what §3.3 and the R2.10C.3a row left to C.5: **the copilot corpus alone** -- the seven `knowledge_retrieval_v2` documents copied from `fixture_documents.py` (`CORPUS[0]` to `CORPUS[6]`, the superseded pool policy, the withdrawn spa page and the neighbour's rooftop bar included), each mapped to exactly one fixture chunk, so served results carry the identifiers the copilot evaluation's citations resolve to; **keyed by (query, limit)**, a miss refusing; **every search the copilot evaluation makes**, 17 pairs read from the checksum-pinned reference replays (10, each limit the search tool's argument default) and R2.9Y capture (11), four shared; **produced locally** through the real API on a scratch PostgreSQL 18.6 database (`scripts/testdb.py`), never the demo data, with CI to confirm it against `postgres:18.6`. The snapshot `tests/evaluation/datasets/copilot_retrieval_snapshot_v1.json` (canonical §12.2 bytes, SHA-256 `92f0000da79ab72b0ea80e3a097bb3722864868562fbbe88ea83eda7b2acba93`) records, per search, the ranked `(doc_id, ordinal, served_sha256)` rows of §12.4: 5 of the 17 return a chunk (`dog fee`, `parking cost`, `parking cost per night`, `pool towels`, `towels provided at the pool`), the other 12 nothing -- §1.3's predictions for these queries, now recorded. `tests/evaluation/copilot_retrieval_snapshot.py` loads it only if its bytes hash to the pin, its corpus and searches are exactly these, and every result is an active chunk of the evaluated hotel whose served hash is its fixture chunk's. `SnapshotKnowledge` stands where `KnowledgeService` does, as `FixtureKnowledge` does; because the tool layer turns a service exception into a failed tool result, every miss is also recorded and `knowledge_harness.run(..., knowledge_source="snapshot")` refuses the run. **`FixtureKnowledge` stays the default:** a stand-in run is unchanged field for field and the R2.9Y reference report stays byte-identical; a snapshot run carries a `knowledge_source` block (`postgresql_snapshot`, the snapshot id and SHA-256) and its own statement (§10). **Gate 3** (§5.1.3) is `tests/integration/test_copilot_retrieval_snapshot.py`: C.4's `LiveHarness` under requirements A to C ingests the copilot corpus, the state is compared with the plan, every served result is checked (§12.4), the 17 searches are sent, a leaking result refuses, and the live document must equal the pinned bytes. It lands in CI shard 1 by construction; locally it passed on the scratch database. Regeneration is opt-in (`COPILOT_RETRIEVAL_SNAPSHOT_WRITE=1`) and refused in CI. **No fingerprinted file changed**, so C.4's pinned report stays valid; `ci.yml`'s comment still says 762 mutations, because correcting it would force a re-measurement and re-pin (§12.8). 18 mutations (R2.10C-M250 to M267, M267 a search that loses its language's stemming, which gate 3 alone must catch): 780 in all. |
 | R2.10C.6 | 2026-11-19 | **`retrieval_failure` from the snapshot, beside the stand-in's; offline, no database.** C.5 passed CI first: run 44396391885 on `8bb5bff`, all 7 jobs green, gate 3 run in shard 1 against `postgres:18.6` and all 780 mutations killed. `knowledge_harness.run(..., knowledge_diagnostics=True, snapshot_retrieval_failure=True)` adds a `snapshot_retrieval_failure` block (`copilot_snapshot_retrieval_failure_v1`, `tests/evaluation/snapshot_retrieval_failure.py`) beside `knowledge_diagnostics`. **One rule:** both verdicts are R2.10B's `knowledge_correctness.assess`, unchanged, with its checksum: the stand-in's on what the model was shown, the snapshot's on the same searches with each returned result list replaced by what `copilot_retrieval_snapshot_v1` holds for its (query, limit), the limit decided by the search tool's argument model as in C.5. A search that errored or whose result was never shown keeps its outcome. **Labelled (§10):** the block names both sources -- `fixture` (`fixture_documents.py`) and `postgresql_snapshot` with the snapshot id and SHA-256 -- and its statement says what the snapshot's verdict is not: the model was shown the stand-in's results, so it describes real search for the searches this model made, not what the model would have searched for or answered. **It refuses** a returned search the snapshot does not hold, a key that is not the search the stand-in answered (query, limit and titles are checked against the stand-in), a stand-in verdict that is not the `knowledge_diagnostics` row's, the block without `knowledge_diagnostics`, and a run the snapshot rather than the stand-in served. **Opt-in and additive:** a report without the block is unchanged, and the R2.9Y reference report stays byte-identical. **Results, offline:** on the reference replays `retrieval_failure` is true for 0 of 10 judged cases with the stand-in and 4 of 10 with the snapshot (`pool_hours`, `parking_price`, `pool_closing_changed`, `guest_faq_injected`: real search returns nothing for `pool opening hours`, `parking price`, `pool closing time` and `guest FAQ`). On all six R2.9Y attempts it is 1 of 10 with the stand-in (`dog_fee`, `dog pet cost`) and 4 of 10 with the snapshot, adding `pool_hours`, `pool_closing_changed` and `guest_faq_injected` (`FAQ` with limit 20); `parking_price` (`parking cost per night`) is adequate under both. These are §1.3's predictions for these queries, now computed from the recorded snapshot. Neither verdict says whether the query or the search is at fault. No fingerprinted file changed, so C.4's pinned report and C.5's snapshot stay valid; `ci.yml`'s comment still says 762 mutations (§12.8). 15 mutations (R2.10C-M268 to M282): 795 in all. |
+| R2.10C.7 | 2026-11-19 | **Final documentation; the last step of §8.** C.6 passed CI first: run 44518385846 on `da258e3`, all 7 jobs green and all 795 mutations killed. This record now says what was built and measured: its status header, a new §1.4 with C.4's pinned results set against §5's targets (Success@5 23 of 45, not the 0.90 target; empty-result rate 22 of 45, not the 0.10 target; shared words 17 of 17, the only family to meet its 0.80 target; paraphrase 0 of 10; scope leakage 0 of 57) and C.5's confirmation of all ten of §1.3's predictions, §7's local-database bullet (a scratch database now exists; the pinned report is still CI's), §8's status and the R2.10C.4 (baseline) row above, which §11 had lacked. `README.md` links this record from a new paragraph on the layered retrieval evaluation; `docs/copilot-evaluation.md` gains §8.5 and points §8.1's production-retrieval caveat at C.6's block; `tests/README.md` lists the R2.10C test modules. §3.5 is unchanged (SHA-256 `c86149e5e421a8016d3b4228e2ef0edc32f8b3cc8e804f31999b5e1972141458`), as is every frozen, pinned and fingerprinted file; no code changed and no mutation was added: 795 in all. |
 
-No measurement has used these definitions. Nothing in this record's measured results changes:
+Until C.4 (§1.4), no measurement had used these definitions. Nothing in this record's earlier
+measured results changes:
 `knowledge_retrieval_v1`'s 16 of 23 and its Wilson interval, and every R2.9Y result, were produced
 before them and stay exactly as recorded. At R2.10C.2.1 the MRR@5 grade and the nDCG@5 gains were
 still open; R2.10C.3a resolved them (§4). Neither amendment changes a measured result.
@@ -499,7 +561,8 @@ Approved 2026-11-09 and recorded here in R2.10C.3a. **Implemented, nothing measu
 numeric contract (§12.5, `tests/evaluation/retrieval_numerics.py`) and the fingerprint
 machinery (§12.1-12.4, §12.6, §12.7: `retrieval_canonical.py`, `retrieval_fingerprint.py`,
 `retrieval_probes.py`, `retrieval_artifacts.py`, the `ci.yml` steps and the `.gitattributes`
-entry). The baseline itself is C.4's (§11, R2.10C fingerprint).
+entry). The baseline itself is C.4's (§11, R2.10C fingerprint); it was measured and pinned on
+2026-11-18 (§1.4).
 
 ### 12.1 What is compared
 
