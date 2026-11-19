@@ -6316,6 +6316,8 @@ _RA = "tests/evaluation/test_retrieval_artifacts.py::"
 _C4R = "tests/evaluation/test_retrieval_c4_requirements.py::"
 COPILOT_SNAPSHOT = "tests/evaluation/copilot_retrieval_snapshot.py"
 _C5 = "tests/evaluation/test_copilot_retrieval_snapshot.py::"
+SNAPSHOT_FAILURE = "tests/evaluation/snapshot_retrieval_failure.py"
+_C6 = "tests/evaluation/test_snapshot_retrieval_failure.py::"
 RETRIEVAL_REVIEW = "tests/evaluation/retrieval_review.py"
 RETRIEVAL_REVIEW_TESTS = "tests/evaluation/test_retrieval_review.py"
 _RR = f"{RETRIEVAL_REVIEW_TESTS}::"
@@ -8671,6 +8673,139 @@ STAGE_R2_10C = [
             "test_gate_3_the_pinned_snapshot_equals_live_search",
         ),
         needs_database=True,
+    ),
+    _r210c(
+        268,
+        "a stand-in verdict that is not the diagnostics row's is reported",
+        SNAPSHOT_FAILURE,
+        "        if stand_in != recorded:\n",
+        "        if False:\n",
+        f"{_C6}test_a_stand_in_verdict_that_is_not_the_diagnostics_rows_refuses",
+    ),
+    _r210c(
+        269,
+        "a returned search the snapshot does not hold is judged as finding nothing",
+        SNAPSHOT_FAILURE,
+        "        if chunks is None:\n",
+        ("        if chunks is None:\n            chunks = ()\n        if False:\n"),
+        f"{_C6}test_a_returned_search_the_snapshot_does_not_hold_refuses",
+        f"{_C6}test_a_search_the_model_made_outside_the_snapshot_refuses",
+    ),
+    _r210c(
+        270,
+        "a key that is not the search the stand-in answered is looked up",
+        SNAPSHOT_FAILURE,
+        (
+            '        if query != search["query"] or _stand_i'
+            'n_titles(query, limit) != search["hit_titles"]:\n'
+        ),
+        "        if False:\n",
+        f"{_C6}test_a_key_that_is_not_the_search_that_ran_refuses",
+    ),
+    _r210c(
+        271,
+        "a returned search with refused arguments is not refused",
+        SNAPSHOT_FAILURE,
+        "        if key is None:\n",
+        "        if False:\n",
+        f"{_C6}test_a_returned_search_with_arguments_the_tool_refuses_refuses",
+    ),
+    _r210c(
+        272,
+        "searches and keys that differ in number are not refused",
+        SNAPSHOT_FAILURE,
+        "    if len(observed) != len(keys):\n",
+        "    if False:\n",
+        f"{_C6}test_searches_and_keys_that_do_not_match_in_number_refuse",
+    ),
+    _r210c(
+        273,
+        "a search that was not shown is judged as returned",
+        SNAPSHOT_FAILURE,
+        '                    "outcome": search["outcome"],\n',
+        '                    "outcome": "returned",\n',
+        f"{_C6}test_a_search_that_was_not_shown_keeps_its_outcome",
+    ),
+    _r210c(
+        274,
+        "the snapshot verdict is not judged on the snapshot's text",
+        SNAPSHOT_FAILURE,
+        "        shown.extend(chunk.text for chunk in chunks)\n",
+        "        shown.extend(())\n",
+        f"{_C6}test_a_not_found_case_is_judged_on_the_snapshots_text",
+    ),
+    _r210c(
+        275,
+        "the snapshot verdict is the stand-in's",
+        SNAPSHOT_FAILURE,
+        ('                "snapshot": {**judged(case, searches, shown), "searches": searches},\n'),
+        (
+            '                "snapshot": {**judged(case, observe'
+            'd.searches, observed.shown), "searches": searches},\n'
+        ),
+        f"{_C6}test_the_reference_replays_verdicts",
+    ),
+    _r210c(
+        276,
+        "the snapshot verdict is labelled as the stand-in",
+        SNAPSHOT_FAILURE,
+        '                "source": snapshots.SOURCE_LABEL,\n',
+        '                "source": STAND_IN_SOURCE,\n',
+        f"{_C6}test_the_block_is_labelled_with_both_sources",
+    ),
+    _r210c(
+        277,
+        "the cases where the verdicts differ are the ones where they agree",
+        SNAPSHOT_FAILURE,
+        (
+            '            if row["stand_in"]["retrieval_fail'
+            'ure"] != row["snapshot"]["retrieval_failure"]\n'
+        ),
+        (
+            '            if row["stand_in"]["retrieval_fail'
+            'ure"] == row["snapshot"]["retrieval_failure"]\n'
+        ),
+        f"{_C6}test_the_reference_replays_verdicts",
+    ),
+    _r210c(
+        278,
+        "a search whose arguments the tool refuses is keyed at the default limit",
+        SNAPSHOT_FAILURE,
+        "                keys.append(None)\n",
+        '                keys.append((str(call.arguments.get("query")), 5))\n',
+        f"{_C6}test_search_keys_follow_the_tool_and_the_call_order",
+    ),
+    _r210c(
+        279,
+        "sequences that name different cases are not refused",
+        SNAPSHOT_FAILURE,
+        "    if any(names != ids for names in named):\n",
+        "    if False:\n",
+        f"{_C6}test_sequences_that_name_different_cases_refuse",
+    ),
+    _r210c(
+        280,
+        "the snapshot retrieval-failure block is on by default",
+        KNOWLEDGE_HARNESS,
+        "    snapshot_retrieval_failure: bool = False,\n",
+        "    snapshot_retrieval_failure: bool = True,\n",
+        f"{_C6}test_the_block_is_off_by_default_and_adds_nothing_else",
+    ),
+    _r210c(
+        281,
+        "the block runs without the diagnostics it sits beside",
+        KNOWLEDGE_HARNESS,
+        "    if snapshot_retrieval_failure and not knowledge_diagnostics:\n",
+        "    if False:\n",
+        f"{_C6}test_the_block_needs_the_diagnostics_beside_it",
+    ),
+    _r210c(
+        282,
+        "the block runs when the snapshot, not the stand-in, served the run",
+        KNOWLEDGE_HARNESS,
+        "    if snapshot_retrieval_failure and knowledge_source != FIXTURE:\n",
+        "    if False:\n",
+        f"{_C6}test_the_block_needs_the_stand_in_to_serve_the_run",
     ),
 ]
 

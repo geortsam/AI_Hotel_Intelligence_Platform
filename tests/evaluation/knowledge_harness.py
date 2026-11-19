@@ -23,6 +23,13 @@ serves them from `copilot_retrieval_snapshot` instead -- what real PostgreSQL se
 these exact searches -- and the report then says so: a `knowledge_source` block and its own
 statement. A search the snapshot does not hold refuses the run. A run with the stand-in is
 unchanged, field for field, so the pinned reference report is too.
+
+## Retrieval failure from the snapshot (R2.10C, C.6)
+
+`snapshot_retrieval_failure=True`, beside `knowledge_diagnostics=True` and with the stand-in
+serving, adds a `snapshot_retrieval_failure` block: R2.10B's `retrieval_failure` judged again on
+what the snapshot holds for the same searches, beside the stand-in's verdict and labelled with both
+sources (`snapshot_retrieval_failure`). It changes nothing else in the report.
 """
 
 from __future__ import annotations
@@ -46,6 +53,7 @@ from app.services.tool_invocation import ToolInvocationService
 from tests.evaluation import copilot_retrieval_snapshot as snapshots
 from tests.evaluation import knowledge_diagnostics as diagnostics
 from tests.evaluation import knowledge_scorers as scorers
+from tests.evaluation import snapshot_retrieval_failure as snapshot_failures
 from tests.evaluation.fixture_documents import FixtureKnowledge
 from tests.evaluation.fixture_hotel import (
     EVAL_HOTEL,
@@ -171,8 +179,10 @@ def run_case(
     prompt: PromptRecord,
     observations: list[diagnostics.CaseObservation] | None = None,
     knowledge: snapshots.SnapshotKnowledge | None = None,
+    search_keys: list[snapshot_failures.CaseSearchKeys] | None = None,
 ) -> KnowledgeCaseResult:
-    """*knowledge* (C.5) replaces the stand-in for this case; `run` checks its misses after."""
+    """*knowledge* (C.5) replaces the stand-in for this case; `run` checks its misses after.
+    *search_keys* (C.6) collects the (query, limit) of each search the model requested."""
     scope = EvalScope(HotelRole(case.role))
     session = EvalSession()
     services = ToolServices(
@@ -229,6 +239,8 @@ def run_case(
                 shown=diagnostics.shown_in(recorder.requests),
             )
         )
+    if search_keys is not None:  # C.6
+        search_keys.append(snapshot_failures.search_keys(case.case_id, recorder.responses))
     seen = scorers.labels_seen(recorder.requests)
     structured = [
         json.loads(m.content)
@@ -312,16 +324,28 @@ def run(
     budget: Budget | None = None,
     knowledge_diagnostics: bool = False,
     knowledge_source: str = FIXTURE,
+    snapshot_retrieval_failure: bool = False,
 ) -> dict[str, Any]:
     """Run every case and return the report. *knowledge_diagnostics* (R2.10A) adds that block,
     beside the report's measures and changing none of them; off by default, so a report without
     it -- the pinned reference among them -- is exactly what it was.
 
     *knowledge_source* (C.5) is `fixture`, the default, or `snapshot`. A snapshot run labels its
-    report and refuses at the first case that made a search the snapshot does not hold."""
+    report and refuses at the first case that made a search the snapshot does not hold.
+
+    *snapshot_retrieval_failure* (C.6) adds that block beside `knowledge_diagnostics`, which it
+    needs, and is computed beside the stand-in's verdict, so the stand-in must serve the run."""
     if knowledge_source not in KNOWLEDGE_SOURCES:
         raise ValueError(f"knowledge_source must be one of {KNOWLEDGE_SOURCES}")
+    if snapshot_retrieval_failure and not knowledge_diagnostics:
+        raise ValueError(
+            "snapshot_retrieval_failure sits beside knowledge_diagnostics: enable both"
+        )
+    if snapshot_retrieval_failure and knowledge_source != FIXTURE:
+        raise ValueError("snapshot_retrieval_failure is computed beside the stand-in's verdict")
     snapshot = snapshots.load() if knowledge_source == SNAPSHOT else None
+    beside = snapshots.load() if snapshot_retrieval_failure else None
+    keys: list[snapshot_failures.CaseSearchKeys] = []
     registry = build_default_registry()
     budget = budget or Budget(timeout_seconds=30.0, max_output_tokens=1024)
     observations: list[diagnostics.CaseObservation] = []
@@ -339,6 +363,7 @@ def run(
                 prompt=prompt,
                 observations=observations if knowledge_diagnostics else None,
                 knowledge=knowledge,
+                search_keys=keys if beside is not None else None,
             )
         )
         if knowledge is not None and knowledge.misses:
@@ -380,6 +405,14 @@ def run(
     if knowledge_diagnostics:
         report["knowledge_diagnostics"] = diagnostics.block(
             question_set.cases, report["cases"], observations
+        )
+    if beside is not None:
+        report[snapshot_failures.BLOCK] = snapshot_failures.block(
+            question_set.cases,
+            observations,
+            keys,
+            report["knowledge_diagnostics"]["cases"],
+            beside,
         )
     return report
 
