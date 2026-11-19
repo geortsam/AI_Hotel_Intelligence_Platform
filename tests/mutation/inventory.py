@@ -8998,6 +8998,86 @@ STAGE_R6_2 = [
 ]
 
 
+# --- R0.4a (v2.0 roadmap, E5): the prepared Dependabot configuration covers every manifest -------
+
+DEPENDABOT = ".github/dependabot.yml"
+_DB = "tests/backend/test_dependabot_config.py::"
+
+
+def _r04a(number: int, breaks: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(
+        f"R0.4a-M{number}",
+        "R0.4a",
+        breaks,
+        one(DEPENDABOT, old, new),
+        tuple(_DB + k for k in killers),
+    )
+
+
+STAGE_R0_4A = [
+    _r04a(
+        1,
+        "the ML requirements are no longer watched (its entry duplicates the backend's)",
+        "    directory: /ml\n",
+        "    directory: /backend\n",
+        "test_every_manifest_in_the_repository_is_covered",
+        "test_no_ecosystem_and_directory_is_listed_twice",
+    ),
+    _r04a(
+        2,
+        "the npm entry points at a directory with no package.json",
+        "  - package-ecosystem: npm\n    directory: /frontend\n",
+        "  - package-ecosystem: npm\n    directory: /\n",
+        "test_every_entry_points_at_its_ecosystems_manifest",
+        "test_every_manifest_in_the_repository_is_covered",
+    ),
+    _r04a(
+        3,
+        "an entry is checked daily, not weekly",
+        "    directory: /ml\n    schedule:\n      interval: weekly\n",
+        "    directory: /ml\n    schedule:\n      interval: daily\n",
+        "test_updates_are_weekly_grouped_and_limited",
+    ),
+    _r04a(
+        4,
+        "an entry may keep many pull requests open at once",
+        "    open-pull-requests-limit: 3\n    groups:\n      actions:\n",
+        "    open-pull-requests-limit: 20\n    groups:\n      actions:\n",
+        "test_updates_are_weekly_grouped_and_limited",
+    ),
+    _r04a(
+        5,
+        "an entry's updates are no longer grouped",
+        '    groups:\n      actions:\n        patterns: ["*"]\n',
+        "",
+        "test_updates_are_weekly_grouped_and_limited",
+    ),
+    _r04a(
+        6,
+        "an entry targets a branch other than the default",
+        "  - package-ecosystem: github-actions\n    directory: /\n",
+        "  - package-ecosystem: github-actions\n    directory: /\n    target-branch: develop\n",
+        "test_it_targets_the_default_branch",
+    ),
+    _r04a(
+        7,
+        "the workflows' actions are no longer watched",
+        "  - package-ecosystem: github-actions\n",
+        "  - package-ecosystem: docker-compose\n",
+        "test_every_manifest_in_the_repository_is_covered",
+        "test_no_ecosystem_and_directory_is_listed_twice",
+    ),
+    _r04a(
+        8,
+        "the frontend image is no longer watched (its entry duplicates the backend's)",
+        "  - package-ecosystem: docker\n    directory: /frontend\n",
+        "  - package-ecosystem: docker\n    directory: /backend\n",
+        "test_every_manifest_in_the_repository_is_covered",
+        "test_no_ecosystem_and_directory_is_listed_twice",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -9043,4 +9123,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R1_4,
     *STAGE_R1_5,
     *STAGE_R6_2,
+    *STAGE_R0_4A,
 )

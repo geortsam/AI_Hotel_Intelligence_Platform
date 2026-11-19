@@ -33,7 +33,7 @@ policy, Ext = external service, Rel = release.
 | **R0.1** cut `v1.0.1` | proposed (R0.1 audit `fae39f3`), never cut | no: publishing a release | Rel | your decision | tag points at a green commit | **decision** — §3.1 |
 | **R0.2** CI independent of unauthenticated Docker Hub | partly: the restore image no longer pulls from Docker Hub (`e2abcf6`) | partly | CI, F | — | all 7 jobs green through the mirror; re-pin | re-pin batch (registry mirror for the Docker jobs); authenticated pulls need a secret — §3.2 |
 | **R0.3** shard the backend CI job | **done** (`c1cdf3e`, 3 shards) | — | — | — | — | done |
-| **R0.4a** Dependabot | none | config yes; activation no | Ext (on `main`) | merging to `main` | config parses; it is inert off the default branch | **E5**, then activation — §3.3 |
+| **R0.4a** Dependabot | none | config yes; activation no | Ext (on `main`) | merging to `main` | config parses; it is inert off the default branch | **config done in E5** (`.github/dependabot.yml`: pip, npm, Docker, Compose and Actions, weekly, grouped, 3 open at most; a test checks every manifest is covered); activation is the §3.3 decision |
 | **R0.4b** transitive Python pinning | **done** (`53fdd0e`, hashed universal locks) | — | — | — | — | done |
 | **R1.1** `HttpOnly; Secure; SameSite` cookie session, refresh, CSRF | none; token in `sessionStorage` (architecture §7.1) | yes | Sec, F (`deps.py`) | — | backend and frontend suites, CSRF and revocation tests, mutations; re-pin | re-pin batch |
 | **R1.2** email channel, password reset, deactivation | none | no | Sec, Ext, M | who may deactivate a global `users` row; an email provider | — | **decision** — §3.4 |
@@ -176,4 +176,5 @@ you would have to do.
 |---|---|---|---|
 | E1 | this matrix and the decision briefs | `6cc1d62` | see E2's row |
 | E2 | R1.5 IANA time zones on create and update; R1.4c every limited route declares 429 (pinned); 8 mutations (R1.4-M1–M2, R1.5-M1–M6): 803 in all | `1210746` | [44590050067](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/44590050067): red on shard 1 (`localtime` accepted on Linux), fixed in E3 |
-| E3 | R6.2 README counts computed from the code, test-suite sizes removed; §2.5 Vitest worker cap; 9 mutations (R6.2-M1–M9); R1.5 fix: Debian's `localtime`, `posixrules` and `Factory` are not places and are refused (R1.5-M7), found by E2's CI on Linux: 813 in all | (this commit) | — |
+| E3 | R6.2 README counts computed from the code, test-suite sizes removed; §2.5 Vitest worker cap; 9 mutations (R6.2-M1–M9); R1.5 fix: Debian's `localtime`, `posixrules` and `Factory` are not places and are refused (R1.5-M7), found by E2's CI on Linux: 813 in all | `73507c9` | CI_E3 |
+| E5 | R0.4a Dependabot configuration, inert until it reaches `main`; 8 mutations (R0.4a-M1–M8): 821 in all | (this commit) | — |

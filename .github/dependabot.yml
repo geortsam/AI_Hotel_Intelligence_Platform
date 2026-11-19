@@ -1,0 +1,77 @@
+# Dependabot (R0.4a). Prepared on a feature branch, where GitHub ignores it: Dependabot reads this
+# file only from the default branch, so nothing here runs until it reaches `main`.
+#
+# What a Dependabot pull request still has to pass, unchanged:
+#   - "Verify the dependency locks" (ci.yml): a direct pin bumped in a requirements file without
+#     regenerating both hashed locks fails there, by name. The regeneration command is in each
+#     lock's header (uv pip compile ... --generate-hashes).
+#   - the retrieval fingerprint (docs/retrieval-evaluation-decision.md, section 12): a change to
+#     ci.yml, pyproject.toml or either lock makes the pinned C.4 report stale, and CI fails until
+#     it is re-measured and re-pinned (section 12.6). No such pull request can merge without it.
+#
+# Weekly, grouped, a few open at a time: each one costs a full CI run, and a lock bump also a re-pin.
+# tests/backend/test_dependabot_config.py checks that every manifest is covered.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      python-backend:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /ml
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      python-ml:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      frontend:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      backend-images:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      frontend-images:
+        patterns: ["*"]
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      compose-images:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns: ["*"]
