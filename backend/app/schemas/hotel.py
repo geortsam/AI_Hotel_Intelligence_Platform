@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import datetime as dt
 import decimal
+import functools
 import uuid
+import zoneinfo
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
 # Reused across create and update so the two cannot drift apart.
 NameField = Annotated[str, Field(min_length=1, max_length=200)]
@@ -28,6 +30,32 @@ CurrencyField = Annotated[str, Field(min_length=3, max_length=3, pattern=r"^[A-Z
 LatitudeField = Annotated[decimal.Decimal, Field(ge=-90, le=90, max_digits=9, decimal_places=6)]
 LongitudeField = Annotated[decimal.Decimal, Field(ge=-180, le=180, max_digits=9, decimal_places=6)]
 StarRatingField = Annotated[int, Field(ge=1, le=5)]
+
+
+@functools.cache
+def iana_zone_names() -> frozenset[str]:
+    """Every zone name the IANA time zone database installed here defines (R1.5).
+
+    The system database where there is one -- the backend image's base installs Debian's
+    `tzdata` -- and the `tzdata` package otherwise. Read once: it does not change while the
+    process runs.
+    """
+    return frozenset(zoneinfo.available_timezones())
+
+
+def _iana_zone(value: str) -> str:
+    """Refuse a name the IANA database does not define, exactly as written (case included).
+
+    Before R1.5 any text was stored, and the business day of a hotel with an unknown zone is
+    taken in UTC (`services/business_day.py`). That fallback stays, for rows written then; no
+    new value can need it.
+    """
+    if value not in iana_zone_names():
+        raise ValueError("must be an IANA time zone name, such as Europe/Athens or UTC")
+    return value
+
+
+TimezoneField = Annotated[str, Field(min_length=1, max_length=64), AfterValidator(_iana_zone)]
 
 
 class HotelBase(BaseModel):
@@ -42,9 +70,10 @@ class HotelBase(BaseModel):
     address_line1: Annotated[str, Field(min_length=1, max_length=200)]
     city: Annotated[str, Field(min_length=1, max_length=100)]
     country_code: CountryCodeField
-    # IANA name. Required by the database because it is what turns an event timestamp into a
-    # business date; defaulted here so a client need not think about it.
-    timezone: Annotated[str, Field(min_length=1, max_length=64)] = "UTC"
+    # IANA name, checked against the IANA database (R1.5). Required by the database because it
+    # is what turns an event timestamp into a business date; defaulted here so a client need
+    # not think about it.
+    timezone: TimezoneField = "UTC"
     currency: CurrencyField
 
     address_line2: Annotated[str, Field(max_length=200)] | None = None
@@ -92,7 +121,7 @@ class HotelUpdate(BaseModel):
     email: Annotated[str, Field(max_length=254)] | None = None
     phone: Annotated[str, Field(max_length=50)] | None = None
     website: Annotated[str, Field(max_length=255)] | None = None
-    timezone: Annotated[str, Field(min_length=1, max_length=64)] | None = None
+    timezone: TimezoneField | None = None
     currency: CurrencyField | None = None
     star_rating: StarRatingField | None = None
     is_active: bool | None = None
@@ -135,4 +164,4 @@ class HotelResponse(BaseModel):
     updated_at: dt.datetime
 
 
-__all__ = ["HotelCreate", "HotelResponse", "HotelUpdate"]
+__all__ = ["HotelCreate", "HotelResponse", "HotelUpdate", "iana_zone_names"]

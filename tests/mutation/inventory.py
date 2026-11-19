@@ -8810,6 +8810,96 @@ STAGE_R2_10C = [
 ]
 
 
+# --- R1.4 / R1.5 (v2.0 roadmap, E2): 429 on every limited route; IANA time zones ----------------
+
+HOTEL_SCHEMA = "backend/app/schemas/hotel.py"
+AUTH_ENDPOINTS = "backend/app/api/v1/endpoints/auth.py"
+_TZ = "tests/backend/test_hotel_timezone.py::"
+_RL = "tests/backend/test_rate_limit_openapi.py::"
+_UNCHECKED_ZONE = "Annotated[str, Field(min_length=1, max_length=64)]"
+
+
+def _r14(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R1.4-M{number}", "R1.4", breaks, one(path, old, new), killers)
+
+
+def _r15(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R1.5-M{number}", "R1.5", breaks, one(path, old, new), killers)
+
+
+STAGE_R1_4 = [
+    _r14(
+        1,
+        "a rate-limited route stops declaring 429",
+        AUTH_ENDPOINTS,
+        "    status.HTTP_429_TOO_MANY_REQUESTS: {\n",
+        "    status.HTTP_418_IM_A_TEAPOT: {\n",
+        f"{_RL}test_every_limited_route_declares_429",
+    ),
+    _r14(
+        2,
+        "a route loses its rate limit",
+        AUTH_ENDPOINTS,
+        "    dependencies=[Depends(change_password_rate_limit)],\n",
+        "    dependencies=[],\n",
+        f"{_RL}test_the_limiters_reach_the_routes_they_are_meant_to",
+    ),
+]
+
+STAGE_R1_5 = [
+    _r15(
+        1,
+        "a time zone the IANA database does not define is accepted",
+        HOTEL_SCHEMA,
+        "    if value not in iana_zone_names():\n",
+        "    if False:\n",
+        f"{_TZ}test_a_name_the_iana_database_does_not_define_is_refused_on_create[Mars/Olympus]",
+        f"{_TZ}test_a_name_the_iana_database_does_not_define_is_refused_on_update[Mars/Olympus]",
+    ),
+    _r15(
+        2,
+        "a zone name is matched regardless of case",
+        HOTEL_SCHEMA,
+        "    if value not in iana_zone_names():\n",
+        "    if value.lower() not in {zone.lower() for zone in iana_zone_names()}:\n",
+        f"{_TZ}test_a_name_the_iana_database_does_not_define_is_refused_on_create[europe/athens]",
+    ),
+    _r15(
+        3,
+        "the create payload's zone is not checked",
+        HOTEL_SCHEMA,
+        '    timezone: TimezoneField = "UTC"\n',
+        f'    timezone: {_UNCHECKED_ZONE} = "UTC"\n',
+        f"{_TZ}test_a_name_the_iana_database_does_not_define_is_refused_on_create[Mars/Olympus]",
+    ),
+    _r15(
+        4,
+        "the update payload's zone is not checked",
+        HOTEL_SCHEMA,
+        "    timezone: TimezoneField | None = None\n",
+        f"    timezone: {_UNCHECKED_ZONE} | None = None\n",
+        f"{_TZ}test_a_name_the_iana_database_does_not_define_is_refused_on_update[Mars/Olympus]",
+    ),
+    _r15(
+        5,
+        "only a fixed subset of the IANA database is accepted",
+        HOTEL_SCHEMA,
+        "    return frozenset(zoneinfo.available_timezones())\n",
+        '    return frozenset({"UTC", "Europe/Athens"})\n',
+        f"{_TZ}test_every_iana_name_is_accepted",
+        f"{_TZ}test_the_check_is_the_installed_iana_database",
+    ),
+    _r15(
+        6,
+        "a row stored before R1.5 with an unknown zone no longer reads",
+        HOTEL_SCHEMA,
+        "    timezone: str\n    currency: str\n",
+        "    timezone: TimezoneField\n    currency: str\n",
+        f"{_TZ}test_a_row_written_before_r1_5_still_reads",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -8852,4 +8942,6 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R2_10A,
     *STAGE_R2_10B,
     *STAGE_R2_10C,
+    *STAGE_R1_4,
+    *STAGE_R1_5,
 )

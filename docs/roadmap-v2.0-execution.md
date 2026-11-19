@@ -41,8 +41,8 @@ policy, Ext = external service, Rel = release.
 | **R1.3b** platform-administrator API | none | no | Sec | who may grant and revoke | — | **decision** — §3.5 |
 | **R1.4a** shared rate limiter (Redis or PostgreSQL) | per-process | no | Ext or M, F | the backing store; a deployment change | — | **decision** — §3.6 |
 | **R1.4b** request-size limits | **done** (`bcdabeb`) | — | — | — | — | done |
-| **R1.4c** 429 declared in OpenAPI | declared on the rate-limited routes (login, copilot, conversations, knowledge) | yes | — | — | a test that every limited route declares 429 | **E2** (checked, pinned by test) |
-| **R1.5** `hotels.timezone` against IANA names | any text accepted, unknown zones fall back to UTC | yes | — (schema only) | — | API tests, mutations | **E2** |
+| **R1.4c** 429 declared in OpenAPI | declared on the rate-limited routes (login, copilot, conversations, knowledge) | yes | — | — | a test that every limited route declares 429 | **done in E2**: all 11 limited routes declare it; the limited surface is pinned |
+| **R1.5** `hotels.timezone` against IANA names | any text accepted, unknown zones fall back to UTC | yes | — (schema only) | — | API tests, mutations | **done in E2** |
 | **R2.1** a real or realistic data source | none verified (R2.4 feasibility `5b754f3`) | no | — | a dataset and its licence, or a pilot hotel | — | **decision** — §3.7 |
 | **R2.2** accuracy and drift protocols on that data | blocked by R2.1 | no | — | R2.1 | — | blocked |
 | **R2.3** live copilot evaluation, then Stage 7.15 | local Ollama pilots only; paid run excluded | no | Ext (paid) | spending; real documents | — | **decision** — §3.8 |
@@ -174,4 +174,5 @@ you would have to do.
 
 | Stage | Tasks | Commit | CI |
 |---|---|---|---|
-| E1 | this matrix and the decision briefs | (this commit) | — |
+| E1 | this matrix and the decision briefs | `6cc1d62` | see E2's row |
+| E2 | R1.5 IANA time zones on create and update; R1.4c every limited route declares 429 (pinned); 8 mutations (R1.4-M1–M2, R1.5-M1–M6): 803 in all | (this commit) | — |

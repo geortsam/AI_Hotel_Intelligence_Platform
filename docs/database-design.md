@@ -207,7 +207,7 @@ Conventions used in every table below:
 | `email` | TEXT | NULL | — | Contact — optional |
 | `phone` | TEXT | NULL | — | Contact — optional |
 | `website` | TEXT | NULL | — | Optional |
-| `timezone` | TEXT | NOT NULL | `'UTC'` | IANA name, e.g. `Europe/Athens`. **Required** — see §9 |
+| `timezone` | TEXT | NOT NULL | `'UTC'` | IANA name, e.g. `Europe/Athens`. **Required** — see §9. The API refuses a name the installed IANA database does not define (R1.5); the column itself accepts any text, so a row written earlier still reads, and its business day falls back to UTC |
 | `currency` | CHAR(3) | NOT NULL | — | Base currency for this property |
 | `star_rating` | SMALLINT | NULL | — | `CHECK (BETWEEN 1 AND 5)` — unrated hotels exist |
 | `total_rooms` | INTEGER | NULL | — | Denormalized convenience? **No** — omitted deliberately; derive from `rooms` |
