@@ -293,6 +293,22 @@ def test_the_result_is_counts_only() -> None:
     ]
 
 
+#: `LogRecord` attributes set by `logging` from the clock and the running process.
+_LOGGING_RUNTIME = frozenset(
+    {
+        "created",
+        "msecs",
+        "relativeCreated",
+        "asctime",
+        "thread",
+        "threadName",
+        "process",
+        "processName",
+        "taskName",
+    }
+)
+
+
 def test_the_log_event_is_counts_only(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -307,7 +323,12 @@ def test_the_log_event_is_counts_only(
     assert record.__dict__["demand_predictions_purged"] == 3
     assert record.__dict__["purge_hotels"] == 1
     assert record.__dict__["purge_batches"] == 1
-    rendered = repr(record.__dict__)
+    # Every field the code under test can set: the message, its arguments and the extras. The
+    # timing and process fields `logging` fills in itself are left out, because their digits
+    # vary from run to run and can contain a probe by chance (a `created` of ...0242422...).
+    rendered = repr(
+        {key: value for key, value in record.__dict__.items() if key not in _LOGGING_RUNTIME}
+    )
     for leak in ("4242", "Europe/Athens", "2001", "2024-10"):
         assert leak not in rendered, leak
 
