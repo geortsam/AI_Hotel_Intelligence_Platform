@@ -126,6 +126,22 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  /* The severity rail (UI-7): an inset stripe along the leading edge, drawn as a shadow so
+   * it takes no width. It REPEATS the badge's text and the icon's shape -- severity is a
+   * real field on an insight -- and never carries the meaning alone. */
+  box-shadow: inset 3px 0 0 var(--rail, var(--color-border-strong));
+}
+
+.rail-neutral {
+  --rail: var(--color-border-strong);
+}
+
+.rail-warning {
+  --rail: var(--color-warning);
+}
+
+.rail-danger {
+  --rail: var(--color-danger);
 }
 
 .header {

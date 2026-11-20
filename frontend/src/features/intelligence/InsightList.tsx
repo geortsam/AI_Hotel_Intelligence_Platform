@@ -48,7 +48,10 @@ export function InsightList({ insights }: InsightListProps) {
         const shown = SEVERITY[insight.severity]
         const Icon = shown.icon
         return (
-          <li key={`${insight.type}-${insight.date_from}-${index}`} className={styles.item}>
+          <li
+            key={`${insight.type}-${insight.date_from}-${index}`}
+            className={`${styles.item} ${styles[`rail-${shown.tone}`]}`}
+          >
             <div className={styles.header}>
               <Icon size={18} aria-hidden="true" className={styles.icon} />
               <h3 className={styles.title}>{insight.title}</h3>
