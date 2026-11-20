@@ -26,6 +26,8 @@ APPROVED_TABLES = {
     # so it is not in `user_hotels`, and it is not an identity attribute, so it is not a
     # column on `users`.
     "platform_admins",
+    # R1.1: the server side of a browser's cookie session.
+    "auth_sessions",
     # operational (11)
     "hotels",
     "room_types",

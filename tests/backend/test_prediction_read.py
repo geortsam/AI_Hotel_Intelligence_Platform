@@ -292,8 +292,9 @@ def test_this_route_is_present_and_is_a_read() -> None:
     # Stage 7.11 added the copilot conversations: 60 / 93 -> 63 / 98.
     # Stage 7.12 added the attention list: 63 / 98 -> 64 / 99.
     # Issue H2 added the early departure and its preview: 64 / 99 -> 65 / 101.
-    assert len(schema["paths"]) == 65
-    assert operations == 101
+    # R1.1 added the cookie session's three routes, reaching no model: 65 / 101 -> 68 / 104.
+    assert len(schema["paths"]) == 68
+    assert operations == 104
     assert SCHEMA_PATH in schema["paths"]
     assert set(schema["paths"][SCHEMA_PATH]) == {"get"}
 
@@ -665,8 +666,9 @@ def test_the_migration_chain_is_eleven_revisions() -> None:
     # Issue H7 added 0020 (the guests' email key and format CHECK; no table).
     # R1.3a added 0021 (two audit actions for the platform-administrator command; no table).
     # R3.3 added 0022 (`updated_at` on the three global catalogues; no table).
-    assert len(revisions) == 22
-    assert revisions[-1] == "20261120_0022_catalogue_versions.py"
+    # R1.1 added 0023 (`auth_sessions`, the cookie sessions' refresh tokens).
+    assert len(revisions) == 23
+    assert revisions[-1] == "20261120_0023_auth_sessions.py"
 
 
 # ======================================================================================

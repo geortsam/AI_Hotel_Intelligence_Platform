@@ -701,4 +701,4 @@ def test_the_loops_operational_limits_are_not_schema_constraints(world: World) -
 
 def test_the_schema_is_at_the_new_head(session: Session) -> None:
     revision = session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-    assert revision == "0022_catalogue_versions"
+    assert revision == "0023_auth_sessions"

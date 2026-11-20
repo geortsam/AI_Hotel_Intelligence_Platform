@@ -151,7 +151,7 @@ describe('the room list', () => {
     expect([...url.searchParams.keys()].sort()).toEqual(['page', 'page_size'])
     expect(url.searchParams.get('page')).toBe('1')
     expect(url.searchParams.get('page_size')).toBe('20')
-    expect(request!.authorization).toMatch(/^Bearer /)
+    expect(request!.credentials).toBe('include')
   })
 
   it('fetches the room-type catalogue exactly once, and no type per room', async () => {

@@ -3,7 +3,6 @@ import { useId, useRef, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/Button'
 import { ApiError } from '@/services/api/ApiError'
 import { authService } from '@/services/auth/authService'
-import { useAuth } from '@/session/AuthProvider'
 import { MIN_PASSWORD_LENGTH } from '@/types/auth'
 
 import styles from './AdministrationForms.module.css'
@@ -18,10 +17,11 @@ type Outcome =
  *
  * ## Two things about this endpoint make it unlike every other write in the application
  *
- * 1. **It revokes every token issued before it, including the one that authorised the
- *    request**, and returns the replacement. So the response is adopted through
- *    `AuthProvider.adoptToken` before anything else happens. Without that the very next
- *    request 401s and the user is signed out by the act of securing their account.
+ * 1. **It ends every session of the account, this one included**, and starts the caller a
+ *    new one in the same response (R1.1): fresh `HttpOnly` cookies, and the new session's CSRF
+ *    token in the `X-CSRF-Token` header, which the API client adopts as the response arrives.
+ *    Nothing here has to carry it over -- the next request already goes out with it, so the
+ *    user is not signed out by the act of securing their account.
  * 2. **A wrong *current* password is a 401**, exactly as it is at sign-in, while the bearer
  *    token stays perfectly valid. The service sends it with `credentialInBody` so the shared
  *    401 handling does not read that as expiry -- otherwise a typo would end the session.
@@ -45,7 +45,6 @@ export function ChangePasswordForm() {
   const confirmId = useId()
   const errorId = useId()
 
-  const { adoptToken } = useAuth()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -87,13 +86,12 @@ export function ChangePasswordForm() {
     setBusy(true)
     setOutcome({ kind: 'idle' })
     try {
-      const token = await authService.changePassword({
+      // The new session's CSRF token arrives in the response header and is adopted by the API
+      // client before this resolves; the body's bearer token is for API clients, not this page.
+      await authService.changePassword({
         current_password: current,
         new_password: next,
       })
-      // Before anything else: every earlier token, including the one that made this call, is
-      // now revoked.
-      adoptToken(token.access_token)
       setCurrent('')
       setNext('')
       setConfirm('')

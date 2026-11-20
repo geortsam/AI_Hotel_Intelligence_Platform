@@ -232,6 +232,19 @@ class ForbiddenError(AppError):
     message = "You do not have permission to perform this operation."
 
 
+class CsrfError(AppError):
+    """A cookie-authenticated request that changes something came without its CSRF token (R1.1).
+
+    403: the caller's session is valid -- the cookie proves that much -- but this request did
+    not prove it was sent by this application's own page rather than by another site riding
+    the cookie. A request with a bearer token never meets this; a header is not ambient.
+    """
+
+    status_code = status.HTTP_403_FORBIDDEN
+    code = "CSRF_FAILED"
+    message = "The request is missing a valid CSRF token."
+
+
 class RateLimitExceededError(AppError):
     """Too many requests from one source, too quickly.
 
@@ -568,6 +581,7 @@ __all__ = [
     "GENERIC_CONFLICT_MESSAGE",
     "AppError",
     "ConflictError",
+    "CsrfError",
     "DatabaseUnavailableError",
     "InternalFaultError",
     "NotFoundError",

@@ -50,6 +50,11 @@ PUBLIC_PATHS = frozenset(
         "/api/v1/",
         "/api/v1/auth/register",
         "/api/v1/auth/login",
+        # R1.1. Sign-in to a cookie session, and the two routes that renew or end one by their
+        # own refresh cookie and CSRF token rather than an access token.
+        "/api/v1/auth/session",
+        "/api/v1/auth/session/refresh",
+        "/api/v1/auth/session/end",
     }
 )
 

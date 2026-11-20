@@ -236,7 +236,7 @@ describe('the bookings list request', () => {
     mountList()
     await screen.findByText('MH-00162')
 
-    expect(listCalls()[0]!.authorization).toMatch(/^Bearer /)
+    expect(listCalls()[0]!.credentials).toBe('include')
   })
 
   it('issues exactly one request per view, and none per row', async () => {
@@ -743,7 +743,7 @@ describe('the booking detail request', () => {
     await screen.findByText('Booking MH-00162')
 
     for (const call of fetchStub.calls.filter((c) => c.url.includes('/api/v1/hotels/'))) {
-      expect(call.authorization).toMatch(/^Bearer /)
+      expect(call.credentials).toBe('include')
     }
   })
 })

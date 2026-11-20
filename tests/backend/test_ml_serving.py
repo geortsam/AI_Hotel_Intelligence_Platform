@@ -752,8 +752,9 @@ def test_exactly_one_serving_route_was_added() -> None:
     # Stage 7.11 added the copilot conversations: 60 / 93 -> 63 / 98.
     # Stage 7.12 added the attention list: 63 / 98 -> 64 / 99.
     # Issue H2 added the early departure and its preview: 64 / 99 -> 65 / 101.
-    assert len(schema["paths"]) == 65
-    assert operations == 101
+    # R1.1 added the cookie session's three routes, reaching no model: 65 / 101 -> 68 / 104.
+    assert len(schema["paths"]) == 68
+    assert operations == 104
     assert sorted(path for path in schema["paths"] if "/ml/" in path) == sorted(
         [SCHEMA_PATH, STORED_PREDICTIONS_PATH, ACCURACY_PATH, DISTRIBUTION_PATH]
     )

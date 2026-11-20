@@ -1644,7 +1644,8 @@ def test_the_v1_application_is_unaffected_by_the_flag() -> None:
     # Stage 7.11 added three conversation paths: like `ask`, they exist with the flag off.
     # Stage 7.12 added the attention list, which involves no language model at all.
     # Issue H2 added the early departure path, which involves none either.
-    assert len(off["paths"]) == 65
+    # R1.1 added the cookie session's three routes, reaching no model: 65 / 101 -> 68 / 104.
+    assert len(off["paths"]) == 68
 
 
 # ======================================================================================

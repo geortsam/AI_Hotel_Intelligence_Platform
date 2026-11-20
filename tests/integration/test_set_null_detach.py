@@ -53,16 +53,18 @@ SUITE_EMAIL = "set-null@example.test"
 #: The revision this suite is about. No longer the head: Issues H4 and H7 added 0019 and
 #: 0020 on top of it.
 REVISION = "0018_composite_set_null_columns"
-HEAD = "0022_catalogue_versions"
+HEAD = "0023_auth_sessions"
 MIGRATION = REPO_ROOT / "database" / "migrations" / "versions" / f"20261006_{REVISION}.py"
 RANGE = {"date_from": "2026-09-01", "date_to": "2026-09-30"}
 REVIEW = {"rating": "4.50", "review_date": "2026-09-05", "title": "Kept", "body": "Quiet room."}
 
 #: Every foreign key at head -- (columns, referenced, actions) -- exactly as PostgreSQL renders it
-#: through ``pg_get_constraintdef``. 38; three changed by 0018.
+#: through ``pg_get_constraintdef``. 39; three changed by 0018, and one added by 0023 (R1.1).
 FOREIGN_KEY_PARTS = {
     "fk_audit_events_actor_user_id_users": ("actor_user_id", "users(id)", "ON DELETE RESTRICT"),
     "fk_audit_events_hotel_id_hotels": ("hotel_id", "hotels(id)", "ON DELETE RESTRICT"),
+    # R1.1. A cookie session means nothing without its account.
+    "fk_auth_sessions_user_id_users": ("user_id", "users(id)", "ON DELETE CASCADE"),
     "fk_booking_rooms_booking_stay_status_bookings": (
         "booking_id, check_in_date, check_out_date, booking_status",
         "bookings(id, check_in_date, check_out_date, status)",
@@ -527,7 +529,7 @@ def test_the_catalog_holds_every_foreign_key_as_0018_left_it(engine: Engine) -> 
         }
 
     assert found == FOREIGN_KEYS
-    assert len(found) == 38
+    assert len(found) == 39
     assert columns == dict.fromkeys(CHANGED_BY_0018, 1)
     assert sum(" SET NULL" in definition for definition in found.values()) == 3
 

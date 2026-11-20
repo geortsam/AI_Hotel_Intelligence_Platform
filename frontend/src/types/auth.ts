@@ -31,6 +31,23 @@ export interface TokenResponse {
 }
 
 /**
+ * `POST /auth/session` and `POST /auth/session/refresh` response. Mirrors `SessionResponse`
+ * (R1.1).
+ *
+ * **No credential.** The access and refresh tokens are `HttpOnly` cookies, never visible here.
+ * `csrf_token` is what the page echoes in `X-CSRF-Token` on every request that changes
+ * something; it proves only that a request came from this page.
+ */
+export interface SessionResponse {
+  readonly user: AuthenticatedUser
+  readonly csrf_token: string
+  /** Seconds until the access cookie's token expires; the client renews on the next 401. */
+  readonly expires_in: number
+  /** Seconds the session lasts unless renewed: the idle limit. */
+  readonly refresh_expires_in: number
+}
+
+/**
  * `GET /auth/me` response. Mirrors `UserResponse`.
  *
  * Note what is absent: no role, no hotel membership, no permissions. The backend documents

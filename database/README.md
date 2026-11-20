@@ -12,10 +12,10 @@ database *as a database*, kept separate from the application code that queries i
 
 ## Current state
 
-**Twenty-two migrations, head `0022_catalogue_versions`,** applied by `alembic upgrade
-head`. They build **28 tables** and the `historical_room_overlaps` view; with Alembic's own
-`alembic_version`, a migrated database reports 30 entries in `information_schema.tables`. Every
-one of the 28 is ORM-mapped -- `tests/backend/test_model_metadata.py` pins the list, so a table
+**Twenty-three migrations, head `0023_auth_sessions`,** applied by `alembic upgrade
+head`. They build **29 tables** and the `historical_room_overlaps` view; with Alembic's own
+`alembic_version`, a migrated database reports 31 entries in `information_schema.tables`. Every
+one of the 29 is ORM-mapped -- `tests/backend/test_model_metadata.py` pins the list, so a table
 that exists in one place and not the other fails the suite. The models live in
 `backend/app/models/`; this directory
 holds the migration history and the raw SQL that is not expressible through the ORM -- the
@@ -29,7 +29,7 @@ canonical SHA-256 over every revision file with line endings normalised to LF, s
 cannot be edited unnoticed on any platform:
 
 ```
-bf415b16a63f2bc0a51e99c59184d5d9c262b86daa5bc4cc740721741866ea6e
+794d256d068ca0c6ef36cbd31f25afe2ef8d169fce9031d76c5f3f00e66ea0a3
 ```
 
 Editing any shipped revision changes that digest and fails

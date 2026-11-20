@@ -20,8 +20,10 @@ import { describe, expect, it } from 'vitest'
  *    the request body and nowhere else.
  * 4. **The last-owner rule is never predicted.** Counting owners in the browser would be a
  *    guess about a number another administrator may already be changing.
- * 5. **The token seam has exactly one caller.** `adoptToken` exists for the password change
- *    and must not become a general way to write the session.
+ * 5. **No screen writes the session.** Since cookie sessions (R1.1) the credentials are
+ *    `HttpOnly` cookies, and a new session's CSRF token is adopted by the API client from the
+ *    response itself -- so nothing here touches the session, and the password form keeps none
+ *    of the bearer token its response body still carries for API clients.
  */
 
 /*
@@ -254,20 +256,16 @@ describe('credentials go from the field to the body and nowhere else', () => {
   })
 })
 
-describe('the session seam has one caller', () => {
-  it('adopts a token only in the password form', () => {
-    const users = sources.filter((file) => /adoptToken/.test(code(file.text)))
-    expect(users.map((file) => file.name)).toEqual(['ChangePasswordForm.tsx'])
-    expect(named('ChangePasswordForm.tsx').match(/adoptToken\(/g)).toHaveLength(1)
+describe('no screen writes the session', () => {
+  it('adopts no token anywhere in this feature', () => {
+    const users = sources.filter((file) => /adoptToken|writeToken|tokenStorage/.test(code(file.text)))
+    expect(users.map((file) => file.name)).toEqual([])
   })
 
-  it('adopts it before anything else can issue a request', () => {
-    const form = named('ChangePasswordForm.tsx')
-    // The old token is dead the moment the server answers, so the replacement is stored
-    // before the form clears itself or reports success.
-    expect(form).toMatch(
-      /adoptToken\(token\.access_token\)[\s\S]{0,200}setOutcome\(\{ kind: 'done' \}\)/,
-    )
+  it('keeps nothing of the bearer token a password change returns', () => {
+    // The body's token is for API clients. This page's session continues in the cookies the
+    // same response set, so the form reads nothing out of the body at all.
+    expect(code(named('ChangePasswordForm.tsx'))).not.toMatch(/access_token/)
   })
 })
 

@@ -821,7 +821,7 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     """
     chain = revisions()
 
-    assert len(chain) == 22
+    assert len(chain) == 23
     roots = [rev for rev, down in chain.items() if down is None]
     heads = [rev for rev in chain if rev not in set(chain.values())]
 
@@ -848,7 +848,8 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     # R1.3a added 0021, the sixth audit revision: it widens the action CHECK by the two
     # platform-administrator actions, exactly as 0009 widened it by one.
     # R3.3 added 0022, which gives the three catalogues an `updated_at`; no audit table.
-    assert heads == ["0022_catalogue_versions"]
+    # R1.1 added 0023, `auth_sessions` for the cookie sessions; no audit table.
+    assert heads == ["0023_auth_sessions"]
     assert chain["0007_audit_events"] == "0006_users_password_changed_at"
     assert chain["0008_audit_retention_archive"] == "0007_audit_events"
     assert chain["0009_audit_booking_deleted"] == "0008_audit_retention_archive"
@@ -863,9 +864,10 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     assert chain["0020_guest_email_rules"] == "0019_review_external_id_scope"
     assert chain["0021_audit_platform_grants"] == "0020_guest_email_rules"
     assert chain["0022_catalogue_versions"] == "0021_audit_platform_grants"
+    assert chain["0023_auth_sessions"] == "0022_catalogue_versions"
     # Every other revision is somebody's parent exactly once: no fork.
     parents = [down for down in chain.values() if down is not None]
-    assert len(parents) == len(set(parents)) == 21
+    assert len(parents) == len(set(parents)) == 22
 
 
 def test_the_audit_table_is_created_by_exactly_one_migration() -> None:

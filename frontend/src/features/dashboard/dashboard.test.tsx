@@ -455,7 +455,7 @@ describe('request count', () => {
     await screen.findByText('58.0%')
 
     for (const call of analyticsCalls()) {
-      expect(call.authorization).toMatch(/^Bearer /)
+      expect(call.credentials).toBe('include')
     }
   })
 
@@ -877,7 +877,7 @@ describe('hotel context', () => {
     await screen.findByText('58.0%')
 
     const call = fetchStub.calls.find((c) => c.url.includes('/hotels?page='))!
-    expect(call.authorization).toMatch(/^Bearer /)
+    expect(call.credentials).toBe('include')
   })
 
   it('says an account has no property, instead of showing an empty dashboard', async () => {

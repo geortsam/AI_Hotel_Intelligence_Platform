@@ -17,7 +17,7 @@ and readable.
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
 ![Tests](https://img.shields.io/badge/tests-run%20in%20CI-success)
-![API](https://img.shields.io/badge/API-65%20paths%20%C2%B7%20101%20operations-informational)
+![API](https://img.shields.io/badge/API-68%20paths%20%C2%B7%20104%20operations-informational)
 
 </div>
 
@@ -29,12 +29,12 @@ more than one currency and the platform never converts between them.</sub></div>
 
 > ### Current state: **V1 complete and verified; V2 complete through Stage 7.14**
 >
-> Eleven domains over a 28-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
+> Eleven domains over a 29-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
 > guests, bookings, payments, reviews, the financial ledger, analytics and intelligence, plus the
 > stored demand predictions the served model writes and the measurements taken over them, and
 > V2's copilot accounting records, hotel knowledge documents and copilot conversations, and the
 > declared demand observation periods —
-> reachable as **65 API paths / 101 operations**, of which **96 require authentication**.
+> reachable as **68 API paths / 104 operations**, of which **96 require authentication**.
 > Authentication is Argon2id plus HS256
 > access tokens; authorization is a four-level hotel role hierarchy with a separate
 > platform-administrator capability. There is a complete React front end — all thirteen
@@ -43,7 +43,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
 > **The backend and frontend suites run in CI on every push.** Schema head is
-> `0022_catalogue_versions` across 22 linear migrations.
+> `0023_auth_sessions` across 23 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
 > baseline — seasonal-naive day-of-week median forecasting, MAD-based intervals and anomaly
@@ -229,7 +229,7 @@ flowchart LR
         S["<b>React SPA</b><br/>static bundle<br/>route-level code splitting"]
         A["<b>FastAPI</b><br/>api → services → repositories"]
         M["<b>demand_baseline_v1</b><br/>artifact, verified before load<br/>loaded once per process"]
-        D[("<b>PostgreSQL 18.6</b><br/>28 application tables<br/>constraints carry the rules")]
+        D[("<b>PostgreSQL 18.6</b><br/>29 application tables<br/>constraints carry the rules")]
     end
 
     B -- "HTTPS" --> N
@@ -321,9 +321,9 @@ Full detail, including the rules later stages must follow:
 |---|---|---|
 | Backend | Python 3.14, FastAPI, Uvicorn | Async HTTP API, OpenAPI generated from types |
 | Validation | Pydantic v2, pydantic-settings | Request/response schemas, environment config |
-| ORM | SQLAlchemy 2.0 | Data mapping across 17 model modules |
+| ORM | SQLAlchemy 2.0 | Data mapping across 18 model modules |
 | Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
-| Migrations | Alembic | 22 linear revisions, head `0022_catalogue_versions` |
+| Migrations | Alembic | 23 linear revisions, head `0023_auth_sessions` |
 | Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
 | Frontend | React 18, TypeScript 5.9, Vite 6 | Dashboard SPA, route-level code splitting |
 | Intelligence (V1) | Python standard library | Deterministic statistical baseline — no NumPy or pandas on its path |
@@ -453,7 +453,7 @@ Start the API:
 |---|---|
 | http://localhost:8000/health | `{"status":"ok", ...}` |
 | http://localhost:8000/health/db | `{"status":"ok","database":"reachable", ...}`, or 503 when it is not |
-| http://localhost:8000/docs | Swagger UI — 65 paths, 101 operations. Disabled when `ENVIRONMENT=production` |
+| http://localhost:8000/docs | Swagger UI — 68 paths, 104 operations. Disabled when `ENVIRONMENT=production` |
 
 ### Frontend
 
@@ -615,7 +615,7 @@ shards, so GitHub Actions shows seven job runs per workflow run.
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 | `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical |
-| `Mutation checks` | re-applies the 867 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Mutation checks` | re-applies the 889 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
@@ -892,14 +892,14 @@ Three things are worth knowing before this is exposed to anyone real. None is a 
 sense of not working as designed; each is a deliberate V1 boundary, recorded here rather than
 left to be discovered.
 
-- **The access token is stored in `sessionStorage`.** The backend authenticates with a bearer
-  JWT and offers no cookie session, so the token must be readable by JavaScript — which means
-  **any cross-site-scripting flaw in the front end could exfiltrate it**. `sessionStorage` is
-  chosen over `localStorage` only for lifetime: it is scoped to the tab and cleared when the tab
-  closes, and the token lives 30 minutes. The content security policy is `script-src 'self'`
-  with no inline script and no `eval`, which narrows the exposure but does not remove it. The
-  real fix is an `HttpOnly; Secure; SameSite` cookie issued by the backend — a backend change,
-  and V2 work. See [docs/architecture.md §7.1](docs/architecture.md#71-session-handling-and-its-limitation).
+- **The browser's session is in `HttpOnly` cookies (R1.1).** `POST /auth/session` sets the
+  access and refresh tokens as `HttpOnly; Secure; SameSite=Strict` cookies that script cannot
+  read, so a cross-site-scripting flaw can act in the page while it runs but can no longer carry
+  the session away. Every request that changes something must echo the session's CSRF token in
+  `X-CSRF-Token`; refresh tokens rotate, and a replayed one ends the session. Signing out, a
+  password change, deactivation and twelve idle hours end it on the server. The bearer login
+  (`POST /auth/login`) remains for API clients, which hold their own token. See
+  [docs/architecture.md §7.1](docs/architecture.md#71-session-handling-and-its-limitation).
 - **Registration is open, and creating a hotel makes you its owner.** `POST /auth/register` is
   unauthenticated by design, and any authenticated user may `POST /hotels` and becomes that
   hotel's `owner`. This is the documented first-run path — see [First run](#first-run) — and it

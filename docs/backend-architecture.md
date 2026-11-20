@@ -179,6 +179,18 @@ making a compensating negative line the correction mechanism.
 
 ---
 
+### Two credentials, one identity (R1.1)
+
+`get_current_user` accepts either an `Authorization: Bearer` token -- `POST /auth/login`, for API
+clients -- or the browser's cookie session from `POST /auth/session`. The header wins when both
+are present. **A cookie-authenticated request that is not a GET must carry the session's CSRF
+token in `X-CSRF-Token`, or it is `403 CSRF_FAILED`** before the route runs: a browser attaches a
+cookie to any request, a header only to its own. This holds on every unsafe operation, so the
+OpenAPI document adds the 403 wherever none is declared (`app.api.openapi`); where a role or
+platform 403 already is, its description stands and this rule applies beside it. A cookie
+session's access token names its session (`sid`), and the request is refused once that session
+has ended. The design is in [architecture.md §7.1](architecture.md#71-session-handling-and-its-limitation).
+
 ## 6. Database-authoritative constraints
 
 These correctness guarantees come from PostgreSQL, and the application deliberately does

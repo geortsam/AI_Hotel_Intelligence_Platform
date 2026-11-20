@@ -1352,7 +1352,7 @@ def runbook(name: str, breaks: str, path: str, old: str, new: str, *tests: str) 
 
 
 STALE = "`0011_demand_prediction_public_id`"
-CURRENT = "`0022_catalogue_versions`"
+CURRENT = "`0023_auth_sessions`"
 REVISIONS_IN_BACKUP = "test_every_revision_a_runbook_quotes_is_the_current_head[backup-restore]"
 
 STAGE_M1 = [
@@ -1384,8 +1384,8 @@ STAGE_M1 = [
         "M1-M4",
         "the restore check forgets alembic_version in its base-table count",
         BACKUP_RUNBOOK,
-        "Expect **29** — the 28 application tables",
-        "Expect **28** — the 28 application tables",
+        "Expect **30** — the 29 application tables",
+        "Expect **29** — the 29 application tables",
         "test_the_restore_check_expects_every_application_table_plus_alembic_version",
     ),
     runbook(
@@ -8927,16 +8927,16 @@ STAGE_R6_2 = [
         1,
         "the README's API path count goes stale",
         README,
-        "**65 API paths / 101 operations**",
-        "**64 API paths / 101 operations**",
+        "**68 API paths / 104 operations**",
+        "**67 API paths / 104 operations**",
         "test_api_paths_and_operations",
     ),
     _r62(
         2,
         "the Swagger row's operation count goes stale",
         README,
-        "Swagger UI — 65 paths, 101 operations.",
-        "Swagger UI — 65 paths, 100 operations.",
+        "Swagger UI — 68 paths, 104 operations.",
+        "Swagger UI — 68 paths, 103 operations.",
         "test_api_paths_and_operations",
     ),
     _r62(
@@ -8951,24 +8951,24 @@ STAGE_R6_2 = [
         4,
         "the architecture diagram's table count goes stale",
         README,
-        "<br/>28 application tables<br/>",
         "<br/>29 application tables<br/>",
+        "<br/>28 application tables<br/>",
         "test_application_tables",
     ),
     _r62(
         5,
         "the README's model-module count goes stale again",
         README,
+        "| Data mapping across 18 model modules |",
         "| Data mapping across 17 model modules |",
-        "| Data mapping across 15 model modules |",
         "test_model_modules",
     ),
     _r62(
         6,
         "the README's migration count goes stale",
         README,
+        "| 23 linear revisions, head",
         "| 22 linear revisions, head",
-        "| 21 linear revisions, head",
         "test_migrations_and_head",
     ),
     _r62(
@@ -9563,6 +9563,240 @@ STAGE_R3_3 = [
 ]
 
 
+# --- R1.1 (v2.0 roadmap, E8): the browser's cookie session -----------------------------------
+
+_CS = "tests/integration/test_cookie_sessions.py::"
+_CL = "tests/backend/test_cookie_session_layering.py::"
+_AUTH_UI = "src/session/auth.test.tsx"
+
+
+def _r11(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R1.1-M{number}", "R1.1", breaks, one(path, old, new), killers)
+
+
+def _r11_db(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An R1.1 mutation whose killers drive real sessions against PostgreSQL."""
+    return Mutation(
+        f"R1.1-M{number}", "R1.1", breaks, one(path, old, new), killers, needs_database=True
+    )
+
+
+def _r11_ui(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An R1.1 mutation of the client, caught by Vitest."""
+    return Mutation(
+        f"R1.1-M{number}", "R1.1", breaks, one(path, old, new), killers, runner=Runner.VITEST
+    )
+
+
+STAGE_R1_1 = [
+    _r11_db(
+        1,
+        "a cookie-authenticated write goes through without its CSRF token",
+        "backend/app/api/deps.py",
+        "    if request.method not in SAFE_METHODS and not csrf_matches(\n",
+        "    if False and not csrf_matches(\n",
+        f"{_CS}test_a_write_without_the_csrf_token_is_refused_and_writes_nothing",
+    ),
+    _r11(
+        2,
+        "any CSRF token matches any session",
+        "backend/app/core/security.py",
+        '    return hmac.compare_digest(presented.encode("utf-8"), '
+        "csrf_token(settings, session_id).encode())\n",
+        "    return True\n",
+        f"{_CL}test_a_csrf_token_matches_only_its_own_session",
+    ),
+    _r11(
+        3,
+        "the CSRF token is no longer bound to its session",
+        "backend/app/core/security.py",
+        '_CSRF_DOMAIN + str(session_id).encode("ascii"), "sha256"',
+        '_CSRF_DOMAIN, "sha256"',
+        f"{_CL}test_the_csrf_token_is_bound_to_its_session",
+    ),
+    _r11_db(
+        4,
+        "a replayed refresh token is honoured instead of ending the session",
+        "backend/app/services/session.py",
+        "        if row.used_at is not None:\n",
+        "        if False:\n",
+        f"{_CS}test_a_replayed_refresh_token_ends_the_whole_session",
+    ),
+    _r11_db(
+        5,
+        "a refresh no longer consumes its token",
+        "backend/app/services/session.py",
+        "        row.used_at = now\n",
+        "",
+        f"{_CS}test_a_replayed_refresh_token_ends_the_whole_session",
+    ),
+    _r11_db(
+        6,
+        "an ended session's access tokens keep working until they expire",
+        "backend/app/services/auth.py",
+        "        if claims.session_id is not None and not self._sessions.family_is_live(\n",
+        "        if False and not self._sessions.family_is_live(\n",
+        f"{_CS}test_signing_out_ends_the_session_and_clears_the_cookies",
+    ),
+    _r11_db(
+        7,
+        "signing out ends nothing on the server",
+        "backend/app/services/session.py",
+        "        self._sessions.revoke_family(row.family_id, dt.datetime.now(dt.UTC))\n",
+        "",
+        f"{_CS}test_signing_out_ends_the_session_and_clears_the_cookies",
+    ),
+    _r11_db(
+        8,
+        "a password change leaves the account's other sessions alive",
+        "backend/app/services/auth.py",
+        "            self._sessions.revoke_all_for_user(user.id, changed_at)\n",
+        "",
+        f"{_CS}test_a_password_change_ends_every_session_and_continues_the_callers",
+    ),
+    _r11_db(
+        9,
+        "a deactivated account can still renew its session",
+        "backend/app/services/session.py",
+        "        if user is None or not user.is_active or row.created_at <= "
+        "user.password_changed_at:\n",
+        "        if user is None or row.created_at <= user.password_changed_at:\n",
+        f"{_CS}test_a_deactivated_account_cannot_refresh",
+    ),
+    _r11_db(
+        10,
+        "an expired session can still be renewed",
+        "backend/app/services/session.py",
+        "        if row.revoked_at is not None or row.expires_at <= now:\n",
+        "        if row.revoked_at is not None:\n",
+        f"{_CS}test_an_expired_session_cannot_be_refreshed_and_its_access_token_stops",
+    ),
+    _r11_db(
+        11,
+        "a renewal is accepted without its CSRF token",
+        "backend/app/services/session.py",
+        "            raise InvalidTokenError\n"
+        "        if not csrf_matches(self._settings, row.family_id, presented_csrf):\n",
+        "            raise InvalidTokenError\n        if False:\n",
+        f"{_CS}test_a_refresh_without_the_csrf_token_is_refused_and_consumes_nothing",
+    ),
+    _r11_db(
+        12,
+        "a bearer token planted in the access cookie authenticates",
+        "backend/app/services/auth.py",
+        "        if session_id is None:\n",
+        "        if False:\n",
+        f"{_CS}test_a_bearer_token_in_the_access_cookie_is_refused",
+    ),
+    _r11(
+        13,
+        "the access cookie is readable by script",
+        "backend/app/api/session_cookies.py",
+        "        issued.access_token,\n"
+        "        max_age=lifetime,\n"
+        '        path="/",\n'
+        "        secure=True,\n"
+        "        httponly=True,\n",
+        "        issued.access_token,\n"
+        "        max_age=lifetime,\n"
+        '        path="/",\n'
+        "        secure=True,\n"
+        "        httponly=False,\n",
+        f"{_CL}test_the_tokens_are_httponly_and_the_csrf_token_is_not",
+    ),
+    _r11(
+        14,
+        "the refresh cookie is sent to every route",
+        "backend/app/api/session_cookies.py",
+        "        issued.refresh_secret,\n        max_age=lifetime,\n        path=REFRESH_PATH,\n",
+        '        issued.refresh_secret,\n        max_age=lifetime,\n        path="/",\n',
+        f"{_CL}test_the_refresh_cookie_is_sent_only_to_the_session_routes",
+    ),
+    _r11(
+        15,
+        "the OpenAPI document no longer says a cookie write can be refused for CSRF",
+        "backend/app/api/openapi.py",
+        '                    responses["403"] = _error(CSRF_FORBIDDEN_DESCRIPTION)\n',
+        "                    pass\n",
+        "tests/backend/test_openapi_authorization.py::"
+        "test_a_403_is_claimed_only_where_it_can_be_answered",
+    ),
+    _r11_ui(
+        16,
+        "the client sends writes without the CSRF token",
+        "frontend/src/services/api/client.ts",
+        "        ...(csrf === null ? {} : { [CSRF_HEADER]: csrf }),\n",
+        "",
+        "src/features/bookings/mutations.test.tsx::carries the token on the mutation itself",
+    ),
+    _r11_ui(
+        17,
+        "the client stops sending the session's cookies",
+        "frontend/src/services/api/client.ts",
+        "      credentials: withoutCookies ? 'omit' : 'include',\n",
+        "      credentials: 'omit',\n",
+        "src/features/bookings/bookings.test.tsx::carries the session token",
+    ),
+    _r11_ui(
+        18,
+        "an expired access cookie signs the user out instead of renewing the session",
+        "frontend/src/services/api/client.ts",
+        "      if (bridge.getToken() !== null && (await refreshSession())) {\n",
+        "      if (false) {\n",
+        f"{_AUTH_UI}::renews an expired access cookie once, retries, and keeps the session",
+    ),
+    _r11_ui(
+        19,
+        "signing out leaves the session alive on the server",
+        "frontend/src/session/AuthProvider.tsx",
+        "    authService.logout().catch(() => {})\n",
+        "",
+        f"{_AUTH_UI}::ends the session on the server too, with its CSRF token",
+    ),
+    _r11_ui(
+        20,
+        "a new session's CSRF token is ignored, so the next write is refused",
+        "frontend/src/services/api/client.ts",
+        "    bridge.adoptToken?.(issued)\n",
+        "",
+        "src/features/administration/administration.test.tsx::"
+        "adopts the CSRF token of the new session, because the old one has ended",
+    ),
+]
+
+
+# --- R0.2 (v2.0 roadmap, E8): Docker Hub pulls through a mirror in CI ------------------------
+
+CI_WORKFLOW = ".github/workflows/ci.yml"
+_MIRROR = "tests/backend/test_ci_registry_mirror.py::"
+
+
+def _r02(number: int, breaks: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R0.2-M{number}", "R0.2", breaks, one(CI_WORKFLOW, old, new), killers)
+
+
+STAGE_R0_2 = [
+    _r02(
+        1,
+        "the runtime job carries on when the mirror did not take effect",
+        '            *) echo "::error::the registry mirror is not active"; exit 1 ;;\n'
+        "          esac\n\n      - name: Docker and Compose versions\n",
+        '            *) echo "  carrying on without it" ;;\n'
+        "          esac\n\n      - name: Docker and Compose versions\n",
+        f"{_MIRROR}test_it_fails_the_job_unless_the_mirror_took_effect[docker-runtime]",
+    ),
+    _r02(
+        2,
+        "the reproducibility job carries on when the mirror did not take effect",
+        '            *) echo "::error::the registry mirror is not active"; exit 1 ;;\n'
+        "          esac\n\n      - name: Docker version\n",
+        '            *) echo "  carrying on without it" ;;\n'
+        "          esac\n\n      - name: Docker version\n",
+        f"{_MIRROR}test_it_fails_the_job_unless_the_mirror_took_effect[image-reproducibility]",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -9612,4 +9846,6 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R4_2,
     *STAGE_R1_3A,
     *STAGE_R3_3,
+    *STAGE_R1_1,
+    *STAGE_R0_2,
 )

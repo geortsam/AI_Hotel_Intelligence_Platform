@@ -364,7 +364,7 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
         run: |
           set -euo pipefail
-          expected='0022_catalogue_versions'
+          expected='0023_auth_sessions'
 
           echo "--- declared head ---"
           heads="$(python -m alembic heads 2>&1)"
@@ -655,6 +655,35 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v5
 
+      - name: Pull Docker Hub images through a mirror, Docker Hub the fallback
+        # R0.2. Every image this job pulls in its steps comes from Docker Hub, unauthenticated,
+        # and one Hub outage (run 37994098334) has already failed a run. The daemon now asks the
+        # public pull-through mirror first and falls back to Docker Hub by itself when the mirror
+        # fails, so the mirror can add availability but cannot take any away. It cannot change
+        # what is pulled either: every reference is pinned by digest, and a digest is verified on
+        # every pull, wherever the bytes came from. The `services:` containers of the other jobs
+        # are pulled by the runner before any step runs, so they still come from Docker Hub.
+        run: |
+          set -euo pipefail
+          config=/etc/docker/daemon.json
+          current='{}'
+          if sudo test -s "$config"; then current="$(sudo cat "$config")"; fi
+          printf '%s' "$current" \
+            | jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' \
+            | sudo tee "$config" > /dev/null
+          sudo systemctl restart docker
+          for attempt in $(seq 1 30); do
+            docker info > /dev/null 2>&1 && break
+            [ "$attempt" -lt 30 ] || { echo "::error::the Docker daemon did not come back"; exit 1; }
+            sleep 1
+          done
+          mirrors="$(docker info --format '{{json .RegistryConfig.Mirrors}}')"
+          echo "  registry mirrors: $mirrors"
+          case "$mirrors" in
+            *'https://mirror.gcr.io/'*) echo "  OK   Docker Hub pulls try mirror.gcr.io first" ;;
+            *) echo "::error::the registry mirror is not active"; exit 1 ;;
+          esac
+
       - name: Docker and Compose versions
         run: |
           set -euo pipefail
@@ -888,8 +917,8 @@ jobs:
 
             revisions=$(ls /app/database/migrations/versions/*.py | wc -l)
             echo "  revisions present: $revisions"
-            if [ "$revisions" -ne 22 ]; then
-              echo "::error::expected 22 revisions, found $revisions"
+            if [ "$revisions" -ne 23 ]; then
+              echo "::error::expected 23 revisions, found $revisions"
               exit 1
             fi
 
@@ -1250,9 +1279,9 @@ jobs:
           echo "--- alembic_version, read from PostgreSQL ---"
           revision="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  $revision"
-          [ "$revision" = "0022_catalogue_versions" ] || {
-            echo "::error::expected 0022_catalogue_versions, got $revision"; exit 1; }
-          echo "  OK   schema is at 0022_catalogue_versions"
+          [ "$revision" = "0023_auth_sessions" ] || {
+            echo "::error::expected 0023_auth_sessions, got $revision"; exit 1; }
+          echo "  OK   schema is at 0023_auth_sessions"
 
           tables="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  public tables created: $tables"
@@ -1738,7 +1767,7 @@ jobs:
 
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  after : $after"
-          [ "$after" = "0022_catalogue_versions" ] || {
+          [ "$after" = "0023_auth_sessions" ] || {
             echo "::error::revision moved to $after"; exit 1; }
           [ "$before" = "$after" ] || { echo "::error::revision changed"; exit 1; }
           echo "  OK   upgrade head is idempotent and the schema is unchanged"
@@ -1770,7 +1799,7 @@ jobs:
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  revision after restart: $revision"
           echo "  tables after restart  : $after"
-          [ "$revision" = "0022_catalogue_versions" ] || {
+          [ "$revision" = "0023_auth_sessions" ] || {
             echo "::error::schema did not survive the restart"; exit 1; }
           [ "$rows" = "$after" ] || { echo "::error::table count changed across restart"; exit 1; }
           echo "  OK   the named volume preserved the schema across stop/start"
@@ -2461,13 +2490,13 @@ jobs:
           # The diff above is the real proof. These restate the few facts that must hold
           # absolutely, so a failure names what was wrong rather than only that something was.
           revision="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc 'SELECT version_num FROM alembic_version')"
-          [ "$revision" = "0022_catalogue_versions" ] || {
+          [ "$revision" = "0023_auth_sessions" ] || {
             echo "::error::restored revision is $revision"; exit 1; }
-          echo "  OK   alembic_version is 0022_catalogue_versions -- no upgrade or downgrade happened"
+          echo "  OK   alembic_version is 0023_auth_sessions -- no upgrade or downgrade happened"
 
           tables="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")"
-          [ "$tables" -eq 29 ] || { echo "::error::restored database has $tables base tables, expected 29"; exit 1; }
-          echo "  OK   29 base tables (28 application tables + alembic_version)"
+          [ "$tables" -eq 30 ] || { echo "::error::restored database has $tables base tables, expected 30"; exit 1; }
+          echo "  OK   30 base tables (29 application tables + alembic_version)"
 
           membership="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc \
             "SELECT u.email || '/' || h.slug || '/' || uh.role FROM user_hotels uh
@@ -3297,6 +3326,35 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v5
+
+      - name: Pull Docker Hub images through a mirror, Docker Hub the fallback
+        # R0.2. Every image this job pulls in its steps comes from Docker Hub, unauthenticated,
+        # and one Hub outage (run 37994098334) has already failed a run. The daemon now asks the
+        # public pull-through mirror first and falls back to Docker Hub by itself when the mirror
+        # fails, so the mirror can add availability but cannot take any away. It cannot change
+        # what is pulled either: every reference is pinned by digest, and a digest is verified on
+        # every pull, wherever the bytes came from. The `services:` containers of the other jobs
+        # are pulled by the runner before any step runs, so they still come from Docker Hub.
+        run: |
+          set -euo pipefail
+          config=/etc/docker/daemon.json
+          current='{}'
+          if sudo test -s "$config"; then current="$(sudo cat "$config")"; fi
+          printf '%s' "$current" \
+            | jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' \
+            | sudo tee "$config" > /dev/null
+          sudo systemctl restart docker
+          for attempt in $(seq 1 30); do
+            docker info > /dev/null 2>&1 && break
+            [ "$attempt" -lt 30 ] || { echo "::error::the Docker daemon did not come back"; exit 1; }
+            sleep 1
+          done
+          mirrors="$(docker info --format '{{json .RegistryConfig.Mirrors}}')"
+          echo "  registry mirrors: $mirrors"
+          case "$mirrors" in
+            *'https://mirror.gcr.io/'*) echo "  OK   Docker Hub pulls try mirror.gcr.io first" ;;
+            *) echo "::error::the registry mirror is not active"; exit 1 ;;
+          esac
 
       - name: Docker version
         run: |

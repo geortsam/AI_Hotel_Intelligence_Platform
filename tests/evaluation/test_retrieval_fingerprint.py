@@ -582,6 +582,14 @@ EXCLUDED = (
             "tool_invocation",
         )
     ),
+    # R1.1 (v2.0 roadmap): the cookie session's four modules, each under an existing reason --
+    # a table outside the measured state, a repository the shared auth dependency constructs,
+    # and two modules only imported. The measurement signs in by bearer token, so no code in
+    # any of the four runs on a measured request.
+    "backend/app/models/auth_session.py",
+    "backend/app/repositories/auth_session.py",
+    "backend/app/api/session_cookies.py",
+    "backend/app/services/session.py",
 )  # fmt: skip
 
 
@@ -594,7 +602,7 @@ def test_the_source_inventory_is_exactly_12_3s() -> None:
 
 def test_the_exclusions_are_exactly_12_3s_each_with_a_reason() -> None:
     assert sorted(fp.EXCLUDED_SOURCES) == sorted(EXCLUDED)
-    assert len(fp.EXCLUDED_SOURCES) == 171
+    assert len(fp.EXCLUDED_SOURCES) == 175
     assert all(reason.strip() for reason in fp.EXCLUDED_SOURCES.values())
     # §12.3 once named this path; the declarative base lives in app/db/base.py.
     assert "backend/app/models/base.py" not in fp.EXCLUDED_SOURCES

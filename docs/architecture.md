@@ -202,8 +202,9 @@ property's reviews never refuse a recording. Issue H7 added the eleventh,
 has and makes its per-hotel uniqueness case-insensitive. R1.3a added the twelfth,
 `0021_audit_platform_grants`, which widens the audit action CHECK by the platform-administrator
 grant and revocation. R3.3 added the thirteenth, `0022_catalogue_versions`, which gives the three
-global catalogues an `updated_at` so their PATCHes take `If-Match`. Head `0022` across 22
-linear revisions, 28 application tables. Four of V2's tables reference `hotels` with `RESTRICT`, so — as V1's
+global catalogues an `updated_at` so their PATCHes take `If-Match`. R1.1 added the fourteenth,
+`0023_auth_sessions`, the server side of the browser's cookie session. Head `0023` across 23 linear
+revisions, 29 application tables. Four of V2's tables reference `hotels` with `RESTRICT`, so — as V1's
 append-only audit trail already did — they can make a hotel undeletable: `DELETE /hotels/{id}`
 still answers 409 rather than cascading. See [v2-architecture.md](v2-architecture.md) §10. See [knowledge-documents.md](knowledge-documents.md) and
 [copilot-conversations.md](copilot-conversations.md).
@@ -580,18 +581,32 @@ In production both are served from **one origin**: nginx serves the built SPA an
 
 ### 7.1 Session handling, and its limitation
 
-The backend authenticates with a bearer JWT and exposes no cookie-session endpoint. A token the
-browser must attach to a header is a token JavaScript must be able to read, so the access token
-is kept in **`sessionStorage`** (`frontend/src/session/tokenStorage.ts`).
+**Since R1.1 the browser signs in to a cookie session**, and no credential is readable by script.
+Until then it held a bearer token in `sessionStorage`, which any cross-site-scripting flaw could
+have read and taken elsewhere.
 
-**This is a documented limitation, not a solved problem.** Any cross-site-scripting flaw in the
-application could read that token; no choice of Web Storage changes that, because `localStorage`
-and `sessionStorage` are equally readable by script on the origin. `sessionStorage` is chosen
-over `localStorage` only for lifetime — it is scoped to the tab and cleared when the tab closes,
-while still surviving a reload — and the access token lives 30 minutes.
+- **Three cookies**, all `Secure; SameSite=Strict`: `__Host-ahip_access`, the 30-minute access
+  token, `HttpOnly`; `__Secure-ahip_refresh`, a 256-bit refresh secret, `HttpOnly` and sent only
+  to `/api/v1/auth/session`; and `__Host-ahip_csrf`, the session's CSRF token, deliberately
+  readable. `POST /auth/session` sets them, `POST /auth/session/refresh` renews them and
+  `POST /auth/session/end` ends the session and clears them.
+- **CSRF.** A request authenticated by the cookie that is not a GET must carry the CSRF token in
+  `X-CSRF-Token`, or it is `403 CSRF_FAILED` with nothing done. The token is an HMAC of the
+  session id under the signing secret, so the server checks it without a lookup; another site
+  can neither read it nor compute it. `SameSite=Strict` already keeps the cookies off other
+  sites' requests; the token is the second, independent defence.
+- **Server-side state.** `auth_sessions` (migration 0023) keeps each refresh token's SHA-256,
+  never the token. A refresh rotates it; a used token presented again is a stolen copy, so the
+  whole session ends for both holders. Signing out, a password change (every session of the
+  account, in the password's own transaction), deactivation and twelve idle hours
+  (`SESSION_REFRESH_TTL_HOURS`) each end a session, and its access tokens stop with it, because
+  every cookie-authenticated request checks the access token's session id is still live.
+- **The page** (`frontend/src/services/api/client.ts`) sends `credentials: 'include'`, attaches
+  the CSRF token to every write, and answers a 401 with one refresh and one retry before it
+  treats the session as ended. `sessionStorage` now holds only the CSRF token, as a fallback for
+  an environment that cannot hold a `__Host-` cookie.
 
-What reduces the exposure today: the content security policy is `script-src 'self'` with no
-inline script and no `eval` in the bundle, and every storage access is confined to four
-functions in one module. **The genuine fix is an `HttpOnly; Secure; SameSite` cookie issued by
-the backend, which script cannot read at all. That is a backend change and is V2 work** — see
-[development-roadmap.md](development-roadmap.md).
+**What remains.** Script running in the page can still act as the user while it runs — no
+session design changes that; the content security policy (`script-src 'self'`, no inline script,
+no `eval`) is what narrows it. The bearer login stays for API clients, which keep their own
+token and need no CSRF token, because a header is never sent on another site's behalf.

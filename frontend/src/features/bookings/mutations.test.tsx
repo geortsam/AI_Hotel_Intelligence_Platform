@@ -11,6 +11,7 @@ import {
   renderWithAuth,
   seedStoredToken,
   TEST_HOTEL,
+  TEST_TOKEN,
   TEST_USER,
   type FetchStub,
 } from '@/test/harness'
@@ -999,7 +1000,9 @@ describe('security', () => {
       expect(mutationCalls('PATCH')).toHaveLength(1)
     })
 
-    expect(mutationCalls('PATCH')[0]!.authorization).toMatch(/^Bearer /)
+    expect(mutationCalls('PATCH')[0]!.credentials).toBe('include')
+    // R1.1: a write carries the session's CSRF token, the one header another site cannot send.
+    expect(mutationCalls('PATCH')[0]!.csrf).toBe(TEST_TOKEN)
   })
 
   it('leaks no guest contact detail through a mutation body', async () => {

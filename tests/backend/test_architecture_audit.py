@@ -414,6 +414,10 @@ def test_every_domain_collection_is_hotel_scoped_or_a_declared_global() -> None:
         "/api/v1/auth/me",
         # Stage 4.5.1: changing your own password is account state, not hotel state.
         "/api/v1/auth/change-password",
+        # R1.1: the cookie session is account state too.
+        "/api/v1/auth/session",
+        "/api/v1/auth/session/refresh",
+        "/api/v1/auth/session/end",
     }
 
     for path in openapi()["paths"]:
@@ -445,6 +449,9 @@ PARAMETERLESS_OPERATIONS = {
     ("get", "/health"),
     ("get", "/health/db"),
     ("get", "/api/v1/auth/me"),
+    # R1.1. Renewing and ending a cookie session read only their cookies and one header.
+    ("post", "/api/v1/auth/session/refresh"),
+    ("post", "/api/v1/auth/session/end"),
     ("get", "/api/v1/"),
 }
 
@@ -469,7 +476,7 @@ def test_every_documented_422_is_the_envelope_the_handler_really_sends() -> None
     }
 
     # Issue H2: the departure's body and its preview's query are both validated: 95 -> 97.
-    assert len(documented) == 97
+    assert len(documented) == 98
     for key, refusal in documented.items():
         schema = refusal["content"]["application/json"]["schema"]
         assert schema == {"$ref": "#/components/schemas/ErrorResponse"}, key
@@ -627,6 +634,10 @@ NON_CREATING_POSTS = {
     # caller's own token, so the replacement is not a convenience -- without it a successful
     # change signs the caller out.
     "/api/v1/auth/change-password": "200",
+    # R1.1. Renewing a session rotates its refresh token and changes no URL: 200 and the session.
+    "/api/v1/auth/session/refresh": "200",
+    # R1.1. Ending a session deletes nothing addressable: 204, with the cookies cleared.
+    "/api/v1/auth/session/end": "204",
     # Stage 4.5.27. Extending an in-house stay creates no separately addressable
     # resource: the added nights belong to the booking that was already there, and its
     # URL does not change. 201 would promise a Location that does not exist.
@@ -827,6 +838,11 @@ IDENTITY_AWARE = {
     # the same footing as the audit repositories: it compares no role, reads no membership and
     # raises no authorization error, and the tests below still cover it for all three.
     "app.repositories.copilot_conversation",
+    # R1.1. A cookie session is an account's: its refresh tokens are stored per user and ended
+    # per user by a password change. Admitted on the audit repositories' footing -- it compares
+    # no role, reads no membership and raises no authorization error.
+    "app.repositories.auth_session",
+    "app.services.session",
 }
 
 
@@ -901,6 +917,10 @@ IDENTITY_AWARE_REPOSITORY_SKIP_REASONS = {
     "app.repositories.copilot_conversation": (
         "app.repositories.copilot_conversation is identity-aware by design (Stage 7.11): "
         "conversations are owner-scoped, so it filters by the caller's actor_user_id"
+    ),
+    "app.repositories.auth_session": (
+        "app.repositories.auth_session is identity-aware by design (R1.1): a cookie session's "
+        "refresh tokens belong to an account and a password change ends them by user_id"
     ),
 }
 

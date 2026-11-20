@@ -15,6 +15,7 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.api.session_cookies import ACCESS_COOKIE, CSRF_HEADER, SAFE_METHODS
 from app.copilot.contracts import ToolServices
 from app.copilot.registry import ToolRegistry, build_default_registry
 from app.core.client_address import (
@@ -23,8 +24,9 @@ from app.core.client_address import (
     trusted_networks,
 )
 from app.core.config import Settings
-from app.core.errors import InvalidTokenError, RateLimitExceededError
+from app.core.errors import CsrfError, InvalidTokenError, RateLimitExceededError
 from app.core.rate_limit import FixedWindowRateLimiter, RateLimit
+from app.core.security import csrf_matches
 from app.db.session import get_session_factory
 from app.llm.base import Budget, ChatModel
 from app.llm.errors import LlmBudgetExhaustedError
@@ -34,6 +36,7 @@ from app.models.user import User
 from app.repositories.amenity import AmenityRepository, RoomTypeAmenityRepository
 from app.repositories.analytics import AnalyticsRepository
 from app.repositories.audit import AuditRepository
+from app.repositories.auth_session import AuthSessionRepository
 from app.repositories.booking import BookingRepository
 from app.repositories.copilot_conversation import CopilotConversationRepository
 from app.repositories.demand_observation import DemandObservationRepository
@@ -94,6 +97,7 @@ from app.services.review import ReviewService
 from app.services.room import RoomService
 from app.services.room_type import RoomTypeService
 from app.services.scope import HotelScopeResolver
+from app.services.session import SessionService
 from app.services.tool_invocation import ToolInvocationService
 
 
@@ -528,10 +532,22 @@ def get_auth_service(db: DbSession, settings: SettingsDep) -> AuthService:
     module-level global -- the app factory can be constructed with different settings, and a
     cached global would ignore them.
     """
-    return AuthService(db, UserRepository(db), settings, get_unbound_audit_trail(db))
+    return AuthService(
+        db, UserRepository(db), settings, get_unbound_audit_trail(db), AuthSessionRepository(db)
+    )
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def get_session_service(
+    db: DbSession, settings: SettingsDep, auth: AuthServiceDep
+) -> SessionService:
+    """Assemble the cookie-session service (R1.1) over the same unit of work as ``auth``."""
+    return SessionService(db, AuthSessionRepository(db), auth, settings)
+
+
+SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
 
 #: Extracts `Authorization: Bearer <token>`. auto_error=False so a MISSING header reaches our
 #: own handler and produces the shared error envelope with our own message, rather than
@@ -540,7 +556,9 @@ _bearer = HTTPBearer(auto_error=False, description="A bearer token from POST /au
 
 
 def get_current_user(
+    request: Request,
     service: AuthServiceDep,
+    settings: SettingsDep,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
 ) -> User:
     """The authenticated caller, or 401.
@@ -548,10 +566,25 @@ def get_current_user(
     **This establishes identity only.** It does not decide which hotels the user may reach:
     that is Stage 4.2, and this dependency deliberately takes no hotel argument so it cannot
     quietly grow one.
+
+    **Two credentials, one identity (R1.1).** An ``Authorization: Bearer`` header wins, as it
+    always has, and needs nothing more: a header is never sent on another site's behalf. Without
+    one, the cookie session's ``HttpOnly`` access cookie is read -- and because a browser attaches
+    a cookie to any request, a cookie-authenticated request that changes something must also
+    carry the session's CSRF token in ``X-CSRF-Token``, or it is 403 ``CSRF_FAILED``.
     """
-    if credentials is None or not credentials.credentials:
+    if credentials is not None and credentials.credentials:
+        return service.resolve_token(credentials.credentials)
+
+    cookie = request.cookies.get(ACCESS_COOKIE)
+    if not cookie:
         raise InvalidTokenError
-    return service.resolve_token(credentials.credentials)
+    user, session_id = service.resolve_session_token(cookie)
+    if request.method not in SAFE_METHODS and not csrf_matches(
+        settings, session_id, request.headers.get(CSRF_HEADER)
+    ):
+        raise CsrfError
+    return user
 
 
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
@@ -1031,6 +1064,7 @@ __all__ = [
     "RoomTypeAmenityServiceDep",
     "RoomTypeServiceDep",
     "ScopeResolverDep",
+    "SessionServiceDep",
     "SettingsDep",
     "ToolInvocationServiceDep",
     "change_password_rate_limit",

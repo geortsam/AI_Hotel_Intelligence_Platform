@@ -371,8 +371,9 @@ def test_the_openapi_document_is_unchanged() -> None:
     # Stage 7.11 added the copilot conversations: 60 / 93 -> 63 / 98.
     # Stage 7.12 added the attention list: 63 / 98 -> 64 / 99.
     # Issue H2 added the early departure and its preview: 64 / 99 -> 65 / 101.
-    assert len(spec["paths"]) == 65
-    assert len(operations) == 101
+    # R1.1 added the cookie session's three routes, reaching no model: 65 / 101 -> 68 / 104.
+    assert len(spec["paths"]) == 68
+    assert len(operations) == 104
     # Built from the real factory, so the middleware is present -- and contributes nothing.
     assert not any("security" in path.lower() for path in spec["paths"])
 

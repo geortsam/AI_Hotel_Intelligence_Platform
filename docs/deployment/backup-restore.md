@@ -34,7 +34,7 @@ strategy.** Nothing in this repository can undo it. `down` without `-v` keeps th
 
 ## 3. Prerequisites
 
-- The stack is running and `migrate` has completed, so the schema is at `0022_catalogue_versions`.
+- The stack is running and `migrate` has completed, so the schema is at `0023_auth_sessions`.
 - You can reach the database container, e.g. `docker compose ps db` shows it healthy.
 - Somewhere to put the archive that is **not** the same disk as the database volume. A backup
   that dies with the host it protects is not a backup.
@@ -53,7 +53,7 @@ docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
 ```
 
 Confirm the database name is the one you intend and the revision is the one you expect. If the
-revision is not `0022_catalogue_versions`, stop and find out why before backing up.
+revision is not `0023_auth_sessions`, stop and find out why before backing up.
 
 ### 4.2 Take the dump
 
@@ -158,7 +158,7 @@ docker exec pg-restore-rehearsal psql -U postgres -d hotel_restore -tAc \
   "SELECT version_num FROM alembic_version"
 ```
 
-Expect `0022_catalogue_versions` — the same revision as the source, with no upgrade or
+Expect `0023_auth_sessions` — the same revision as the source, with no upgrade or
 downgrade having happened.
 
 ```bash
@@ -167,7 +167,7 @@ docker exec pg-restore-rehearsal psql -U postgres -d hotel_restore -tAc \
     WHERE table_schema='public' AND table_type='BASE TABLE'"
 ```
 
-Expect **29** — the 28 application tables plus `alembic_version`. The
+Expect **30** — the 29 application tables plus `alembic_version`. The
 `historical_room_overlaps` view should also be present.
 
 Then compare facts rather than eyeballing. Run the same query against the source and the

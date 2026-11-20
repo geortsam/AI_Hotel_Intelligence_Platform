@@ -57,7 +57,7 @@ pytestmark = requires_postgres
 SUITE_EMAIL = "external-id-scope@example.test"
 #: The revision this suite is about. No longer the head: Issue H7 added 0020 on top of it.
 REVISION = "0019_review_external_id_scope"
-HEAD = "0022_catalogue_versions"
+HEAD = "0023_auth_sessions"
 MIGRATION = REPO_ROOT / "database" / "migrations" / "versions" / f"20261007_{REVISION}.py"
 
 TENANT_INDEX = "uq_reviews_hotel_source_external_review_id"

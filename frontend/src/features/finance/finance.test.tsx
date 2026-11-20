@@ -208,7 +208,7 @@ describe('the revenue journal', () => {
     expect(url.searchParams.get('page')).toBe('1')
     expect(url.searchParams.get('page_size')).toBe('20')
     // The Authorization header is assembled in one place; this proves it reached the ledger.
-    expect(request!.authorization).toMatch(/^Bearer /)
+    expect(request!.credentials).toBe('include')
   })
 
   it('prints each amount in the currency of its own line, never converted', async () => {

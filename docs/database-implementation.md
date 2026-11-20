@@ -16,7 +16,8 @@
 > case-insensitive per-hotel key for guest emails, no table); and `0021_audit_platform_grants`
 > (R1.3a, two audit actions for the platform-administrator command, no table); and
 > `0022_catalogue_versions` (R3.3, an `updated_at` and its trigger on the three global catalogues, no
-> table). The head is `0022` across 22 linear revisions. In particular, §9's environment notes describe the machine as it
+> table); and `0023_auth_sessions` (R1.1, `auth_sessions`, the cookie sessions' refresh-token digests). The
+> head is `0023` across 23 linear revisions. In particular, §9's environment notes describe the machine as it
 > was at Stage 2B, not as it is. See [architecture.md](architecture.md) and
 > [../database/README.md](../database/README.md).
 

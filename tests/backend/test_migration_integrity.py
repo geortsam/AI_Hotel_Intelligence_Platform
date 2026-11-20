@@ -69,10 +69,11 @@ EXPECTED_FILENAMES = (
     "20261009_0020_guest_email_rules.py",
     "20261119_0021_audit_platform_grants.py",
     "20261120_0022_catalogue_versions.py",
+    "20261120_0023_auth_sessions.py",
 )
 
 #: sha256 of the canonicalised concatenation described in this module's docstring. Derived
-#: from the twenty-two files above; not a value chosen to make anything pass.
+#: from the twenty-three files above; not a value chosen to make anything pass.
 #:
 #: Moved on every migration. `0dc2f8b1...` over nine files was the value before Stage 6.8 added
 #: `demand_predictions`; `35162fde...` over ten was the value before Stage 6.11 added
@@ -96,12 +97,14 @@ EXPECTED_FILENAMES = (
 #: (R1.3a) widened the audit action CHECK for the platform-administrator command, still
 #: reproduced by the first twenty; and `dc753149...` over twenty-one was the value before 0022
 #: (R3.3) gave the three global catalogues an `updated_at`, still reproduced by the first
-#: twenty-one. All thirteen are recorded rather than discarded,
+#: twenty-one; and `bf415b16...` over twenty-two was the value before 0023 (R1.1) added
+#: `auth_sessions`, still reproduced by the first twenty-two. All fourteen are recorded rather
+#: than discarded,
 #: because "the digest changed" should always be answerable with "yes, in that commit, for
 #: that migration".
-CANONICAL_SHA256 = "bf415b16a63f2bc0a51e99c59184d5d9c262b86daa5bc4cc740721741866ea6e"
+CANONICAL_SHA256 = "794d256d068ca0c6ef36cbd31f25afe2ef8d169fce9031d76c5f3f00e66ea0a3"
 
-EXPECTED_HEAD = "0022_catalogue_versions"
+EXPECTED_HEAD = "0023_auth_sessions"
 EXPECTED_ROOT = "0001_initial_schema"
 
 REVISION = re.compile(r'^revision: str = "([^"]+)"', re.MULTILINE)
@@ -243,6 +246,13 @@ def test_the_catalogue_versions_left_every_earlier_migration_untouched() -> None
     earlier = [path.read_bytes() for path in migration_files()[:21]]
 
     assert digest_of(earlier) == "dc753149d62affbff1a65e5839d2f1c8255124dea461f1bbaac612e39bbe0550"
+
+
+def test_the_auth_sessions_table_left_every_earlier_migration_untouched() -> None:
+    """Adding 0023 moved the digest only because 0023 was added: 0001-0022 are byte-identical."""
+    earlier = [path.read_bytes() for path in migration_files()[:22]]
+
+    assert digest_of(earlier) == "bf415b16a63f2bc0a51e99c59184d5d9c262b86daa5bc4cc740721741866ea6e"
 
 
 def test_the_digest_does_not_depend_on_how_git_checked_the_files_out() -> None:

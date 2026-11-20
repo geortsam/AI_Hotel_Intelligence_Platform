@@ -34,6 +34,8 @@ LIMITERS: dict[str, Callable[..., Any]] = {
 H = "/api/v1/hotels/{hotel_public_id}"
 EXPECTED: dict[tuple[str, str], set[str]] = {
     ("POST", "/api/v1/auth/login"): {"login_rate_limit"},
+    # R1.1. The cookie sign-in shares the login's budget: one brute-force surface, one limit.
+    ("POST", "/api/v1/auth/session"): {"login_rate_limit"},
     ("POST", "/api/v1/auth/change-password"): {"change_password_rate_limit"},
     ("GET", f"{H}/documents"): {"knowledge_read_rate_limit"},
     ("GET", f"{H}/documents/{{document_public_id}}"): {"knowledge_read_rate_limit"},

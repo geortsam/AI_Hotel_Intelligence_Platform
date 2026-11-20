@@ -520,6 +520,8 @@ EXCLUDED_SOURCES: Final = {
         f"backend/app/models/{name}.py": _OTHER_TABLE
         for name in (
             "audit",
+            # R1.1. The cookie sessions' table; the harness signs in by bearer token.
+            "auth_session",
             "booking",
             "copilot_conversation",
             "demand_observation",
@@ -607,9 +609,17 @@ EXCLUDED_SOURCES: Final = {
         for name in (
             "room_type",
             "ml_prediction_removal",
+            # R1.1. Built by `get_auth_service`, which every authenticated route shares; its
+            # methods run only for a token with a session id, and the harness's has none.
+            "auth_session",
         )
     },
     "backend/app/api/preconditions.py": _NOT_RUN,
+    # R1.1. The cookie session's names and its service: imported by `deps` and the auth router,
+    # and run only on the session routes or for a request with no bearer token, neither of which
+    # the measurement makes.
+    "backend/app/api/session_cookies.py": _NOT_RUN,
+    "backend/app/services/session.py": _NOT_RUN,
     **{
         f"backend/app/api/routes/{name}.py": _NOT_RUN
         for name in (

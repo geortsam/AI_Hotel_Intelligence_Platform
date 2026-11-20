@@ -20,6 +20,7 @@ from fastapi.routing import APIRoute
 
 from app.api.deps import get_current_user, require_platform_admin, require_role
 from app.api.openapi import (
+    CSRF_FORBIDDEN_DESCRIPTION,
     PLATFORM_FORBIDDEN_DESCRIPTION,
     ROLE_FORBIDDEN_DESCRIPTION,
     UNAUTHENTICATED_DESCRIPTION,
@@ -132,7 +133,13 @@ def test_an_operation_without_a_bearer_token_declares_no_401_but_a_failed_sign_i
 ) -> None:
     unsecured = {key: op for key, op in operations(document).items() if not op.get("security")}
 
-    assert {key for key, op in unsecured.items() if "401" in op["responses"]} == {LOGIN}
+    # R1.1: the cookie sign-in fails as the bearer login does, and a renewal answers 401 for a
+    # session that has ended. Both are reached without a bearer token by design.
+    assert {key for key, op in unsecured.items() if "401" in op["responses"]} == {
+        LOGIN,
+        ("post", "/api/v1/auth/session"),
+        ("post", "/api/v1/auth/session/refresh"),
+    }
 
 
 def test_the_generated_401_says_what_a_bearer_token_failure_is(document: dict[str, Any]) -> None:
@@ -168,11 +175,36 @@ def test_every_route_level_gate_declares_403(
 def test_a_403_is_claimed_only_where_it_can_be_answered(
     document: dict[str, Any], gates: dict[tuple[str, str], str | None]
 ) -> None:
-    """A viewer-level route cannot refuse a member for their role; a non-member gets 404."""
-    declared = {key for key, op in operations(document).items() if "403" in op["responses"]}
-    gated = {key for key, kind in gates.items() if kind is not None}
+    """A viewer-level route cannot refuse a member for their role; a non-member gets 404.
 
-    assert declared - gated == set(SERVICE_LEVEL_403)
+    R1.1 adds the one other 403 there is: ``CSRF_FAILED``, answerable by every authenticated
+    operation that changes something, because a browser may reach it by the session cookie. It
+    is claimed exactly there -- never on a read -- and the two session routes that check a CSRF
+    token by their own refresh cookie declare it by hand.
+    """
+    ops = operations(document)
+    declared = {key for key, op in ops.items() if "403" in op["responses"]}
+    gated = {key for key, kind in gates.items() if kind is not None}
+    csrf_only = {
+        key
+        for key, op in ops.items()
+        if op.get("security")
+        and key[0] not in {"get", "head", "options"}
+        and key not in gated
+        and key not in SERVICE_LEVEL_403
+    }
+    session_routes = {
+        ("post", "/api/v1/auth/session/refresh"),
+        ("post", "/api/v1/auth/session/end"),
+    }
+
+    assert declared - gated == set(SERVICE_LEVEL_403) | csrf_only | session_routes
+    assert csrf_only, "no unsafe authenticated operation was found"
+    for key in csrf_only:
+        assert ops[key]["responses"]["403"]["description"] == CSRF_FORBIDDEN_DESCRIPTION, key
+    assert not {key for key in declared - gated - session_routes if key[0] == "get"} - set(
+        SERVICE_LEVEL_403
+    )
 
 
 def test_a_role_checked_inside_a_service_is_declared_on_its_route(

@@ -166,6 +166,10 @@ APPROVED_RESOURCE_SEGMENTS = {
     "register",
     "login",
     "me",
+    # R1.1. The browser's cookie session: started, renewed and ended.
+    "session",
+    "refresh",
+    "end",
     # Stage 4.5.12. The property's own record of what was done to it. Hotel-scoped like the
     # data it describes, and read-only: the collection offers GET and nothing else.
     "audit-events",
@@ -227,6 +231,10 @@ IDENTITY_COLLECTIONS = {
     # change your own credential would mean a user who belongs to no property could never
     # change it, and one who belongs to two would have to pick.
     "/api/v1/auth/change-password",
+    # R1.1. A cookie session belongs to the account too, exactly like the bearer login.
+    "/api/v1/auth/session",
+    "/api/v1/auth/session/refresh",
+    "/api/v1/auth/session/end",
 }
 
 #: Stage 4.5.13. Collections that sit outside the hotel hierarchy because their rows have no
@@ -355,6 +363,10 @@ def test_domain_surface_is_exactly_the_approved_hierarchy() -> None:
         "/api/v1/auth/login",
         "/api/v1/auth/change-password",
         "/api/v1/auth/me",
+        # R1.1. The cookie session.
+        "/api/v1/auth/session",
+        "/api/v1/auth/session/refresh",
+        "/api/v1/auth/session/end",
     }
 
 
