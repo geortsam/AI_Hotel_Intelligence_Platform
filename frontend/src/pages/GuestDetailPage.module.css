@@ -1,7 +1,12 @@
+/* A record column (UI-8): the guest record is short label/value pairs, and across the page's
+ * full ~1100px each value sat far from its label. 880px keeps them together; the column
+ * stays aligned with the page title. */
 .page {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  width: 100%;
+  max-width: 880px;
 }
 
 /* The way back, above the heading rather than inside it: it is navigation, not a title. */
