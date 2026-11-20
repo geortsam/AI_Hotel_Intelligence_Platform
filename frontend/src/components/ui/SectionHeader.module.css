@@ -15,6 +15,12 @@
   font-weight: var(--weight-semibold);
 }
 
+/* The page's own title (`as="h1"`) is a step above its sections (UI-6). Every page title
+ * measured 20px -- the size of the section headings beneath it -- except Analytics' 24px. */
+.pageTitle {
+  font-size: var(--text-2xl);
+}
+
 .description {
   margin-top: var(--space-1);
   color: var(--color-text-muted);

@@ -26,12 +26,14 @@
 .range {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  /* The size every other page's description uses (UI-6). */
+  font-size: var(--text-base);
   line-height: var(--leading-normal);
 }
 
 .range {
   color: var(--color-text-subtle);
+  font-size: var(--text-sm);
 }
 
 .sections {
