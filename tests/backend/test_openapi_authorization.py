@@ -170,6 +170,9 @@ def test_every_route_level_gate_declares_403(
     assert missing == []
     for key in gated:
         assert refers_to_error_response(ops[key]["responses"]["403"]), key
+        # R1.1. Every unsafe authenticated operation can answer the CSRF 403 too, so a 403 being
+        # present no longer proves the gate was seen: it must name the gate's own authority.
+        assert ops[key]["responses"]["403"]["description"] != CSRF_FORBIDDEN_DESCRIPTION, key
 
 
 def test_a_403_is_claimed_only_where_it_can_be_answered(
