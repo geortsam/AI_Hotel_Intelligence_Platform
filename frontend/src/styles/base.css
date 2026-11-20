@@ -59,7 +59,16 @@ h4 {
 }
 
 h1 {
+  font-family: var(--font-display);
   font-size: var(--text-2xl);
+  letter-spacing: var(--tracking-tight);
+}
+
+/* Figures line up in columns: tabular numerals wherever numbers are compared (UI-1). */
+.tnum,
+td,
+dd {
+  font-variant-numeric: tabular-nums;
 }
 
 h2 {

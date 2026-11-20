@@ -98,7 +98,7 @@
 }
 
 .danger:hover:not(:disabled) {
-  background: #b91c1c;
+  background: var(--color-danger-hover);
 }
 
 /* Lucide renders an <svg>; keep it from stretching the button. */
