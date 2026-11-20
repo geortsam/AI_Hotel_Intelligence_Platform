@@ -443,6 +443,17 @@ PACKAGE_INITS: Final = (
     "backend/app/models/__init__.py",
     "backend/app/db/__init__.py",
 )
+#: The cookie session's modules (R1.1, E8). Fingerprinted rather than excluded: they hold the
+#: application's authentication logic and are in its import closure, so a change to any of them
+#: is a change the measured application could carry. Hashing them changes nothing that is
+#: measured -- the harness still signs in by bearer token, and no `auth_sessions` row is part
+#: of §12.4's state.
+AUTH_SOURCES: Final = (
+    "backend/app/models/auth_session.py",
+    "backend/app/repositories/auth_session.py",
+    "backend/app/services/session.py",
+    "backend/app/api/session_cookies.py",
+)
 #: §12.3 "sources", in its order; the migration versions are added from the commit's tree.
 SOURCE_FILES: Final = (
     CI_FILE,
@@ -461,6 +472,7 @@ SOURCE_FILES: Final = (
     "backend/app/schemas/knowledge.py",
     "backend/app/models/knowledge.py",
     "backend/app/models/enums.py",
+    *AUTH_SOURCES,
     "database/migrations/env.py",
     "tests/conftest.py",
     "tests/integration/conftest.py",
@@ -520,8 +532,6 @@ EXCLUDED_SOURCES: Final = {
         f"backend/app/models/{name}.py": _OTHER_TABLE
         for name in (
             "audit",
-            # R1.1. The cookie sessions' table; the harness signs in by bearer token.
-            "auth_session",
             "booking",
             "copilot_conversation",
             "demand_observation",
@@ -609,17 +619,9 @@ EXCLUDED_SOURCES: Final = {
         for name in (
             "room_type",
             "ml_prediction_removal",
-            # R1.1. Built by `get_auth_service`, which every authenticated route shares; its
-            # methods run only for a token with a session id, and the harness's has none.
-            "auth_session",
         )
     },
     "backend/app/api/preconditions.py": _NOT_RUN,
-    # R1.1. The cookie session's names and its service: imported by `deps` and the auth router,
-    # and run only on the session routes or for a request with no bearer token, neither of which
-    # the measurement makes.
-    "backend/app/api/session_cookies.py": _NOT_RUN,
-    "backend/app/services/session.py": _NOT_RUN,
     **{
         f"backend/app/api/routes/{name}.py": _NOT_RUN
         for name in (
@@ -1457,6 +1459,7 @@ def environment_record(
 
 
 __all__ = [
+    "AUTH_SOURCES",
     "BUILD_ARCHITECTURES",
     "CI_FILE",
     "EXCLUDED_SOURCES",

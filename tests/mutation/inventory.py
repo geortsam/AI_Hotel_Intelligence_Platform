@@ -9762,6 +9762,24 @@ STAGE_R1_1 = [
         "src/features/administration/administration.test.tsx::"
         "adopts the CSRF token of the new session, because the old one has ended",
     ),
+    _r11(
+        21,
+        "the session service drops out of the retrieval fingerprint",
+        "tests/evaluation/retrieval_fingerprint.py",
+        '    "backend/app/services/session.py",\n    "backend/app/api/session_cookies.py",\n)\n',
+        '    "backend/app/api/session_cookies.py",\n)\n',
+        "tests/evaluation/test_retrieval_fingerprint.py::"
+        "test_the_cookie_session_modules_are_fingerprinted_and_not_excluded",
+    ),
+    _r11(
+        22,
+        "the cookie session's modules are no longer fingerprinted at all",
+        "tests/evaluation/retrieval_fingerprint.py",
+        "    *AUTH_SOURCES,\n",
+        "",
+        "tests/evaluation/test_retrieval_fingerprint.py::"
+        "test_the_cookie_session_modules_are_fingerprinted_and_not_excluded",
+    ),
 ]
 
 

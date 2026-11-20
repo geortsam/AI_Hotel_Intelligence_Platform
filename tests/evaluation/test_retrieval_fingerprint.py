@@ -582,27 +582,45 @@ EXCLUDED = (
             "tool_invocation",
         )
     ),
-    # R1.1 (v2.0 roadmap): the cookie session's four modules, each under an existing reason --
-    # a table outside the measured state, a repository the shared auth dependency constructs,
-    # and two modules only imported. The measurement signs in by bearer token, so no code in
-    # any of the four runs on a measured request.
+)  # fmt: skip
+
+#: R1.1's cookie-session modules: fingerprinted, never excluded (see `fp.AUTH_SOURCES`).
+AUTH = (
     "backend/app/models/auth_session.py",
     "backend/app/repositories/auth_session.py",
-    "backend/app/api/session_cookies.py",
     "backend/app/services/session.py",
-)  # fmt: skip
+    "backend/app/api/session_cookies.py",
+)
 
 
 def test_the_source_inventory_is_exactly_12_3s() -> None:
     assert fp.HARNESS_SOURCES == HARNESS
     assert fp.PACKAGE_INITS == INITS
-    assert sorted(fp.SOURCE_FILES) == sorted((*SPEC_SOURCES, *HARNESS, fp.INTEGRATION_TEST, *INITS))
-    assert len(fp.SOURCE_FILES) == 47
+    assert fp.AUTH_SOURCES == AUTH
+    assert sorted(fp.SOURCE_FILES) == sorted(
+        (*SPEC_SOURCES, *AUTH, *HARNESS, fp.INTEGRATION_TEST, *INITS)
+    )
+    assert len(fp.SOURCE_FILES) == 51
+
+
+def test_the_cookie_session_modules_are_fingerprinted_and_not_excluded() -> None:
+    """All four are hashed into the fingerprint; none is excused by a reason; each is real."""
+    for path in AUTH:
+        assert path in fp.SOURCE_FILES, path
+        assert path not in fp.EXCLUDED_SOURCES, path
+        assert (ROOT / path).is_file(), path
+    assert fp.SOURCE_FILES.count("backend/app/services/session.py") == 1
+
+
+def test_the_canonical_sources_have_no_duplicate_and_no_overlap_with_the_exclusions() -> None:
+    assert len(set(fp.SOURCE_FILES)) == len(fp.SOURCE_FILES)
+    assert not set(fp.SOURCE_FILES) & set(fp.EXCLUDED_SOURCES)
+    assert not set(fp.AUTH_SOURCES) & set(fp.HARNESS_SOURCES)
 
 
 def test_the_exclusions_are_exactly_12_3s_each_with_a_reason() -> None:
     assert sorted(fp.EXCLUDED_SOURCES) == sorted(EXCLUDED)
-    assert len(fp.EXCLUDED_SOURCES) == 175
+    assert len(fp.EXCLUDED_SOURCES) == 171
     assert all(reason.strip() for reason in fp.EXCLUDED_SOURCES.values())
     # §12.3 once named this path; the declarative base lives in app/db/base.py.
     assert "backend/app/models/base.py" not in fp.EXCLUDED_SOURCES
