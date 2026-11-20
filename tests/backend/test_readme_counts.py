@@ -24,6 +24,7 @@ import ast
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 import pytest
 
@@ -154,8 +155,11 @@ def test_migrations_and_head(readme: str) -> None:
 
 
 def test_no_test_suite_size_is_stated(readme: str) -> None:
-    """No job can check such a figure, so the README must not state one."""
+    """No job can check such a figure, so the README must not state one -- in prose, or in a
+    badge, where a URL-encoded count read "7984 backend" long after R6.2 removed the sentence."""
     assert re.findall(r"\d[\d,]* (?:backend|frontend) tests", readme) == []
+    badges = [unquote(message) for message in re.findall(r"badge/tests-([^)\s-]*)", readme)]
+    assert badges and [message for message in badges if re.search(r"\d", message)] == []
 
 
 def test_the_matchers_see_the_old_stale_sentence() -> None:

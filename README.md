@@ -16,7 +16,7 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-7984%20backend%20%C2%B7%201346%20frontend-success)
+![Tests](https://img.shields.io/badge/tests-run%20in%20CI-success)
 ![API](https://img.shields.io/badge/API-65%20paths%20%C2%B7%20101%20operations-informational)
 
 </div>
@@ -614,7 +614,7 @@ shards, so GitHub Actions shows seven job runs per workflow run.
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 | `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical |
-| `Mutation checks` | re-applies the 821 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Mutation checks` | re-applies the 836 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
@@ -788,26 +788,33 @@ Stage 7.15. See [docs/retrieval-evaluation-decision.md](docs/retrieval-evaluatio
 list, read, continue, delete. Each belongs to one hotel and its creator -- anyone else gets 404 --
 and expires, turns included, 30 days after it was last used: unreachable at once (enforced in
 every query), then physically deleted by the next purge -- its hotel's next start or continuation,
-or `python -m app.jobs.purge_conversations`, which an operator should schedule (daily is
-recommended; the application schedules nothing). The model is shown at most 6 earlier turns / 12,000 characters as context; figures
+or `python -m app.jobs.purge_conversations`, which the opt-in retention scheduler runs daily
+(or an operator does). The model is shown at most 6 earlier turns / 12,000 characters as context; figures
 and citations must still come from the current turn's own lookups. Question and answer text is
 stored only there -- never in the audit trail or the accounting record. See
 [docs/copilot-conversations.md](docs/copilot-conversations.md).
 
 **Accounting retention (Issue 4).** Each copilot question's content-free accounting record
 (`llm_invocations`) is kept 365 days (`LLM_INVOCATION_RETENTION_DAYS`) and then physically
-deleted by `python -m app.jobs.purge_llm_invocations`, which an operator should schedule (daily
-is recommended; the application schedules nothing). The database still refuses every UPDATE,
+deleted by `python -m app.jobs.purge_llm_invocations`, which the opt-in retention scheduler
+runs daily (or an operator does). The database still refuses every UPDATE,
 and every DELETE except of a record older than the period the purge declares. See
 [docs/copilot-accounting-retention.md](docs/copilot-accounting-retention.md).
 
 **Prediction retention (Issue H8).** A stored demand prediction is kept while its target date is
 within 730 days (`DEMAND_PREDICTION_RETENTION_DAYS`) of its hotel's today, and is then physically
-deleted by `python -m app.jobs.purge_demand_predictions`, which an operator should schedule (daily
-is recommended). A window older than that reads as empty in the prediction, accuracy, drift and
+deleted by `python -m app.jobs.purge_demand_predictions`, which the opt-in retention scheduler
+runs daily (or an operator does). A window older than that reads as empty in the prediction, accuracy, drift and
 performance endpoints. Deleting a hotel removes its predictions in the same transaction; if
 anything else still blocks the delete, nothing is removed. See
 [docs/ml-prediction-retention.md](docs/ml-prediction-retention.md).
+
+**Retention scheduler (R4.2), opt-in.** `python -m app.jobs.scheduler` runs the audit archival
+(`python -m app.jobs.archive_audit_events`, which copies and verifies and never deletes) and the
+three purges every 24 hours. Each failure is reported, and the next cycle tries again.
+`docker compose -f docker-compose.yml -f docker-compose.scheduler.yml up -d` adds it as a
+service. Without that file the stack is unchanged, and `--once` runs one cycle for cron. See
+[docs/deployment/retention-scheduler.md](docs/deployment/retention-scheduler.md).
 
 **The attention list (Stage 7.12).** `…/intelligence/priorities` ranks one hotel's upcoming days by
 the seasonal forecast and lists the busiest three, the strongest anomalies the window saw and a
@@ -933,9 +940,11 @@ What remains genuinely missing is operational rather than functional:
   locks disagree, but nothing regenerates them automatically, and the optional
   `backend/requirements-llm.txt` is not locked. Base images, the interpreter and the frontend
   tree are pinned too; see [docs/deployment/reproducibility.md](docs/deployment/reproducibility.md).
-- **Nothing updates the pins.** No Renovate, no Dependabot. A pinned digest is a digest that
-  goes stale, and sitting on a base image with a known CVE is the real cost of pinning; bumping
-  one is a deliberate act.
+- **Nothing updates the pins yet.** `.github/dependabot.yml` (R0.4a) asks for weekly, grouped
+  update pull requests for every manifest, but GitHub reads it only from the default branch,
+  and it has not reached it; until it does, no Renovate and no Dependabot run. A pinned digest
+  is a digest that goes stale, and sitting on a base image with a known CVE is the real cost
+  of pinning; bumping one is a deliberate act, and a Dependabot proposal will be one too.
 - **No platform-administrator API.** Granting platform administration is a deliberate
   out-of-band database write; see [First run](#first-run). That is by design, not an omission.
 

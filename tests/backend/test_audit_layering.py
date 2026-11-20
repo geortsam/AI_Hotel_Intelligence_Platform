@@ -1247,6 +1247,9 @@ def test_the_audit_modules_are_exactly_the_authorised_set() -> None:
     second implementation of the audit READ query. An archive repository is not that -- it
     writes a different table, offers no listing, and shares the source table only as a SELECT
     to copy from.
+
+    R4.2 added ``jobs/archive_audit_events.py``: the operator command that calls the archival
+    service. It holds no query of its own, so it is not a second implementation either.
     """
     modules = {path.relative_to(APP).as_posix() for path in APP.rglob("*audit*.py")}
 
@@ -1258,6 +1261,7 @@ def test_the_audit_modules_are_exactly_the_authorised_set() -> None:
         "services/audit.py",
         "api/v1/endpoints/audit.py",
         "api/v1/endpoints/platform_audit.py",
+        "jobs/archive_audit_events.py",
     }
 
 

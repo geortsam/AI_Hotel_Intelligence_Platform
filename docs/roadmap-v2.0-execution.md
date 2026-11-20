@@ -52,7 +52,7 @@ policy, Ext = external service, Rel = release.
 | **R3.3** `updated_at` and `If-Match` on the global catalogues | not present (H6 covers hotel-scoped resources) | yes | M, F | — | migration on CI and scratch, API tests, mutations; re-pin | re-pin batch |
 | **R3.4** FX rates | decision 14: transaction currency only | no | M | multi-currency properties | — | **decision** — §3.10 |
 | **R4.1** ACME certificates; off-site encrypted backups, PITR | manual certificates; local backups | no | Ext | a domain, a CA account, off-site storage | — | **decision** — §3.11 |
-| **R4.2** a scheduler for the purges and the audit archival | operator commands | yes | — | — | job tests; Compose stays valid in CI | **E6** (opt-in) |
+| **R4.2** a scheduler for the purges and the audit archival | operator commands | yes | — | — | job tests; Compose stays valid in CI | **done in E6**, opt-in: `python -m app.jobs.scheduler` runs the audit archival (new command `app.jobs.archive_audit_events`) and the three purges every 24 hours, a failed job stopping neither the others nor the schedule; `docker-compose.scheduler.yml` adds it as a service, the base stack unchanged; runbook `docs/deployment/retention-scheduler.md` |
 | **R4.3a** metrics exporter | none | partly | F (`main.py`) | where alerts go | — | §3.12 |
 | **R4.3b** SBOM, image signing | none | SBOM partly; signing no | CI, Ext | a signing identity and a registry | — | §3.12 |
 | **R5** portfolio view, exports, payments, OTA import, sentiment, housekeeping | none | no | — | the audience (roadmap §5) | — | **decision** — §3.13 |
@@ -176,5 +176,6 @@ you would have to do.
 |---|---|---|---|
 | E1 | this matrix and the decision briefs | `6cc1d62` | see E2's row |
 | E2 | R1.5 IANA time zones on create and update; R1.4c every limited route declares 429 (pinned); 8 mutations (R1.4-M1–M2, R1.5-M1–M6): 803 in all | `1210746` | [44590050067](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/44590050067): red on shard 1 (`localtime` accepted on Linux), fixed in E3 |
-| E3 | R6.2 README counts computed from the code, test-suite sizes removed; §2.5 Vitest worker cap; 9 mutations (R6.2-M1–M9); R1.5 fix: Debian's `localtime`, `posixrules` and `Factory` are not places and are refused (R1.5-M7), found by E2's CI on Linux: 813 in all | `73507c9` | CI_E3 |
-| E5 | R0.4a Dependabot configuration, inert until it reaches `main`; 8 mutations (R0.4a-M1–M8): 821 in all | (this commit) | — |
+| E3 | R6.2 README counts computed from the code, test-suite sizes removed; §2.5 Vitest worker cap; 9 mutations (R6.2-M1–M9); R1.5 fix: Debian's `localtime`, `posixrules` and `Factory` are not places and are refused (R1.5-M7), found by E2's CI on Linux: 813 in all | `73507c9` | [44613868962](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/44613868962): all 7 green, 813/813 |
+| E5 | R0.4a Dependabot configuration, inert until it reaches `main`; 8 mutations (R0.4a-M1–M8): 821 in all | `df3a3cf` | see E6's row |
+| E6 | R4.2 opt-in retention scheduler and the audit archival command; 14 mutations (R4.2-M1–M14, 4 on PostgreSQL); the README tests badge no longer states suite sizes (R6.2-M10); 836 in all | (this commit) | — |

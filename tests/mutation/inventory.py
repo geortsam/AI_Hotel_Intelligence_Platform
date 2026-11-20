@@ -8995,6 +8995,14 @@ STAGE_R6_2 = [
         "",
         "test_approved_values_the_production_build_verifies",
     ),
+    _r62(
+        10,
+        "the README's badge states test-suite sizes again",
+        README,
+        "![Tests](https://img.shields.io/badge/tests-run%20in%20CI-success)",
+        "![Tests](https://img.shields.io/badge/tests-7984%20backend%20%C2%B7%201346%20frontend-success)",
+        "test_no_test_suite_size_is_stated",
+    ),
 ]
 
 
@@ -9078,6 +9086,149 @@ STAGE_R0_4A = [
 ]
 
 
+# --- R4.2 (v2.0 roadmap, E6): the opt-in retention scheduler and the archival command ----------
+
+SCHEDULER = "backend/app/jobs/scheduler.py"
+ARCHIVE_COMMAND = "backend/app/jobs/archive_audit_events.py"
+SCHEDULER_COMPOSE = "docker-compose.scheduler.yml"
+_JS = "tests/backend/test_job_scheduler.py::"
+_AJ = "tests/integration/test_audit_archive_job.py::"
+
+
+def _r42(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R4.2-M{number}", "R4.2", breaks, one(path, old, new), killers)
+
+
+def _r42_db(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An R4.2 mutation whose killers run the archival command against PostgreSQL."""
+    return Mutation(
+        f"R4.2-M{number}", "R4.2", breaks, one(path, old, new), killers, needs_database=True
+    )
+
+
+STAGE_R4_2 = [
+    _r42(
+        1,
+        "a retention job is dropped from the schedule",
+        SCHEDULER,
+        '    Job("demand prediction purge", purge_demand_predictions.main),\n',
+        "",
+        f"{_JS}test_it_schedules_the_three_purges_and_the_archival",
+        f"{_JS}test_every_job_module_is_scheduled_or_excluded_by_reason",
+    ),
+    _r42(
+        2,
+        "a failed job stops the jobs after it",
+        SCHEDULER,
+        "        if status != 0:\n            failed.append(job.name)\n",
+        "        if status != 0:\n            failed.append(job.name)\n            break\n",
+        f"{_JS}test_a_failed_job_does_not_stop_the_others_and_fails_the_run",
+    ),
+    _r42(
+        3,
+        "a cycle with a failed job reports success",
+        SCHEDULER,
+        '            + ", ".join(failed)\n        )\n        return 1\n',
+        '            + ", ".join(failed)\n        )\n        return 0\n',
+        f"{_JS}test_once_fails_when_a_job_fails",
+        f"{_JS}test_a_failed_job_does_not_stop_the_others_and_fails_the_run",
+    ),
+    _r42(
+        4,
+        "a job that raises reports its message, which can carry a connection string",
+        SCHEDULER,
+        '            print(f"{job.name} FAILED ({type(exc).__name__})", file=sys.stderr)\n',
+        '            print(f"{job.name} FAILED ({exc})", file=sys.stderr)\n',
+        f"{_JS}test_a_job_that_raises_is_reported_by_type_only",
+    ),
+    _r42(
+        5,
+        "the interval runs from the end of a cycle, so a slow cycle pushes every later one back",
+        SCHEDULER,
+        "        sleep(max(0, interval - (time.monotonic() - started)))\n",
+        "        sleep(interval + (time.monotonic() - started) + 60)\n",
+        f"{_JS}test_the_loop_repeats_on_the_interval_from_each_cycles_start",
+    ),
+    _r42(
+        6,
+        "an interval of zero hours, or under a second, is accepted",
+        SCHEDULER,
+        "    if seconds < 1:\n",
+        "    if seconds < 0:\n",
+        f"{_JS}test_an_invalid_interval_is_a_usage_error[0]",
+        f"{_JS}test_an_invalid_interval_is_a_usage_error[0.0001]",
+    ),
+    _r42(
+        7,
+        "a failing cycle stops the schedule",
+        SCHEDULER,
+        "        run_once(settings, jobs)\n        cycles += 1\n",
+        "        if run_once(settings, jobs):\n            return 1\n        cycles += 1\n",
+        f"{_JS}test_a_failing_cycle_does_not_stop_the_schedule",
+    ),
+    _r42(
+        8,
+        "the scheduler service starts before the schema is migrated",
+        SCHEDULER_COMPOSE,
+        "      migrate:\n        condition: service_completed_successfully\n",
+        "      migrate:\n        condition: service_started\n",
+        f"{_JS}test_the_scheduler_waits_for_the_migration",
+    ),
+    _r42(
+        9,
+        "the scheduler service publishes a port",
+        SCHEDULER_COMPOSE,
+        '    command: ["python", "-m", "app.jobs.scheduler"]\n',
+        '    command: ["python", "-m", "app.jobs.scheduler"]\n    ports: ["8001:8000"]\n',
+        f"{_JS}test_the_scheduler_runs_the_scheduler_and_publishes_nothing",
+    ),
+    _r42(
+        10,
+        "the scheduler service runs one cycle and exits",
+        SCHEDULER_COMPOSE,
+        '    command: ["python", "-m", "app.jobs.scheduler"]\n',
+        '    command: ["python", "-m", "app.jobs.scheduler", "--once"]\n',
+        f"{_JS}test_the_scheduler_runs_the_scheduler_and_publishes_nothing",
+    ),
+    _r42_db(
+        11,
+        "the archival command reports a failure's message, which can carry the connection URL",
+        ARCHIVE_COMMAND,
+        '            f"audit archival FAILED ({type(exc).__name__}); every committed batch was',
+        '            f"audit archival FAILED ({exc}); every committed batch was',
+        f"{_AJ}test_it_exits_non_zero_without_leaking_the_connection",
+        f"{_AJ}test_an_invalid_setting_is_refused_without_archiving",
+    ),
+    _r42_db(
+        12,
+        "the archival command exits 0 when it failed",
+        ARCHIVE_COMMAND,
+        "            file=sys.stderr,\n        )\n        return 1\n",
+        "            file=sys.stderr,\n        )\n        return 0\n",
+        f"{_AJ}test_it_exits_non_zero_without_leaking_the_connection",
+        f"{_AJ}test_an_invalid_setting_is_refused_without_archiving",
+    ),
+    _r42_db(
+        13,
+        "the archival command says complete when the batch ceiling stopped it",
+        ARCHIVE_COMMAND,
+        '    state = "complete" if result.complete else ',
+        '    state = "complete" if True else ',
+        f"{_AJ}test_it_says_when_the_batch_ceiling_stopped_it",
+    ),
+    _r42_db(
+        14,
+        "the archival command ignores the retention setting",
+        ARCHIVE_COMMAND,
+        "                result = archive_audit_events(session, settings)\n",
+        "                result = archive_audit_events(\n"
+        '                    session, settings.model_copy(update={"audit_retention_days": 730})\n'
+        "                )\n",
+        f"{_AJ}test_it_reads_the_retention_from_the_environment",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -9124,4 +9275,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R1_5,
     *STAGE_R6_2,
     *STAGE_R0_4A,
+    *STAGE_R4_2,
 )

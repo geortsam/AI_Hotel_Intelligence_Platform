@@ -1,0 +1,28 @@
+# AI Hotel Intelligence Platform -- the retention scheduler, opt-in (R4.2).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.scheduler.yml up -d
+#
+# Adds one service, `scheduler`, that runs `python -m app.jobs.scheduler`: the audit archival and
+# the conversation, invocation and prediction purges, every 24 hours, in the API's image with the
+# API's configuration. Without this file the stack is exactly docker-compose.yml's four services,
+# and the same jobs can be run by hand (`docker compose run --rm api python -m app.jobs.<job>`)
+# or from the host's own scheduler with `python -m app.jobs.scheduler --once`.
+#
+# A separate file rather than a fifth service in docker-compose.yml: CI's docker-runtime job pins
+# that file's topology to exactly db, migrate, api and frontend.
+services:
+  scheduler:
+    # The API's image, build, restart policy and environment -- the same anchored configuration
+    # `migrate` and `api` share, so the jobs act on the database the API serves. `extends` does
+    # not carry `depends_on`, which is set below.
+    extends:
+      file: docker-compose.yml
+      service: api
+    # Only once the schema is migrated, like the API: the jobs query tables the migration makes.
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["python", "-m", "app.jobs.scheduler"]
+    # The API's probe asks its HTTP server for /health; this process serves nothing.
+    healthcheck:
+      disable: true

@@ -1300,8 +1300,9 @@ conflict with the shape above:
   declared span is *unknown*, not zero. Which rule governs this table?
 - **Column definitions.** `out_of_order_rooms` has no source data; `no_shows`, `arrivals` and
   `departures` have no settled date basis or status rule for this table.
-- **Trigger and backfill.** The application schedules nothing (every existing purge is an
-  operator command), so how the job runs, and how far back it may backfill, are both open.
+- **Trigger and backfill.** The only scheduler is the opt-in retention scheduler (R4.2), which
+  runs the purges and the audit archival and not this job. How it runs, and how far back it
+  may backfill, are both open.
 
 ---
 
