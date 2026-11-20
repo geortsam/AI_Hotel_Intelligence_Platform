@@ -35,10 +35,7 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
-  /* On a narrow screen the four periods scroll rather than wrapping into a ragged block or
-   * pushing the page wider than the viewport. */
   max-width: 100%;
-  overflow-x: auto;
 }
 
 .option {
@@ -87,6 +84,29 @@
 .group:disabled .optionLabel {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+/*
+ * Below 600px the four periods become a 2 x 2 grid of equal cells that fills the row (UI-5).
+ * They used to scroll inside the control, which on a phone hid "Last 90 days" behind an edge
+ * nobody knew to swipe -- and where a flex parent would not let the control shrink, pushed
+ * past the viewport instead. A grid keeps every option visible and every label whole.
+ */
+@media (max-width: 599px) {
+  .group {
+    width: 100%;
+  }
+
+  .options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .optionLabel {
+    flex: 1;
+    text-align: center;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
