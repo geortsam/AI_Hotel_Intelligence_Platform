@@ -13,6 +13,29 @@
   gap: var(--space-2);
   /* Holds the row steady whether or not a delta line is present. */
   min-height: 132px;
+  /* Entrance (UI-6): a short rise and fade as the figures land, 40ms apart along the row and
+   * never more than four steps, so the last tile is still in place within 400ms. Opacity and
+   * transform only -- nothing reflows -- and reduced motion collapses it to the end state. */
+  animation: kpi-in var(--duration-slow) var(--ease-enter) backwards;
+}
+
+.card:nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.card:nth-child(3) {
+  animation-delay: 80ms;
+}
+
+.card:nth-child(n + 4) {
+  animation-delay: 120ms;
+}
+
+@keyframes kpi-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 }
 
 /* An eyebrow (UI-6): small capitals above the figure, so the figure is what the eye finds. */
