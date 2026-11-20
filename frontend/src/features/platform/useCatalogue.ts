@@ -49,6 +49,8 @@ export interface CatalogueRow {
   readonly isActive?: boolean
   /** `is_room_revenue` or `is_fixed_cost`, whichever this catalogue has. */
   readonly flag?: boolean
+  /** The entry's `updated_at` as loaded: the version an edit of it names (R3.3). */
+  readonly updatedAt: string
 }
 
 export interface CatalogueState {
@@ -74,7 +76,12 @@ export interface CatalogueState {
   readonly setActiveFilter: (value: boolean | undefined) => void
   readonly reload: () => void
   readonly create: (payload: Record<string, unknown>) => Promise<boolean>
-  readonly update: (code: string, payload: Record<string, unknown>) => Promise<boolean>
+  /** `version` is the entry's `updatedAt` as loaded; the update is then conditional. */
+  readonly update: (
+    code: string,
+    payload: Record<string, unknown>,
+    version?: string,
+  ) => Promise<boolean>
   readonly remove: (code: string) => Promise<boolean>
   readonly dismiss: () => void
 }
@@ -86,13 +93,14 @@ const CATALOGUES = {
     list: (page: number, pageSize: number, _active: boolean | undefined, signal: AbortSignal) =>
       platformService.listAmenities({ page, pageSize }, signal),
     create: (payload: Record<string, unknown>) => platformService.createAmenity(payload as never),
-    update: (code: string, payload: Record<string, unknown>) =>
-      platformService.updateAmenity(code, payload as never),
+    update: (code: string, payload: Record<string, unknown>, version?: string) =>
+      platformService.updateAmenity(code, payload as never, version),
     remove: (code: string) => platformService.deleteAmenity(code),
     toRow: (row: Amenity): CatalogueRow => ({
       code: row.code,
       name: row.name,
       category: row.category,
+      updatedAt: row.updated_at,
     }),
   },
   'revenue-categories': {
@@ -104,14 +112,15 @@ const CATALOGUES = {
       ),
     create: (payload: Record<string, unknown>) =>
       platformService.createRevenueCategory(payload as never),
-    update: (code: string, payload: Record<string, unknown>) =>
-      platformService.updateRevenueCategory(code, payload as never),
+    update: (code: string, payload: Record<string, unknown>, version?: string) =>
+      platformService.updateRevenueCategory(code, payload as never, version),
     remove: (code: string) => platformService.deleteRevenueCategory(code),
     toRow: (row: RevenueCategory): CatalogueRow => ({
       code: row.code,
       name: row.name,
       isActive: row.is_active,
       flag: row.is_room_revenue,
+      updatedAt: row.updated_at,
     }),
   },
   'expense-categories': {
@@ -123,14 +132,15 @@ const CATALOGUES = {
       ),
     create: (payload: Record<string, unknown>) =>
       platformService.createExpenseCategory(payload as never),
-    update: (code: string, payload: Record<string, unknown>) =>
-      platformService.updateExpenseCategory(code, payload as never),
+    update: (code: string, payload: Record<string, unknown>, version?: string) =>
+      platformService.updateExpenseCategory(code, payload as never, version),
     remove: (code: string) => platformService.deleteExpenseCategory(code),
     toRow: (row: ExpenseCategory): CatalogueRow => ({
       code: row.code,
       name: row.name,
       isActive: row.is_active,
       flag: row.is_fixed_cost,
+      updatedAt: row.updated_at,
     }),
   },
 } as const
@@ -290,12 +300,12 @@ export function useCatalogue(kind: CatalogueKind): CatalogueState {
   )
 
   const update = useCallback(
-    (code: string, payload: Record<string, unknown>) =>
+    (code: string, payload: Record<string, unknown>, version?: string) =>
       run(
         'update',
         code,
         async () => {
-          await catalogue.update(code, payload)
+          await catalogue.update(code, payload, version)
           setAttempt((n) => n + 1)
         },
         'Entry updated.',

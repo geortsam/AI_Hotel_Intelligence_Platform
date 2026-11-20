@@ -5,7 +5,8 @@
 > migrations (users, memberships, platform admins, audit events, audit archive, served demand
 > predictions, LLM invocations, knowledge documents, copilot conversations, declared demand
 > observation periods, the LLM-invocation retention rule, the platform-administrator audit
-> actions); the head is now `0021_audit_platform_grants` (R1.3a, two audit actions, no table)
+> actions, the catalogues' versions); the head is now `0022_catalogue_versions` (R3.3, an
+> `updated_at` on `amenities`, `revenue_categories` and `expense_categories`, no table)
 > over 28 application tables. The "design only" status line below
 > describes this document at the time it was written, not the repository today.
 

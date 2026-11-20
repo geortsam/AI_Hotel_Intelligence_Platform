@@ -251,13 +251,17 @@ def test_every_catalogue_write_route_is_refused(
 
 
 def test_a_refused_catalogue_write_changes_nothing(api: TestClient, engine: Engine) -> None:
-    """The refusal happens before the service, so the rows must be untouched afterwards."""
+    """The refusal happens before the service, so the rows must be untouched afterwards --
+    their version (R3.3) included."""
     make_categories(engine)
+    before = api.get(f"{REVENUE_CATEGORIES}/FB").json()
 
     api.patch(f"{REVENUE_CATEGORIES}/FB", json={"name": "Renamed", "is_active": False})
     api.delete(f"{EXPENSE_CATEGORIES}/UTILITIES")
 
-    assert api.get(f"{REVENUE_CATEGORIES}/FB").json() == {
+    after = api.get(f"{REVENUE_CATEGORIES}/FB").json()
+    assert after == before
+    assert {key: value for key, value in after.items() if key != "updated_at"} == {
         "code": "FB",
         "name": "Food and beverage",
         "is_room_revenue": False,
@@ -316,7 +320,10 @@ def test_creating_a_revenue_category_returns_the_stored_row(
 ) -> None:
     created = revenue_catalogue.create(RevenueCategoryCreate(code="SPA", name="Spa treatments"))
 
-    assert created.model_dump() == {
+    stored = created.model_dump()
+    # The version the database stamped (R3.3): present, and an instant with a zone.
+    assert stored.pop("updated_at").tzinfo is not None
+    assert stored == {
         "code": "SPA",
         "name": "Spa treatments",
         "is_room_revenue": False,
@@ -433,7 +440,9 @@ def test_expense_categories_have_their_own_flag(
         ExpenseCategoryCreate(code="RENT", name="Rent", is_fixed_cost=True)
     )
 
-    assert created.model_dump() == {
+    stored = created.model_dump()
+    assert stored.pop("updated_at").tzinfo is not None
+    assert stored == {
         "code": "RENT",
         "name": "Rent",
         "is_fixed_cost": True,
@@ -1217,13 +1226,15 @@ def test_the_expense_response_is_exactly_the_declared_contract(api: TestClient, 
     }
 
 
-def test_the_category_response_carries_no_timestamps(api: TestClient, engine: Engine) -> None:
-    """Neither category table has created_at or updated_at."""
+def test_the_category_response_carries_its_version_and_no_creation_time(
+    api: TestClient, engine: Engine
+) -> None:
+    """Neither category table has created_at; 0022 (R3.3) gave each an updated_at."""
     seed_revenue_category(engine, "SPA", "Spa")
 
     body = api.get(f"{REVENUE_CATEGORIES}/SPA").json()
 
-    assert set(body) == {"code", "name", "is_room_revenue", "is_active"}
+    assert set(body) == {"code", "name", "is_room_revenue", "is_active", "updated_at"}
 
 
 def test_a_rejected_revenue_create_writes_nothing(

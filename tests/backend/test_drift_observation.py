@@ -1107,8 +1107,9 @@ def test_the_migration_chain_did_not_move() -> None:
     # Issue H4 added 0019 (one unique index of `reviews` replaced; no table).
     # Issue H7 added 0020 (the guests' email key and format CHECK; no table).
     # R1.3a added 0021 (two audit actions for the platform-administrator command; no table).
-    assert len(revisions) == 21
-    assert revisions[-1].endswith("20261119_0021_audit_platform_grants.py")
+    # R3.3 added 0022 (`updated_at` on the three global catalogues; no table).
+    assert len(revisions) == 22
+    assert revisions[-1].endswith("20261120_0022_catalogue_versions.py")
 
 
 def test_the_model_identity_is_untouched() -> None:

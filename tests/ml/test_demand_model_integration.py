@@ -468,8 +468,9 @@ def test_the_migration_chain_is_unchanged() -> None:
     # Issue H4 added 0019 (the scope of one `reviews` unique index), which no model reads.
     # Issue H7 added 0020 (the guests' email key and format CHECK), which no model reads.
     # R1.3a added 0021 (two audit actions), which no model reads.
-    assert len(revisions) == 21
-    assert revisions[-1].endswith("20261119_0021_audit_platform_grants.py")
+    # R3.3 added 0022 (`updated_at` on the three catalogues), which no demand model reads.
+    assert len(revisions) == 22
+    assert revisions[-1].endswith("20261120_0022_catalogue_versions.py")
 
 
 #: Committed beside the model: four JSON records. `model.pkl` is the Stage 6.5 payload, which is

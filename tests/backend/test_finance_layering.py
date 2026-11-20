@@ -581,12 +581,13 @@ def test_ledger_responses_expose_no_internal_keys(schema: type) -> None:
 
 
 @pytest.mark.parametrize("schema", [RevenueCategoryResponse, ExpenseCategoryResponse])
-def test_category_responses_carry_no_timestamps(schema: type) -> None:
-    """Neither category table uses the timestamp mixin, so none are invented."""
+def test_category_responses_carry_a_version_and_no_creation_time(schema: type) -> None:
+    """Neither category table uses the timestamp mixin; 0022 (R3.3) gave each an ``updated_at``
+    alone, for ``If-Match``. No creation time is invented."""
     fields = set(schema.model_fields)  # type: ignore[attr-defined]
 
     assert "created_at" not in fields
-    assert "updated_at" not in fields
+    assert "updated_at" in fields
     assert "id" not in fields
 
 

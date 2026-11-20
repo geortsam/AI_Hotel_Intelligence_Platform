@@ -1352,7 +1352,7 @@ def runbook(name: str, breaks: str, path: str, old: str, new: str, *tests: str) 
 
 
 STALE = "`0011_demand_prediction_public_id`"
-CURRENT = "`0021_audit_platform_grants`"
+CURRENT = "`0022_catalogue_versions`"
 REVISIONS_IN_BACKUP = "test_every_revision_a_runbook_quotes_is_the_current_head[backup-restore]"
 
 STAGE_M1 = [
@@ -3185,7 +3185,7 @@ STAGE_H6 = [
         "backend/app/api/v1/endpoints/guests.py",
         "    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE, **STALE_UPDATE_RESPONSE},\n",
         "    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},\n",
-        f"{PRECONDITION_TESTS}::test_exactly_the_five_conditional_operations_declare_412",
+        f"{PRECONDITION_TESTS}::test_exactly_the_conditional_operations_declare_412",
     ),
     precondition_static(
         17,
@@ -8967,8 +8967,8 @@ STAGE_R6_2 = [
         6,
         "the README's migration count goes stale",
         README,
+        "| 22 linear revisions, head",
         "| 21 linear revisions, head",
-        "| 20 linear revisions, head",
         "test_migrations_and_head",
     ),
     _r62(
@@ -9386,6 +9386,183 @@ STAGE_R1_3A = [
 ]
 
 
+# --- R3.3 (v2.0 roadmap, E7): If-Match on the three global catalogues ------------------------
+
+CATALOGUE_VERSIONS_MIGRATION = "database/migrations/versions/20261120_0022_catalogue_versions.py"
+_CC = "tests/integration/test_catalogue_concurrency.py::"
+_CC_STALE = f"{_CC}test_a_stale_version_is_refused_and_nothing_is_written_or_audited"
+_CC_WAIT = f"{_CC}test_a_writer_that_commits_while_the_update_waits_is_seen_not_overwritten"
+_CC_UI = f"{PLATFORM_UI}::keeps the draft on a stale save, and reloads only when asked"
+
+
+def _r33(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R3.3-M{number}", "R3.3", breaks, one(path, old, new), killers)
+
+
+def _r33_db(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An R3.3 mutation whose killers need PostgreSQL: the lock, the trigger, the migration."""
+    return Mutation(
+        f"R3.3-M{number}", "R3.3", breaks, one(path, old, new), killers, needs_database=True
+    )
+
+
+def _r33_ui(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An R3.3 mutation of the client, caught by Vitest."""
+    return Mutation(
+        f"R3.3-M{number}", "R3.3", breaks, one(path, old, new), killers, runner=Runner.VITEST
+    )
+
+
+STAGE_R3_3 = [
+    _r33_db(
+        1,
+        "a stale If-Match on the amenity PATCH is ignored and the write lands",
+        "backend/app/services/amenity.py",
+        "            amenity = self._repository.lock_for_update(amenity)\n"
+        "            require_unchanged(amenity.updated_at, expected_updated_at)\n",
+        "            pass\n",
+        f"{_CC_STALE}[amenity]",
+    ),
+    _r33_db(
+        2,
+        "a stale If-Match on the revenue-category PATCH is ignored and the write lands",
+        "backend/app/services/finance.py",
+        '        category is still that version."""\n'
+        "        category = self._require(code)\n"
+        "        if expected_updated_at is not None:\n",
+        '        category is still that version."""\n'
+        "        category = self._require(code)\n"
+        "        if expected_updated_at is not None and False:\n",
+        f"{_CC_STALE}[revenue-category]",
+    ),
+    _r33_db(
+        3,
+        "a stale If-Match on the expense-category PATCH is ignored and the write lands",
+        "backend/app/services/finance.py",
+        '``expected_updated_at``, conditionally."""\n'
+        "        category = self._require(code)\n"
+        "        if expected_updated_at is not None:\n",
+        '``expected_updated_at``, conditionally."""\n'
+        "        category = self._require(code)\n"
+        "        if expected_updated_at is not None and False:\n",
+        f"{_CC_STALE}[expense-category]",
+    ),
+    _r33_db(
+        4,
+        "the amenity is compared without the row lock, so a concurrent write is overwritten",
+        "backend/app/services/amenity.py",
+        "            amenity = self._repository.lock_for_update(amenity)\n",
+        "",
+        f"{_CC_WAIT}[amenity]",
+    ),
+    _r33_db(
+        5,
+        "the category lock no longer locks, so a concurrent write is overwritten",
+        "backend/app/repositories/finance.py",
+        "            select(RevenueCategory)\n"
+        "            .where(RevenueCategory.id == category.id)\n"
+        "            .with_for_update(key_share=True)\n",
+        "            select(RevenueCategory)\n"
+        "            .where(RevenueCategory.id == category.id)\n",
+        f"{_CC_WAIT}[revenue-category]",
+    ),
+    _r33_db(
+        6,
+        "the lock re-read keeps the version first loaded, so a concurrent write is overwritten",
+        "backend/app/repositories/amenity.py",
+        "            .execution_options(populate_existing=True)\n",
+        "",
+        f"{_CC_WAIT}[amenity]",
+    ),
+    _r33_db(
+        7,
+        "the expense endpoint drops the precondition it parsed",
+        "backend/app/api/v1/endpoints/expense_categories.py",
+        "    return service.update(code.upper(), payload, expected_updated_at=if_match)\n",
+        "    return service.update(code.upper(), payload)\n",
+        f"{_CC_STALE}[expense-category]",
+    ),
+    _r33(
+        8,
+        "the revenue-category PATCH no longer documents its 412",
+        "backend/app/api/v1/endpoints/revenue_categories.py",
+        "    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE, **STALE_UPDATE_RESPONSE},\n",
+        "    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},\n",
+        f"{PRECONDITION_TESTS}::test_exactly_the_conditional_operations_declare_412",
+    ),
+    _r33(
+        9,
+        "the amenity response hides the version a client must send back",
+        "backend/app/schemas/amenity.py",
+        "    #: The value an ``If-Match`` names (R3.3).\n    updated_at: dt.datetime\n",
+        "",
+        "tests/backend/test_amenity_layering.py::"
+        "test_response_is_exactly_the_three_business_columns_and_the_version",
+    ),
+    _r33_db(
+        10,
+        "the migration versions the catalogues without the trigger that maintains the version",
+        CATALOGUE_VERSIONS_MIGRATION,
+        "        op.execute(\n"
+        '            f"CREATE TRIGGER trg_{table}_set_updated_at BEFORE UPDATE ON {table} "\n'
+        '            "FOR EACH ROW EXECUTE FUNCTION set_updated_at()"\n'
+        "        )\n",
+        "",
+        f"{_CC}test_the_trigger_moves_the_version_on_any_write[amenity]",
+        "tests/backend/test_migration_integrity.py::test_the_canonical_digest_is_unchanged",
+    ),
+    _r33_db(
+        11,
+        "the downgrade leaves the triggers behind",
+        CATALOGUE_VERSIONS_MIGRATION,
+        '        op.execute(f"DROP TRIGGER trg_{table}_set_updated_at ON {table}")\n',
+        "",
+        f"{_CC}test_the_downgrade_removes_only_the_versions_and_the_upgrade_fills_existing_rows",
+    ),
+    _r33_ui(
+        12,
+        "the catalogue edit is sent without the version it was loaded at",
+        "frontend/src/pages/PlatformPage.tsx",
+        "                        : catalogue.update(editing.code, payload, editing.updatedAt)\n",
+        "                        : catalogue.update(editing.code, payload)\n",
+        f"{PLATFORM_UI}::sends a cleared amenity group as null, with the loaded version",
+    ),
+    _r33_ui(
+        13,
+        "a revenue category's version is lost on the way into the form",
+        "frontend/src/features/platform/useCatalogue.ts",
+        "      flag: row.is_room_revenue,\n      updatedAt: row.updated_at,\n",
+        "      flag: row.is_room_revenue,\n      updatedAt: '',\n",
+        f"{PLATFORM_UI}::sends a retired revenue category as is_active alone",
+    ),
+    _r33_ui(
+        14,
+        "a stale catalogue save offers no way to reload",
+        "frontend/src/pages/PlatformPage.tsx",
+        "                  {writeFailure.canReload === true ? (\n",
+        "                  {writeFailure.canReload === false ? (\n",
+        _CC_UI,
+    ),
+    _r33_ui(
+        15,
+        "a reload leaves the stale draft in the form",
+        "frontend/src/pages/PlatformPage.tsx",
+        "key={editing === null ? 'create' : `${editing.code}@${editing.updatedAt}`}\n",
+        "key={editing === null ? 'create' : editing.code}\n",
+        _CC_UI,
+    ),
+    _r33_ui(
+        16,
+        "a reload keeps editing the entry as it was first loaded",
+        "frontend/src/pages/PlatformPage.tsx",
+        "      current === null ? null : (catalogue.rows.find((row) => row.code === current.code)"
+        " ?? null),\n",
+        "      current,\n",
+        _CC_UI,
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -9434,4 +9611,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R0_4A,
     *STAGE_R4_2,
     *STAGE_R1_3A,
+    *STAGE_R3_3,
 )

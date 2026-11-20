@@ -100,8 +100,9 @@ class RevenueCategoryUpdate(BaseModel):
 class RevenueCategoryResponse(BaseModel):
     """Exactly the columns the table has, minus the internal key.
 
-    No ``created_at`` or ``updated_at``: ``revenue_categories`` does not use the timestamp
-    mixin and carries no such columns, so none are invented.
+    ``updated_at`` but no ``created_at``: ``revenue_categories`` does not use the timestamp
+    mixin, and migration 0022 (R3.3) added the version alone, so the PATCH can take an
+    ``If-Match``. No creation time is invented.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -110,6 +111,8 @@ class RevenueCategoryResponse(BaseModel):
     name: str
     is_room_revenue: bool
     is_active: bool
+    #: The value an ``If-Match`` names (R3.3).
+    updated_at: dt.datetime
 
 
 # --- expense categories ---------------------------------------------------------------------
@@ -140,7 +143,7 @@ class ExpenseCategoryUpdate(BaseModel):
 
 
 class ExpenseCategoryResponse(BaseModel):
-    """Exactly the columns the table has. No timestamps -- the table has none."""
+    """Exactly the columns the table has: the version (0022, R3.3) but no creation time."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -148,6 +151,8 @@ class ExpenseCategoryResponse(BaseModel):
     name: str
     is_fixed_cost: bool
     is_active: bool
+    #: The value an ``If-Match`` names (R3.3).
+    updated_at: dt.datetime
 
 
 # --- revenue ----------------------------------------------------------------------------------

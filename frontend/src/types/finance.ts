@@ -136,6 +136,8 @@ export interface RevenueCategory {
    */
   readonly is_room_revenue: boolean
   readonly is_active: boolean
+  /** The version a conditional update names (R3.3). */
+  readonly updated_at: string
 }
 
 /** An expense category, from the same kind of global catalogue. */
@@ -144,6 +146,8 @@ export interface ExpenseCategory {
   readonly name: string
   readonly is_fixed_cost: boolean
   readonly is_active: boolean
+  /** The version a conditional update names (R3.3). */
+  readonly updated_at: string
 }
 
 /**

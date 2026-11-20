@@ -19,6 +19,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Path, Query, status
 
 from app.api.deps import ExpenseCategoryServiceDep, get_current_user, require_platform_admin
+from app.api.preconditions import STALE_UPDATE_RESPONSE, IfMatch
 from app.schemas.common import ErrorResponse, Page
 from app.schemas.finance import (
     ExpenseCategoryCreate,
@@ -109,15 +110,19 @@ def get_expense_category(
     summary="Update an expense category",
     description="Accepts name, is_fixed_cost and is_active. The code is the URL identity and "
     "is not editable.",
-    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},
+    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE, **STALE_UPDATE_RESPONSE},
     # Stage 4.3: a global catalogue belongs to no hotel, so no per-hotel role can grant
     # authority over it. Reserved to the platform administrator; see require_platform_admin.
     dependencies=[Depends(require_platform_admin)],
 )
 def update_expense_category(
-    code: CodePath, payload: ExpenseCategoryUpdate, service: ExpenseCategoryServiceDep
+    code: CodePath,
+    payload: ExpenseCategoryUpdate,
+    if_match: IfMatch,
+    service: ExpenseCategoryServiceDep,
 ) -> ExpenseCategoryResponse:
-    return service.update(code.upper(), payload)
+    """412 if an ``If-Match`` names a version of the entry that is no longer current (R3.3)."""
+    return service.update(code.upper(), payload, expected_updated_at=if_match)
 
 
 @router.delete(

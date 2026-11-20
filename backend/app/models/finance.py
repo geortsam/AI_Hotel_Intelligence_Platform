@@ -17,6 +17,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Date,
+    DateTime,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -24,6 +25,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -52,6 +54,11 @@ class RevenueCategory(Base):
         Boolean, nullable=False, server_default=text("false")
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    # R3.3 (migration 0022). The version an `If-Match` names; set by the shared
+    # `set_updated_at` trigger on every write. No `created_at`: nothing needs one.
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
     entries: Mapped[list[Revenue]] = relationship(back_populates="category")
 
@@ -129,6 +136,11 @@ class ExpenseCategory(Base):
         Boolean, nullable=False, server_default=text("false")
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    # R3.3 (migration 0022). The version an `If-Match` names; set by the shared
+    # `set_updated_at` trigger on every write. No `created_at`: nothing needs one.
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
     entries: Mapped[list[Expense]] = relationship(back_populates="category")
 

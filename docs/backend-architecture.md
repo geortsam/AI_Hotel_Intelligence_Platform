@@ -86,9 +86,10 @@ byte-identical, checked by counting all eleven.
 ### Conditional updates (Issue H6)
 
 Without help, a PATCH is last-write-wins: a client that loaded a record, waited and saved
-overwrote whatever was written in between. Five routes now take an optional `If-Match` — the
-hotel, guest, room type, room and booking PATCHes — carrying the record's own `updated_at` as a
-strong entity-tag, exactly as the API returned it (`"2026-10-09T10:00:00.123456Z"`):
+overwrote whatever was written in between. Eight routes now take an optional `If-Match` — the
+hotel, guest, room type, room and booking PATCHes (Issue H6), and the amenity, revenue-category
+and expense-category PATCHes (R3.3) — carrying the record's own `updated_at` as a strong
+entity-tag, exactly as the API returned it (`"2026-10-09T10:00:00.123456Z"`):
 
 - **Lock, then compare, in the update's own transaction.** With the header, the service
   re-reads the row under a row lock (`populate_existing`) before anything else the update does
@@ -98,7 +99,8 @@ strong entity-tag, exactly as the API returned it (`"2026-10-09T10:00:00.123456Z
   waits for the lock is therefore seen, not overwritten.
 - **The lock** is the one the row's other writers already contend on: `FOR UPDATE` on a
   booking (`BookingRepository.lock_for_update`, shared with status transitions and stay
-  moves); `FOR NO KEY UPDATE` on a hotel, guest, room type or room — the lock PostgreSQL's own
+  moves); `FOR NO KEY UPDATE` on a hotel, guest, room type, room or catalogue entry — the lock
+  PostgreSQL's own
   non-key UPDATE takes, so it serialises with every writer of the row without making the
   foreign-key checks of unrelated inserts (`FOR KEY SHARE`) wait behind an edit.
 - **A mismatch is `412 STALE_UPDATE`**, raised before anything is flushed: nothing is written.
@@ -110,11 +112,13 @@ strong entity-tag, exactly as the API returned it (`"2026-10-09T10:00:00.123456Z
 - **Not on commands.** Booking status changes and stay moves are judged against the current
   state under the booking's lock already; member role changes, review moderation and the room
   status control are single deliberate commands. None of them carries the precondition.
-- **Not on the global catalogues.** `amenities`, `revenue_categories` and `expense_categories`
-  have no `updated_at`, so there is no version to name; adding one is a migration H6 did not
-  make. Their forms send only the fields that changed, which keeps an untouched field from
-  being restored from a stale copy — but two operators changing the **same** field of the same
-  entry still leave the later value in place.
+- **The global catalogues too, since R3.3.** H6 could not cover `amenities`,
+  `revenue_categories` and `expense_categories`: they had no `updated_at`, so there was no
+  version to name. Migration `0022_catalogue_versions` gave each one — and no `created_at` —
+  maintained by the same `set_updated_at` trigger; rows that existed before it received the
+  migration's own time, a valid version though not a record of their last write. Their PATCHes
+  now take the same precondition, and the platform page sends the loaded version and offers the
+  same explicit reload on a 412.
 
 The edit forms send only the fields that differ from the record as loaded (each side put
 through the same draft-to-payload function), so even without a precondition an update can no
@@ -341,9 +345,9 @@ In priority order.
    ids but never an address, if existing rows would break either rule; it repairs nothing.
 3. ~~**The three `SET NULL` corrections** in §9.~~ Done by migration `0018_composite_set_null_columns` (Issue H3).
 4. ~~**Optimistic concurrency.**~~ Done for the hotel, guest, room type, room and booking
-   PATCHes by an optional `If-Match` on `updated_at` (Issue H6, §3). **Remaining:** the three
-   global catalogues have no `updated_at`, so same-field edits there are still last-write-wins;
-   giving them one is a migration. Creation races were always decided by the database (§6).
+   PATCHes by an optional `If-Match` on `updated_at` (Issue H6, §3), and for the three global
+   catalogues once migration `0022_catalogue_versions` gave them an `updated_at` (R3.3).
+   Creation races were always decided by the database (§6).
 5. **A `daily_hotel_metrics` population job — reserved, not approved (Issue H9).** The table
    exists and stays empty; no job is implemented and no roadmap stage schedules one. Analytics
    computes on demand and the ML dataset pipeline reads its own approved sources (the booking

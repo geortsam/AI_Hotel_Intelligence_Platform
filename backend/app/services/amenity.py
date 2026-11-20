@@ -14,6 +14,7 @@ errors through the shared SQLSTATE vocabulary.
 
 from __future__ import annotations
 
+import datetime as dt
 import logging
 import uuid
 from typing import Any
@@ -42,6 +43,7 @@ from app.schemas.amenity import (
 )
 from app.schemas.common import Page
 from app.services.audit import AuditTrail
+from app.services.concurrency import require_unchanged
 from app.services.scope import HotelScopeResolver
 
 logger = logging.getLogger(__name__)
@@ -101,9 +103,21 @@ class AmenityService:
 
         return AmenityResponse.model_validate(created)
 
-    def update(self, code: str, payload: AmenityUpdate) -> AmenityResponse:
-        """Apply a partial update and commit."""
+    def update(
+        self,
+        code: str,
+        payload: AmenityUpdate,
+        *,
+        expected_updated_at: dt.datetime | None = None,
+    ) -> AmenityResponse:
+        """Apply a partial update and commit. With ``expected_updated_at`` -- an ``If-Match``
+        precondition -- refuse with 412 unless the amenity is still that version."""
         amenity = self._require(code)
+        if expected_updated_at is not None:
+            # R3.3, the Issue H6 rule. Lock, then compare -- before anything else this update
+            # does, the empty-update shortcut included. A stale version writes nothing.
+            amenity = self._repository.lock_for_update(amenity)
+            require_unchanged(amenity.updated_at, expected_updated_at)
         changes: dict[str, Any] = payload.model_dump(exclude_unset=True)
 
         if not changes:
