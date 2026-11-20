@@ -198,23 +198,25 @@ def test_assignment_payload_rejects_identifiers_the_url_determines(field: str) -
         AmenityAssignment.model_validate({"code": "WIFI", field: 1})
 
 
-# --- 27. response exposes no internal ids, and invents no timestamps ------------------------------
+# --- 27. response exposes no internal ids, and invents no creation time -------------------------
 
 
-def test_response_is_exactly_the_three_business_columns() -> None:
-    assert set(AmenityResponse.model_fields) == {"code", "name", "category"}
+def test_response_is_exactly_the_three_business_columns_and_the_version() -> None:
+    assert set(AmenityResponse.model_fields) == {"code", "name", "category", "updated_at"}
 
 
 def test_response_exposes_no_internal_id() -> None:
     assert "id" not in AmenityResponse.model_fields
 
 
-def test_response_invents_no_timestamps() -> None:
-    """``Amenity`` does not use TimestampMixin: the table has no created_at/updated_at, and
-    the API must not pretend otherwise."""
+def test_response_invents_no_creation_time() -> None:
+    """``Amenity`` does not use TimestampMixin: migration 0022 (R3.3) gave the table an
+    ``updated_at`` -- the version an ``If-Match`` names -- and no ``created_at``, and the API
+    must not pretend otherwise."""
     assert "created_at" not in AmenityResponse.model_fields
-    assert "updated_at" not in AmenityResponse.model_fields
+    assert "updated_at" in AmenityResponse.model_fields
     assert not hasattr(Amenity, "created_at")
+    assert hasattr(Amenity, "updated_at")
 
 
 # --- service behaviour without a database ------------------------------------------------------

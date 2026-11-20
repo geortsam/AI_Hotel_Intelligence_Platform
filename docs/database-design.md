@@ -4,9 +4,9 @@
 > not maintained since. The schema it designs was implemented and has since grown by later
 > migrations (users, memberships, platform admins, audit events, audit archive, served demand
 > predictions, LLM invocations, knowledge documents, copilot conversations, declared demand
-> observation periods, the LLM-invocation retention rule); the head is now
-> `0020_guest_email_rules` (Issue H7, a format CHECK and a case-insensitive per-hotel key for guest emails, no
-> table)
+> observation periods, the LLM-invocation retention rule, the platform-administrator audit
+> actions, the catalogues' versions, cookie sessions); the head is now `0023_auth_sessions`
+> (R1.1, the `auth_sessions` table of refresh-token digests)
 > over 28 application tables. The "design only" status line below
 > describes this document at the time it was written, not the repository today.
 
@@ -207,7 +207,7 @@ Conventions used in every table below:
 | `email` | TEXT | NULL | — | Contact — optional |
 | `phone` | TEXT | NULL | — | Contact — optional |
 | `website` | TEXT | NULL | — | Optional |
-| `timezone` | TEXT | NOT NULL | `'UTC'` | IANA name, e.g. `Europe/Athens`. **Required** — see §9 |
+| `timezone` | TEXT | NOT NULL | `'UTC'` | IANA name, e.g. `Europe/Athens`. **Required** — see §9. The API refuses a name the installed IANA database does not define (R1.5); the column itself accepts any text, so a row written earlier still reads, and its business day falls back to UTC |
 | `currency` | CHAR(3) | NOT NULL | — | Base currency for this property |
 | `star_rating` | SMALLINT | NULL | — | `CHECK (BETWEEN 1 AND 5)` — unrated hotels exist |
 | `total_rooms` | INTEGER | NULL | — | Denormalized convenience? **No** — omitted deliberately; derive from `rooms` |
@@ -1300,8 +1300,9 @@ conflict with the shape above:
   declared span is *unknown*, not zero. Which rule governs this table?
 - **Column definitions.** `out_of_order_rooms` has no source data; `no_shows`, `arrivals` and
   `departures` have no settled date basis or status rule for this table.
-- **Trigger and backfill.** The application schedules nothing (every existing purge is an
-  operator command), so how the job runs, and how far back it may backfill, are both open.
+- **Trigger and backfill.** The only scheduler is the opt-in retention scheduler (R4.2), which
+  runs the purges and the audit archival and not this job. How it runs, and how far back it
+  may backfill, are both open.
 
 ---
 

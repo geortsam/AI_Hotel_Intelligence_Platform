@@ -8,6 +8,15 @@
 .panel {
   width: 100%;
   max-width: 400px;
+  /* The card arrives once (UI-9): opacity and a 4px rise, nothing that reflows. */
+  animation: login-in var(--duration-slow) var(--ease-enter) backwards;
+}
+
+@keyframes login-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 }
 
 .brand {
@@ -17,14 +26,15 @@
   margin-bottom: var(--space-6);
 }
 
+/* The same brass mark as the sidebar's (UI-2): accent ground, page-coloured glyph. */
 .brandMark {
   display: grid;
   place-items: center;
   width: 32px;
   height: 32px;
   border-radius: var(--radius-md);
-  background: var(--color-primary);
-  color: var(--color-text-inverse);
+  background: var(--color-accent);
+  color: var(--color-bg);
   flex-shrink: 0;
 }
 
@@ -34,7 +44,7 @@
 }
 
 .title {
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: var(--weight-semibold);
 }
 
@@ -132,4 +142,66 @@
   text-align: center;
   font-size: var(--text-xs);
   color: var(--color-text-subtle);
+}
+
+/*
+ * From 1024px, a split screen (UI-9): a brand half on the left -- the product name in display
+ * type over a quiet brass-and-blue glow -- and the sign-in card on the right. The glow is a
+ * decorative `::before` grid cell; the brand block is the same element as on a phone, only
+ * placed over it, so the reading order stays brand, "Sign in", the form.
+ */
+@media (min-width: 1024px) {
+  .screen {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding: 0;
+  }
+
+  .screen::before {
+    content: '';
+    grid-column: 1;
+    grid-row: 1;
+    align-self: stretch;
+    justify-self: stretch;
+    border-right: 1px solid var(--color-border);
+    background:
+      radial-gradient(90% 70% at 15% 20%, rgba(200, 162, 74, 0.14), transparent 60%),
+      radial-gradient(80% 70% at 85% 90%, rgba(59, 99, 243, 0.16), transparent 60%),
+      var(--color-surface);
+  }
+
+  .panel {
+    grid-column: 2;
+    grid-row: 1;
+    padding: var(--space-6) var(--space-4);
+  }
+
+  .brand {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 50%;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin: 0;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+
+  .brandMark {
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-lg);
+  }
+
+  .brandMark svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .brandText {
+    font-family: var(--font-display);
+    font-size: var(--text-4xl);
+    letter-spacing: var(--tracking-tight);
+  }
 }

@@ -1,0 +1,19 @@
+/*
+ * Text for assistive technology only: read aloud, laid out nowhere (UI-4).
+ *
+ * The standard clip pattern, not `display: none` or `visibility: hidden`, either of which
+ * would hide the text from screen readers too -- the opposite of the point. Eleven feature
+ * modules defined this rule identically; each now composes it from here.
+ */
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

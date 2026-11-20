@@ -21,8 +21,9 @@
   min-width: 280px;
 }
 
+/* The chart tokens (UI-1), as on the dashboard's trend chart (UI-7). */
 .gridline {
-  stroke: var(--color-border);
+  stroke: var(--chart-grid);
   stroke-width: 1;
 }
 
@@ -34,7 +35,7 @@
 }
 
 .axisLabel {
-  fill: var(--color-text-subtle);
+  fill: var(--chart-axis);
   font-size: 11px;
   font-family: var(--font-sans);
 }
@@ -132,22 +133,24 @@
 
 /* The two series are distinguished by SHAPE first -- solid vs dashed, round vs diamond --
  * so the chart survives a monochrome print and a reader who cannot tell the hues apart.
- * Colour is a second, redundant signal. */
+ * Colour is a second, redundant signal: what happened in the strongest ink, what the model
+ * says in the forecast blue, with its interval in the same hue (UI-7) -- so the band reads
+ * as the forecast's, not as a halo around the actuals. */
 .actualLine {
   fill: none;
-  stroke: var(--color-primary);
+  stroke: var(--color-text);
   stroke-width: 2;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
 
 .actualPoint {
-  fill: var(--color-primary);
+  fill: var(--color-text);
 }
 
 .predictedLine {
   fill: none;
-  stroke: var(--color-text-muted);
+  stroke: var(--chart-forecast);
   stroke-width: 2;
   stroke-dasharray: 5 4;
   stroke-linejoin: round;
@@ -155,14 +158,13 @@
 }
 
 .predictedPoint {
-  fill: var(--color-text-muted);
+  fill: var(--chart-forecast);
 }
 
 /* The prediction interval. Deliberately faint: it is context for the dashed line, not a
  * third series competing with the two real ones. */
 .band {
-  fill: var(--color-text-muted);
-  opacity: 0.14;
+  fill: var(--chart-band);
 }
 
 .legend {

@@ -9,9 +9,10 @@ earned; the schema keeps them apart and so does this.
 
 **Lifecycle, decided from the schema rather than by convention:**
 
-* *Categories* are mutable and deletable. They have no timestamps and no update trigger, but
-  they do carry ``is_active``, and both ledger tables reference them ``ON DELETE RESTRICT``
-  -- so a category in use cannot be removed, and retiring one means deactivating it.
+* *Categories* are mutable and deletable. Since migration 0022 (R3.3) they carry an
+  ``updated_at`` and the update trigger -- the version an ``If-Match`` names -- but still no
+  ``created_at``. They carry ``is_active``, and both ledger tables reference them ``ON DELETE
+  RESTRICT`` -- so a category in use cannot be removed, and retiring one means deactivating it.
 * *Ledger lines are append-only*, for a structural reason rather than a policy one: neither
   table has a ``public_id`` and neither has any unique constraint beyond its primary key, so
   no client can name a row to edit or delete it. The schema's own correction mechanism is a
@@ -19,7 +20,7 @@ earned; the schema keeps them apart and so does this.
   ``tax_amount`` does, and that asymmetry is deliberate.
 
   The ``set_updated_at`` trigger on both tables is **not** evidence against this. It is on
-  all twelve tables that have an ``updated_at`` column, including ``payments``, which is
+  every table that has an ``updated_at`` column, including ``payments``, which is
   append-only. It is a blanket convention, checked rather than assumed.
 
 **What this module deliberately does NOT do**, because the frozen schema does not say it:
@@ -79,6 +80,7 @@ from app.schemas.finance import (
     RevenueResponse,
 )
 from app.services.audit import AuditTrail
+from app.services.concurrency import require_unchanged
 from app.services.scope import HotelScopeResolver
 
 logger = logging.getLogger(__name__)
@@ -153,9 +155,22 @@ class RevenueCategoryService:
             raise self._translate(exc) from exc
         return RevenueCategoryResponse.model_validate(created)
 
-    def update(self, code: str, payload: RevenueCategoryUpdate) -> RevenueCategoryResponse:
-        """Apply a partial update and commit. ``code`` is not reachable from here."""
+    def update(
+        self,
+        code: str,
+        payload: RevenueCategoryUpdate,
+        *,
+        expected_updated_at: dt.datetime | None = None,
+    ) -> RevenueCategoryResponse:
+        """Apply a partial update and commit. ``code`` is not reachable from here. With
+        ``expected_updated_at`` -- an ``If-Match`` precondition -- refuse with 412 unless the
+        category is still that version."""
         category = self._require(code)
+        if expected_updated_at is not None:
+            # R3.3, the Issue H6 rule. Lock, then compare -- before anything else this update
+            # does, the empty-update shortcut included. A stale version writes nothing.
+            category = self._repository.lock_for_update(category)
+            require_unchanged(category.updated_at, expected_updated_at)
         changes: dict[str, Any] = payload.model_dump(exclude_unset=True)
         if not changes:
             return RevenueCategoryResponse.model_validate(category)
@@ -275,8 +290,20 @@ class ExpenseCategoryService:
             raise self._translate(exc) from exc
         return ExpenseCategoryResponse.model_validate(created)
 
-    def update(self, code: str, payload: ExpenseCategoryUpdate) -> ExpenseCategoryResponse:
+    def update(
+        self,
+        code: str,
+        payload: ExpenseCategoryUpdate,
+        *,
+        expected_updated_at: dt.datetime | None = None,
+    ) -> ExpenseCategoryResponse:
+        """Apply a partial update and commit; with ``expected_updated_at``, conditionally."""
         category = self._require(code)
+        if expected_updated_at is not None:
+            # R3.3, the Issue H6 rule. Lock, then compare -- before anything else this update
+            # does, the empty-update shortcut included. A stale version writes nothing.
+            category = self._repository.lock_for_update(category)
+            require_unchanged(category.updated_at, expected_updated_at)
         changes: dict[str, Any] = payload.model_dump(exclude_unset=True)
         if not changes:
             return ExpenseCategoryResponse.model_validate(category)

@@ -31,7 +31,9 @@ and nDCG.
 - **Recall@5:** the grade-2 chunks in *top*, over the query's grade-2 chunks.
 - **MRR@5:** 1 / the rank of the first chunk in *top* graded at least `mrr_min_grade`, else 0.
 - **nDCG@5:** DCG / ideal DCG. DCG sums gain(grade) / log2(rank + 1) over *top*; the ideal DCG
-  is the same sum over the query's judged grades, highest first, cut at `cutoff`.
+  is the same sum over the query's judged grades, highest first, cut at `cutoff`. The
+  discounts log2(rank + 1) are the certified table of `retrieval_numerics` (§12.5), defined
+  for ranks 1 to 5 only.
 - **Empty-result rate:** the search returned nothing at all.
 - **No-answer, strict** (over no-answer queries): the search returned nothing at all.
 - **No-answer, lenient** (over no-answer queries): nothing returned is graded at least
@@ -97,6 +99,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Any, Final
 
+from tests.evaluation.retrieval_numerics import certified_sqrt, discount
 from tests.evaluation.retrieval_schema import (
     GRADES,
     SCHEMA_VERSION,
@@ -301,7 +304,7 @@ def reciprocal_rank_at(
 
 
 def _dcg(gains: Sequence[float]) -> float:
-    return math.fsum(gain / math.log2(rank + 1) for rank, gain in enumerate(gains, start=1))
+    return math.fsum(gain / discount(rank) for rank, gain in enumerate(gains, start=1))
 
 
 def ndcg_at(
@@ -357,6 +360,13 @@ def no_answer_lenient(query: DatasetQuery, ranked: Sequence[ChunkRef], min_grade
 # --- intervals -----------------------------------------------------------------------------------
 
 
+def wilson_radicand(successes: int, n: int, z: float = WILSON_Z_95) -> float:
+    """p(1 - p) / n + z^2 / (4 n^2) in binary64: what Wilson's square root is taken of. Its
+    inputs are `wilson_interval`'s, once checked there; the root is `certified_sqrt` (§12.5)."""
+    p = successes / n
+    return p * (1 - p) / n + z * z / (4 * n * n)
+
+
 def wilson_interval(successes: int, n: int, z: float = WILSON_Z_95) -> tuple[float, float] | None:
     """Wilson's score interval for *successes* of *n*, rounded; `None` when n is 0."""
     for value, name in ((successes, "successes"), (n, "n")):
@@ -371,7 +381,7 @@ def wilson_interval(successes: int, n: int, z: float = WILSON_Z_95) -> tuple[flo
     p = successes / n
     denominator = 1 + z * z / n
     centre = (p + z * z / (2 * n)) / denominator
-    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denominator
+    half = z * certified_sqrt(wilson_radicand(successes, n, z)) / denominator
     low = 0.0 if successes == 0 else max(0.0, centre - half)
     high = 1.0 if successes == n else min(1.0, centre + half)
     return round(low, DIGITS), round(high, DIGITS)
@@ -634,4 +644,5 @@ __all__ = [
     "success_at",
     "trap_hits",
     "wilson_interval",
+    "wilson_radicand",
 ]

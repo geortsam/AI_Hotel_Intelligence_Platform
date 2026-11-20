@@ -115,6 +115,13 @@ const WRITE_COPY = {
       detail: 'The change could not be saved. The entry is unchanged.',
       canRetry: true,
     },
+    stale: {
+      title: 'Nothing was saved',
+      detail:
+        'Someone else changed this entry after you opened the form, so your changes were not applied. They are still in the form. Reload to see the current version — reloading replaces your edits.',
+      canRetry: false,
+      canReload: true,
+    },
   },
   delete: {
     forbidden: {
@@ -163,7 +170,8 @@ const WRITE_COPY = {
  * ## What this screen deliberately does not offer
  *
  * * **Granting or revoking platform administrator.** No endpoint exists -- the repository
- *   behind the check is read-only and the grant is provisioned out of band. A control here
+ *   behind the check is read-only, and the grant is made by the operator command
+ *   `python -m app.jobs.platform_admin` (R1.3a), deliberately not over HTTP. A control here
  *   would be a button with nothing behind it.
  * * **Editing or deleting an audit event.** The trail is append-only by design, which is what
  *   makes it worth reading.
@@ -185,6 +193,15 @@ export function PlatformPage() {
   const activeFilterId = useId()
   const actionFilterId = useId()
   const resourceFilterId = useId()
+
+  /* A reload replaces the entry being edited with the server's current copy, and with it the
+   * form's baseline and draft (R3.3): the form is keyed on the version below. An entry that
+   * is gone, or no longer on this page, closes the form rather than editing a ghost. */
+  useEffect(() => {
+    setEditing((current) =>
+      current === null ? null : (catalogue.rows.find((row) => row.code === current.code) ?? null),
+    )
+  }, [catalogue.rows])
 
   /* Switching catalogue closes every form: a create aimed at amenities must not submit
    * itself against expense categories because a tab changed underneath it. */
@@ -281,6 +298,21 @@ export function PlatformPage() {
                 <div>
                   <p className={styles.failureTitle}>{writeFailure.title}</p>
                   <p className={styles.failureDetail}>{writeFailure.detail}</p>
+                  {writeFailure.canReload === true ? (
+                    <div className={styles.failureAction}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          // The reader's choice, never automatic: it replaces the draft.
+                          catalogue.dismiss()
+                          catalogue.reload()
+                        }}
+                      >
+                        Reload the current version
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -288,6 +320,7 @@ export function PlatformPage() {
             {creating || editing !== null ? (
               <div className={styles.panel}>
                 <CatalogueForm
+                  key={editing === null ? 'create' : `${editing.code}@${editing.updatedAt}`}
                   kind={kind}
                   {...(editing === null ? {} : { entry: editing })}
                   busy={catalogue.pending === (editing === null ? 'create' : 'update')}
@@ -300,7 +333,7 @@ export function PlatformPage() {
                     const write =
                       editing === null
                         ? catalogue.create(payload)
-                        : catalogue.update(editing.code, payload)
+                        : catalogue.update(editing.code, payload, editing.updatedAt)
                     void write.then((accepted) => {
                       if (accepted) {
                         setCreating(false)

@@ -118,7 +118,7 @@ describe('the member list', () => {
     const url = new URL(requestsFor('/members?page=')[0]!.url, 'http://localhost')
     expect(url.pathname).toBe(`/api/v1/hotels/${TEST_HOTEL.public_id}/members`)
     expect([...url.searchParams.keys()].sort()).toEqual(['page', 'page_size'])
-    expect(requestsFor('/members?page=')[0]!.authorization).toMatch(/^Bearer /)
+    expect(requestsFor('/members?page=')[0]!.credentials).toBe('include')
   })
 
   it('offers no search, filter or sort, because the endpoint has none', async () => {
@@ -628,10 +628,13 @@ describe('changing your own password', () => {
     expect(body).not.toHaveProperty('user_public_id')
   })
 
-  it('adopts the replacement token, because the old one is now revoked', async () => {
+  it('adopts the CSRF token of the new session, because the old one has ended', async () => {
     const user = userEvent.setup()
+    // R1.1. The change ends every session, this one included, and the response starts a new
+    // one: fresh `HttpOnly` cookies, and the new CSRF token in `X-CSRF-Token`.
     fetchStub.on('POST', '/auth/change-password', {
       body: { access_token: 'replacement.token.value', token_type: 'bearer', expires_in: 1800 },
+      headers: { 'X-CSRF-Token': 'replacement-csrf-token' },
     })
     renderPage()
     await screen.findByText('Dana Reception')
@@ -640,14 +643,18 @@ describe('changing your own password', () => {
     await user.click(screen.getByRole('button', { name: 'Change password' }))
     await screen.findByText(/Password changed/)
 
-    // The next request must carry the NEW token: every token minted before the change,
-    // including the one that made it, has been revoked.
+    // Every later write carries the NEW token; the old one belonged to the ended session.
+    expect(window.sessionStorage.getItem('ahip.csrf_token')).toBe('replacement-csrf-token')
+    // The body's bearer token is for API clients: this page keeps it nowhere.
+    const stored = Object.keys(window.sessionStorage)
+      .map((key) => window.sessionStorage.getItem(key) ?? '')
+      .join(' ')
+    expect(stored).not.toContain('replacement.token.value')
+    expect(window.localStorage.length).toBe(0)
     await user.selectOptions(screen.getByLabelText('Per page'), '50')
     await waitFor(() => {
       const listCalls = requestsFor('/members?page=')
-      expect(listCalls[listCalls.length - 1]!.authorization).toBe(
-        'Bearer replacement.token.value',
-      )
+      expect(listCalls[listCalls.length - 1]!.authorization).toBeNull()
     })
   })
 
@@ -667,7 +674,7 @@ describe('changing your own password', () => {
     // The session survives: a typo must not sign somebody out, least of all while they are
     // securing their account.
     expect(screen.getByText('Dana Reception')).toBeInTheDocument()
-    expect(window.sessionStorage.getItem('ahip.access_token')).toBe(TEST_TOKEN)
+    expect(window.sessionStorage.getItem('ahip.csrf_token')).toBe(TEST_TOKEN)
   })
 
   it('refuses a short new password without a request', async () => {

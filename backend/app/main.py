@@ -97,6 +97,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # R1.1. A cross-origin page reads the new session's CSRF token from this header.
+        expose_headers=["X-CSRF-Token"],
     )
 
     # Added LAST, so in Starlette it is the OUTERMOST middleware -- `add_middleware` inserts

@@ -16,8 +16,8 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-7984%20backend%20%C2%B7%201346%20frontend-success)
-![API](https://img.shields.io/badge/API-65%20paths%20%C2%B7%20101%20operations-informational)
+![Tests](https://img.shields.io/badge/tests-run%20in%20CI-success)
+![API](https://img.shields.io/badge/API-68%20paths%20%C2%B7%20104%20operations-informational)
 
 </div>
 
@@ -29,12 +29,12 @@ more than one currency and the platform never converts between them.</sub></div>
 
 > ### Current state: **V1 complete and verified; V2 complete through Stage 7.14**
 >
-> Eleven domains over a 28-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
+> Eleven domains over a 29-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
 > guests, bookings, payments, reviews, the financial ledger, analytics and intelligence, plus the
 > stored demand predictions the served model writes and the measurements taken over them, and
 > V2's copilot accounting records, hotel knowledge documents and copilot conversations, and the
 > declared demand observation periods —
-> reachable as **65 API paths / 101 operations**, of which **96 require authentication**.
+> reachable as **68 API paths / 104 operations**, of which **96 require authentication**.
 > Authentication is Argon2id plus HS256
 > access tokens; authorization is a four-level hotel role hierarchy with a separate
 > platform-administrator capability. There is a complete React front end — all thirteen
@@ -42,8 +42,8 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **7984 backend tests and 1346 frontend tests pass in CI.** Schema head is
-> `0020_guest_email_rules` across 20 linear migrations.
+> **The backend and frontend suites run in CI on every push.** Schema head is
+> `0023_auth_sessions` across 23 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
 > baseline — seasonal-naive day-of-week median forecasting, MAD-based intervals and anomaly
@@ -229,7 +229,7 @@ flowchart LR
         S["<b>React SPA</b><br/>static bundle<br/>route-level code splitting"]
         A["<b>FastAPI</b><br/>api → services → repositories"]
         M["<b>demand_baseline_v1</b><br/>artifact, verified before load<br/>loaded once per process"]
-        D[("<b>PostgreSQL 18.6</b><br/>28 application tables<br/>constraints carry the rules")]
+        D[("<b>PostgreSQL 18.6</b><br/>29 application tables<br/>constraints carry the rules")]
     end
 
     B -- "HTTPS" --> N
@@ -321,9 +321,9 @@ Full detail, including the rules later stages must follow:
 |---|---|---|
 | Backend | Python 3.14, FastAPI, Uvicorn | Async HTTP API, OpenAPI generated from types |
 | Validation | Pydantic v2, pydantic-settings | Request/response schemas, environment config |
-| ORM | SQLAlchemy 2.0 | Data mapping across 15 model modules |
+| ORM | SQLAlchemy 2.0 | Data mapping across 18 model modules |
 | Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
-| Migrations | Alembic | 20 linear revisions, head `0020_guest_email_rules` |
+| Migrations | Alembic | 23 linear revisions, head `0023_auth_sessions` |
 | Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
 | Frontend | React 18, TypeScript 5.9, Vite 6 | Dashboard SPA, route-level code splitting |
 | Intelligence (V1) | Python standard library | Deterministic statistical baseline — no NumPy or pandas on its path |
@@ -453,7 +453,7 @@ Start the API:
 |---|---|
 | http://localhost:8000/health | `{"status":"ok", ...}` |
 | http://localhost:8000/health/db | `{"status":"ok","database":"reachable", ...}`, or 503 when it is not |
-| http://localhost:8000/docs | Swagger UI — 65 paths, 101 operations. Disabled when `ENVIRONMENT=production` |
+| http://localhost:8000/docs | Swagger UI — 68 paths, 104 operations. Disabled when `ENVIRONMENT=production` |
 
 ### Frontend
 
@@ -516,22 +516,23 @@ POST /api/v1/auth/register  →  POST /api/v1/auth/login  →  POST /api/v1/hote
 ```
 
 **The first platform administrator has no API, by design.** `platform_admins` governs the
-catalogues every hotel shares, so the grant is a deliberate out-of-band database write rather
-than something an endpoint hands out — the same grant the integration suite performs. It
-requires that the intended person has already registered, and it is idempotent:
+catalogues every hotel shares, so the grant is a deliberate operator action rather than
+something an endpoint hands out. It is made with an operator command (R1.3a), which records
+the grant in the audit trail in the same transaction. It requires that the intended person
+has already registered, and repeating it changes nothing:
 
-```sql
-INSERT INTO platform_admins (user_id, role)
-SELECT u.id, 'platform_admin' FROM users u WHERE u.email = lower('ops@example.com')
-ON CONFLICT (user_id) DO NOTHING;
+```bash
+docker compose run --rm api python -m app.jobs.platform_admin grant ops@example.com
 ```
+
+`revoke` removes a grant the same way, and refuses to remove the last one unless told to.
 
 An empty database is not authorization: nothing here creates an administrator because it
 noticed no rows.
 
 **Read [docs/deployment/first-run-bootstrap.md](docs/deployment/first-run-bootstrap.md) before
 running the grant** — it covers the checks to make first, how to verify the result, secret
-handling, what is *not* audited, and what to do if the wrong user was granted.
+handling, what is and is not audited, and what to do if the wrong user was granted.
 
 **Demo data, optionally.** `scripts/seed_demo.py` fills a *new, empty, migrated* database with
 deterministic, synthetic data for two fictional hotels and a demo owner account. The data runs
@@ -614,7 +615,7 @@ shards, so GitHub Actions shows seven job runs per workflow run.
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 | `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical |
-| `Mutation checks` | re-applies the 606 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Mutation checks` | re-applies the 891 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
@@ -764,30 +765,57 @@ recall@5 is 0.6957 against a pgvector threshold of 0.90 declared beforehand: a s
 paraphrased queries miss, not evidence about real documents. See
 [docs/copilot-evaluation.md](docs/copilot-evaluation.md) §8.
 
+**Layered retrieval evaluation (R2.10C).** The copilot evaluation's searches are answered by a
+word-overlap stand-in, so its document results said nothing about production search. A decision
+record declared three layers, their metrics and their thresholds before anything was measured,
+and each is now built. **Real PostgreSQL (C.4):** `knowledge_retrieval_v2` -- 17 documents and
+57 queries, 45 answerable and 12 with no answer, 11 of them queries a model actually sent,
+reviewed and signed off before measurement -- runs through the real upload and search routes in
+CI and is pinned byte for byte with a fingerprint of the database configuration, so any changed
+result fails CI. Measured: Success@5 **23 of 45 (0.51; Wilson 95% 0.37 to 0.65)** against a
+0.90 target that is reported, not gated; all 17 shared-word queries are found, **no paraphrase
+or title-only query is** (0 of 10 and 0 of 5, each returning nothing), multi-idea queries 1 of
+6; and 0 of 57 queries return another hotel's or an inactive document, which is a hard gate.
+**A snapshot (C.5):** real search's results for every search the copilot evaluation makes,
+pinned by checksum and held equal to live search in CI; the evaluation can run on it instead
+of the stand-in. **Side by side (C.6):** an opt-in block judges a run's retrieval twice by the
+same rule; on the six recorded model runs it fails 1 of 10 cases with the stand-in and 4 of 10
+with real search. The corpus and most queries are invented, so this is regression evidence
+about the search as configured, not about real hotels, and it neither triggers nor rules out
+Stage 7.15. See [docs/retrieval-evaluation-decision.md](docs/retrieval-evaluation-decision.md)
+§1.4.
+
 **Conversations (Stage 7.11).** `…/copilot/conversations` holds multi-turn conversations: start,
 list, read, continue, delete. Each belongs to one hotel and its creator -- anyone else gets 404 --
 and expires, turns included, 30 days after it was last used: unreachable at once (enforced in
 every query), then physically deleted by the next purge -- its hotel's next start or continuation,
-or `python -m app.jobs.purge_conversations`, which an operator should schedule (daily is
-recommended; the application schedules nothing). The model is shown at most 6 earlier turns / 12,000 characters as context; figures
+or `python -m app.jobs.purge_conversations`, which the opt-in retention scheduler runs daily
+(or an operator does). The model is shown at most 6 earlier turns / 12,000 characters as context; figures
 and citations must still come from the current turn's own lookups. Question and answer text is
 stored only there -- never in the audit trail or the accounting record. See
 [docs/copilot-conversations.md](docs/copilot-conversations.md).
 
 **Accounting retention (Issue 4).** Each copilot question's content-free accounting record
 (`llm_invocations`) is kept 365 days (`LLM_INVOCATION_RETENTION_DAYS`) and then physically
-deleted by `python -m app.jobs.purge_llm_invocations`, which an operator should schedule (daily
-is recommended; the application schedules nothing). The database still refuses every UPDATE,
+deleted by `python -m app.jobs.purge_llm_invocations`, which the opt-in retention scheduler
+runs daily (or an operator does). The database still refuses every UPDATE,
 and every DELETE except of a record older than the period the purge declares. See
 [docs/copilot-accounting-retention.md](docs/copilot-accounting-retention.md).
 
 **Prediction retention (Issue H8).** A stored demand prediction is kept while its target date is
 within 730 days (`DEMAND_PREDICTION_RETENTION_DAYS`) of its hotel's today, and is then physically
-deleted by `python -m app.jobs.purge_demand_predictions`, which an operator should schedule (daily
-is recommended). A window older than that reads as empty in the prediction, accuracy, drift and
+deleted by `python -m app.jobs.purge_demand_predictions`, which the opt-in retention scheduler
+runs daily (or an operator does). A window older than that reads as empty in the prediction, accuracy, drift and
 performance endpoints. Deleting a hotel removes its predictions in the same transaction; if
 anything else still blocks the delete, nothing is removed. See
 [docs/ml-prediction-retention.md](docs/ml-prediction-retention.md).
+
+**Retention scheduler (R4.2), opt-in.** `python -m app.jobs.scheduler` runs the audit archival
+(`python -m app.jobs.archive_audit_events`, which copies and verifies and never deletes) and the
+three purges every 24 hours. Each failure is reported, and the next cycle tries again.
+`docker compose -f docker-compose.yml -f docker-compose.scheduler.yml up -d` adds it as a
+service. Without that file the stack is unchanged, and `--once` runs one cycle for cron. See
+[docs/deployment/retention-scheduler.md](docs/deployment/retention-scheduler.md).
 
 **The attention list (Stage 7.12).** `…/intelligence/priorities` ranks one hotel's upcoming days by
 the seasonal forecast and lists the busiest three, the strongest anomalies the window saw and a
@@ -864,14 +892,14 @@ Three things are worth knowing before this is exposed to anyone real. None is a 
 sense of not working as designed; each is a deliberate V1 boundary, recorded here rather than
 left to be discovered.
 
-- **The access token is stored in `sessionStorage`.** The backend authenticates with a bearer
-  JWT and offers no cookie session, so the token must be readable by JavaScript — which means
-  **any cross-site-scripting flaw in the front end could exfiltrate it**. `sessionStorage` is
-  chosen over `localStorage` only for lifetime: it is scoped to the tab and cleared when the tab
-  closes, and the token lives 30 minutes. The content security policy is `script-src 'self'`
-  with no inline script and no `eval`, which narrows the exposure but does not remove it. The
-  real fix is an `HttpOnly; Secure; SameSite` cookie issued by the backend — a backend change,
-  and V2 work. See [docs/architecture.md §7.1](docs/architecture.md#71-session-handling-and-its-limitation).
+- **The browser's session is in `HttpOnly` cookies (R1.1).** `POST /auth/session` sets the
+  access and refresh tokens as `HttpOnly; Secure; SameSite=Strict` cookies that script cannot
+  read, so a cross-site-scripting flaw can act in the page while it runs but can no longer carry
+  the session away. Every request that changes something must echo the session's CSRF token in
+  `X-CSRF-Token`; refresh tokens rotate, and a replayed one ends the session. Signing out, a
+  password change, deactivation and twelve idle hours end it on the server. The bearer login
+  (`POST /auth/login`) remains for API clients, which hold their own token. See
+  [docs/architecture.md §7.1](docs/architecture.md#71-session-handling-and-its-limitation).
 - **Registration is open, and creating a hotel makes you its owner.** `POST /auth/register` is
   unauthenticated by design, and any authenticated user may `POST /hotels` and becomes that
   hotel's `owner`. This is the documented first-run path — see [First run](#first-run) — and it
@@ -913,11 +941,14 @@ What remains genuinely missing is operational rather than functional:
   locks disagree, but nothing regenerates them automatically, and the optional
   `backend/requirements-llm.txt` is not locked. Base images, the interpreter and the frontend
   tree are pinned too; see [docs/deployment/reproducibility.md](docs/deployment/reproducibility.md).
-- **Nothing updates the pins.** No Renovate, no Dependabot. A pinned digest is a digest that
-  goes stale, and sitting on a base image with a known CVE is the real cost of pinning; bumping
-  one is a deliberate act.
-- **No platform-administrator API.** Granting platform administration is a deliberate
-  out-of-band database write; see [First run](#first-run). That is by design, not an omission.
+- **Nothing updates the pins yet.** `.github/dependabot.yml` (R0.4a) asks for weekly, grouped
+  update pull requests for every manifest, but GitHub reads it only from the default branch,
+  and it has not reached it; until it does, no Renovate and no Dependabot run. A pinned digest
+  is a digest that goes stale, and sitting on a base image with a known CVE is the real cost
+  of pinning; bumping one is a deliberate act, and a Dependabot proposal will be one too.
+- **No platform-administrator API.** Platform administration is granted and revoked by an
+  audited operator command; see [First run](#first-run). Who may do it through an API is an
+  open decision (R1.3b), so there is none.
 
 The V1 intelligence layer remains a transparent statistical baseline. The trained demand model
 sits beside it — served, but **not scientifically validated**, and shown on the Analytics page

@@ -273,14 +273,14 @@ def archive_audit_events(
     """The job entry point.
 
     **A function, not an endpoint.** Stage 4.5.14 asked for a service or job entry point rather
-    than an HTTP surface, and this is it: a scheduler, a management command or an operator with
-    a Python shell calls this with a session and the application's settings. There is
-    deliberately no route, so there is no destructive retention API to authorize, rate-limit or
-    accidentally expose to a hotel user -- and no way for any API caller to influence the
-    cutoff.
+    than an HTTP surface, and this is it: the ``app.jobs.archive_audit_events`` command (R4.2),
+    which ``app.jobs.scheduler`` runs daily when a deployment opts in, calls this with a session
+    and the application's settings. There is deliberately no route, so there is no destructive
+    retention API to authorize, rate-limit or accidentally expose to a hotel user -- and no way
+    for any API caller to influence the cutoff.
 
-    It is not wired to a scheduler in this stage. Choosing and configuring one is a deployment
-    decision, and this stage was scoped to the mechanism.
+    Stage 4.5.14 was scoped to the mechanism and wired no scheduler. R4.2 added the command and
+    the opt-in scheduler; whether to run it remains a deployment decision.
     """
     service = AuditRetentionService(
         session, AuditArchiveRepository(session), RetentionPolicy.from_settings(settings)

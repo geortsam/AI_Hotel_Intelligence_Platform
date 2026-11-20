@@ -567,7 +567,7 @@ def test_the_retrieval_index_exists_and_is_gin(session: Session) -> None:
 
 def test_the_schema_is_at_the_new_head(session: Session) -> None:
     revision = session.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
-    assert revision == "0020_guest_email_rules"
+    assert revision == "0023_auth_sessions"
 
 
 # --- rate limits: per caller, after authorization -----------------------------------------------

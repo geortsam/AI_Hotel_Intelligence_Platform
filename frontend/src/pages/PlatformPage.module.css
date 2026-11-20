@@ -197,6 +197,11 @@
   max-width: 70ch;
 }
 
+/* The reload a stale save offers (R3.3). */
+.failureAction {
+  margin: var(--space-2) 0 0;
+}
+
 @media (max-width: 599px) {
   .fields {
     grid-template-columns: 1fr;
@@ -295,6 +300,12 @@
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   cursor: pointer;
+  /* The underline sits ON the list's rule, not a pixel above it (UI-7), and the state change
+   * eases rather than snapping. */
+  margin-bottom: -1px;
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-base) var(--ease-standard);
 }
 
 .tab:hover {

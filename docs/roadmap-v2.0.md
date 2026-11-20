@@ -5,6 +5,10 @@
 > implemented, scheduled or approved. Each stage needs its own authorization, as every earlier
 > stage did.
 >
+> **Execution (2026-11-19).** Work on these stages has started under your standing instruction;
+> [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) tracks each task's state, and holds a
+> decision brief for every task that waits on you.
+>
 > **Naming.** [v2-roadmap.md](v2-roadmap.md) already uses "V2" for Stages 7.2–7.14 (the copilot,
 > knowledge documents and multi-horizon models), and those shipped **inside** `v1.0.0`. To avoid
 > two meanings of "V2", this document calls the next major line **v2.0** and numbers its stages

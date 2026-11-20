@@ -112,6 +112,8 @@ def test_create_accepts_optional_fields(api: TestClient) -> None:
         ("star_rating", 0),
         ("latitude", "91.0"),
         ("longitude", "-181.0"),
+        ("timezone", "Mars/Olympus"),
+        ("timezone", "europe/athens"),
     ],
 )
 def test_create_validation_failure_returns_422(api: TestClient, field: str, value: object) -> None:
@@ -365,6 +367,48 @@ def test_update_validates_supplied_fields(api: TestClient) -> None:
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_update_refuses_a_zone_the_iana_database_does_not_define(api: TestClient) -> None:
+    """R1.5: refused with the field named, and the stored zone is left as it was."""
+    created = api.post(HOTELS, json=payload()).json()
+    url = f"{HOTELS}/{created['public_id']}"
+
+    response = api.patch(url, json={"timezone": "Mars/Olympus"})
+
+    assert response.status_code == 422
+    body = response.json()["error"]
+    assert body["code"] == "VALIDATION_ERROR"
+    assert any("timezone" in d["location"] for d in body["details"])
+    assert api.get(url).json()["timezone"] == "Europe/Athens"
+
+
+def test_update_accepts_another_iana_zone(api: TestClient) -> None:
+    created = api.post(HOTELS, json=payload()).json()
+
+    response = api.patch(f"{HOTELS}/{created['public_id']}", json={"timezone": "Pacific/Auckland"})
+
+    assert response.status_code == 200
+    assert response.json()["timezone"] == "Pacific/Auckland"
+
+
+def test_a_hotel_stored_with_an_unknown_zone_before_r1_5_still_reads_and_updates(
+    api: TestClient, session: Session
+) -> None:
+    """The database accepts any text, as it did: a row written before R1.5 reads as stored, and
+    an update that does not name the zone does not re-check it."""
+    created = api.post(HOTELS, json=payload()).json()
+    session.execute(
+        sa.text("UPDATE hotels SET timezone = 'Not/AZone' WHERE public_id = :p"),
+        {"p": created["public_id"]},
+    )
+    session.commit()
+    url = f"{HOTELS}/{created['public_id']}"
+
+    assert api.get(url).json()["timezone"] == "Not/AZone"
+    renamed = api.patch(url, json={"name": "Renamed"})
+    assert renamed.status_code == 200
+    assert renamed.json()["timezone"] == "Not/AZone"
 
 
 def test_update_rejects_unknown_fields(api: TestClient) -> None:

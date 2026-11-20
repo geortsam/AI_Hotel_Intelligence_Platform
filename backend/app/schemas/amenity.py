@@ -4,10 +4,11 @@
 (``uq_amenities_code``) and is the URL identifier -- the same convention room types use.
 ``amenities.id`` is a sequential BIGINT and stays internal.
 
-**No timestamps.** Unlike every other domain so far, ``Amenity`` does not use
-``TimestampMixin``: the table has no ``created_at`` or ``updated_at`` columns and no trigger
-maintaining them. The response schema reflects the table as it is rather than inventing
-fields the database cannot supply.
+**A version, and no creation time.** ``Amenity`` does not use ``TimestampMixin``: until
+migration 0022 (R3.3) the table had no timestamps at all. 0022 added ``updated_at`` alone,
+maintained by the shared ``set_updated_at`` trigger, so the PATCH can take the same
+``If-Match`` precondition as every hotel resource (Issue H6). There is still no
+``created_at``, and none is invented.
 
 Amenities are a **global catalogue**, deliberately not hotel-scoped, so "sea view" means the
 same thing across the portfolio. No ``hotel_id`` appears here.
@@ -15,6 +16,7 @@ same thing across the portfolio. No ``hotel_id`` appears here.
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -60,8 +62,8 @@ class AmenityUpdate(BaseModel):
 class AmenityResponse(BaseModel):
     """What the API returns.
 
-    Exactly the three business columns the table has. ``id`` is never exposed, and no
-    timestamps are fabricated -- the table has none.
+    The three business columns and the version. ``id`` is never exposed, and no creation
+    time is fabricated -- the table has none.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -69,6 +71,8 @@ class AmenityResponse(BaseModel):
     code: str
     name: str
     category: str | None
+    #: The value an ``If-Match`` names (R3.3).
+    updated_at: dt.datetime
 
 
 class AmenityAssignment(BaseModel):

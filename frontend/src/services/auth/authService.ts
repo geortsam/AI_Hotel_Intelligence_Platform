@@ -3,6 +3,7 @@ import type {
   AuthenticatedUser,
   LoginRequest,
   PasswordChangeRequest,
+  SessionResponse,
   TokenResponse,
 } from '@/types/auth'
 
@@ -26,26 +27,34 @@ import type {
  *   cannot create accounts either: `POST .../members` names an account that must already
  *   exist. An unused method is dead code that still has to be maintained and reviewed.
  *
- * There is no `logout` here because the backend has none. See `AuthProvider` for what
- * signing out therefore means.
+ * **The browser signs in to a cookie session (R1.1)**: `POST /auth/session` sets `HttpOnly`
+ * cookies this code never reads, and `POST /auth/session/end` ends the session on the server.
+ * `POST /auth/login`, the bearer login, is for API clients and is not used here.
  */
 export const authService = {
   /**
-   * Exchange credentials for an access token.
+   * Sign in to a cookie session.
    *
-   * `anonymous` matters. Without it a stale token would ride along on a sign-in attempt,
-   * and — worse — the 401 that a wrong password produces would be read by the client as
-   * "your session expired", clearing a session the user still legitimately had.
+   * `anonymous` matters. Without it the 401 that a wrong password produces would be read by
+   * the client as "your session expired", clearing a session the user still legitimately had.
    *
    * Throws `ApiError` on rejection: 401 `AUTHENTICATION_FAILED` for any bad credential,
    * 429 `RATE_LIMITED` with `retryAfterSeconds` when the address has tried too often.
    */
-  login(credentials: LoginRequest, signal?: AbortSignal): Promise<TokenResponse> {
-    return api.post<TokenResponse>('/auth/login', {
+  login(credentials: LoginRequest, signal?: AbortSignal): Promise<SessionResponse> {
+    return api.post<SessionResponse>('/auth/session', {
       body: credentials,
       anonymous: true,
       ...(signal ? { signal } : {}),
     })
+  },
+
+  /**
+   * End the cookie session: the server revokes it -- its access tokens stop at once -- and
+   * clears its cookies. Idempotent: with no session it still answers 204.
+   */
+  logout(signal?: AbortSignal): Promise<void> {
+    return api.post<void>('/auth/session/end', { anonymous: true, ...(signal ? { signal } : {}) })
   },
 
   /**

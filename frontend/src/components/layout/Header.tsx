@@ -52,7 +52,11 @@ export function Header({ title, breadcrumb, isSidebarOpen, onToggleSidebar }: He
 
       <div className={styles.titleGroup}>
         {breadcrumb ? <span className={styles.breadcrumb}>{breadcrumb}</span> : null}
-        <h1 className={styles.title}>{title}</h1>
+        {/*
+         * Text, not a heading (UI-2). Every page renders its own `h1`, so a second one here
+         * gave each screen two top-level headings. The area name stays visible as context.
+         */}
+        <p className={styles.title}>{title}</p>
       </div>
 
       <div className={styles.actions}>

@@ -349,7 +349,7 @@ class AuditAction(_Vocabulary):
 
     Named ``resource.verb`` in the past tense, because an audit event is a record of
     something that already happened and committed. See :data:`PLATFORM_AUDIT_ACTIONS` for the
-    three groups that belong to no hotel.
+    four groups that belong to no hotel.
     """
 
     BOOKING_CREATED = "booking.created"
@@ -401,6 +401,14 @@ class AuditAction(_Vocabulary):
     DOCUMENT_CREATED = "document.created"
     DOCUMENT_VERSION_CREATED = "document.version_created"
     DOCUMENT_WITHDRAWN = "document.withdrawn"
+
+    #: R1.3a. Platform administration granted to, or revoked from, an account by the operator
+    #: command ``python -m app.jobs.platform_admin`` -- until then an out-of-band INSERT that
+    #: nothing recorded. Resource type ``user``, reference the account's public UUID; no
+    #: actor, because no authenticated user caused it, and no hotel. Migration 0021 widened
+    #: `ck_audit_events_action_valid` by these two, as 0009 widened it by one.
+    PLATFORM_ADMIN_GRANTED = "platform_admin.granted"
+    PLATFORM_ADMIN_REVOKED = "platform_admin.revoked"
 
 
 class AuditResourceType(_Vocabulary):
@@ -463,6 +471,8 @@ class DocumentLanguage(_Vocabulary):
 #: several, and attributing the change to one of them would be an invention. The three global
 #: catalogues have no ``hotel_id`` column at all -- that is precisely why only a platform
 #: administrator may write them -- so an event about one belongs to every hotel and to none.
+#: A platform-administrator grant (R1.3a) is about an account's platform authority, which no
+#: hotel holds.
 #:
 #: **The consequence is deliberate and is not hidden**: the hotel-scoped retrieval API cannot
 #: return these rows, because there is no hotel to ask under. They are recorded as evidence;
@@ -480,6 +490,8 @@ PLATFORM_AUDIT_ACTIONS: frozenset[str] = frozenset(
         AuditAction.EXPENSE_CATEGORY_CREATED.value,
         AuditAction.EXPENSE_CATEGORY_UPDATED.value,
         AuditAction.EXPENSE_CATEGORY_DELETED.value,
+        AuditAction.PLATFORM_ADMIN_GRANTED.value,
+        AuditAction.PLATFORM_ADMIN_REVOKED.value,
     }
 )
 

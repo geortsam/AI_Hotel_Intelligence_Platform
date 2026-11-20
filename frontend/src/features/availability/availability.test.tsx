@@ -188,7 +188,7 @@ describe('the request', () => {
     expect(url.searchParams.get('check_in')).toBe('2027-05-03')
     expect(url.searchParams.get('check_out')).toBe('2027-05-05')
     expect(url.searchParams.get('rooms_required')).toBe('1')
-    expect(requestsFor('/availability')[0]!.authorization).toMatch(/^Bearer /)
+    expect(requestsFor('/availability')[0]!.credentials).toBe('include')
   })
 
   it('omits the room type when any type will do', async () => {

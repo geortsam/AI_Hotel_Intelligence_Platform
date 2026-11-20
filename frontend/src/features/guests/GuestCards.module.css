@@ -1,7 +1,7 @@
 /*
  * The guest list on a small screen.
  *
- * Rendered instead of the table below 768px, never in addition to it -- the switch is a
+ * Rendered instead of the table below 1024px, never in addition to it -- the switch is a
  * media query in `useIsCompact`, so only one of the two is ever mounted and a screen reader
  * meets one copy of the data.
  */

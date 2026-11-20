@@ -666,17 +666,17 @@ def test_response_schema_is_exactly_the_declared_contract(
 
     body = api.get(f"{AMENITIES}/WIFI").json()
 
-    assert set(body) == {"code", "name", "category"}
+    assert set(body) == {"code", "name", "category", "updated_at"}
 
 
-def test_response_exposes_no_internal_id_or_invented_timestamps(
+def test_response_exposes_no_internal_id_or_invented_creation_time(
     api: TestClient, catalogue: AmenityService
 ) -> None:
     make_amenity(catalogue)
 
     body = api.get(f"{AMENITIES}/WIFI").json()
 
-    for forbidden in ["id", "amenity_id", "created_at", "updated_at"]:
+    for forbidden in ["id", "amenity_id", "created_at"]:
         assert forbidden not in body
 
 

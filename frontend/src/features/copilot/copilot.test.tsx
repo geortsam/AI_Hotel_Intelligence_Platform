@@ -315,6 +315,8 @@ describe('the copilot switch, as the server reports it', () => {
     expect(request).toBeDefined()
     expect(new URL(request!.url, 'http://localhost').search).toBe('')
     expect(request!.authorization).toBeNull()
+    // R1.1: the session is cookies, so "no session token" means no cookies at all.
+    expect(request!.credentials).toBe('omit')
   })
 
   it('never attaches the session token to the metadata request, even with a session live', async () => {
@@ -332,6 +334,8 @@ describe('the copilot switch, as the server reports it', () => {
     )
     expect(request).toBeDefined()
     expect(request!.authorization).toBeNull()
+    expect(request!.credentials).toBe('omit')
+    expect(request!.csrf).toBeNull()
   })
 
   it('shows the box disabled under a clear message when the server says the copilot is off', async () => {
@@ -449,7 +453,7 @@ describe('a one-off question', () => {
     expect(url.search).toBe('')
     // Exactly `{question}`: no hotel, role, tool list, prompt or model.
     expect(JSON.parse(request!.body!)).toEqual({ question: 'How full were we last week?' })
-    expect(request!.authorization).toMatch(/^Bearer /)
+    expect(request!.credentials).toBe('include')
     // Nothing about a one-off question touches the conversation endpoints.
     expect(fetchStub.calls.some((call) => call.url.includes('/conversations'))).toBe(false)
   })
@@ -1168,9 +1172,9 @@ describe('browser storage', () => {
 
     expect(window.localStorage.length).toBe(0)
     const sessionKeys = Object.keys(window.sessionStorage)
-    // Only what the session already kept before this stage: the token and the chosen hotel.
+    // Only what the session already kept: its CSRF token (R1.1) and the chosen hotel.
     for (const key of sessionKeys) {
-      expect(['ahip.access_token', 'ahip.selected_hotel']).toContain(key)
+      expect(['ahip.csrf_token', 'ahip.selected_hotel']).toContain(key)
     }
     const stored = sessionKeys.map((key) => window.sessionStorage.getItem(key) ?? '').join(' ')
     for (const secret of [

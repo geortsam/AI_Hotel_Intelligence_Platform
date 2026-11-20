@@ -1302,7 +1302,7 @@ describe('accessibility', () => {
     renderPage()
     await screen.findByText('Booking demand is increasing')
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Intelligence' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Forecasting' })).toBeInTheDocument()
     expect(
       screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent),
     ).toEqual([

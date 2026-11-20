@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 
 import { Badge } from '@/components/ui/Badge'
+import rail from '@/components/ui/Rail.module.css'
 import { activePresentation, statusPresentation } from '@/features/rooms/vocabulary'
 import { formatDateTime } from '@/lib/format'
 import { roomPath } from '@/router/routes'
@@ -14,7 +15,7 @@ export interface RoomCardsProps {
 }
 
 /**
- * The room list below 768px, as cards.
+ * The room list below 1024px, as cards.
  *
  * The same rooms and the same fields, not a subset: a seven-column table on a phone is either
  * a horizontal scroll nobody finds or four columns silently dropped. Fields the record does
@@ -30,7 +31,7 @@ export function RoomCards({ rooms, timeZone }: RoomCardsProps) {
         const status = statusPresentation(room.status)
         const active = activePresentation(room.is_active)
         return (
-          <li key={room.room_number} className={styles.card}>
+          <li key={room.room_number} className={`${styles.card} ${rail[status.tone]}`}>
             <div className={styles.header}>
               <h3 className={styles.number}>
                 <Link className={styles.link} to={roomPath(room.room_type_code, room.room_number)}>

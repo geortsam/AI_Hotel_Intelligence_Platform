@@ -27,7 +27,7 @@ const SECOND_COLUMN: Readonly<Record<CatalogueKind, string>> = {
 /**
  * One shared catalogue's entries.
  *
- * A table above 768px and cards below, the same switch every list in this application makes.
+ * A table above 1024px and cards below, the same switch every list in this application makes.
  * These rows are three or four fields wide, so nothing is dropped on a phone.
  *
  * ## The flag column differs per catalogue, and says so

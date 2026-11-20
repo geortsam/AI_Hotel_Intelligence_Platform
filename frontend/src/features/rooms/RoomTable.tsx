@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 
 import { Badge } from '@/components/ui/Badge'
+import rail from '@/components/ui/Rail.module.css'
 import { activePresentation, statusPresentation } from '@/features/rooms/vocabulary'
 import { formatDateTime, UNAVAILABLE } from '@/lib/format'
 import { roomPath } from '@/router/routes'
@@ -45,7 +46,7 @@ export function RoomTable({ rooms, timeZone }: RoomTableProps) {
           <tr>
             <th scope="col">Room</th>
             <th scope="col">Type</th>
-            <th scope="col">Floor</th>
+            <th scope="col" className={styles.numeric}>Floor</th>
             <th scope="col">Status</th>
             <th scope="col">Service</th>
             <th scope="col">Notes</th>
@@ -57,7 +58,7 @@ export function RoomTable({ rooms, timeZone }: RoomTableProps) {
             const status = statusPresentation(room.status)
             const active = activePresentation(room.is_active)
             return (
-              <tr key={room.room_number}>
+              <tr key={room.room_number} className={rail[status.tone]}>
                 <th scope="row" className={styles.numberCell}>
                   <Link
                     className={styles.link}

@@ -17,8 +17,15 @@ once, where it is generated, on the precedent of
   a 403. A role checked inside a service rather than on the route is declared on that route by
   hand, as before.
 
+* **403 ``CSRF_FAILED``** (R1.1) can be answered by every operation that carries a security
+  requirement and changes something -- any method but GET -- because a browser may reach it with
+  the session cookie instead of a bearer token, and then must send ``X-CSRF-Token``. Added where
+  no 403 is declared; where a role or platform 403 already is, that description stands, and this
+  rule -- one for every unsafe operation -- is stated here and in docs/backend-architecture.md
+  rather than repeated in each.
+
 Both point at the shared ``ErrorResponse`` envelope the handlers send. A 401 or 403 a route
-already declared is left exactly as written. Paths, operations and every other response are
+already declared is otherwise left as written. Paths, operations and every other response are
 untouched.
 """
 
@@ -43,6 +50,12 @@ ROLE_FORBIDDEN_DESCRIPTION = (
 PLATFORM_FORBIDDEN_DESCRIPTION = (
     "The caller is authenticated but holds no platform administrator grant."
 )
+CSRF_FORBIDDEN_DESCRIPTION = (
+    "`CSRF_FAILED`: the request was authenticated by the session cookie but did not carry the "
+    "session's CSRF token in `X-CSRF-Token`. Never answered to a bearer token."
+)
+#: Methods that change nothing, so a cookie-authenticated request needs no CSRF token for them.
+_SAFE_METHODS = frozenset({"get", "head", "options"})
 
 _ERROR_RESPONSE = {"application/json": {"schema": {"$ref": "#/components/schemas/ErrorResponse"}}}
 
@@ -103,12 +116,19 @@ def document_authorization_errors(app: FastAPI) -> None:
                 reason = reasons.get((path, method))
                 if reason is not None and "403" not in responses:
                     responses["403"] = _error(reason)
+                if (
+                    operation.get("security")
+                    and method not in _SAFE_METHODS
+                    and "403" not in responses
+                ):
+                    responses["403"] = _error(CSRF_FORBIDDEN_DESCRIPTION)
         return schema
 
     app.openapi = openapi  # type: ignore[method-assign]
 
 
 __all__ = [
+    "CSRF_FORBIDDEN_DESCRIPTION",
     "PLATFORM_FORBIDDEN_DESCRIPTION",
     "ROLE_FORBIDDEN_DESCRIPTION",
     "UNAUTHENTICATED_DESCRIPTION",

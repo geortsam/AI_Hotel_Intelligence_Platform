@@ -19,42 +19,54 @@
    * Three depths, not five. An operations UI needs "page", "panel" and "raised panel";
    * beyond that the levels stop being distinguishable and start being decoration.
    * ------------------------------------------------------------------------------- */
-  --color-bg: #0d1117;
-  --color-surface: #131820;
-  --color-surface-raised: #1a212b;
-  --color-surface-hover: #1e2630;
+  /* UI-1 "Midnight concierge": deeper, cooler ink-navy surfaces than the original greys. */
+  --color-bg: #0b0f17;
+  --color-surface: #111723;
+  --color-surface-raised: #172031;
+  --color-surface-hover: #1c2639;
 
   /* Colour -- lines */
   /* A hairline between panels. Decorative: a card is identified by its fill, so this
    * is not a boundary WCAG 1.4.11 governs and it stays subtle on purpose. */
-  --color-border: #232b36;
+  --color-border: #1f2a3c;
   /* The boundary of an INTERACTIVE control -- a secondary button, an input, the hotel
-   * chip. Measured at 3.34:1 against the page background, above the 3:1 that WCAG 1.4.11
-   * requires for control boundaries. It was #313c4a and measured 1.69:1, which made a
-   * secondary button almost impossible to locate against the page for anyone with low
-   * contrast sensitivity; the primary button passed only because its fill is saturated. */
-  --color-border-strong: #5d6875;
+   * chip. WCAG 1.4.11 requires 3:1 for control boundaries, and a control can sit on any of
+   * the three surfaces, so this is checked against all three: 3.98:1 on the page, 3.72:1 on
+   * a panel and 3.38:1 on a raised panel (UI-1). The plan's #5a6a82 fell to 2.97:1 on a
+   * raised panel and was not adopted. History: #313c4a measured 1.69:1, which made a
+   * secondary button almost impossible to locate for anyone with low contrast sensitivity. */
+  --color-border-strong: #63738b;
 
   /* ---------------------------------------------------------------------------------
    * Colour -- text, with measured contrast against --color-bg
    * ------------------------------------------------------------------------------- */
-  --color-text: #e8ecf1; /* 15.9:1 -- body copy and headings */
-  --color-text-muted: #9aa7b8; /* 7.7:1 -- secondary copy, labels */
-  --color-text-subtle: #808e9f; /* 5.7:1 -- meta text; still passes AA at 14px */
+  /* Ratios against the page / panel / raised panel (UI-1); every pairing is at least 4.5:1. */
+  --color-text: #e8ecf1; /* 16.2 / 15.1 / 13.8 -- body copy and headings */
+  --color-text-muted: #9aa7b8; /* 7.9 / 7.3 / 6.7 -- secondary copy, labels */
+  --color-text-subtle: #808e9f; /* 5.7 / 5.4 / 4.9 -- meta text; still passes AA at 14px */
   --color-text-inverse: #ffffff;
 
   /* ---------------------------------------------------------------------------------
    * Colour -- primary action
    *
-   * Both shades carry white text at AA or better (5.1:1 and 6.7:1), which is why hover
-   * goes DARKER rather than lighter: the obvious "lighten on hover" lands at 3.8:1 and
+   * Every shade carries white text at AA or better -- 4.9:1, 6.7:1 and 7.4:1 (UI-1) --
+   * which is why hover goes DARKER rather than lighter: the obvious "lighten on hover"
    * fails the contrast requirement precisely when the control is being interacted with.
    * ------------------------------------------------------------------------------- */
-  --color-primary: #2563eb;
-  --color-primary-hover: #1d4ed8;
-  --color-primary-active: #1e40af;
-  --color-primary-soft: rgba(37, 99, 235, 0.14);
-  --color-primary-text: #93b4fd;
+  --color-primary: #3b63f3;
+  --color-primary-hover: #2f50cc;
+  --color-primary-active: #2949c4;
+  --color-primary-soft: rgba(59, 99, 243, 0.14);
+  --color-primary-text: #93b4fd; /* 9.3 / 8.7 / 7.9 */
+
+  /* ---------------------------------------------------------------------------------
+   * Colour -- accent (UI-1)
+   *
+   * Brass: the hospitality warmth. For the brand mark, highlights and the active
+   * indicator ONLY -- never for status, which has its own colours below.
+   * ------------------------------------------------------------------------------- */
+  --color-accent: #c8a24a;
+  --color-accent-text: #e3c47a; /* 11.4 / 10.6 / 9.7 */
 
   /* ---------------------------------------------------------------------------------
    * Colour -- status
@@ -72,6 +84,8 @@
   --color-warning-text: #fbbf4c;
 
   --color-danger: #dc2626;
+  /* The danger button's hover: darker, white text at 6.5:1. Was a raw hex in Button. */
+  --color-danger-hover: #b91c1c;
   --color-danger-soft: rgba(220, 38, 38, 0.15);
   --color-danger-text: #f98080;
 
@@ -83,14 +97,36 @@
   --color-focus: #7aa5ff;
 
   /* ---------------------------------------------------------------------------------
+   * Colour -- data visualisation (UI-1)
+   *
+   * Six categorical hues, distinct in hue and lightness, each at least 5.3:1 against a
+   * raised panel so a line or bar reads on any surface. The forecast and its band use the
+   * primary colour, the band at 18%.
+   * ------------------------------------------------------------------------------- */
+  --chart-1: #6b8cff; /* blue */
+  --chart-2: #3fc1b0; /* teal */
+  --chart-3: #d9b45a; /* brass */
+  --chart-4: #a68bfa; /* violet */
+  --chart-5: #f08a7e; /* coral */
+  --chart-6: #8fa1b8; /* slate */
+  --chart-grid: #1f2a3c;
+  --chart-axis: #808e9f;
+  --chart-forecast: #3b63f3;
+  --chart-band: rgba(59, 99, 243, 0.18);
+
+  /* ---------------------------------------------------------------------------------
    * Typography
    *
    * 14px base rather than 16px: this is a dense operations tool where tables and lists
    * matter more than prose, and 14px is the convention users of such tools expect.
    * ------------------------------------------------------------------------------- */
+  /* Inter, self-hosted (styles/fonts.css); the system stack shows until it has loaded. */
   --font-sans:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, 'Cascadia Mono', Menlo, Consolas, monospace;
+  /* Page titles and headline figures only: Source Serif 4, self-hosted (styles/fonts.css). */
+  --font-display: 'Source Serif 4', Georgia, 'Times New Roman', serif;
 
   --text-xs: 0.75rem; /* 12px -- meta, timestamps */
   --text-sm: 0.8125rem; /* 13px -- labels, table cells */
@@ -99,6 +135,7 @@
   --text-xl: 1.25rem; /* 20px -- page headings */
   --text-2xl: 1.5rem; /* 24px -- page title */
   --text-3xl: 1.875rem; /* 30px -- figures, KPI values */
+  --text-4xl: 2.25rem; /* 36px -- the dashboard's hero figure */
 
   --weight-normal: 400;
   --weight-medium: 500;
@@ -110,6 +147,7 @@
   --leading-relaxed: 1.7;
 
   --tracking-wide: 0.04em; /* small-caps labels only */
+  --tracking-tight: -0.01em; /* display sizes */
 
   /* ---------------------------------------------------------------------------------
    * Spacing -- a 4px scale. Every margin and padding comes from here.
@@ -127,8 +165,8 @@
 
   /* Radius -- four steps is enough to be consistent and few enough to stay consistent. */
   --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
   --radius-full: 9999px;
 
   /* ---------------------------------------------------------------------------------
@@ -141,10 +179,20 @@
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.36);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.44);
 
-  /* Motion. Short enough to feel immediate; honoured only when motion is welcome. */
-  --duration-fast: 100ms;
-  --duration-base: 160ms;
-  --easing: cubic-bezier(0.2, 0, 0.2, 1);
+  /* ---------------------------------------------------------------------------------
+   * Motion (UI-1). Short enough to feel immediate; honoured only when motion is welcome.
+   * Animate opacity and transform only, move at most 8px, never animate the focus ring.
+   * ------------------------------------------------------------------------------- */
+  --duration-instant: 80ms; /* press */
+  --duration-fast: 120ms; /* hover, colour */
+  --duration-base: 180ms; /* tab indicator, drawer */
+  --duration-slow: 280ms; /* page and card entrance */
+  --duration-chart: 400ms; /* a chart drawing once */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(0, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.3, 0, 1, 1);
+  /* The original single curve, kept as an alias so every existing module still works. */
+  --easing: var(--ease-standard);
 
   /* ---------------------------------------------------------------------------------
    * Layout
@@ -167,9 +215,14 @@
 
 /*
  * Breakpoints cannot be custom properties -- a media query cannot read var(). They are
- * recorded here so every `@media` in the project quotes the same three numbers:
+ * recorded here so every `@media` in the project quotes the same numbers. The canonical set
+ * (UI-1) is four:
  *
- *   mobile    < 768px    single column, sidebar becomes a drawer
- *   tablet    >= 768px   sidebar still a drawer, content gains breathing room
- *   desktop   >= 1024px  sidebar is permanent
+ *   600px    two-column content grids begin
+ *   768px    tablet: sidebar still a drawer, content gains breathing room
+ *   1024px   desktop: sidebar is permanent
+ *   1280px   wide: KPI rows four across
+ *
+ * Existing rules still quote others (599, 640, 639, 480, 379, 26rem, 767, 899, 1100); they
+ * move to this set stage by stage, never in a token-only change.
  */

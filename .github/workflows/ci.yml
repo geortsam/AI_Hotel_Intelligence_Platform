@@ -135,6 +135,11 @@ jobs:
       # nothing but tables the suite creates and drops. No application credential, and no
       # credential of any real environment, appears anywhere in this repository.
       POSTGRES_PASSWORD: ci-ephemeral-postgres-password
+      # Decision F §12.3 (engine): the PostgreSQL image the retrieval fingerprint declares.
+      # It must equal `services.postgres.image` below character for character. The
+      # measurement reads both from this file's blob at the measured commit and compares
+      # them with this variable; any difference refuses the run. Change all three together.
+      RETRIEVAL_EVAL_POSTGRES_IMAGE: postgres:18.6@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
 
     services:
       # The three values below repeat the job-level `env` on purpose. GitHub does not expose
@@ -359,7 +364,7 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
         run: |
           set -euo pipefail
-          expected='0020_guest_email_rules'
+          expected='0023_auth_sessions'
 
           echo "--- declared head ---"
           heads="$(python -m alembic heads 2>&1)"
@@ -375,6 +380,40 @@ jobs:
           echo "$current"
           echo "$current" | grep -q "${expected} (head)" \
             || { echo "::error::database is not at ${expected}: ${current}"; exit 1; }
+
+      - name: Record the PostgreSQL container's Docker metadata
+        # Decision F §12.6 "Artifacts": before the tests, the image identity the retrieval
+        # measurement checks (§12.3 engine) -- `docker inspect` of the service container,
+        # `docker image inspect` of its image and `docker info` -- is written to
+        # $RETRIEVAL_EVAL_OUT/docker.json. The measurement refuses if the container's image is
+        # not the inspected one, if that image does not list postgres@<declared digest>, or if
+        # its architecture disagrees with version(). Shard 1 only: the C.4 integration test
+        # lands there by construction. $RETRIEVAL_EVAL_OUT is exported for the later steps.
+        if: matrix.shard == 1
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/retrieval-eval"
+          mkdir -p "$out"
+          echo "RETRIEVAL_EVAL_OUT=$out" >> "$GITHUB_ENV"
+          RETRIEVAL_EVAL_DOCKER_FILE="$out/docker.json" python - <<'PY'
+          import json, os, subprocess
+
+          def docker(*args):
+              done = subprocess.run(["docker", *args], check=True, capture_output=True, text=True)
+              return json.loads(done.stdout)
+
+          [container] = docker("inspect", os.environ["POSTGRES_CONTAINER"])
+          [image] = docker("image", "inspect", container["Image"])
+          info = docker("info", "--format", "{{json .}}")
+          with open(os.environ["RETRIEVAL_EVAL_DOCKER_FILE"], "w", encoding="utf-8") as handle:
+              json.dump({"container": container, "image": image, "info": info}, handle,
+                        sort_keys=True, indent=1)
+          print("container image", container["Image"])
+          print("repo digests   ", image.get("RepoDigests"))
+          print("platform       ", image.get("Os"), image.get("Architecture"), image.get("Variant", ""))
+          PY
 
       - name: pytest
         env:
@@ -395,6 +434,27 @@ jobs:
             3) python -m pytest "${shard3[@]}" ;;
             *) echo "::error::unknown shard '$SHARD'"; exit 1 ;;
           esac
+
+      - name: Print the retrieval evaluation artifacts' SHA-256
+        # Decision F §12.6 "Artifacts" and "Pinning": every file's SHA-256 goes to the job
+        # log, so a downloaded report can be checked against a digest that was published
+        # before anyone downloaded it. Runs whatever the tests did; until C.4 lands, the
+        # directory holds docker.json alone.
+        if: always() && matrix.shard == 1
+        run: |
+          set -euo pipefail
+          cd "$RETRIEVAL_EVAL_OUT"
+          find . -type f -print0 | sort -z | xargs -0 sha256sum
+
+      - name: Upload the retrieval evaluation artifacts
+        # Pinned by commit SHA (§12.6), named by run id and attempt, and an empty directory is
+        # an error. The artifact expires; a report that is pinned is committed byte for byte.
+        if: always() && matrix.shard == 1
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: retrieval-eval-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.RETRIEVAL_EVAL_OUT }}
+          if-no-files-found: error
 
   frontend-quality-gates:
     name: Frontend quality gates
@@ -466,18 +526,19 @@ jobs:
   # ---------------------------------------------------------------------------------------
   # The recorded mutation checks, re-run on every push.
   #
-  # The 41 stages 7.6-7.14, F2, F16, I4, F1, F2-ADR, M1, M2, F2-COMP, F3, F4, G1, H1, H2, H3, H4,
-  # H6, H7, H8, R2.2, R2.2b, R2.8AA, R2.8AC, R2.8AE, R2.8AG, R2.8AI, R2.8AK, R2.9B, R2.9K, R2.9X,
-  # R2.10A, R2.10B and R2.10C each broke their own guarantees on purpose and reported that a test
-  # caught every break.
-  # `python -m tests.mutation` re-applies those 606 edits from tests/mutation/inventory.py -- in
+  # Every stage recorded in tests/mutation/test_harness.py's RECORDED_PER_STAGE broke its own
+  # guarantees on purpose and reported that a test caught every break. The stage list and the
+  # counts live in tests/README.md and README.md, where test_inventory_docs.py and
+  # test_readme_counts.py keep them equal to the inventory; none is restated here, so none
+  # can go stale here.
+  # `python -m tests.mutation` re-applies every recorded edit from tests/mutation/inventory.py -- in
   # a throwaway copy of the tracked files, never in this checkout -- and fails unless every named
   # killer fails under its mutation and passes without it. See tests/mutation/harness.py.
   #
   # A job of its own, parallel to the others, so its run -- 20m23s and 31m06s in two runs on
   # 2026-10-29; it varies -- happens beside quality-gates rather than after it. It needs both
-  # toolchains (606 mutations span Python and Vitest; 61 are Vitest) and its own disposable
-  # PostgreSQL for the 129 mutations whose killers are integration tests.
+  # toolchains (the mutations span Python and Vitest) and its own disposable PostgreSQL for the
+  # mutations whose killers are integration tests.
   # The limit is 90 minutes: the mutation step took 32m20s for 389 mutations (2026-11-05), and
   # at 606 it outgrew the earlier 45-minute limit and was cancelled (run 42885849036, 2026-11-10).
   # `--require-all` makes a mutation that could not run a failure, not a skip. Nothing here
@@ -593,6 +654,35 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v5
+
+      - name: Pull Docker Hub images through a mirror, Docker Hub the fallback
+        # R0.2. Every image this job pulls in its steps comes from Docker Hub, unauthenticated,
+        # and one Hub outage (run 37994098334) has already failed a run. The daemon now asks the
+        # public pull-through mirror first and falls back to Docker Hub by itself when the mirror
+        # fails, so the mirror can add availability but cannot take any away. It cannot change
+        # what is pulled either: every reference is pinned by digest, and a digest is verified on
+        # every pull, wherever the bytes came from. The `services:` containers of the other jobs
+        # are pulled by the runner before any step runs, so they still come from Docker Hub.
+        run: |
+          set -euo pipefail
+          config=/etc/docker/daemon.json
+          current='{}'
+          if sudo test -s "$config"; then current="$(sudo cat "$config")"; fi
+          printf '%s' "$current" \
+            | jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' \
+            | sudo tee "$config" > /dev/null
+          sudo systemctl restart docker
+          for attempt in $(seq 1 30); do
+            docker info > /dev/null 2>&1 && break
+            [ "$attempt" -lt 30 ] || { echo "::error::the Docker daemon did not come back"; exit 1; }
+            sleep 1
+          done
+          mirrors="$(docker info --format '{{json .RegistryConfig.Mirrors}}')"
+          echo "  registry mirrors: $mirrors"
+          case "$mirrors" in
+            *'https://mirror.gcr.io/'*) echo "  OK   Docker Hub pulls try mirror.gcr.io first" ;;
+            *) echo "::error::the registry mirror is not active"; exit 1 ;;
+          esac
 
       - name: Docker and Compose versions
         run: |
@@ -827,8 +917,8 @@ jobs:
 
             revisions=$(ls /app/database/migrations/versions/*.py | wc -l)
             echo "  revisions present: $revisions"
-            if [ "$revisions" -ne 20 ]; then
-              echo "::error::expected 20 revisions, found $revisions"
+            if [ "$revisions" -ne 23 ]; then
+              echo "::error::expected 23 revisions, found $revisions"
               exit 1
             fi
 
@@ -1189,9 +1279,9 @@ jobs:
           echo "--- alembic_version, read from PostgreSQL ---"
           revision="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  $revision"
-          [ "$revision" = "0020_guest_email_rules" ] || {
-            echo "::error::expected 0020_guest_email_rules, got $revision"; exit 1; }
-          echo "  OK   schema is at 0020_guest_email_rules"
+          [ "$revision" = "0023_auth_sessions" ] || {
+            echo "::error::expected 0023_auth_sessions, got $revision"; exit 1; }
+          echo "  OK   schema is at 0023_auth_sessions"
 
           tables="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  public tables created: $tables"
@@ -1677,7 +1767,7 @@ jobs:
 
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  after : $after"
-          [ "$after" = "0020_guest_email_rules" ] || {
+          [ "$after" = "0023_auth_sessions" ] || {
             echo "::error::revision moved to $after"; exit 1; }
           [ "$before" = "$after" ] || { echo "::error::revision changed"; exit 1; }
           echo "  OK   upgrade head is idempotent and the schema is unchanged"
@@ -1709,7 +1799,7 @@ jobs:
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  revision after restart: $revision"
           echo "  tables after restart  : $after"
-          [ "$revision" = "0020_guest_email_rules" ] || {
+          [ "$revision" = "0023_auth_sessions" ] || {
             echo "::error::schema did not survive the restart"; exit 1; }
           [ "$rows" = "$after" ] || { echo "::error::table count changed across restart"; exit 1; }
           echo "  OK   the named volume preserved the schema across stop/start"
@@ -2400,13 +2490,13 @@ jobs:
           # The diff above is the real proof. These restate the few facts that must hold
           # absolutely, so a failure names what was wrong rather than only that something was.
           revision="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc 'SELECT version_num FROM alembic_version')"
-          [ "$revision" = "0020_guest_email_rules" ] || {
+          [ "$revision" = "0023_auth_sessions" ] || {
             echo "::error::restored revision is $revision"; exit 1; }
-          echo "  OK   alembic_version is 0020_guest_email_rules -- no upgrade or downgrade happened"
+          echo "  OK   alembic_version is 0023_auth_sessions -- no upgrade or downgrade happened"
 
           tables="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")"
-          [ "$tables" -eq 29 ] || { echo "::error::restored database has $tables base tables, expected 29"; exit 1; }
-          echo "  OK   29 base tables (28 application tables + alembic_version)"
+          [ "$tables" -eq 30 ] || { echo "::error::restored database has $tables base tables, expected 30"; exit 1; }
+          echo "  OK   30 base tables (29 application tables + alembic_version)"
 
           membership="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc \
             "SELECT u.email || '/' || h.slug || '/' || uh.role FROM user_hotels uh
@@ -3236,6 +3326,35 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v5
+
+      - name: Pull Docker Hub images through a mirror, Docker Hub the fallback
+        # R0.2. Every image this job pulls in its steps comes from Docker Hub, unauthenticated,
+        # and one Hub outage (run 37994098334) has already failed a run. The daemon now asks the
+        # public pull-through mirror first and falls back to Docker Hub by itself when the mirror
+        # fails, so the mirror can add availability but cannot take any away. It cannot change
+        # what is pulled either: every reference is pinned by digest, and a digest is verified on
+        # every pull, wherever the bytes came from. The `services:` containers of the other jobs
+        # are pulled by the runner before any step runs, so they still come from Docker Hub.
+        run: |
+          set -euo pipefail
+          config=/etc/docker/daemon.json
+          current='{}'
+          if sudo test -s "$config"; then current="$(sudo cat "$config")"; fi
+          printf '%s' "$current" \
+            | jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' \
+            | sudo tee "$config" > /dev/null
+          sudo systemctl restart docker
+          for attempt in $(seq 1 30); do
+            docker info > /dev/null 2>&1 && break
+            [ "$attempt" -lt 30 ] || { echo "::error::the Docker daemon did not come back"; exit 1; }
+            sleep 1
+          done
+          mirrors="$(docker info --format '{{json .RegistryConfig.Mirrors}}')"
+          echo "  registry mirrors: $mirrors"
+          case "$mirrors" in
+            *'https://mirror.gcr.io/'*) echo "  OK   Docker Hub pulls try mirror.gcr.io first" ;;
+            *) echo "::error::the registry mirror is not active"; exit 1 ;;
+          esac
 
       - name: Docker version
         run: |

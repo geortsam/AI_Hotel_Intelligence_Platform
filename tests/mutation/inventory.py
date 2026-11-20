@@ -1352,7 +1352,7 @@ def runbook(name: str, breaks: str, path: str, old: str, new: str, *tests: str) 
 
 
 STALE = "`0011_demand_prediction_public_id`"
-CURRENT = "`0020_guest_email_rules`"
+CURRENT = "`0023_auth_sessions`"
 REVISIONS_IN_BACKUP = "test_every_revision_a_runbook_quotes_is_the_current_head[backup-restore]"
 
 STAGE_M1 = [
@@ -1384,8 +1384,8 @@ STAGE_M1 = [
         "M1-M4",
         "the restore check forgets alembic_version in its base-table count",
         BACKUP_RUNBOOK,
-        "Expect **29** — the 28 application tables",
-        "Expect **28** — the 28 application tables",
+        "Expect **30** — the 29 application tables",
+        "Expect **29** — the 29 application tables",
         "test_the_restore_check_expects_every_application_table_plus_alembic_version",
     ),
     runbook(
@@ -3185,7 +3185,7 @@ STAGE_H6 = [
         "backend/app/api/v1/endpoints/guests.py",
         "    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE, **STALE_UPDATE_RESPONSE},\n",
         "    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},\n",
-        f"{PRECONDITION_TESTS}::test_exactly_the_five_conditional_operations_declare_412",
+        f"{PRECONDITION_TESTS}::test_exactly_the_conditional_operations_declare_412",
     ),
     precondition_static(
         17,
@@ -6302,6 +6302,25 @@ RETRIEVAL_V2_TESTS = "tests/evaluation/test_retrieval_v2.py"
 _RM = f"{RETRIEVAL_METRICS_TESTS}::"
 _RS = f"{RETRIEVAL_SCHEMA_TESTS}::"
 _RV = f"{RETRIEVAL_V2_TESTS}::"
+RETRIEVAL_NUMERICS = "tests/evaluation/retrieval_numerics.py"
+RETRIEVAL_NUMERICS_TESTS = "tests/evaluation/test_retrieval_numerics.py"
+_RN = f"{RETRIEVAL_NUMERICS_TESTS}::"
+RETRIEVAL_CANONICAL = "tests/evaluation/retrieval_canonical.py"
+RETRIEVAL_FINGERPRINT = "tests/evaluation/retrieval_fingerprint.py"
+RETRIEVAL_PROBES = "tests/evaluation/retrieval_probes.py"
+RETRIEVAL_ARTIFACTS = "tests/evaluation/retrieval_artifacts.py"
+_RC = "tests/evaluation/test_retrieval_canonical.py::"
+_RF = "tests/evaluation/test_retrieval_fingerprint.py::"
+_RP = "tests/evaluation/test_retrieval_probes.py::"
+_RA = "tests/evaluation/test_retrieval_artifacts.py::"
+_C4R = "tests/evaluation/test_retrieval_c4_requirements.py::"
+COPILOT_SNAPSHOT = "tests/evaluation/copilot_retrieval_snapshot.py"
+_C5 = "tests/evaluation/test_copilot_retrieval_snapshot.py::"
+SNAPSHOT_FAILURE = "tests/evaluation/snapshot_retrieval_failure.py"
+_C6 = "tests/evaluation/test_snapshot_retrieval_failure.py::"
+RETRIEVAL_REVIEW = "tests/evaluation/retrieval_review.py"
+RETRIEVAL_REVIEW_TESTS = "tests/evaluation/test_retrieval_review.py"
+_RR = f"{RETRIEVAL_REVIEW_TESTS}::"
 MUTATION_HARNESS = "tests/mutation/harness.py"
 _HT = "tests/mutation/test_harness.py::"
 _DIFFERS = f"{_RV}test_a_dataset_that_differs_from_the_capture_is_reported"
@@ -6400,8 +6419,8 @@ STAGE_R2_10C = [
         10,
         "the discount is log2(rank + 2): one rank off",
         RETRIEVAL_METRICS,
-        "    return math.fsum(gain / math.log2(rank + 1) for rank,",
-        "    return math.fsum(gain / math.log2(rank + 2) for rank,",
+        "    return math.fsum(gain / discount(rank) for rank,",
+        "    return math.fsum(gain / discount(rank + 1) for rank,",
         f"{_AT_RANK}[1]",
         f"{_RM}test_the_gains_are_the_configured_ones",
     ),
@@ -6494,8 +6513,8 @@ STAGE_R2_10C = [
         21,
         "the Wilson half-width drops its z^2 / 4n^2 term",
         RETRIEVAL_METRICS,
-        "    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denominator\n",
-        "    half = z * math.sqrt(p * (1 - p) / n) / denominator\n",
+        "    return p * (1 - p) / n + z * z / (4 * n * n)\n",
+        "    return p * (1 - p) / n\n",
         _WILSON + "[5-10-expected2]",
         _WILSON + "[16-23-expected3]",
     ),
@@ -7131,6 +7150,2668 @@ STAGE_R2_10C = [
         'not reset the test database")\n',
         f"{_HT}test_a_database_backed_run_is_rebuilt_before_every_batch",
     ),
+    # R2.10C.3c: the review sheet and the review form.
+    _r210c(
+        94,
+        "a form made for another dataset checksum is accepted",
+        RETRIEVAL_REVIEW,
+        '            if form["dataset"][field] != value:\n',
+        "            if False:\n",
+        f"{_RR}test_a_form_claiming_another_checksum_is_refused",
+        f"{_RR}test_a_review_of_another_dataset_is_refused",
+    ),
+    _r210c(
+        95,
+        "a form made against another review sheet is accepted",
+        RETRIEVAL_REVIEW,
+        '    if form["review_sheet_sha256"] != review_sheet_sha256:\n',
+        "    if False:\n",
+        f"{_RR}test_a_review_against_another_sheet_is_refused",
+    ),
+    _r210c(
+        96,
+        "a changed grade needs no rationale",
+        RETRIEVAL_REVIEW,
+        "        if not _explained(rationale):\n"
+        '            problems.append(f"{where}: a change needs a rationale")\n',
+        '        if False:\n            problems.append(f"{where}: a change needs a rationale")\n',
+        f"{_RR}test_a_malformed_review_is_refused[change-no-rationale]",
+        f"{_RR}test_a_malformed_review_is_refused[change-blank-rationale]",
+    ),
+    _r210c(
+        97,
+        "a 'change' to the proposed grade is accepted",
+        RETRIEVAL_REVIEW,
+        "        elif grade == proposed[1]:\n",
+        "        elif False:\n",
+        f"{_RR}test_a_malformed_review_is_refused[same-grade]",
+    ),
+    _r210c(
+        98,
+        "an undecided judgment is not reported as outstanding",
+        RETRIEVAL_REVIEW,
+        '            if judgment["decision"] is None:\n',
+        "            if False:\n",
+        f"{_RR}test_a_partial_review_lists_exactly_what_is_outstanding",
+        f"{_RR}test_a_blank_form_is_not_a_review",
+    ),
+    _r210c(
+        99,
+        "an added judgment may name an out-of-scope chunk",
+        RETRIEVAL_REVIEW,
+        "    elif not found[0].in_scope:\n",
+        "    elif False:\n",
+        f"{_RR}test_a_malformed_review_is_refused[added-out-of-scope]",
+        f"{_RR}test_a_malformed_review_is_refused[added-neighbour]",
+    ),
+    _r210c(
+        100,
+        "the sheet is hashed as checked out, so a CRLF checkout is another sheet",
+        RETRIEVAL_REVIEW,
+        '    return hashlib.sha256(text.replace("\\r\\n", "\\n").encode("utf-8")).hexdigest()\n',
+        '    return hashlib.sha256(text.encode("utf-8")).hexdigest()\n',
+        f"{_RR}test_a_crlf_checkout_of_the_sheet_is_the_same_sheet",
+    ),
+    _r210c(
+        101,
+        "true is accepted as grade 1",
+        RETRIEVAL_REVIEW,
+        "    return isinstance(value, int) and not isinstance(value, bool) and value in GRADES\n",
+        "    return isinstance(value, int) and value in GRADES\n",
+        f"{_RR}test_a_malformed_review_is_refused[grade-bool]",
+        f"{_RR}test_a_malformed_review_is_refused[added-grade-bool]",
+    ),
+    _r210c(
+        102,
+        "a review date that is no calendar date is accepted",
+        RETRIEVAL_REVIEW,
+        "                dt.date.fromisoformat(str(reviewed_on))\n",
+        "                pass\n",
+        f"{_RR}test_a_malformed_review_is_refused[bad-date]",
+    ),
+    _r210c(
+        103,
+        "a chunk may be added at grade 0",
+        RETRIEVAL_REVIEW,
+        "    if not _is_grade(grade) or grade == 0:\n",
+        "    if not _is_grade(grade):\n",
+        f"{_RR}test_a_malformed_review_is_refused[added-grade-0]",
+    ),
+    _r210c(
+        104,
+        "a chunk in another language graded 2 is not flagged",
+        RETRIEVAL_REVIEW,
+        '        "CROSS-LANGUAGE-GRADE-2": any(item.grade == 2 for item in foreign),\n',
+        '        "CROSS-LANGUAGE-GRADE-2": False,\n',
+        f"{_RR}test_a_chunk_in_another_language_graded_2_is_flagged",
+    ),
+    _r210c(
+        105,
+        "a query revision needs no rationale",
+        RETRIEVAL_REVIEW,
+        '    if decision == "revise" and not _explained(rationale):\n',
+        "    if False:\n",
+        f"{_RR}test_a_malformed_review_is_refused[revise-no-rationale]",
+    ),
+    _r210c(
+        106,
+        "stopwords are not folded, so a Greek final sigma escapes them",
+        RETRIEVAL_REVIEW,
+        "word not in _FOLDED_STOPWORDS and",
+        "word not in STOPWORDS and",
+        f"{_RR}test_words_are_whole_case_folded_words_without_stopwords_or_numbers",
+    ),
+    _r210c(
+        107,
+        "write-form overwrites a review in progress",
+        RETRIEVAL_REVIEW,
+        "        if FORM_PATH.exists():\n",
+        "        if False:\n",
+        f"{_RR}test_write_form_never_overwrites_a_review",
+    ),
+    _r210c(
+        108,
+        "an accepted grade needs no rationale",
+        RETRIEVAL_REVIEW,
+        '        if decision == "accept" and not _explained(rationale):\n',
+        "        if False:\n",
+        f"{_RR}test_a_malformed_review_is_refused[accept-no-rationale]",
+        f"{_RR}test_a_malformed_review_is_refused[accept-blank-rationale]",
+        f"{_RR}test_every_judgment_decision_needs_a_rationale",
+    ),
+    _r210c(
+        109,
+        "the certificate ignores precisions that disagree",
+        RETRIEVAL_NUMERICS,
+        "    if r1.hex() != r2.hex():\n",
+        "    if False:\n",
+        f"{_RN}test_precisions_that_disagree_are_refused",
+    ),
+    _r210c(
+        110,
+        "the certificate accepts D - E on the lower midpoint",
+        RETRIEVAL_NUMERICS,
+        "    if low < exact - error and exact + error < high:\n",
+        "    if low <= exact - error and exact + error < high:\n",
+        f"{_RN}test_the_certificate_is_strict_at_both_ends",
+    ),
+    _r210c(
+        111,
+        "the certificate accepts D + E on the upper midpoint",
+        RETRIEVAL_NUMERICS,
+        "    if low < exact - error and exact + error < high:\n",
+        "    if low < exact - error and exact + error <= high:\n",
+        f"{_RN}test_the_certificate_is_strict_at_both_ends",
+    ),
+    _r210c(
+        112,
+        "an exact tie is accepted for an odd significand",
+        RETRIEVAL_NUMERICS,
+        "    return error == 0 and exact in (low, high) and even_significand(r)\n",
+        "    return error == 0 and exact in (low, high)\n",
+        f"{_RN}test_an_exact_tie_is_accepted_only_for_an_even_significand",
+    ),
+    _r210c(
+        113,
+        "a midpoint is accepted as a tie although E > 0",
+        RETRIEVAL_NUMERICS,
+        "    return error == 0 and exact in (low, high) and even_significand(r)\n",
+        "    return exact in (low, high) and even_significand(r)\n",
+        f"{_RN}test_an_exact_tie_is_accepted_only_for_an_even_significand",
+    ),
+    _r210c(
+        114,
+        "the overflow threshold is the largest double itself",
+        RETRIEVAL_NUMERICS,
+        "OVERFLOW_THRESHOLD: Final = Fraction(2**1024 - 2**970)\n",
+        "OVERFLOW_THRESHOLD: Final = Fraction(2**1024 - 2**971)\n",
+        f"{_RN}test_the_midpoints_and_the_overflow_threshold",
+    ),
+    _r210c(
+        115,
+        "the square-root error bound is taken at P1",
+        RETRIEVAL_NUMERICS,
+        "adjusted() - SQRT_PRECISIONS[1] + 1)",
+        "adjusted() - SQRT_PRECISIONS[0] + 1)",
+        f"{_RN}test_a_square_root_is_computed_at_both_precisions",
+        f"{_RN}test_the_square_root_error_bound_is_half_a_unit_in_the_last_digit",
+    ),
+    _r210c(
+        116,
+        "the logarithm error bound is one unit, not two",
+        RETRIEVAL_NUMERICS,
+        "    return 2 * Fraction(10) ** (1 - LOG_PRECISIONS[1]) * abs(Fraction(second))\n",
+        "    return Fraction(10) ** (1 - LOG_PRECISIONS[1]) * abs(Fraction(second))\n",
+        f"{_RN}test_the_logarithm_error_bound_is_two_units_of_p2_relative",
+    ),
+    _r210c(
+        117,
+        "a flag other than Inexact and Rounded is let through",
+        RETRIEVAL_NUMERICS,
+        "    if forbidden:\n",
+        "    if False:\n",
+        f"{_RN}test_a_flag_other_than_inexact_and_rounded_refuses",
+    ),
+    _r210c(
+        118,
+        "Subnormal is not trapped",
+        RETRIEVAL_NUMERICS,
+        "    decimal.Subnormal,\n",
+        "",
+        f"{_RN}test_the_context_is_the_contract",
+        f"{_RN}test_every_trapped_signal_refuses[Subnormal]",
+    ),
+    _r210c(
+        119,
+        "the contexts round half up",
+        RETRIEVAL_NUMERICS,
+        "ROUNDING: Final = decimal.ROUND_HALF_EVEN\n",
+        "ROUNDING: Final = decimal.ROUND_HALF_UP\n",
+        f"{_RN}test_the_context_is_the_contract",
+    ),
+    _r210c(
+        120,
+        "a subnormal square-root input is accepted",
+        RETRIEVAL_NUMERICS,
+        "    if not (math.isfinite(x) and x >= sys.float_info.min):\n",
+        "    if not (math.isfinite(x) and x > 0):\n",
+        f"{_RN}test_a_square_root_input_must_be_positive_normal_and_finite",
+    ),
+    _r210c(
+        121,
+        "a discount outside (1, 4) is accepted",
+        RETRIEVAL_NUMERICS,
+        "    if not low < value < high:\n",
+        "    if False:\n",
+        f"{_RN}test_a_discount_outside_one_to_four_is_refused",
+    ),
+    _r210c(
+        122,
+        "the pure-Python decimal is accepted",
+        RETRIEVAL_NUMERICS,
+        '    if getattr(module, "Decimal", None) is not _decimal.Decimal:\n',
+        "    if False:\n",
+        f"{_RN}test_cpython_decimal_is_required",
+    ),
+    _r210c(
+        123,
+        "the log2(5) literal is one unit in the last place off",
+        RETRIEVAL_NUMERICS,
+        'LOG2_5: Final = float.fromhex("0x1.2934f0979a371p+1")\n',
+        'LOG2_5: Final = float.fromhex("0x1.2934f0979a372p+1")\n',
+        f"{_RN}test_the_discount_table_is_the_pinned_binary64_values",
+    ),
+    _r210c(
+        124,
+        "the computation runs in a copy of the caller's context",
+        RETRIEVAL_NUMERICS,
+        "    with decimal.localcontext(context(precision)) as local:\n",
+        "    with decimal.localcontext() as local:\n",
+        f"{_RN}test_each_literal_is_certified_at_both_precisions",
+        f"{_RN}test_the_callers_context_is_neither_used_nor_changed",
+    ),
+    _r210c(
+        125,
+        "the writer accepts float objects",
+        RETRIEVAL_CANONICAL,
+        (
+            '        raise CanonicalError(f"{where}: the writer refuses f'
+            'loat objects; wrap it in Binary64")\n'
+        ),
+        "        return value\n",
+        f"{_RC}test_the_writer_refuses_any_float_object",
+    ),
+    _r210c(
+        126,
+        "the writer keeps insertion order",
+        RETRIEVAL_CANONICAL,
+        "        plain, sort_keys=True, separators",
+        "        plain, sort_keys=False, separators",
+        f"{_RC}test_the_writer_is_independent_of_insertion_order",
+    ),
+    _r210c(
+        127,
+        "a binary64 string that does not round-trip is accepted",
+        RETRIEVAL_CANONICAL,
+        "    if float.hex(value) != text:\n",
+        "    if False:\n",
+        f"{_RC}test_a_binary64_string_that_does_not_round_trip_is_refused",
+    ),
+    _r210c(
+        128,
+        "the reader accepts bytes the writer would write differently",
+        RETRIEVAL_CANONICAL,
+        "    if dumps(value) != data:\n",
+        "    if False:\n",
+        f"{_RC}test_the_reader_refuses_anything_not_written_byte_for_byte",
+    ),
+    _r210c(
+        129,
+        "null is accepted where none is declared",
+        RETRIEVAL_CANONICAL,
+        "        if spec.nullable:\n            return\n",
+        "        if True:\n            return\n",
+        f"{_RC}test_null_is_allowed_only_where_declared_nullable",
+    ),
+    _r210c(
+        130,
+        "an unordered list need not be sorted",
+        RETRIEVAL_CANONICAL,
+        "            if keys != sorted(keys) or len(set(keys)) != len(keys):\n",
+        "            if len(set(keys)) != len(keys):\n",
+        f"{_RC}test_values_of_another_type_are_refused",
+    ),
+    _r210c(
+        131,
+        "an object may carry undeclared keys",
+        RETRIEVAL_CANONICAL,
+        "            if missing or extra:\n",
+        "            if missing:\n",
+        f"{_RC}test_values_of_another_type_are_refused",
+    ),
+    _r210c(
+        132,
+        "a binary64 field accepts a float object read as JSON",
+        RETRIEVAL_CANONICAL,
+        (
+            '        raise CanonicalError(f"{where}: a binary64 is a floa'
+            't.hex string; got {text!r}")\n'
+        ),
+        "        return float(text)  # type: ignore[arg-type]\n",
+        f"{_RC}test_values_of_another_type_are_refused",
+    ),
+    _r210c(
+        133,
+        "the fingerprint hashes the components, not the inputs",
+        RETRIEVAL_FINGERPRINT,
+        '    """SHA-256 of the canonical form of `inputs`."""\n    return canon.sha256(inputs)\n',
+        (
+            '    """SHA-256 of the canonical form of `inputs`."""\n    ret'
+            "urn canon.sha256(components(inputs))\n"
+        ),
+        f"{_RF}test_the_fingerprint_is_sha256_of_the_canonical_inputs",
+    ),
+    _r210c(
+        134,
+        "a manifest whose fingerprint is not its inputs' passes",
+        RETRIEVAL_FINGERPRINT,
+        '    if manifest["fingerprint"] != fingerprint(manifest["inputs"]):\n',
+        "    if False:\n",
+        f"{_RF}test_tampering_with_one_group_names_that_group",
+    ),
+    _r210c(
+        135,
+        "results are compared before the fingerprint",
+        RETRIEVAL_FINGERPRINT,
+        '    if pinned["fingerprint"] != measured["fingerprint"]:\n',
+        "    if False:\n",
+        f"{_RF}test_the_comparison_is_fingerprint_first_then_results",
+    ),
+    _r210c(
+        136,
+        "an ordered group may be out of its declared order",
+        RETRIEVAL_FINGERPRINT,
+        "    if order != sorted(order) or len(set(order)) != len(order):\n",
+        "    if len(set(order)) != len(order):\n",
+        f"{_RF}test_ordered_groups_must_keep_their_declared_order",
+    ),
+    _r210c(
+        137,
+        "a dirty tracked tree is measured",
+        RETRIEVAL_FINGERPRINT,
+        "    if status:\n",
+        "    if False:\n",
+        f"{_RF}test_a_dirty_tracked_tree_refuses",
+    ),
+    _r210c(
+        138,
+        "an untracked migration is ignored",
+        RETRIEVAL_FINGERPRINT,
+        '    if untracked:\n        raise refuse("repository", f"untracked files under',
+        '    if False:\n        raise refuse("repository", f"untracked files under',
+        f"{_RF}test_an_untracked_migration_refuses",
+    ),
+    _r210c(
+        139,
+        "a missing source is skipped",
+        RETRIEVAL_FINGERPRINT,
+        '    if missing:\n        raise refuse("repository", f"sources missing',
+        '    if False:\n        raise refuse("repository", f"sources missing',
+        f"{_RF}test_a_missing_source_refuses",
+    ),
+    _r210c(
+        140,
+        "a module imported from elsewhere is accepted",
+        RETRIEVAL_FINGERPRINT,
+        "        if found is None or Path(found).resolve() != (repository / path).resolve():\n",
+        "        if found is None:\n",
+        f"{_RF}test_a_module_imported_from_elsewhere_refuses",
+    ),
+    _r210c(
+        141,
+        "the workflow variable need not match the declared image",
+        RETRIEVAL_FINGERPRINT,
+        "    if not (service == declared == variable):\n",
+        "    if not (service == declared):\n",
+        f"{_RF}test_a_missing_or_different_variable_refuses",
+    ),
+    _r210c(
+        142,
+        "the container may run another image than the inspected one",
+        RETRIEVAL_FINGERPRINT,
+        "    if container_image != image_id:\n",
+        "    if False:\n",
+        f"{_RF}test_any_image_identity_failure_refuses",
+    ),
+    _r210c(
+        143,
+        "the image need not list the declared digest",
+        RETRIEVAL_FINGERPRINT,
+        (
+            '    if not isinstance(repo_digests, list) or f"postgres@{ima'
+            'ge.digest}" not in repo_digests:\n'
+        ),
+        "    if not isinstance(repo_digests, list):\n",
+        f"{_RF}test_any_image_identity_failure_refuses",
+    ),
+    _r210c(
+        144,
+        "the image architecture may disagree with version()",
+        RETRIEVAL_FINGERPRINT,
+        '    if BUILD_ARCHITECTURES[match.group(1)] != docker["platform"]["architecture"]:\n',
+        "    if False:\n",
+        f"{_RF}test_the_architecture_must_agree_with_the_build_target_of_version",
+    ),
+    _r210c(
+        145,
+        "an extra installed distribution is accepted",
+        RETRIEVAL_FINGERPRINT,
+        "    if missing or extra or wrong:\n",
+        "    if missing or wrong:\n",
+        f"{_RF}test_an_installed_set_that_is_not_the_lock_refuses",
+    ),
+    _r210c(
+        146,
+        "pip is not exempt from the installed set",
+        RETRIEVAL_FINGERPRINT,
+        'UNPINNED: Final = ("pip",)\n',
+        "UNPINNED: Final = ()\n",
+        f"{_RF}test_the_ci_install_of_the_dev_lock_is_exactly_the_installed_set",
+    ),
+    _r210c(
+        147,
+        "a runtime-lock pin may differ from the dev lock",
+        RETRIEVAL_FINGERPRINT,
+        '    if disagreeing:\n        raise refuse("installed_set", f"runtime-lock pins',
+        '    if False:\n        raise refuse("installed_set", f"runtime-lock pins',
+        f"{_RF}test_a_runtime_pin_that_differs_from_the_dev_lock_refuses",
+    ),
+    _r210c(
+        148,
+        "markers are ignored",
+        RETRIEVAL_FINGERPRINT,
+        "            holds = True if marker is None else marker.evaluate(",
+        "            holds = True if True else marker.evaluate(",
+        f"{_RF}test_a_marker_that_does_not_hold_excludes_its_pin",
+    ),
+    _r210c(
+        149,
+        "a file that differs from its RECORD hash passes",
+        RETRIEVAL_FINGERPRINT,
+        "        if digest != value:\n",
+        "        if False:\n",
+        f"{_RF}test_record_verification_catches_a_changed_or_missing_file",
+    ),
+    _r210c(
+        150,
+        "a non-exact pin is accepted",
+        RETRIEVAL_FINGERPRINT,
+        '            or specifiers[0].operator != "=="\n',
+        "",
+        f"{_RF}test_anything_but_an_exact_pin_refuses",
+    ),
+    _r210c(
+        151,
+        "a sign-off that does not approve is accepted",
+        RETRIEVAL_FINGERPRINT,
+        "    if not so.approves(record, dataset.checksum()):\n",
+        "    if False:\n",
+        f"{_RF}test_a_missing_or_mismatched_sign_off_refuses",
+    ),
+    _r210c(
+        152,
+        "a declared binary64 number stays an integer",
+        RETRIEVAL_FINGERPRINT,
+        "        return Binary64(float(value))\n",
+        "        return value\n",
+        f"{_RF}test_the_metrics_group_writes_every_binary64_as_float_hex",
+    ),
+    _r210c(
+        153,
+        "the discount table is left out of the metrics group",
+        RETRIEVAL_FINGERPRINT,
+        (
+            '        "discount_table": {str(rank): Binary64(value) for ra'
+            "nk, value in sorted(table.items())},\n"
+        ),
+        '        "discount_table": {},\n',
+        f"{_RF}test_the_metrics_group_writes_every_binary64_as_float_hex",
+    ),
+    _r210c(
+        154,
+        "a NULL in a probe's row is accepted",
+        RETRIEVAL_PROBES,
+        (
+            "        if any(value is None for index, value in enumerate(row)"
+            " if index not in nullable):\n"
+        ),
+        "        if False:\n",
+        f"{_RP}test_a_null_refuses",
+    ),
+    _r210c(
+        155,
+        "a chunk whose vector is not bound is accepted",
+        RETRIEVAL_PROBES,
+        "        if bound is not True:\n",
+        "        if False:\n",
+        f"{_RP}test_a_chunk_whose_vector_is_not_bound_refuses",
+    ),
+    _r210c(
+        156,
+        "document order is not read from the database",
+        RETRIEVAL_PROBES,
+        '                "document_order": order,\n',
+        '                "document_order": 0,\n',
+        f"{_RP}test_the_ingested_state_matches_the_plan",
+    ),
+    _r210c(
+        157,
+        "supersedes is not read from the database",
+        RETRIEVAL_PROBES,
+        '                "supersedes": None if sup is None else by_row_id[sup],\n',
+        '                "supersedes": None,\n',
+        f"{_RP}test_the_ingested_state_matches_the_plan",
+    ),
+    _r210c(
+        158,
+        "a document of another hotel is accepted",
+        RETRIEVAL_PROBES,
+        "        if hotel_id not in uploads.hotels:\n",
+        "        if False:\n",
+        f"{_RP}test_a_document_of_another_hotel_refuses",
+    ),
+    _r210c(
+        159,
+        "the echoed limit is not checked",
+        RETRIEVAL_PROBES,
+        '    if response.get("query") != query or response.get("limit") != limit:\n',
+        '    if response.get("query") != query:\n',
+        f"{_RP}test_a_served_result_that_differs_refuses",
+    ),
+    _r210c(
+        160,
+        "more results than the limit are accepted",
+        RETRIEVAL_PROBES,
+        "    if len(results) > limit:\n",
+        "    if False:\n",
+        f"{_RP}test_more_results_than_the_limit_refuses",
+    ),
+    _r210c(
+        161,
+        "served fields are not compared with the database",
+        RETRIEVAL_PROBES,
+        "        if served != (title, version, language, ordinal, text):\n",
+        "        if False:\n",
+        f"{_RP}test_a_served_result_that_differs_refuses",
+    ),
+    _r210c(
+        162,
+        "a stop-word file is hashed by name, not content",
+        RETRIEVAL_PROBES,
+        "            files[name] = hashlib.sha256(bytes(rows[0][0])).hexdigest()\n",
+        "            files[name] = hashlib.sha256(name.encode()).hexdigest()\n",
+        f"{_RP}test_the_text_search_group",
+    ),
+    _r210c(
+        163,
+        "every expected version is 1",
+        RETRIEVAL_PROBES,
+        (
+            "        versions[doc_id] = 1 if document.supersedes is None "
+            "else versions[document.supersedes] + 1\n"
+        ),
+        "        versions[doc_id] = 1\n",
+        f"{_RP}test_the_expected_state",
+    ),
+    _r210c(
+        164,
+        "a second run overwrites the first",
+        RETRIEVAL_ARTIFACTS,
+        (
+            "    stale = sorted(entry.name for entry in directory.iterdir()"
+            " if entry.name != DOCKER_FILE)\n"
+        ),
+        "    stale: list[str] = []\n",
+        f"{_RA}test_a_run_writes_once",
+    ),
+    _r210c(
+        165,
+        "the job log's digest is not checked",
+        RETRIEVAL_ARTIFACTS,
+        "    if log_digest != digest:\n",
+        "    if False:\n",
+        f"{_RA}test_a_wrong_log_digest_or_digest_file_fails",
+    ),
+    _r210c(
+        166,
+        "repository groups are recomputed at any commit, whatever its tree",
+        RETRIEVAL_ARTIFACTS,
+        "    if head_tree != tree:\n        return [",
+        "    if False:\n        return [",
+        f"{_RA}test_repository_groups_must_recompute_at_the_runs_tree",
+    ),
+    _r210c(
+        167,
+        "a refusal writes no refusal.json",
+        RETRIEVAL_ARTIFACTS,
+        (
+            "    except MeasurementRefused as refusal:\n        _record_re"
+            "fusal(out_dir, refusal, commit, tree, started, fetch_for_metadata, env)\n"
+        ),
+        "    except MeasurementRefused as refusal:\n",
+        f"{_RA}test_a_dirty_tree_refuses_and_writes_only_refusal_json",
+    ),
+    _r210c(
+        168,
+        "a libc database may carry a datlocale",
+        RETRIEVAL_PROBES,
+        "        if raw_locale is not None:\n",
+        "        if False:\n",
+        f"{_RP}test_a_locale_that_does_not_fit_its_provider_refuses",
+    ),
+    _r210c(
+        169,
+        "builtin and icu may have a NULL datlocale",
+        RETRIEVAL_PROBES,
+        "    elif raw_locale is None:\n",
+        "    elif False:\n",
+        f"{_RP}test_a_locale_that_does_not_fit_its_provider_refuses",
+    ),
+    _r210c(
+        170,
+        "any column of the database row may be NULL",
+        RETRIEVAL_PROBES,
+        '    row = _one(fetch, DATABASE_SQL, {}, "database", frozenset({DATLOCALE_COLUMN}))\n',
+        '    row = _one(fetch, DATABASE_SQL, {}, "database", frozenset(range(7)))\n',
+        f"{_RP}test_any_other_null_in_the_database_row_refuses",
+    ),
+    _r210c(
+        171,
+        "any dictionary may have NULL init options",
+        RETRIEVAL_PROBES,
+        "            if key != fp.NULL_OPTIONS_DICTIONARY:\n",
+        "            if False:\n",
+        f"{_RP}test_null_init_options_are_only_pg_catalog_simples_and_empty_ones_never",
+    ),
+    _r210c(
+        172,
+        "empty init options are accepted",
+        RETRIEVAL_PROBES,
+        '        elif options == "":\n',
+        "        elif False:\n",
+        f"{_RP}test_null_init_options_are_only_pg_catalog_simples_and_empty_ones_never",
+    ),
+    _r210c(
+        173,
+        "any column of a dictionary row may be NULL",
+        RETRIEVAL_PROBES,
+        "            frozenset({DICTINITOPTION_COLUMN}),\n",
+        "            frozenset(range(4)),\n",
+        f"{_RP}test_any_other_null_in_a_dictionary_row_refuses",
+    ),
+    _r210c(
+        174,
+        "the manifest does not hold the locale to its provider",
+        RETRIEVAL_FINGERPRINT,
+        '    if libc != (database["locale"] is None):\n',
+        "    if False:\n",
+        f"{_RF}test_the_manifest_holds_the_locale_to_its_provider",
+    ),
+    _r210c(
+        175,
+        "the manifest accepts null init options for any dictionary",
+        RETRIEVAL_FINGERPRINT,
+        "        if (key, named) != (NULL_OPTIONS_DICTIONARY, NULL_OPTIONS_DICTIONARY):\n",
+        "        if False:\n",
+        f"{_RF}test_the_manifest_allows_null_init_options_only_for_pg_catalog_simple",
+    ),
+    _r210c(
+        176,
+        "the declared type accepts empty init options",
+        RETRIEVAL_FINGERPRINT,
+        '            init_options=Spec("string", nullable=True, pattern="nonempty"),\n',
+        '            init_options=Spec("string", nullable=True),\n',
+        f"{_RF}test_the_manifest_allows_null_init_options_only_for_pg_catalog_simple",
+    ),
+    _r210c(
+        177,
+        "the manifest accepts a NULL collate",
+        RETRIEVAL_FINGERPRINT,
+        '    collate=STR("nonempty"),\n',
+        '    collate=Spec("string", nullable=True),\n',
+        f"{_RF}test_null_appears_only_where_12_2_allows_it",
+    ),
+    _r210c(
+        178,
+        "the upload action is pinned to a SHA that is not v4.6.2's",
+        ".github/workflows/ci.yml",
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2\n",
+        "actions/upload-artifact@ea165f8d65b6e75b8a5d1f2a6bd1ed9b6d7f7e0b # v4.6.2\n",
+        f"{_RA}test_every_artifact_is_printed_and_uploaded_whatever_the_tests_did",
+        f"{_RA}test_the_upload_pin_carries_its_version_comment",
+    ),
+    _r210c(
+        179,
+        "an absent Docker variant is recorded as an empty string",
+        RETRIEVAL_FINGERPRINT,
+        "        variant = None\n",
+        '        variant = ""\n',
+        f"{_RF}test_an_absent_variant_is_a_typed_null_and_a_named_one_is_kept",
+    ),
+    _r210c(
+        180,
+        "a present empty Docker variant is accepted",
+        RETRIEVAL_FINGERPRINT,
+        "    elif not isinstance(variant, str) or not variant:\n",
+        "    elif not isinstance(variant, str):\n",
+        f"{_RF}test_a_present_variant_that_is_not_a_nonempty_string_refuses",
+    ),
+    _r210c(
+        181,
+        "a present Docker variant that is not a string is accepted",
+        RETRIEVAL_FINGERPRINT,
+        "    elif not isinstance(variant, str) or not variant:\n",
+        "    elif not variant:\n",
+        f"{_RF}test_a_present_variant_that_is_not_a_nonempty_string_refuses",
+    ),
+    _r210c(
+        182,
+        "the declared type accepts an empty variant",
+        RETRIEVAL_FINGERPRINT,
+        '        variant=Spec("string", nullable=True, pattern="nonempty"),\n',
+        '        variant=Spec("string", nullable=True),\n',
+        f"{_RF}test_the_manifest_holds_the_variant_to_null_or_a_nonempty_string",
+    ),
+    _r210c(
+        183,
+        "the declared type refuses the absent variant's null",
+        RETRIEVAL_FINGERPRINT,
+        '        variant=Spec("string", nullable=True, pattern="nonempty"),\n',
+        '        variant=STR("nonempty"),\n',
+        f"{_RF}test_the_manifest_accepts_a_null_or_a_named_variant",
+    ),
+    _r210c(
+        184,
+        "an empty template lexize is accepted",
+        RETRIEVAL_FINGERPRINT,
+        '            lexize=STR("nonempty"),\n',
+        "            lexize=STR(),\n",
+        f"{_RF}test_an_empty_template_lexize_refuses",
+        f"{_RA}test_an_empty_lexize_or_token_description_from_the_server_refuses",
+    ),
+    _r210c(
+        185,
+        "an empty token-type description is accepted",
+        RETRIEVAL_FINGERPRINT,
+        '        OBJ(id=INT(), alias=STR("nonempty"), description=STR("nonempty")), ordered=True\n',
+        '        OBJ(id=INT(), alias=STR("nonempty"), description=STR()), ordered=True\n',
+        f"{_RF}test_an_empty_token_type_description_refuses",
+        f"{_RA}test_an_empty_lexize_or_token_description_from_the_server_refuses",
+    ),
+    _r210c(
+        186,
+        "a package __init__ the harness loads is not fingerprinted",
+        RETRIEVAL_FINGERPRINT,
+        '    "backend/app/schemas/__init__.py",\n',
+        "",
+        f"{_RF}test_the_source_inventory_is_exactly_12_3s",
+        f"{_RF}test_the_import_closure_is_fingerprinted_or_excluded_by_reason",
+    ),
+    _r210c(
+        187,
+        "a harness module is not fingerprinted",
+        RETRIEVAL_FINGERPRINT,
+        '    "tests/evaluation/retrieval_numerics.py",\n',
+        "",
+        f"{_RF}test_the_source_inventory_is_exactly_12_3s",
+        f"{_RF}test_the_import_closure_is_fingerprinted_or_excluded_by_reason",
+    ),
+    _r210c(
+        188,
+        "the exclusion names models/base.py, which does not exist",
+        RETRIEVAL_FINGERPRINT,
+        '    "backend/app/db/base.py": (\n',
+        '    "backend/app/models/base.py": (\n',
+        f"{_RF}test_the_exclusions_are_exactly_12_3s_each_with_a_reason",
+        f"{_RF}test_every_excluded_source_exists_in_this_tree",
+        f"{_RF}test_the_import_closure_is_fingerprinted_or_excluded_by_reason",
+    ),
+    _r210c(
+        189,
+        "an excluded source may be missing at the measured commit",
+        RETRIEVAL_FINGERPRINT,
+        "    if gone:\n",
+        "    if False:\n",
+        f"{_RF}test_an_excluded_source_missing_at_the_commit_refuses",
+    ),
+    _r210c(
+        190,
+        "an untracked file is accepted",
+        RETRIEVAL_FINGERPRINT,
+        "    if strays:\n",
+        "    if False:\n",
+        f"{_RF}test_an_untracked_conftest_refuses",
+        f"{_RF}test_an_untracked_file_of_any_kind_refuses",
+        f"{_RA}test_an_untracked_file_refuses_the_measurement",
+    ),
+    _r210c(
+        191,
+        "an ignored file Python could execute is accepted",
+        RETRIEVAL_FINGERPRINT,
+        "    if executable:\n",
+        "    if False:\n",
+        f"{_RF}test_an_ignored_file_python_could_execute_refuses",
+    ),
+    _r210c(
+        192,
+        "an ignored directory's files are never looked at",
+        RETRIEVAL_FINGERPRINT,
+        '                for found in (repository / entry).rglob("*")\n',
+        "                for found in ()\n",
+        f"{_RF}test_an_ignored_file_python_could_execute_refuses",
+    ),
+    _r210c(
+        193,
+        "an ignored node_modules refuses the measurement",
+        RETRIEVAL_FINGERPRINT,
+        (
+            '    {".git", ".venv", "venv", "__pycache__", "node_modules", '
+            '".mypy_cache", ".pytest_cache",\n'
+        ),
+        '    {".git", ".venv", "venv", "__pycache__", ".mypy_cache", ".pytest_cache",\n',
+        f"{_RF}test_ignored_caches_environments_and_inert_files_pass",
+    ),
+    _r210c(
+        194,
+        "the measurement never looks for strays",
+        RETRIEVAL_ARTIFACTS,
+        "    if require_no_strays:\n",
+        "    if False:\n",
+        f"{_RA}test_an_untracked_file_refuses_the_measurement",
+    ),
+    _r210c(
+        195,
+        "a module outside the inventory goes unreported",
+        RETRIEVAL_FINGERPRINT,
+        (
+            "        {path for path in paths if path not in SOURCE_FILES and path not in "
+            "EXCLUDED_SOURCES}\n"
+        ),
+        "        {path for path in paths if False}\n",
+        f"{_RF}test_a_new_unlisted_repository_module_is_reported",
+    ),
+    _r210c(
+        196,
+        "a package __init__ is looked up as <package>.__init__",
+        RETRIEVAL_FINGERPRINT,
+        '    return name.removesuffix(".__init__")  # a package is imported by its own name\n',
+        "    return name\n",
+        f"{_RF}test_module_names_follow_the_import_roots",
+    ),
+    _r210c(
+        197,
+        "a relative output directory is accepted",
+        RETRIEVAL_ARTIFACTS,
+        "    if not path.is_absolute():\n",
+        "    if False:\n",
+        f"{_RA}test_a_relative_output_directory_refuses",
+    ),
+    _r210c(
+        198,
+        "an output directory inside the repository is accepted",
+        RETRIEVAL_ARTIFACTS,
+        "        if resolved.is_relative_to(root):\n",
+        "        if False:\n",
+        f"{_RA}test_an_output_directory_inside_the_repository_refuses",
+        f"{_RA}test_a_symlink_that_resolves_inside_the_repository_refuses",
+        f"{_RA}test_a_measurement_into_the_repository_refuses_and_writes_nothing",
+    ),
+    _r210c(
+        199,
+        "a symlink into the repository is not followed",
+        RETRIEVAL_ARTIFACTS,
+        "    resolved = path.resolve()\n",
+        "    resolved = path.absolute()\n",
+        f"{_RA}test_a_symlink_that_resolves_inside_the_repository_refuses",
+    ),
+    _r210c(
+        200,
+        "run_measurement writes wherever it is told",
+        RETRIEVAL_ARTIFACTS,
+        "    require_output_directory(out_dir, repository)\n",
+        "    pass\n",
+        f"{_RA}test_a_measurement_into_the_repository_refuses_and_writes_nothing",
+    ),
+    _r210c(
+        201,
+        "the workflow variable's directory is not checked",
+        RETRIEVAL_ARTIFACTS,
+        "    return require_output_directory(Path(value), repository)\n",
+        "    return Path(value)\n",
+        f"{_RA}test_a_relative_output_directory_refuses",
+        f"{_RA}test_an_output_directory_inside_the_repository_refuses",
+    ),
+    _r210c(
+        202,
+        "a run writes beside stale or partial files",
+        RETRIEVAL_ARTIFACTS,
+        (
+            "    stale = sorted(entry.name for entry in directory.iterdir()"
+            " if entry.name != DOCKER_FILE)\n"
+        ),
+        "    stale = [name for name in OUTPUTS if (directory / name).exists()]\n",
+        f"{_RA}test_a_directory_holding_anything_but_docker_json_refuses_before_writing",
+    ),
+    _r210c(
+        203,
+        "a refusal is reported only after the missing report",
+        RETRIEVAL_ARTIFACTS,
+        "    if REFUSAL_FILE in names:\n",
+        "    if REFUSAL_FILE in names and SUCCESS_SET <= names:\n",
+        f"{_RA}test_a_refused_run_has_nothing_to_pin",
+        f"{_RA}test_a_real_refusal_leaves_exactly_the_refusal_set",
+    ),
+    _r210c(
+        204,
+        "a refused run may hold other files",
+        RETRIEVAL_ARTIFACTS,
+        "        if names != REFUSAL_SET:\n",
+        "        if False:\n",
+        f"{_RA}test_a_refused_run_holds_exactly_docker_json_and_refusal_json",
+    ),
+    _r210c(
+        205,
+        "extra, stale or partial files pass verification",
+        RETRIEVAL_ARTIFACTS,
+        "    if extra:\n",
+        "    if False:\n",
+        f"{_RA}test_a_success_directory_holds_exactly_its_four_files",
+    ),
+    _r210c(
+        206,
+        "an artifact that is not a regular file passes",
+        RETRIEVAL_ARTIFACTS,
+        "    if irregular:\n",
+        "    if False:\n",
+        f"{_RA}test_an_artifact_that_is_not_a_regular_file_fails",
+    ),
+    _r210c(
+        207,
+        "the environment record's digest is not checked against the job log",
+        RETRIEVAL_ARTIFACTS,
+        "    if environment_log_digest != digest:\n",
+        "    if False:\n",
+        f"{_RA}test_a_wrong_or_missing_environment_log_digest_fails",
+        f"{_RA}test_a_tampered_environment_record_fails_before_its_tree_is_trusted",
+    ),
+    _r210c(
+        208,
+        "a missing environment digest is not refused",
+        RETRIEVAL_ARTIFACTS,
+        "    if not _SHA256_HEX.fullmatch(environment_log_digest):\n",
+        "    if False:\n",
+        f"{_RA}test_a_wrong_or_missing_environment_log_digest_fails",
+    ),
+    _r210c(
+        209,
+        "the tree id of an unproven environment record is trusted",
+        RETRIEVAL_ARTIFACTS,
+        "    if untrusted:\n",
+        "    if False:\n",
+        f"{_RA}test_a_tampered_environment_record_fails_before_its_tree_is_trusted",
+    ),
+    _r210c(
+        210,
+        "a malformed tree id is compared as if it were one",
+        RETRIEVAL_ARTIFACTS,
+        "    if not isinstance(tree, str) or not _TREE_ID.fullmatch(tree):\n",
+        "    if not isinstance(tree, str):\n",
+        f"{_RA}test_an_environment_record_without_a_tree_id_fails",
+    ),
+    _r210c(
+        211,
+        "the environment record carries no tree id",
+        RETRIEVAL_FINGERPRINT,
+        '        "tree": tree,\n',
+        "",
+        f"{_RF}test_the_environment_record_lists_what_it_cannot_read_and_is_canonical",
+        f"{_RA}test_the_environment_record_is_separate_and_never_in_the_fingerprint",
+    ),
+    _r210c(
+        212,
+        "the measurement records no tree id",
+        RETRIEVAL_ARTIFACTS,
+        "            tree=tree,\n",
+        "",
+        f"{_RA}test_the_environment_record_is_separate_and_never_in_the_fingerprint",
+    ),
+    _r210c(
+        213,
+        "the pinned environment record may have its line endings rewritten",
+        ".gitattributes",
+        "tests/evaluation/retrieval_report_v2.environment.json -text\n",
+        "",
+        f"{_RA}test_both_pinned_files_are_marked_minus_text_in_gitattributes",
+    ),
+    _r210c(
+        214,
+        "the environment record is pinned elsewhere",
+        RETRIEVAL_ARTIFACTS,
+        'PINNED_ENVIRONMENT: Final = "tests/evaluation/retrieval_report_v2.environment.json"\n',
+        'PINNED_ENVIRONMENT: Final = "tests/evaluation/retrieval_report_v2.env.json"\n',
+        f"{_RA}test_the_pinned_paths_are_exact",
+    ),
+    _r210c(
+        215,
+        "the environment digest may be left out of the command line",
+        RETRIEVAL_ARTIFACTS,
+        "        required=True,\n",
+        '        default="",\n',
+        f"{_RA}test_the_command_line_reports_and_exits",
+    ),
+    _r210c(
+        216,
+        "a missing get_db override is not refused",
+        RETRIEVAL_ARTIFACTS,
+        "    if override is None:\n",
+        "    if False:\n",
+        f"{_C4R}test_a_missing_get_db_override_refuses",
+    ),
+    _r210c(
+        217,
+        "the override and fetch may use different engines",
+        RETRIEVAL_ARTIFACTS,
+        "    if bind is not engine:\n",
+        "    if False:\n",
+        f"{_C4R}test_an_override_bound_to_another_engine_refuses",
+    ),
+    _r210c(
+        218,
+        "a fetch bound to no engine is accepted",
+        RETRIEVAL_ARTIFACTS,
+        "    if not isinstance(engine, Engine):\n",
+        "    if False:\n",
+        f"{_C4R}test_a_fetch_without_an_engine_refuses",
+    ),
+    _r210c(
+        219,
+        "the production session factory stays usable while measuring",
+        RETRIEVAL_ARTIFACTS,
+        '    setattr(deps, "get_session_factory", forbidden)  # noqa: B010 - a module attribute\n',
+        "    pass\n",
+        f"{_C4R}test_the_production_session_factory_refuses_while_measuring",
+    ),
+    _r210c(
+        220,
+        "the production session factory is not restored afterwards",
+        RETRIEVAL_ARTIFACTS,
+        '        setattr(deps, "get_session_factory", original)  # noqa: B010\n',
+        "        pass\n",
+        f"{_C4R}test_the_production_session_factory_refuses_while_measuring",
+    ),
+    _r210c(
+        221,
+        "an unexpected HTTP status passes",
+        RETRIEVAL_ARTIFACTS,
+        "    if isinstance(status, bool) or status != expected_status:\n",
+        "    if False:\n",
+        f"{_C4R}test_an_unexpected_status_refuses",
+        f"{_C4R}test_a_failed_search_response_stops_the_measurement",
+        f"{_C4R}test_a_failed_ingest_response_stops_the_measurement",
+    ),
+    _r210c(
+        222,
+        "a body that is not a JSON object passes",
+        RETRIEVAL_ARTIFACTS,
+        "    if not isinstance(body, dict):\n",
+        "    if False:\n",
+        f"{_C4R}test_a_body_that_is_not_a_json_object_refuses",
+    ),
+    _r210c(
+        223,
+        "two harness hotels may resolve to one row",
+        RETRIEVAL_PROBES,
+        "    if len(out) != len(HOTEL_ROLES):\n",
+        "    if False:\n",
+        f"{_C4R}test_hotel_ids_refuse_anything_but_two_distinct_rows",
+    ),
+    _r210c(
+        224,
+        "the hotel mapping takes any set of roles",
+        RETRIEVAL_PROBES,
+        "    if sorted(public_ids) != sorted(HOTEL_ROLES):\n",
+        "    if False:\n",
+        f"{_C4R}test_hotel_ids_refuse_anything_but_two_distinct_rows",
+    ),
+    _r210c(
+        225,
+        "an excluded model gains a relationship to the knowledge documents",
+        "backend/app/models/hotel.py",
+        (
+            "    daily_metrics: Mapped[list[DailyHotelMet"
+            'ric]] = relationship(back_populates="hotel")\n'
+        ),
+        (
+            "    daily_metrics: Mapped[list[DailyHotelMet"
+            'ric]] = relationship(back_populates="hotel")\n'
+            "    documents: Mapped[list[HotelDocument]] = relationship(viewonly=True)\n"
+        ),
+        f"{_C4R}test_the_knowledge_models_have_no_relationships_and_none_point_at_them",
+    ),
+    _r210c(
+        226,
+        "an excluded schema reads the environment",
+        "backend/app/schemas/meta.py",
+        "from pydantic import BaseModel, ConfigDict, Field\n",
+        (
+            "import os\n"
+            "\n"
+            "from pydantic import BaseModel, ConfigDict, Field\n"
+            "\n"
+            'PREFIX = os.environ.get("META_PREFIX", "")\n'
+        ),
+        f"{_C4R}test_the_audited_exclusions_register_no_listeners_read_no_environment_import_nothing",
+    ),
+    _r210c(
+        227,
+        "an excluded model imports SQLAlchemy's event system",
+        "backend/app/models/room.py",
+        "from sqlalchemy.orm import Mapped, mapped_column, relationship\n",
+        (
+            "from sqlalchemy import event  # noqa: F401\n"
+            "from sqlalchemy.orm import Mapped, mapped_column, relationship\n"
+        ),
+        f"{_C4R}test_the_audited_exclusions_register_no_listeners_read_no_environment_import_nothing",
+    ),
+    _r210c(
+        228,
+        "an excluded module imports dynamically",
+        "backend/app/core/request_id.py",
+        "import re\n",
+        "import importlib  # noqa: F401\nimport re\n",
+        f"{_C4R}test_the_audited_exclusions_register_no_listeners_read_no_environment_import_nothing",
+    ),
+    _r210c(
+        229,
+        "a service reaches the production session factory directly",
+        "backend/app/services/knowledge.py",
+        "from app.knowledge.chunking import checksum, chunk_text\n",
+        (
+            "from app.db.session import get_session_factory  # noqa: F401\n"
+            "from app.knowledge.chunking import checksum, chunk_text\n"
+        ),
+        f"{_C4R}test_the_production_engine_is_reached_only_through_get_db_and_the_jobs",
+    ),
+    _r210c(
+        230,
+        "the integration conftest no longer overrides get_db",
+        "tests/integration/conftest.py",
+        "    app.dependency_overrides[get_db] = override_get_db\n",
+        "    pass\n",
+        f"{_C4R}test_the_conftest_app_reads_through_the_conftest_engine",
+    ),
+    _r210c(
+        231,
+        "scope leakage never fails the gate",
+        RETRIEVAL_ARTIFACTS,
+        "    if count != 0 or leaking:\n",
+        "    if False:\n",
+        f"{_C4R}test_scope_leakage_fails_the_gate_from_the_count_or_any_query_row",
+    ),
+    _r210c(
+        232,
+        "a query row that leaks passes when the overall count is 0",
+        RETRIEVAL_ARTIFACTS,
+        "    if count != 0 or leaking:\n",
+        "    if count != 0:\n",
+        f"{_C4R}test_scope_leakage_fails_the_gate_from_the_count_or_any_query_row",
+    ),
+    _r210c(
+        233,
+        "a baseline with no pinned report passes the gate",
+        RETRIEVAL_ARTIFACTS,
+        "    if pinned is None:\n",
+        ("    if pinned is None:\n        return []\n    if False:\n"),
+        f"{_C4R}test_with_no_pinned_report_the_baseline_fails_the_gate",
+    ),
+    _r210c(
+        234,
+        "a pinned report that is not a valid report is trusted",
+        RETRIEVAL_ARTIFACTS,
+        ("    found = report_problems(pinned_report)\n    if found:\n"),
+        ("    found = report_problems(pinned_report)\n    if False:\n"),
+        f"{_C4R}test_a_pinned_report_that_is_not_a_valid_report_fails",
+    ),
+    _r210c(
+        235,
+        "the in-memory report is compared with the read-back pin",
+        RETRIEVAL_ARTIFACTS,
+        "    change = fp.compare(pinned_report, canon.loads(measured_bytes))\n",
+        "    change = fp.compare(pinned_report, report)\n",
+        f"{_C4R}test_a_report_equal_to_its_pin_passes_both_gates",
+    ),
+    _r210c(
+        236,
+        "a changed fingerprint or result is not reported",
+        RETRIEVAL_ARTIFACTS,
+        "    if change is not None:\n",
+        "    if False:\n",
+        f"{_C4R}test_a_report_that_differs_from_its_pin_fails_and_says_how",
+    ),
+    _r210c(
+        237,
+        "a report that differs only byte for byte passes",
+        RETRIEVAL_ARTIFACTS,
+        "    elif measured_bytes != pinned:\n",
+        "    elif False:\n",
+        f"{_C4R}test_a_report_that_differs_from_its_pin_fails_and_says_how",
+    ),
+    _r210c(
+        238,
+        "the pinned report is never read",
+        RETRIEVAL_ARTIFACTS,
+        "    return path.read_bytes() if path.is_file() else None\n",
+        "    return None\n",
+        f"{_C4R}test_the_pinned_report_is_read_from_its_pinned_path",
+    ),
+    _r210c(
+        239,
+        "the C.4 test ignores the hard gates",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        "    problems = ra.gate_problems(report, ra.pinned_report_bytes())\n",
+        "    problems: list[str] = []\n",
+        f"{_C4R}test_the_c4_test_applies_both_hard_gates_to_what_it_measured",
+    ),
+    _r210c(
+        240,
+        "the C.4 measurement may fall back to the production session factory",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        ("    with ra.production_sessions_forbidden():\n        report = ra.run_measurement(\n"),
+        ("    if True:\n        report = ra.run_measurement(\n"),
+        f"{_C4R}test_the_c4_test_is_wired_to_the_conftest_engine_with_no_fallback",
+    ),
+    _r210c(
+        241,
+        "the C.4 measurement runs without checking its wiring",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        (
+            "    ra.require_measurement_wiring(app, fetch)\n"
+            "    live = LiveHarness(TestClient(app), fetch)\n"
+            "    with ra.production_sessions_forbidden():\n"
+            "        report = ra.run_measurement(\n"
+        ),
+        (
+            "    live = LiveHarness(TestClient(app), fetch)\n"
+            "    with ra.production_sessions_forbidden():\n"
+            "        report = ra.run_measurement(\n"
+        ),
+        f"{_C4R}test_the_c4_test_is_wired_to_the_conftest_engine_with_no_fallback",
+    ),
+    _r210c(
+        242,
+        "C.4's hotel ownership does not come from SQL",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        (
+            "            hotels=rp.hotel_ids(self._fetch, se"
+            "lf.hotels), documents=documents, chunks=chunks\n"
+        ),
+        "            hotels={}, documents=documents, chunks=chunks\n",
+        f"{_C4R}test_the_c4_test_maps_hotels_by_sql_only",
+    ),
+    _r210c(
+        243,
+        "the search status is not a literal",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        ('            200,\n            "search",\n'),
+        ('            int("200"),\n            "search",\n'),
+        f"{_C4R}test_every_c4_request_has_an_explicit_status",
+    ),
+    _r210c(
+        244,
+        "the withdrawal response is not checked",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        (
+            "                ra.checked_json(\n"
+            "                    self._client.post(\n"
+            '                        f"/api/v1/hotels/{self.hotels[document.hotel]}/documents/"\n'
+        ),
+        (
+            "                (\n"
+            "                    self._client.post(\n"
+            '                        f"/api/v1/hotels/{self.hotels[document.hotel]}/documents/"\n'
+        ),
+        f"{_C4R}test_every_c4_request_has_an_explicit_status",
+    ),
+    _r210c(
+        245,
+        "C.4 is skipped in CI too when its directory is missing",
+        "tests/integration/test_knowledge_retrieval_v2_eval.py",
+        '    if os.environ.get(ra.OUT_VARIABLE) is None and os.environ.get("CI") != "true":\n',
+        "    if os.environ.get(ra.OUT_VARIABLE) is None:\n",
+        f"{_C4R}test_in_ci_a_missing_directory_refuses_and_is_never_skipped",
+    ),
+    _r210c(
+        246,
+        "the route table that dispatches the measured requests is not fingerprinted",
+        RETRIEVAL_FINGERPRINT,
+        ('    "backend/app/api/v1/router.py",\n    "backend/app/api/v1/endpoints/knowledge.py",\n'),
+        '    "backend/app/api/v1/endpoints/knowledge.py",\n',
+        f"{_C4R}test_the_application_import_closure_is_fingerprinted_or_excluded_by_reason",
+    ),
+    _r210c(
+        247,
+        "an application file is neither fingerprinted nor excluded",
+        RETRIEVAL_FINGERPRINT,
+        ('            "request_id",\n            "security_headers",\n'),
+        '            "security_headers",\n',
+        f"{_C4R}test_the_application_import_closure_is_fingerprinted_or_excluded_by_reason",
+    ),
+    _r210c(
+        248,
+        "the application closure leaves out the C.4 test",
+        "tests/evaluation/test_retrieval_c4_requirements.py",
+        ("import tests.integration.test_knowledge_retrieval_v2_eval\nroot = "),
+        "root = ",
+        f"{_C4R}test_the_application_import_closure_is_fingerprinted_or_excluded_by_reason",
+    ),
+    _r210c(
+        249,
+        "the application closure exempts the application like a virtual environment",
+        "tests/evaluation/test_retrieval_c4_requirements.py",
+        (
+            '    return [path for path in loaded if not set(path.split("/")) '
+            "& fp.EXEMPT_DIRECTORIES]\n"
+        ),
+        (
+            '    return [path for path in loaded if not set(path.split("/")) '
+            '& (fp.EXEMPT_DIRECTORIES | {"backend"})]\n'
+        ),
+        f"{_C4R}test_the_application_import_closure_is_fingerprinted_or_excluded_by_reason",
+    ),
+    _r210c(
+        250,
+        "a search the snapshot does not hold is answered with no results",
+        COPILOT_SNAPSHOT,
+        "        if chunks is None:\n",
+        ("        if chunks is None:\n            chunks = ()\n        if False:\n"),
+        f"{_C5}test_a_search_the_snapshot_does_not_hold_refuses_and_is_recorded",
+    ),
+    _r210c(
+        251,
+        "the snapshot is keyed by the query alone",
+        COPILOT_SNAPSHOT,
+        "        chunks = self.snapshot.searches.get((query, limit))\n",
+        (
+            "        chunks = next((c for (q, _), c in self."
+            "snapshot.searches.items() if q == query), None)\n"
+        ),
+        f"{_C5}test_the_limit_is_part_of_the_key",
+    ),
+    _r210c(
+        252,
+        "the snapshot serves another hotel",
+        COPILOT_SNAPSHOT,
+        "        if hotel_public_id != EVAL_HOTEL:\n",
+        "        if False:\n",
+        f"{_C5}test_another_hotel_refuses_and_is_recorded",
+    ),
+    _r210c(
+        253,
+        "a snapshot miss does not refuse the run",
+        KNOWLEDGE_HARNESS,
+        "        if knowledge is not None and knowledge.misses:\n",
+        "        if False:\n",
+        f"{_C5}test_a_snapshot_miss_refuses_the_run",
+    ),
+    _r210c(
+        254,
+        "the snapshot becomes the default document search",
+        KNOWLEDGE_HARNESS,
+        ("    knowledge_diagnostics: bool = False,\n    knowledge_source: str = FIXTURE,\n"),
+        ("    knowledge_diagnostics: bool = False,\n    knowledge_source: str = SNAPSHOT,\n"),
+        f"{_C5}test_the_stand_in_stays_the_default",
+    ),
+    _r210c(
+        255,
+        "a snapshot run's report is not labelled",
+        KNOWLEDGE_HARNESS,
+        ('    if snapshot is not None:\n        report["knowledge_source"] = {\n'),
+        ('    if False:\n        report["knowledge_source"] = {\n'),
+        f"{_C5}test_a_snapshot_run_is_labelled_and_says_what_its_search_was",
+    ),
+    _r210c(
+        256,
+        "a snapshot run's statement says the stand-in searched",
+        KNOWLEDGE_HARNESS,
+        (
+            "        statement = REFERENCE_STATEMENT if snap"
+            "shot is None else SNAPSHOT_REFERENCE_STATEMENT\n"
+        ),
+        "        statement = REFERENCE_STATEMENT\n",
+        f"{_C5}test_a_snapshot_run_is_labelled_and_says_what_its_search_was",
+    ),
+    _r210c(
+        257,
+        "a snapshot that leaks is loaded",
+        COPILOT_SNAPSHOT,
+        "            if item is None or not _in_scope(item):\n",
+        "            if item is None:\n",
+        f"{_C5}test_a_result_outside_the_evaluated_hotels_active_documents_refuses",
+    ),
+    _r210c(
+        258,
+        "a snapshot entry longer than its limit is loaded",
+        COPILOT_SNAPSHOT,
+        '        if len(entry["results"]) > key[1]:\n',
+        "        if False:\n",
+        f"{_C5}test_more_results_than_the_limit_refuse",
+    ),
+    _r210c(
+        259,
+        "a served hash that is not the fixture chunk is loaded",
+        COPILOT_SNAPSHOT,
+        '            if row["served_sha256"] != identity:\n',
+        "            if False:\n",
+        f"{_C5}test_a_served_hash_that_is_not_the_fixture_chunk_refuses",
+    ),
+    _r210c(
+        260,
+        "a snapshot that does not hold exactly the copilot's searches is loaded",
+        COPILOT_SNAPSHOT,
+        "    if sorted(searches) != list(copilot_searches()):\n",
+        "    if False:\n",
+        f"{_C5}test_a_missing_or_an_extra_search_refuses",
+    ),
+    _r210c(
+        261,
+        "the snapshot is read without its pinned digest",
+        COPILOT_SNAPSHOT,
+        "    if actual != SNAPSHOT_SHA256:\n",
+        "    if False:\n",
+        f"{_C5}test_the_snapshot_is_pinned_by_its_bytes",
+    ),
+    _r210c(
+        262,
+        "a leaking live result can be written as the snapshot",
+        COPILOT_SNAPSHOT,
+        "            if served is None or not _in_scope(served):\n",
+        "            if served is None:\n",
+        f"{_C5}test_building_refuses_a_leak_a_long_list_or_other_searches",
+    ),
+    _r210c(
+        263,
+        "a copy that is not its fixture chunk is accepted",
+        COPILOT_SNAPSHOT,
+        (
+            "        if copied != (role, chunk.status, chun"
+            "k.title, (chunk.text,)) or chunk.ordinal != 0:\n"
+        ),
+        "        if False:\n",
+        f"{_C5}test_a_copy_that_is_not_its_fixture_chunk_refuses",
+    ),
+    _r210c(
+        264,
+        "a replayed search's limit is not the tool's",
+        COPILOT_SNAPSHOT,
+        '    return {_effective(a, REPLAYS_FILE) for a in _search_arguments(replays["cases"])}\n',
+        (
+            '    return {(str(a["query"]), int(a.get("limit", 6'
+            '))) for a in _search_arguments(replays["cases"])}\n'
+        ),
+        f"{_C5}test_a_replay_without_a_limit_gets_the_tools_default",
+    ),
+    _r210c(
+        265,
+        "the snapshot may be regenerated in CI",
+        COPILOT_SNAPSHOT,
+        '    if environ.get("CI") == "true":\n',
+        "    if False:\n",
+        f"{_C5}test_the_snapshot_is_regenerated_only_on_an_explicit_request_outside_ci",
+    ),
+    _r210c(
+        266,
+        "the replays are read without their pinned digest",
+        COPILOT_SNAPSHOT,
+        "    if actual != REPLAYS_SHA256:\n",
+        "    if False:\n",
+        f"{_C5}test_replays_that_are_not_the_pinned_file_refuse",
+    ),
+    Mutation(
+        "R2.10C-M267",
+        "R2.10C",
+        "search drops its language's stemming, which gate 3 must see",
+        one(
+            "backend/app/repositories/knowledge.py",
+            (
+                "        tsquery = func.websearch_to_tsquery(ca"
+                "st(HotelDocument.language, REGCONFIG), query)\n"
+            ),
+            '        tsquery = func.websearch_to_tsquery(cast("simple", REGCONFIG), query)\n',
+        ),
+        (
+            "tests/integration/test_copilot_retrieval_snapshot.py::"
+            "test_gate_3_the_pinned_snapshot_equals_live_search",
+        ),
+        needs_database=True,
+    ),
+    _r210c(
+        268,
+        "a stand-in verdict that is not the diagnostics row's is reported",
+        SNAPSHOT_FAILURE,
+        "        if stand_in != recorded:\n",
+        "        if False:\n",
+        f"{_C6}test_a_stand_in_verdict_that_is_not_the_diagnostics_rows_refuses",
+    ),
+    _r210c(
+        269,
+        "a returned search the snapshot does not hold is judged as finding nothing",
+        SNAPSHOT_FAILURE,
+        "        if chunks is None:\n",
+        ("        if chunks is None:\n            chunks = ()\n        if False:\n"),
+        f"{_C6}test_a_returned_search_the_snapshot_does_not_hold_refuses",
+        f"{_C6}test_a_search_the_model_made_outside_the_snapshot_refuses",
+    ),
+    _r210c(
+        270,
+        "a key that is not the search the stand-in answered is looked up",
+        SNAPSHOT_FAILURE,
+        (
+            '        if query != search["query"] or _stand_i'
+            'n_titles(query, limit) != search["hit_titles"]:\n'
+        ),
+        "        if False:\n",
+        f"{_C6}test_a_key_that_is_not_the_search_that_ran_refuses",
+    ),
+    _r210c(
+        271,
+        "a returned search with refused arguments is not refused",
+        SNAPSHOT_FAILURE,
+        "        if key is None:\n",
+        "        if False:\n",
+        f"{_C6}test_a_returned_search_with_arguments_the_tool_refuses_refuses",
+    ),
+    _r210c(
+        272,
+        "searches and keys that differ in number are not refused",
+        SNAPSHOT_FAILURE,
+        "    if len(observed) != len(keys):\n",
+        "    if False:\n",
+        f"{_C6}test_searches_and_keys_that_do_not_match_in_number_refuse",
+    ),
+    _r210c(
+        273,
+        "a search that was not shown is judged as returned",
+        SNAPSHOT_FAILURE,
+        '                    "outcome": search["outcome"],\n',
+        '                    "outcome": "returned",\n',
+        f"{_C6}test_a_search_that_was_not_shown_keeps_its_outcome",
+    ),
+    _r210c(
+        274,
+        "the snapshot verdict is not judged on the snapshot's text",
+        SNAPSHOT_FAILURE,
+        "        shown.extend(chunk.text for chunk in chunks)\n",
+        "        shown.extend(())\n",
+        f"{_C6}test_a_not_found_case_is_judged_on_the_snapshots_text",
+    ),
+    _r210c(
+        275,
+        "the snapshot verdict is the stand-in's",
+        SNAPSHOT_FAILURE,
+        ('                "snapshot": {**judged(case, searches, shown), "searches": searches},\n'),
+        (
+            '                "snapshot": {**judged(case, observe'
+            'd.searches, observed.shown), "searches": searches},\n'
+        ),
+        f"{_C6}test_the_reference_replays_verdicts",
+    ),
+    _r210c(
+        276,
+        "the snapshot verdict is labelled as the stand-in",
+        SNAPSHOT_FAILURE,
+        '                "source": snapshots.SOURCE_LABEL,\n',
+        '                "source": STAND_IN_SOURCE,\n',
+        f"{_C6}test_the_block_is_labelled_with_both_sources",
+    ),
+    _r210c(
+        277,
+        "the cases where the verdicts differ are the ones where they agree",
+        SNAPSHOT_FAILURE,
+        (
+            '            if row["stand_in"]["retrieval_fail'
+            'ure"] != row["snapshot"]["retrieval_failure"]\n'
+        ),
+        (
+            '            if row["stand_in"]["retrieval_fail'
+            'ure"] == row["snapshot"]["retrieval_failure"]\n'
+        ),
+        f"{_C6}test_the_reference_replays_verdicts",
+    ),
+    _r210c(
+        278,
+        "a search whose arguments the tool refuses is keyed at the default limit",
+        SNAPSHOT_FAILURE,
+        "                keys.append(None)\n",
+        '                keys.append((str(call.arguments.get("query")), 5))\n',
+        f"{_C6}test_search_keys_follow_the_tool_and_the_call_order",
+    ),
+    _r210c(
+        279,
+        "sequences that name different cases are not refused",
+        SNAPSHOT_FAILURE,
+        "    if any(names != ids for names in named):\n",
+        "    if False:\n",
+        f"{_C6}test_sequences_that_name_different_cases_refuse",
+    ),
+    _r210c(
+        280,
+        "the snapshot retrieval-failure block is on by default",
+        KNOWLEDGE_HARNESS,
+        "    snapshot_retrieval_failure: bool = False,\n",
+        "    snapshot_retrieval_failure: bool = True,\n",
+        f"{_C6}test_the_block_is_off_by_default_and_adds_nothing_else",
+    ),
+    _r210c(
+        281,
+        "the block runs without the diagnostics it sits beside",
+        KNOWLEDGE_HARNESS,
+        "    if snapshot_retrieval_failure and not knowledge_diagnostics:\n",
+        "    if False:\n",
+        f"{_C6}test_the_block_needs_the_diagnostics_beside_it",
+    ),
+    _r210c(
+        282,
+        "the block runs when the snapshot, not the stand-in, served the run",
+        KNOWLEDGE_HARNESS,
+        "    if snapshot_retrieval_failure and knowledge_source != FIXTURE:\n",
+        "    if False:\n",
+        f"{_C6}test_the_block_needs_the_stand_in_to_serve_the_run",
+    ),
+]
+
+
+# --- R1.4 / R1.5 (v2.0 roadmap, E2): 429 on every limited route; IANA time zones ----------------
+
+HOTEL_SCHEMA = "backend/app/schemas/hotel.py"
+AUTH_ENDPOINTS = "backend/app/api/v1/endpoints/auth.py"
+_TZ = "tests/backend/test_hotel_timezone.py::"
+_RL = "tests/backend/test_rate_limit_openapi.py::"
+_UNCHECKED_ZONE = "Annotated[str, Field(min_length=1, max_length=64)]"
+
+
+def _r14(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R1.4-M{number}", "R1.4", breaks, one(path, old, new), killers)
+
+
+def _r15(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R1.5-M{number}", "R1.5", breaks, one(path, old, new), killers)
+
+
+STAGE_R1_4 = [
+    _r14(
+        1,
+        "a rate-limited route stops declaring 429",
+        AUTH_ENDPOINTS,
+        "    status.HTTP_429_TOO_MANY_REQUESTS: {\n",
+        "    status.HTTP_418_IM_A_TEAPOT: {\n",
+        f"{_RL}test_every_limited_route_declares_429",
+    ),
+    _r14(
+        2,
+        "a route loses its rate limit",
+        AUTH_ENDPOINTS,
+        "    dependencies=[Depends(change_password_rate_limit)],\n",
+        "    dependencies=[],\n",
+        f"{_RL}test_the_limiters_reach_the_routes_they_are_meant_to",
+    ),
+]
+
+STAGE_R1_5 = [
+    _r15(
+        1,
+        "a time zone the IANA database does not define is accepted",
+        HOTEL_SCHEMA,
+        "    if value not in iana_zone_names():\n",
+        "    if False:\n",
+        f"{_TZ}test_a_name_the_iana_database_does_not_define_is_refused_on_create[Mars/Olympus]",
+        f"{_TZ}test_a_name_the_iana_database_does_not_define_is_refused_on_update[Mars/Olympus]",
+    ),
+    _r15(
+        2,
+        "a zone name is matched regardless of case",
+        HOTEL_SCHEMA,
+        "    if value not in iana_zone_names():\n",
+        "    if value.lower() not in {zone.lower() for zone in iana_zone_names()}:\n",
+        f"{_TZ}test_a_name_the_iana_database_does_not_define_is_refused_on_create[europe/athens]",
+    ),
+    _r15(
+        3,
+        "the create payload's zone is not checked",
+        HOTEL_SCHEMA,
+        '    timezone: TimezoneField = "UTC"\n',
+        f'    timezone: {_UNCHECKED_ZONE} = "UTC"\n',
+        f"{_TZ}test_a_name_the_iana_database_does_not_define_is_refused_on_create[Mars/Olympus]",
+    ),
+    _r15(
+        4,
+        "the update payload's zone is not checked",
+        HOTEL_SCHEMA,
+        "    timezone: TimezoneField | None = None\n",
+        f"    timezone: {_UNCHECKED_ZONE} | None = None\n",
+        f"{_TZ}test_a_name_the_iana_database_does_not_define_is_refused_on_update[Mars/Olympus]",
+    ),
+    _r15(
+        5,
+        "only a fixed subset of the IANA database is accepted",
+        HOTEL_SCHEMA,
+        "    return frozenset(zoneinfo.available_timezones()) - NOT_A_PLACE\n",
+        '    return frozenset({"UTC", "Europe/Athens"})\n',
+        f"{_TZ}test_every_iana_name_is_accepted",
+        f"{_TZ}test_the_check_is_the_installed_iana_database",
+    ),
+    _r15(
+        6,
+        "a row stored before R1.5 with an unknown zone no longer reads",
+        HOTEL_SCHEMA,
+        "    timezone: str\n    currency: str\n",
+        "    timezone: TimezoneField\n    currency: str\n",
+        f"{_TZ}test_a_row_written_before_r1_5_still_reads",
+    ),
+    _r15(
+        7,
+        "a host alias such as Debian's localtime is accepted as a zone",
+        HOTEL_SCHEMA,
+        "    return frozenset(zoneinfo.available_timezones()) - NOT_A_PLACE\n",
+        "    return frozenset(zoneinfo.available_timezones())\n",
+        f"{_TZ}test_a_name_the_iana_database_does_not_define_is_refused_on_create[Factory]",
+        f"{_TZ}test_a_host_alias_is_refused_even_where_the_host_lists_it",
+    ),
+]
+
+
+# --- R6.2 (v2.0 roadmap, E3): every count the README states is computed from the code ---------
+
+README = "README.md"
+PRODUCTION_BUILDER = "ml/pipelines/build_production_artifact.py"
+_README_COUNTS = "tests/backend/test_readme_counts.py::"
+
+
+def _r62(number: int, breaks: str, path: str, old: str, new: str, killer: str) -> Mutation:
+    return Mutation(
+        f"R6.2-M{number}", "R6.2", breaks, one(path, old, new), (f"{_README_COUNTS}{killer}",)
+    )
+
+
+STAGE_R6_2 = [
+    _r62(
+        1,
+        "the README's API path count goes stale",
+        README,
+        "**68 API paths / 104 operations**",
+        "**67 API paths / 104 operations**",
+        "test_api_paths_and_operations",
+    ),
+    _r62(
+        2,
+        "the Swagger row's operation count goes stale",
+        README,
+        "Swagger UI — 68 paths, 104 operations.",
+        "Swagger UI — 68 paths, 103 operations.",
+        "test_api_paths_and_operations",
+    ),
+    _r62(
+        3,
+        "the README's authenticated-operation count goes stale",
+        README,
+        "**96 require authentication**",
+        "**97 require authentication**",
+        "test_operations_that_require_authentication",
+    ),
+    _r62(
+        4,
+        "the architecture diagram's table count goes stale",
+        README,
+        "<br/>29 application tables<br/>",
+        "<br/>28 application tables<br/>",
+        "test_application_tables",
+    ),
+    _r62(
+        5,
+        "the README's model-module count goes stale again",
+        README,
+        "| Data mapping across 18 model modules |",
+        "| Data mapping across 17 model modules |",
+        "test_model_modules",
+    ),
+    _r62(
+        6,
+        "the README's migration count goes stale",
+        README,
+        "| 23 linear revisions, head",
+        "| 22 linear revisions, head",
+        "test_migrations_and_head",
+    ),
+    _r62(
+        7,
+        "the README states test-suite sizes again",
+        README,
+        "> **The backend and frontend suites run in CI on every push.**",
+        "> **7984 backend tests and 1346 frontend tests pass in CI.**",
+        "test_no_test_suite_size_is_stated",
+    ),
+    _r62(
+        8,
+        "the README's approved-value count goes stale",
+        README,
+        "verified against 22 approved values before",
+        "verified against 21 approved values before",
+        "test_approved_values_the_production_build_verifies",
+    ),
+    _r62(
+        9,
+        "the production build verifies one approved value fewer than the README says",
+        PRODUCTION_BUILDER,
+        '    checks.equal("artifact format", ARTIFACT_FORMAT, artifact_block.get("format"))\n',
+        "",
+        "test_approved_values_the_production_build_verifies",
+    ),
+    _r62(
+        10,
+        "the README's badge states test-suite sizes again",
+        README,
+        "![Tests](https://img.shields.io/badge/tests-run%20in%20CI-success)",
+        "![Tests](https://img.shields.io/badge/tests-7984%20backend%20%C2%B7%201346%20frontend-success)",
+        "test_no_test_suite_size_is_stated",
+    ),
+]
+
+
+# --- R0.4a (v2.0 roadmap, E5): the prepared Dependabot configuration covers every manifest -------
+
+DEPENDABOT = ".github/dependabot.yml"
+_DB = "tests/backend/test_dependabot_config.py::"
+
+
+def _r04a(number: int, breaks: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(
+        f"R0.4a-M{number}",
+        "R0.4a",
+        breaks,
+        one(DEPENDABOT, old, new),
+        tuple(_DB + k for k in killers),
+    )
+
+
+STAGE_R0_4A = [
+    _r04a(
+        1,
+        "the ML requirements are no longer watched (its entry duplicates the backend's)",
+        "    directory: /ml\n",
+        "    directory: /backend\n",
+        "test_every_manifest_in_the_repository_is_covered",
+        "test_no_ecosystem_and_directory_is_listed_twice",
+    ),
+    _r04a(
+        2,
+        "the npm entry points at a directory with no package.json",
+        "  - package-ecosystem: npm\n    directory: /frontend\n",
+        "  - package-ecosystem: npm\n    directory: /\n",
+        "test_every_entry_points_at_its_ecosystems_manifest",
+        "test_every_manifest_in_the_repository_is_covered",
+    ),
+    _r04a(
+        3,
+        "an entry is checked daily, not weekly",
+        "    directory: /ml\n    schedule:\n      interval: weekly\n",
+        "    directory: /ml\n    schedule:\n      interval: daily\n",
+        "test_updates_are_weekly_grouped_and_limited",
+    ),
+    _r04a(
+        4,
+        "an entry may keep many pull requests open at once",
+        "    open-pull-requests-limit: 3\n    groups:\n      actions:\n",
+        "    open-pull-requests-limit: 20\n    groups:\n      actions:\n",
+        "test_updates_are_weekly_grouped_and_limited",
+    ),
+    _r04a(
+        5,
+        "an entry's updates are no longer grouped",
+        '    groups:\n      actions:\n        patterns: ["*"]\n',
+        "",
+        "test_updates_are_weekly_grouped_and_limited",
+    ),
+    _r04a(
+        6,
+        "an entry targets a branch other than the default",
+        "  - package-ecosystem: github-actions\n    directory: /\n",
+        "  - package-ecosystem: github-actions\n    directory: /\n    target-branch: develop\n",
+        "test_it_targets_the_default_branch",
+    ),
+    _r04a(
+        7,
+        "the workflows' actions are no longer watched",
+        "  - package-ecosystem: github-actions\n",
+        "  - package-ecosystem: docker-compose\n",
+        "test_every_manifest_in_the_repository_is_covered",
+        "test_no_ecosystem_and_directory_is_listed_twice",
+    ),
+    _r04a(
+        8,
+        "the frontend image is no longer watched (its entry duplicates the backend's)",
+        "  - package-ecosystem: docker\n    directory: /frontend\n",
+        "  - package-ecosystem: docker\n    directory: /backend\n",
+        "test_every_manifest_in_the_repository_is_covered",
+        "test_no_ecosystem_and_directory_is_listed_twice",
+    ),
+]
+
+
+# --- R4.2 (v2.0 roadmap, E6): the opt-in retention scheduler and the archival command ----------
+
+SCHEDULER = "backend/app/jobs/scheduler.py"
+ARCHIVE_COMMAND = "backend/app/jobs/archive_audit_events.py"
+SCHEDULER_COMPOSE = "docker-compose.scheduler.yml"
+_JS = "tests/backend/test_job_scheduler.py::"
+_AJ = "tests/integration/test_audit_archive_job.py::"
+
+
+def _r42(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R4.2-M{number}", "R4.2", breaks, one(path, old, new), killers)
+
+
+def _r42_db(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An R4.2 mutation whose killers run the archival command against PostgreSQL."""
+    return Mutation(
+        f"R4.2-M{number}", "R4.2", breaks, one(path, old, new), killers, needs_database=True
+    )
+
+
+STAGE_R4_2 = [
+    _r42(
+        1,
+        "a retention job is dropped from the schedule",
+        SCHEDULER,
+        '    Job("demand prediction purge", purge_demand_predictions.main),\n',
+        "",
+        f"{_JS}test_it_schedules_the_three_purges_and_the_archival",
+        f"{_JS}test_every_job_module_is_scheduled_or_excluded_by_reason",
+    ),
+    _r42(
+        2,
+        "a failed job stops the jobs after it",
+        SCHEDULER,
+        "        if status != 0:\n            failed.append(job.name)\n",
+        "        if status != 0:\n            failed.append(job.name)\n            break\n",
+        f"{_JS}test_a_failed_job_does_not_stop_the_others_and_fails_the_run",
+    ),
+    _r42(
+        3,
+        "a cycle with a failed job reports success",
+        SCHEDULER,
+        '            + ", ".join(failed)\n        )\n        return 1\n',
+        '            + ", ".join(failed)\n        )\n        return 0\n',
+        f"{_JS}test_once_fails_when_a_job_fails",
+        f"{_JS}test_a_failed_job_does_not_stop_the_others_and_fails_the_run",
+    ),
+    _r42(
+        4,
+        "a job that raises reports its message, which can carry a connection string",
+        SCHEDULER,
+        '            print(f"{job.name} FAILED ({type(exc).__name__})", file=sys.stderr)\n',
+        '            print(f"{job.name} FAILED ({exc})", file=sys.stderr)\n',
+        f"{_JS}test_a_job_that_raises_is_reported_by_type_only",
+    ),
+    _r42(
+        5,
+        "the interval runs from the end of a cycle, so a slow cycle pushes every later one back",
+        SCHEDULER,
+        "        sleep(max(0, interval - (time.monotonic() - started)))\n",
+        "        sleep(interval + (time.monotonic() - started) + 60)\n",
+        f"{_JS}test_the_loop_repeats_on_the_interval_from_each_cycles_start",
+    ),
+    _r42(
+        6,
+        "an interval of zero hours, or under a second, is accepted",
+        SCHEDULER,
+        "    if seconds < 1:\n",
+        "    if seconds < 0:\n",
+        f"{_JS}test_an_invalid_interval_is_a_usage_error[0]",
+        f"{_JS}test_an_invalid_interval_is_a_usage_error[0.0001]",
+    ),
+    _r42(
+        7,
+        "a failing cycle stops the schedule",
+        SCHEDULER,
+        "        run_once(settings, jobs)\n        cycles += 1\n",
+        "        if run_once(settings, jobs):\n            return 1\n        cycles += 1\n",
+        f"{_JS}test_a_failing_cycle_does_not_stop_the_schedule",
+    ),
+    _r42(
+        8,
+        "the scheduler service starts before the schema is migrated",
+        SCHEDULER_COMPOSE,
+        "      migrate:\n        condition: service_completed_successfully\n",
+        "      migrate:\n        condition: service_started\n",
+        f"{_JS}test_the_scheduler_waits_for_the_migration",
+    ),
+    _r42(
+        9,
+        "the scheduler service publishes a port",
+        SCHEDULER_COMPOSE,
+        '    command: ["python", "-m", "app.jobs.scheduler"]\n',
+        '    command: ["python", "-m", "app.jobs.scheduler"]\n    ports: ["8001:8000"]\n',
+        f"{_JS}test_the_scheduler_runs_the_scheduler_and_publishes_nothing",
+    ),
+    _r42(
+        10,
+        "the scheduler service runs one cycle and exits",
+        SCHEDULER_COMPOSE,
+        '    command: ["python", "-m", "app.jobs.scheduler"]\n',
+        '    command: ["python", "-m", "app.jobs.scheduler", "--once"]\n',
+        f"{_JS}test_the_scheduler_runs_the_scheduler_and_publishes_nothing",
+    ),
+    _r42_db(
+        11,
+        "the archival command reports a failure's message, which can carry the connection URL",
+        ARCHIVE_COMMAND,
+        '            f"audit archival FAILED ({type(exc).__name__}); every committed batch was',
+        '            f"audit archival FAILED ({exc}); every committed batch was',
+        f"{_AJ}test_it_exits_non_zero_without_leaking_the_connection",
+        f"{_AJ}test_an_invalid_setting_is_refused_without_archiving",
+    ),
+    _r42_db(
+        12,
+        "the archival command exits 0 when it failed",
+        ARCHIVE_COMMAND,
+        "            file=sys.stderr,\n        )\n        return 1\n",
+        "            file=sys.stderr,\n        )\n        return 0\n",
+        f"{_AJ}test_it_exits_non_zero_without_leaking_the_connection",
+        f"{_AJ}test_an_invalid_setting_is_refused_without_archiving",
+    ),
+    _r42_db(
+        13,
+        "the archival command says complete when the batch ceiling stopped it",
+        ARCHIVE_COMMAND,
+        '    state = "complete" if result.complete else ',
+        '    state = "complete" if True else ',
+        f"{_AJ}test_it_says_when_the_batch_ceiling_stopped_it",
+    ),
+    _r42_db(
+        14,
+        "the archival command ignores the retention setting",
+        ARCHIVE_COMMAND,
+        "                result = archive_audit_events(session, settings)\n",
+        "                result = archive_audit_events(\n"
+        '                    session, settings.model_copy(update={"audit_retention_days": 730})\n'
+        "                )\n",
+        f"{_AJ}test_it_reads_the_retention_from_the_environment",
+    ),
+]
+
+
+# --- R1.3a (v2.0 roadmap, E4): the audited platform-administrator command ---------------------
+
+PLATFORM_ADMIN_COMMAND = "backend/app/jobs/platform_admin.py"
+GRANTS_MIGRATION = "database/migrations/versions/20261119_0021_audit_platform_grants.py"
+_PA = "tests/integration/test_platform_admin_command.py::"
+_PL = "tests/backend/test_platform_admin_layering.py::"
+
+
+def _r13a(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R1.3a-M{number}", "R1.3a", breaks, one(path, old, new), killers)
+
+
+def _r13a_db(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An R1.3a mutation whose killers run the command or the migration against PostgreSQL."""
+    return Mutation(
+        f"R1.3a-M{number}", "R1.3a", breaks, one(path, old, new), killers, needs_database=True
+    )
+
+
+STAGE_R1_3A = [
+    _r13a_db(
+        1,
+        "a grant is made without its audit event",
+        PLATFORM_ADMIN_COMMAND,
+        "    AuditTrail(AuditRepository(session)).record(\n"
+        "        AuditAction.PLATFORM_ADMIN_GRANTED,\n",
+        "    (lambda *_, **__: None)(\n        AuditAction.PLATFORM_ADMIN_GRANTED,\n",
+        f"{_PA}test_a_grant_and_its_audit_event_commit_together",
+        f"{_PL}test_it_records_each_change_with_an_enum_member",
+    ),
+    _r13a_db(
+        2,
+        "a revocation is made without its audit event",
+        PLATFORM_ADMIN_COMMAND,
+        "    AuditTrail(AuditRepository(session)).record(\n"
+        "        AuditAction.PLATFORM_ADMIN_REVOKED,\n",
+        "    (lambda *_, **__: None)(\n        AuditAction.PLATFORM_ADMIN_REVOKED,\n",
+        f"{_PA}test_a_revocation_and_its_audit_event_commit_together",
+        f"{_PL}test_it_records_each_change_with_an_enum_member",
+    ),
+    _r13a_db(
+        3,
+        "a grant is recorded as a revocation",
+        PLATFORM_ADMIN_COMMAND,
+        "    AuditTrail(AuditRepository(session)).record(\n"
+        "        AuditAction.PLATFORM_ADMIN_GRANTED,\n",
+        "    AuditTrail(AuditRepository(session)).record(\n"
+        "        AuditAction.PLATFORM_ADMIN_REVOKED,\n",
+        f"{_PA}test_a_grant_and_its_audit_event_commit_together",
+        f"{_PL}test_it_records_each_change_with_an_enum_member",
+    ),
+    _r13a_db(
+        4,
+        "the email is matched exactly as typed, not as registration stores it",
+        PLATFORM_ADMIN_COMMAND,
+        "select(User).where(User.email == email.strip().lower())",
+        "select(User).where(User.email == email)",
+        f"{_PA}test_the_email_is_matched_as_registration_stores_it",
+    ),
+    _r13a_db(
+        5,
+        "an unregistered email reaches the grant instead of being refused",
+        PLATFORM_ADMIN_COMMAND,
+        "    if user is None:\n",
+        "    if user is None and False:\n",
+        f"{_PA}test_an_unregistered_email_is_refused_and_nothing_is_created",
+    ),
+    _r13a_db(
+        6,
+        "a deactivated account is granted platform administration",
+        PLATFORM_ADMIN_COMMAND,
+        "    if not user.is_active:\n",
+        "    if False:\n",
+        f"{_PA}test_a_deactivated_account_is_refused",
+    ),
+    _r13a_db(
+        7,
+        "a repeated grant is attempted again instead of changing nothing",
+        PLATFORM_ADMIN_COMMAND,
+        "    if session.get(PlatformAdmin, user.id) is not None:\n"
+        '        return "already a platform administrator; nothing changed"\n',
+        "",
+        f"{_PA}test_a_repeated_grant_changes_nothing_and_records_nothing",
+    ),
+    _r13a_db(
+        8,
+        "revoking from a non-administrator revokes someone else",
+        PLATFORM_ADMIN_COMMAND,
+        '    if held is None:\n        return "not a platform administrator; nothing changed"\n',
+        "    if held is None:\n        held = granted[0]\n",
+        f"{_PA}test_revoking_from_a_non_administrator_changes_nothing",
+    ),
+    _r13a_db(
+        9,
+        "the last administrator can be revoked without --allow-none",
+        PLATFORM_ADMIN_COMMAND,
+        "    if len(granted) == 1 and not allow_none:\n",
+        "    if False:\n",
+        f"{_PA}test_the_last_administrator_is_kept_unless_none_is_intended",
+    ),
+    _r13a(
+        10,
+        "the revocation counts the administrators without locking them",
+        PLATFORM_ADMIN_COMMAND,
+        "select(PlatformAdmin).with_for_update()",
+        "select(PlatformAdmin)",
+        f"{_PL}test_the_revocation_locks_every_grant_before_counting",
+    ),
+    _r13a_db(
+        11,
+        "the output names the account",
+        PLATFORM_ADMIN_COMMAND,
+        '    return "platform administration granted"\n',
+        '    return f"platform administration granted to {user.email}"\n',
+        f"{_PA}test_the_output_names_nobody",
+    ),
+    _r13a_db(
+        12,
+        "a failure prints the exception, which can carry the connection string",
+        PLATFORM_ADMIN_COMMAND,
+        '            f"platform administration FAILED ({type(exc).__name__}); nothing changed",\n',
+        '            f"platform administration FAILED ({exc}); nothing changed",\n',
+        f"{_PA}test_a_failure_changes_nothing_and_leaks_nothing",
+        f"{_PL}test_it_prints_nothing_about_the_account",
+    ),
+    _r13a(
+        13,
+        "the grant events become hotel-scoped",
+        "backend/app/models/enums.py",
+        "        AuditAction.PLATFORM_ADMIN_GRANTED.value,\n"
+        "        AuditAction.PLATFORM_ADMIN_REVOKED.value,\n",
+        "",
+        "tests/backend/test_audit_layering.py::"
+        "test_the_hotel_scoped_actions_are_the_thirteen_a_property_owns",
+        f"{_PL}test_both_actions_are_platform_scoped",
+    ),
+    _r13a_db(
+        14,
+        "the migration does not widen the action CHECK, so the database refuses every grant",
+        GRANTS_MIGRATION,
+        "    op.execute(_check((*_PREVIOUS_ACTIONS, *_ADDED_ACTIONS)))\n",
+        "    op.execute(_check(_PREVIOUS_ACTIONS))\n",
+        f"{_PA}test_a_grant_and_its_audit_event_commit_together",
+        f"{_PA}test_the_head_permits_both_actions_and_the_downgrade_removes_only_them",
+    ),
+    _r13a_db(
+        15,
+        "the downgrade keeps the two actions, so it is no downgrade",
+        GRANTS_MIGRATION,
+        "    op.execute(_check(_PREVIOUS_ACTIONS))\n",
+        "    op.execute(_check((*_PREVIOUS_ACTIONS, *_ADDED_ACTIONS)))\n",
+        f"{_PA}test_the_head_permits_both_actions_and_the_downgrade_removes_only_them",
+        f"{_PA}test_the_downgrade_is_refused_while_a_grant_event_exists",
+    ),
+]
+
+
+# --- R3.3 (v2.0 roadmap, E7): If-Match on the three global catalogues ------------------------
+
+CATALOGUE_VERSIONS_MIGRATION = "database/migrations/versions/20261120_0022_catalogue_versions.py"
+_CC = "tests/integration/test_catalogue_concurrency.py::"
+_CC_STALE = f"{_CC}test_a_stale_version_is_refused_and_nothing_is_written_or_audited"
+_CC_WAIT = f"{_CC}test_a_writer_that_commits_while_the_update_waits_is_seen_not_overwritten"
+_CC_UI = f"{PLATFORM_UI}::keeps the draft on a stale save, and reloads only when asked"
+
+
+def _r33(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R3.3-M{number}", "R3.3", breaks, one(path, old, new), killers)
+
+
+def _r33_db(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An R3.3 mutation whose killers need PostgreSQL: the lock, the trigger, the migration."""
+    return Mutation(
+        f"R3.3-M{number}", "R3.3", breaks, one(path, old, new), killers, needs_database=True
+    )
+
+
+def _r33_ui(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An R3.3 mutation of the client, caught by Vitest."""
+    return Mutation(
+        f"R3.3-M{number}", "R3.3", breaks, one(path, old, new), killers, runner=Runner.VITEST
+    )
+
+
+STAGE_R3_3 = [
+    _r33_db(
+        1,
+        "a stale If-Match on the amenity PATCH is ignored and the write lands",
+        "backend/app/services/amenity.py",
+        "            amenity = self._repository.lock_for_update(amenity)\n"
+        "            require_unchanged(amenity.updated_at, expected_updated_at)\n",
+        "            pass\n",
+        f"{_CC_STALE}[amenity]",
+    ),
+    _r33_db(
+        2,
+        "a stale If-Match on the revenue-category PATCH is ignored and the write lands",
+        "backend/app/services/finance.py",
+        '        category is still that version."""\n'
+        "        category = self._require(code)\n"
+        "        if expected_updated_at is not None:\n",
+        '        category is still that version."""\n'
+        "        category = self._require(code)\n"
+        "        if expected_updated_at is not None and False:\n",
+        f"{_CC_STALE}[revenue-category]",
+    ),
+    _r33_db(
+        3,
+        "a stale If-Match on the expense-category PATCH is ignored and the write lands",
+        "backend/app/services/finance.py",
+        '``expected_updated_at``, conditionally."""\n'
+        "        category = self._require(code)\n"
+        "        if expected_updated_at is not None:\n",
+        '``expected_updated_at``, conditionally."""\n'
+        "        category = self._require(code)\n"
+        "        if expected_updated_at is not None and False:\n",
+        f"{_CC_STALE}[expense-category]",
+    ),
+    _r33_db(
+        4,
+        "the amenity is compared without the row lock, so a concurrent write is overwritten",
+        "backend/app/services/amenity.py",
+        "            amenity = self._repository.lock_for_update(amenity)\n",
+        "",
+        f"{_CC_WAIT}[amenity]",
+    ),
+    _r33_db(
+        5,
+        "the category lock no longer locks, so a concurrent write is overwritten",
+        "backend/app/repositories/finance.py",
+        "            select(RevenueCategory)\n"
+        "            .where(RevenueCategory.id == category.id)\n"
+        "            .with_for_update(key_share=True)\n",
+        "            select(RevenueCategory)\n"
+        "            .where(RevenueCategory.id == category.id)\n",
+        f"{_CC_WAIT}[revenue-category]",
+    ),
+    _r33_db(
+        6,
+        "the lock re-read keeps the version first loaded, so a concurrent write is overwritten",
+        "backend/app/repositories/amenity.py",
+        "            .execution_options(populate_existing=True)\n",
+        "",
+        f"{_CC_WAIT}[amenity]",
+    ),
+    _r33_db(
+        7,
+        "the expense endpoint drops the precondition it parsed",
+        "backend/app/api/v1/endpoints/expense_categories.py",
+        "    return service.update(code.upper(), payload, expected_updated_at=if_match)\n",
+        "    return service.update(code.upper(), payload)\n",
+        f"{_CC_STALE}[expense-category]",
+    ),
+    _r33(
+        8,
+        "the revenue-category PATCH no longer documents its 412",
+        "backend/app/api/v1/endpoints/revenue_categories.py",
+        "    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE, **STALE_UPDATE_RESPONSE},\n",
+        "    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},\n",
+        f"{PRECONDITION_TESTS}::test_exactly_the_conditional_operations_declare_412",
+    ),
+    _r33(
+        9,
+        "the amenity response hides the version a client must send back",
+        "backend/app/schemas/amenity.py",
+        "    #: The value an ``If-Match`` names (R3.3).\n    updated_at: dt.datetime\n",
+        "",
+        "tests/backend/test_amenity_layering.py::"
+        "test_response_is_exactly_the_three_business_columns_and_the_version",
+    ),
+    _r33_db(
+        10,
+        "the migration versions the catalogues without the trigger that maintains the version",
+        CATALOGUE_VERSIONS_MIGRATION,
+        "        op.execute(\n"
+        '            f"CREATE TRIGGER trg_{table}_set_updated_at BEFORE UPDATE ON {table} "\n'
+        '            "FOR EACH ROW EXECUTE FUNCTION set_updated_at()"\n'
+        "        )\n",
+        "",
+        f"{_CC}test_the_trigger_moves_the_version_on_any_write[amenity]",
+        "tests/backend/test_migration_integrity.py::test_the_canonical_digest_is_unchanged",
+    ),
+    _r33_db(
+        11,
+        "the downgrade leaves the triggers behind",
+        CATALOGUE_VERSIONS_MIGRATION,
+        '        op.execute(f"DROP TRIGGER trg_{table}_set_updated_at ON {table}")\n',
+        "",
+        f"{_CC}test_the_downgrade_removes_only_the_versions_and_the_upgrade_fills_existing_rows",
+    ),
+    _r33_ui(
+        12,
+        "the catalogue edit is sent without the version it was loaded at",
+        "frontend/src/pages/PlatformPage.tsx",
+        "                        : catalogue.update(editing.code, payload, editing.updatedAt)\n",
+        "                        : catalogue.update(editing.code, payload)\n",
+        f"{PLATFORM_UI}::sends a cleared amenity group as null, with the loaded version",
+    ),
+    _r33_ui(
+        13,
+        "a revenue category's version is lost on the way into the form",
+        "frontend/src/features/platform/useCatalogue.ts",
+        "      flag: row.is_room_revenue,\n      updatedAt: row.updated_at,\n",
+        "      flag: row.is_room_revenue,\n      updatedAt: '',\n",
+        f"{PLATFORM_UI}::sends a retired revenue category as is_active alone",
+    ),
+    _r33_ui(
+        14,
+        "a stale catalogue save offers no way to reload",
+        "frontend/src/pages/PlatformPage.tsx",
+        "                  {writeFailure.canReload === true ? (\n",
+        "                  {writeFailure.canReload === false ? (\n",
+        _CC_UI,
+    ),
+    _r33_ui(
+        15,
+        "a reload leaves the stale draft in the form",
+        "frontend/src/pages/PlatformPage.tsx",
+        "key={editing === null ? 'create' : `${editing.code}@${editing.updatedAt}`}\n",
+        "key={editing === null ? 'create' : editing.code}\n",
+        _CC_UI,
+    ),
+    _r33_ui(
+        16,
+        "a reload keeps editing the entry as it was first loaded",
+        "frontend/src/pages/PlatformPage.tsx",
+        "      current === null ? null : (catalogue.rows.find((row) => row.code === current.code)"
+        " ?? null),\n",
+        "      current,\n",
+        _CC_UI,
+    ),
+]
+
+
+# --- R1.1 (v2.0 roadmap, E8): the browser's cookie session -----------------------------------
+
+_CS = "tests/integration/test_cookie_sessions.py::"
+_CL = "tests/backend/test_cookie_session_layering.py::"
+_AUTH_UI = "src/session/auth.test.tsx"
+
+
+def _r11(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R1.1-M{number}", "R1.1", breaks, one(path, old, new), killers)
+
+
+def _r11_db(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An R1.1 mutation whose killers drive real sessions against PostgreSQL."""
+    return Mutation(
+        f"R1.1-M{number}", "R1.1", breaks, one(path, old, new), killers, needs_database=True
+    )
+
+
+def _r11_ui(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An R1.1 mutation of the client, caught by Vitest."""
+    return Mutation(
+        f"R1.1-M{number}", "R1.1", breaks, one(path, old, new), killers, runner=Runner.VITEST
+    )
+
+
+STAGE_R1_1 = [
+    _r11_db(
+        1,
+        "a cookie-authenticated write goes through without its CSRF token",
+        "backend/app/api/deps.py",
+        "    if request.method not in SAFE_METHODS and not csrf_matches(\n",
+        "    if False and not csrf_matches(\n",
+        f"{_CS}test_a_write_without_the_csrf_token_is_refused_and_writes_nothing",
+    ),
+    _r11(
+        2,
+        "any CSRF token matches any session",
+        "backend/app/core/security.py",
+        '    return hmac.compare_digest(presented.encode("utf-8"), '
+        "csrf_token(settings, session_id).encode())\n",
+        "    return True\n",
+        f"{_CL}test_a_csrf_token_matches_only_its_own_session",
+    ),
+    _r11(
+        3,
+        "the CSRF token is no longer bound to its session",
+        "backend/app/core/security.py",
+        '_CSRF_DOMAIN + str(session_id).encode("ascii"), "sha256"',
+        '_CSRF_DOMAIN, "sha256"',
+        f"{_CL}test_the_csrf_token_is_bound_to_its_session",
+    ),
+    _r11_db(
+        4,
+        "a replayed refresh token is honoured instead of ending the session",
+        "backend/app/services/session.py",
+        "        if row.used_at is not None:\n",
+        "        if False:\n",
+        f"{_CS}test_a_replayed_refresh_token_ends_the_whole_session",
+    ),
+    _r11_db(
+        5,
+        "a refresh no longer consumes its token",
+        "backend/app/services/session.py",
+        "        row.used_at = now\n",
+        "",
+        f"{_CS}test_a_replayed_refresh_token_ends_the_whole_session",
+    ),
+    _r11_db(
+        6,
+        "an ended session's access tokens keep working until they expire",
+        "backend/app/services/auth.py",
+        "        if claims.session_id is not None and not self._sessions.family_is_live(\n",
+        "        if False and not self._sessions.family_is_live(\n",
+        f"{_CS}test_signing_out_ends_the_session_and_clears_the_cookies",
+    ),
+    _r11_db(
+        7,
+        "signing out ends nothing on the server",
+        "backend/app/services/session.py",
+        "        self._sessions.revoke_family(row.family_id, dt.datetime.now(dt.UTC))\n",
+        "",
+        f"{_CS}test_signing_out_ends_the_session_and_clears_the_cookies",
+    ),
+    _r11_db(
+        8,
+        "a password change leaves the account's other sessions alive",
+        "backend/app/services/auth.py",
+        "            self._sessions.revoke_all_for_user(user.id, changed_at)\n",
+        "",
+        f"{_CS}test_a_password_change_ends_every_session_and_continues_the_callers",
+    ),
+    _r11_db(
+        9,
+        "a deactivated account can still renew its session",
+        "backend/app/services/session.py",
+        "        if user is None or not user.is_active or row.created_at <= "
+        "user.password_changed_at:\n",
+        "        if user is None or row.created_at <= user.password_changed_at:\n",
+        f"{_CS}test_a_deactivated_account_cannot_refresh",
+    ),
+    _r11_db(
+        10,
+        "an expired session can still be renewed",
+        "backend/app/services/session.py",
+        "        if row.revoked_at is not None or row.expires_at <= now:\n",
+        "        if row.revoked_at is not None:\n",
+        f"{_CS}test_an_expired_session_cannot_be_refreshed_and_its_access_token_stops",
+    ),
+    _r11_db(
+        11,
+        "a renewal is accepted without its CSRF token",
+        "backend/app/services/session.py",
+        "            raise InvalidTokenError\n"
+        "        if not csrf_matches(self._settings, row.family_id, presented_csrf):\n",
+        "            raise InvalidTokenError\n        if False:\n",
+        f"{_CS}test_a_refresh_without_the_csrf_token_is_refused_and_consumes_nothing",
+    ),
+    _r11_db(
+        12,
+        "a bearer token planted in the access cookie authenticates",
+        "backend/app/services/auth.py",
+        "        if session_id is None:\n",
+        "        if False:\n",
+        f"{_CS}test_a_bearer_token_in_the_access_cookie_is_refused",
+    ),
+    _r11(
+        13,
+        "the access cookie is readable by script",
+        "backend/app/api/session_cookies.py",
+        "        issued.access_token,\n"
+        "        max_age=lifetime,\n"
+        '        path="/",\n'
+        "        secure=True,\n"
+        "        httponly=True,\n",
+        "        issued.access_token,\n"
+        "        max_age=lifetime,\n"
+        '        path="/",\n'
+        "        secure=True,\n"
+        "        httponly=False,\n",
+        f"{_CL}test_the_tokens_are_httponly_and_the_csrf_token_is_not",
+    ),
+    _r11(
+        14,
+        "the refresh cookie is sent to every route",
+        "backend/app/api/session_cookies.py",
+        "        issued.refresh_secret,\n        max_age=lifetime,\n        path=REFRESH_PATH,\n",
+        '        issued.refresh_secret,\n        max_age=lifetime,\n        path="/",\n',
+        f"{_CL}test_the_refresh_cookie_is_sent_only_to_the_session_routes",
+    ),
+    _r11(
+        15,
+        "the OpenAPI document no longer says a cookie write can be refused for CSRF",
+        "backend/app/api/openapi.py",
+        '                    responses["403"] = _error(CSRF_FORBIDDEN_DESCRIPTION)\n',
+        "                    pass\n",
+        "tests/backend/test_openapi_authorization.py::"
+        "test_a_403_is_claimed_only_where_it_can_be_answered",
+    ),
+    _r11_ui(
+        16,
+        "the client sends writes without the CSRF token",
+        "frontend/src/services/api/client.ts",
+        "        ...(csrf === null ? {} : { [CSRF_HEADER]: csrf }),\n",
+        "",
+        "src/features/bookings/mutations.test.tsx::carries the token on the mutation itself",
+    ),
+    _r11_ui(
+        17,
+        "the client stops sending the session's cookies",
+        "frontend/src/services/api/client.ts",
+        "      credentials: withoutCookies ? 'omit' : 'include',\n",
+        "      credentials: 'omit',\n",
+        "src/features/bookings/bookings.test.tsx::carries the session token",
+    ),
+    _r11_ui(
+        18,
+        "an expired access cookie signs the user out instead of renewing the session",
+        "frontend/src/services/api/client.ts",
+        "      if (bridge.getToken() !== null && (await refreshSession())) {\n",
+        "      if (false) {\n",
+        f"{_AUTH_UI}::renews an expired access cookie once, retries, and keeps the session",
+    ),
+    _r11_ui(
+        19,
+        "signing out leaves the session alive on the server",
+        "frontend/src/session/AuthProvider.tsx",
+        "    authService.logout().catch(() => {})\n",
+        "",
+        f"{_AUTH_UI}::ends the session on the server too, with its CSRF token",
+    ),
+    _r11_ui(
+        20,
+        "a new session's CSRF token is ignored, so the next write is refused",
+        "frontend/src/services/api/client.ts",
+        "    bridge.adoptToken?.(issued)\n",
+        "",
+        "src/features/administration/administration.test.tsx::"
+        "adopts the CSRF token of the new session, because the old one has ended",
+    ),
+    _r11(
+        21,
+        "the session service drops out of the retrieval fingerprint",
+        "tests/evaluation/retrieval_fingerprint.py",
+        '    "backend/app/services/session.py",\n    "backend/app/api/session_cookies.py",\n)\n',
+        '    "backend/app/api/session_cookies.py",\n)\n',
+        "tests/evaluation/test_retrieval_fingerprint.py::"
+        "test_the_cookie_session_modules_are_fingerprinted_and_not_excluded",
+    ),
+    _r11(
+        22,
+        "the cookie session's modules are no longer fingerprinted at all",
+        "tests/evaluation/retrieval_fingerprint.py",
+        "    *AUTH_SOURCES,\n",
+        "",
+        "tests/evaluation/test_retrieval_fingerprint.py::"
+        "test_the_cookie_session_modules_are_fingerprinted_and_not_excluded",
+    ),
+]
+
+
+# --- R0.2 (v2.0 roadmap, E8): Docker Hub pulls through a mirror in CI ------------------------
+
+CI_WORKFLOW = ".github/workflows/ci.yml"
+_MIRROR = "tests/backend/test_ci_registry_mirror.py::"
+
+
+def _r02(number: int, breaks: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R0.2-M{number}", "R0.2", breaks, one(CI_WORKFLOW, old, new), killers)
+
+
+STAGE_R0_2 = [
+    _r02(
+        1,
+        "the runtime job carries on when the mirror did not take effect",
+        '            *) echo "::error::the registry mirror is not active"; exit 1 ;;\n'
+        "          esac\n\n      - name: Docker and Compose versions\n",
+        '            *) echo "  carrying on without it" ;;\n'
+        "          esac\n\n      - name: Docker and Compose versions\n",
+        f"{_MIRROR}test_it_fails_the_job_unless_the_mirror_took_effect[docker-runtime]",
+    ),
+    _r02(
+        2,
+        "the reproducibility job carries on when the mirror did not take effect",
+        '            *) echo "::error::the registry mirror is not active"; exit 1 ;;\n'
+        "          esac\n\n      - name: Docker version\n",
+        '            *) echo "  carrying on without it" ;;\n'
+        "          esac\n\n      - name: Docker version\n",
+        f"{_MIRROR}test_it_fails_the_job_unless_the_mirror_took_effect[image-reproducibility]",
+    ),
 ]
 
 
@@ -7176,4 +9857,13 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R2_10A,
     *STAGE_R2_10B,
     *STAGE_R2_10C,
+    *STAGE_R1_4,
+    *STAGE_R1_5,
+    *STAGE_R6_2,
+    *STAGE_R0_4A,
+    *STAGE_R4_2,
+    *STAGE_R1_3A,
+    *STAGE_R3_3,
+    *STAGE_R1_1,
+    *STAGE_R0_2,
 )

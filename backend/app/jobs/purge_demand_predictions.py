@@ -11,8 +11,8 @@ its database configuration, runs the job, and prints one line of counts.
 request purges this table. Without this command stored predictions accumulate indefinitely.
 
 **It does not schedule itself.** Run it periodically -- daily is the recommended cadence -- from
-cron, a systemd timer or the platform's scheduler. How often it runs bounds how long a prediction
-can remain after its target date left the retention period.
+cron, a systemd timer or ``python -m app.jobs.scheduler`` (opt-in, R4.2). How often it runs bounds
+how long a prediction can remain after its target date left the retention period.
 
 **What it prints.** Counts and the retention period, and on failure only the exception's type:
 never an identifier, a hotel, a date, a value or a connection string. It records no audit event

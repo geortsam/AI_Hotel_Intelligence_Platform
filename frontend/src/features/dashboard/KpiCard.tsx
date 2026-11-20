@@ -104,11 +104,15 @@ export function KpiCard({
 
       {!isLoading && delta && DeltaIcon ? (
         <p className={`${styles.delta} ${styles[delta.direction]}`}>
-          <DeltaIcon size={14} aria-hidden="true" />
-          {/* Where the spoken form differs -- "pts" read aloud as "percentage points" -- the
-              visible text is hidden from assistive technology and the spoken one stands in. */}
-          <span aria-hidden={spoken !== shown ? true : undefined}>{shown}</span>
-          {spoken !== shown ? <span className={styles.srOnly}>{spoken}</span> : null}
+          {/* The chip (UI-5/6) holds the direction and the figure; the comparison label
+              stays outside it, as plain text. */}
+          <span className={styles.deltaChip}>
+            <DeltaIcon size={14} aria-hidden="true" />
+            {/* Where the spoken form differs -- "pts" read aloud as "percentage points" -- the
+                visible text is hidden from assistive technology and the spoken one stands in. */}
+            <span aria-hidden={spoken !== shown ? true : undefined}>{shown}</span>
+            {spoken !== shown ? <span className={styles.srOnly}>{spoken}</span> : null}
+          </span>
           {deltaLabel ? <span className={styles.deltaLabel}>{deltaLabel}</span> : null}
         </p>
       ) : null}

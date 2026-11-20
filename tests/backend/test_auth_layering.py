@@ -599,7 +599,9 @@ def test_the_current_user_dependency_takes_no_hotel() -> None:
     """It cannot quietly grow an authorization argument if it never had one."""
     parameters = set(inspect.signature(deps.get_current_user).parameters)
 
-    assert parameters == {"service", "credentials"}
+    # R1.1 added the request (for the session cookie and its CSRF header) and the settings (to
+    # check that header): neither can carry a hotel.
+    assert parameters == {"service", "credentials", "request", "settings"}
 
 
 def test_the_service_surface_is_exactly_the_declared_operations() -> None:
@@ -610,7 +612,19 @@ def test_the_service_surface_is_exactly_the_declared_operations() -> None:
     """
     methods = {name for name in dir(AuthService) if not name.startswith("_")}
 
-    assert methods == {"register", "authenticate", "resolve_token", "change_password"}
+    # R1.1 added the cookie session's four: the credential check shared with the bearer login,
+    # resolving and issuing a session's access token, and the one place a user becomes a
+    # response. None reads a role or a membership.
+    assert methods == {
+        "register",
+        "authenticate",
+        "resolve_token",
+        "change_password",
+        "verify_credentials",
+        "resolve_session_token",
+        "issue_session_token",
+        "to_response",
+    }
 
 
 def test_the_user_model_carries_no_authorization_column() -> None:
@@ -652,6 +666,11 @@ PUBLIC_OPERATIONS = {
     "GET /health",
     "GET /health/db",
     "POST /api/v1/auth/login",
+    # R1.1. The cookie session's routes are reached before a session exists, or to renew or
+    # end one; each authenticates by its own cookie, never by the bearer scheme.
+    "POST /api/v1/auth/session",
+    "POST /api/v1/auth/session/refresh",
+    "POST /api/v1/auth/session/end",
     "POST /api/v1/auth/register",
 }
 
@@ -712,8 +731,9 @@ def test_the_message_names_neither_the_address_nor_the_reason() -> None:
 
 def test_the_service_raises_the_identical_error_on_every_path() -> None:
     """Three rejection sites, one exception, no arguments -- so none of them can accidentally
-    grow a distinguishing message."""
-    source = inspect.getsource(AuthService.authenticate)
+    grow a distinguishing message. Since R1.1 they live in ``verify_credentials``, which the
+    bearer login and the cookie session both go through."""
+    source = inspect.getsource(AuthService.verify_credentials)
 
     assert source.count("raise AuthenticationError") == 3
     assert "AuthenticationError(" not in source
@@ -722,9 +742,11 @@ def test_the_service_raises_the_identical_error_on_every_path() -> None:
 def test_an_unknown_address_still_pays_for_a_verification() -> None:
     """Skipping the Argon2id computation on a miss would make it measurably faster, which is
     an account-enumeration oracle by timing."""
-    source = inspect.getsource(AuthService.authenticate)
+    source = inspect.getsource(AuthService.verify_credentials)
 
     assert "verify_password(password, _DUMMY_HASH)" in source
+    # Both sign-ins reach it: neither has a path around the dummy verification.
+    assert "self.verify_credentials(" in inspect.getsource(AuthService.authenticate)
 
 
 def test_the_dummy_hash_is_a_real_argon2id_digest() -> None:

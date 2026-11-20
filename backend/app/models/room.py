@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import decimal
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -17,6 +19,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -42,6 +45,11 @@ class Amenity(Base):
     code: Mapped[str] = mapped_column(Text, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[str | None] = mapped_column(Text)
+    # R3.3 (migration 0022). The version an `If-Match` names; set by the shared
+    # `set_updated_at` trigger on every write. No `created_at`: nothing needs one.
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
     room_types: Mapped[list[RoomType]] = relationship(
         secondary="room_type_amenities", back_populates="amenities"

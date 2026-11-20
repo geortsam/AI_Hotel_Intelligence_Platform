@@ -154,6 +154,12 @@ class Settings(BaseSettings):
     #: `_secret_required_in_production` below refuses to start a production app without it.
     secret_key: str | None = None
 
+    #: R1.1. How long a cookie session's refresh token lives, in hours. Each refresh rotates it
+    #: and starts a new period, so this is the **idle** limit: a browser left untouched this
+    #: long must sign in again. Twelve hours spans a front-desk shift. A floor of one hour, so
+    #: a session always outlives its thirty-minute access token, and a ceiling of thirty days.
+    session_refresh_ttl_hours: int = Field(default=12, ge=1, le=720)
+
     # --- Request body size ----------------------------------------------------
     #: The most bytes a request body may carry; more is `413 REQUEST_TOO_LARGE`, refused before
     #: the body is buffered (`app.middleware.request_size`). Every field also has its own

@@ -12,8 +12,8 @@ start or continuation purges its own hotel's expired conversations, so at a hote
 nothing would ever remove them. This command removes them everywhere.
 
 **It does not schedule itself.** Run it periodically -- daily is the recommended cadence -- from
-cron, a systemd timer or the platform's scheduler. How often it runs bounds how long an expired
-conversation's text can remain in the database after it became unreachable.
+cron, a systemd timer or ``python -m app.jobs.scheduler`` (opt-in, R4.2). How often it runs bounds
+how long an expired conversation's text can remain in the database after it became unreachable.
 
 **What it prints.** Counts and the retention period, and on failure only the exception's type:
 never an identifier, a question, an answer or a connection string. It records no audit event,

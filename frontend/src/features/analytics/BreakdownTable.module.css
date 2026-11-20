@@ -48,6 +48,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* `.table th, .table td` set `text-align: left` and outrank a bare class, so without this
+ * the numbers were never right-aligned (UI-5 found every numeric cell computing `left`). */
+.table .numeric {
+  text-align: right;
+}
+
 .category {
   font-weight: 500;
   color: var(--color-text);

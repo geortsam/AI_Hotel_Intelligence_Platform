@@ -314,8 +314,8 @@ it is persisted at all (§7), lives in its own tenant-scoped table with its own 
 >   conversation is unreachable at once. Physical deletion follows at the next purge: every start
 >   and continuation purges up to 100 expired conversations at its hotel, and the operator command
 >   `python -m app.jobs.purge_conversations` purges every hotel (V2 closure, F2). Physical
->   deletion; no archive. The application schedules nothing: running the command periodically
->   (daily recommended) is a deployment responsibility.
+>   deletion; no archive. Running the command daily is a deployment choice: the opt-in
+>   retention scheduler (`python -m app.jobs.scheduler`, R4.2) does it when it is enabled.
 > - **Earlier turns are context, never evidence.** At most 6 earlier turns and 12,000 characters,
 >   whole turns only, citation labels stripped, a withheld answer shown as
 >   `(No answer was given.)`. Figures are grounded only by the current turn; citation labels

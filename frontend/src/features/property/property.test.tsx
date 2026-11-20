@@ -172,7 +172,7 @@ describe('the property record', () => {
     const url = new URL(lastRequestFor('/room-types?page=')!.url, 'http://localhost')
     expect(url.pathname).toBe(`/api/v1/hotels/${TEST_HOTEL.public_id}/room-types`)
     expect([...url.searchParams.keys()].sort()).toEqual(['page', 'page_size'])
-    expect(lastRequestFor('/room-types?page=')!.authorization).toMatch(/^Bearer /)
+    expect(lastRequestFor('/room-types?page=')!.credentials).toBe('include')
   })
 
   it('offers no search, filter or sort, because the endpoints have none', async () => {

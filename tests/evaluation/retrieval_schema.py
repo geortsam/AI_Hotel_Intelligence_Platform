@@ -22,9 +22,14 @@ chunker produces exactly those ordinals is C.3b's offline check, not this module
 - **Nothing is repaired, guessed or dropped.** An unknown field, a missing field, a wrong type, a
   `true` where an integer belongs, a duplicate JSON key, a malformed identifier or digest: each is a
   `DatasetError`.
-- **Grades** are 0 (not relevant), 1 (partial, same topic, or another language) and 2 (the chunk
-  alone states the fact the question needs). An unjudged chunk is grade 0.
+- **Grades** (decision record §3.5) are 0 (not relevant), 1 (same topic but partial -- only part of
+  a needed fact, or the topic without the fact -- or another language) and 2 (the chunk alone
+  states the fact the question needs; when a question asks for several independent facts, each
+  is a fact it needs, and a chunk that alone states at least one of them in full is grade 2). An
+  unjudged chunk is grade 0.
 - **Answerable** means at least one grade-2 chunk; a no-answer query has none (it may have grade 1).
+  A multi-idea query is answerable only when every fact it asks for is stated in full by at least
+  one grade-2 chunk: the schema cannot see facts, so the review checks that, and a test pins it.
   A query of family `no_answer` is never answerable. Every metric keeps the two apart.
 - **Scope.** A judged chunk belongs to an active document of the evaluated hotel: search can
   return nothing else. A forbidden chunk belongs to an inactive version or to the neighbour hotel,
@@ -411,7 +416,8 @@ class DatasetQuery:
 
     @property
     def sufficient(self) -> frozenset[ChunkRef]:
-        """The grade-2 chunks: each alone answers the question."""
+        """The grade-2 chunks: each alone states a fact the question needs (§3.5): the fact, or,
+        for a question asking several independent facts, at least one of them in full."""
         return frozenset(item.ref for item in self.relevant if item.grade == SUFFICIENT)
 
     def as_dict(self) -> dict[str, Any]:

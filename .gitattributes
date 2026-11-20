@@ -24,3 +24,9 @@
 # digest -- would depend on the platform, and the check would fail on exactly one of them.
 # `-text` pins the checkout form to whatever was committed.
 ml/data/processed/*.csv -text
+
+# Decision F, section 12.6 "Pinning": the pinned v2 retrieval report and its environment record
+# are copied byte for byte from a CI artifact, and their SHA-256s are the ones in the job log
+# (the report's also in the pin commit's message). No checkout may rewrite their line endings.
+tests/evaluation/retrieval_report_v2.json -text
+tests/evaluation/retrieval_report_v2.environment.json -text

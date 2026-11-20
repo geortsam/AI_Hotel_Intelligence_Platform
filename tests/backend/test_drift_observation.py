@@ -1040,8 +1040,9 @@ def test_the_api_surface_is_the_one_stage_73_published() -> None:
     # Stage 7.11 added the copilot conversations: 60 / 93 -> 63 / 98.
     # Stage 7.12 added the attention list: 63 / 98 -> 64 / 99.
     # Issue H2 added the early departure and its preview: 64 / 99 -> 65 / 101.
-    assert len(schema["paths"]) == 65
-    assert operations == 101
+    # R1.1 added the cookie session's three routes, reaching no model: 65 / 101 -> 68 / 104.
+    assert len(schema["paths"]) == 68
+    assert operations == 104
 
 
 def test_the_frozen_result_type_is_still_not_an_http_contract() -> None:
@@ -1106,8 +1107,11 @@ def test_the_migration_chain_did_not_move() -> None:
     # Issue H3 added 0018 (three foreign keys recreated; no table).
     # Issue H4 added 0019 (one unique index of `reviews` replaced; no table).
     # Issue H7 added 0020 (the guests' email key and format CHECK; no table).
-    assert len(revisions) == 20
-    assert revisions[-1].endswith("20261009_0020_guest_email_rules.py")
+    # R1.3a added 0021 (two audit actions for the platform-administrator command; no table).
+    # R3.3 added 0022 (`updated_at` on the three global catalogues; no table).
+    # R1.1 added 0023 (`auth_sessions`, the cookie sessions' refresh tokens).
+    assert len(revisions) == 23
+    assert revisions[-1].endswith("20261120_0023_auth_sessions.py")
 
 
 def test_the_model_identity_is_untouched() -> None:

@@ -16,6 +16,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Path, Query, status
 
 from app.api.deps import AmenityServiceDep, get_current_user, require_platform_admin
+from app.api.preconditions import STALE_UPDATE_RESPONSE, IfMatch
 from app.schemas.amenity import AmenityCreate, AmenityResponse, AmenityUpdate
 from app.schemas.common import ErrorResponse, Page
 from app.services.amenity import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
@@ -98,16 +99,17 @@ def get_amenity(code: CodePath, service: AmenityServiceDep) -> AmenityResponse:
     "/{code}",
     response_model=AmenityResponse,
     summary="Partially update an amenity",
-    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE},
+    responses={**NOT_FOUND_RESPONSE, **CONFLICT_RESPONSE, **STALE_UPDATE_RESPONSE},
     # Stage 4.3: a global catalogue belongs to no hotel, so no per-hotel role can grant
     # authority over it. Reserved to the platform administrator; see require_platform_admin.
     dependencies=[Depends(require_platform_admin)],
 )
 def update_amenity(
-    code: CodePath, payload: AmenityUpdate, service: AmenityServiceDep
+    code: CodePath, payload: AmenityUpdate, if_match: IfMatch, service: AmenityServiceDep
 ) -> AmenityResponse:
-    """Only the fields present in the body are written; the rest are preserved."""
-    return service.update(code.upper(), payload)
+    """Only the fields present in the body are written; the rest are preserved. 412 if an
+    ``If-Match`` names a version of the amenity that is no longer current (R3.3)."""
+    return service.update(code.upper(), payload, expected_updated_at=if_match)
 
 
 @router.delete(

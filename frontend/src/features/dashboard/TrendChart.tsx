@@ -109,6 +109,8 @@ function niceScale(min: number, max: number): { lower: number; upper: number; st
 export function TrendChart({ metric, points, formatValue, unit, emptyMessage }: TrendChartProps) {
   const titleId = useId()
   const descId = useId()
+  // A url(#...) fragment cannot carry the colons React puts in its ids.
+  const areaId = `trend-area-${useId().replace(/[^A-Za-z0-9_-]/g, '')}`
 
   const plottable = points.filter(
     (point): point is TrendPoint & { value: number } => point.value !== null,
@@ -136,20 +138,35 @@ export function TrendChart({ metric, points, formatValue, unit, emptyMessage }: 
 
   /* Segments, not one path: a break in the data must be a break in the line. */
   const segments: string[] = []
+  // The same runs, closed down to zero (UI-6): the shaded area under each one. Zero is always
+  // in the domain, so the area is the value's true extent, and a gap shades nothing.
+  const areas: string[] = []
   let current: string[] = []
+  let runStart = 0
+  let runEnd = 0
+  const closeRun = () => {
+    if (current.length > 1) {
+      areas.push(
+        `${current.join(' ')} L${xFor(runEnd)},${yFor(0)} L${xFor(runStart)},${yFor(0)} Z`,
+      )
+    }
+    if (current.length > 0) {
+      segments.push(current.join(' '))
+    }
+    current = []
+  }
   points.forEach((point, index) => {
     if (point.value === null) {
-      if (current.length > 0) {
-        segments.push(current.join(' '))
-        current = []
-      }
+      closeRun()
       return
     }
+    if (current.length === 0) {
+      runStart = index
+    }
+    runEnd = index
     current.push(`${current.length === 0 ? 'M' : 'L'}${xFor(index)},${yFor(point.value)}`)
   })
-  if (current.length > 0) {
-    segments.push(current.join(' '))
-  }
+  closeRun()
 
   const ticks: number[] = []
   for (let value = lower; value <= upper + step / 2; value += step) {
@@ -221,8 +238,21 @@ export function TrendChart({ metric, points, formatValue, unit, emptyMessage }: 
           ) : null,
         )}
 
+        <defs>
+          <linearGradient id={areaId} x1="0" x2="0" y1="0" y2="1">
+            <stop className={styles.areaTop} offset="0" />
+            <stop className={styles.areaBottom} offset="1" />
+          </linearGradient>
+        </defs>
+
+        {areas.map((area) => (
+          <path key={area} className={styles.area} d={area} fill={`url(#${areaId})`} />
+        ))}
+
+        {/* `pathLength` normalises every segment to 1, so the draw-in (CSS) needs no
+         * measuring: the dash is the whole line and the offset runs from 1 to 0. */}
         {segments.map((segment) => (
-          <path key={segment} className={styles.line} d={segment} />
+          <path key={segment} className={styles.line} d={segment} pathLength={1} />
         ))}
 
         {/* One measurement is a dot. Drawn for a lone point, and for any point marooned

@@ -588,7 +588,8 @@ def test_exactly_one_route_serves_the_model_and_none_names_an_artifact() -> None
     # Stage 7.11's conversation routes are outside /ml and reach the model only as a tool.
     # Stage 7.12's attention list reads the seasonal forecast, never the demand model.
     # Issue H2's early departure and its preview are booking routes and reach no model.
-    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 101
+    # R1.1 added the cookie session's three routes, reaching no model: 101 -> 104.
+    assert sum(len([m for m in spec if m in methods]) for spec in paths.values()) == 104
 
     assert sorted(path for path in paths if "/ml/" in path) == sorted(ML_ENDPOINTS)
     for endpoint in ML_ENDPOINTS:

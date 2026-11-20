@@ -1,3 +1,4 @@
+import { Compass } from 'lucide-react'
 import { isRouteErrorResponse, Link, useRouteError } from 'react-router-dom'
 
 import { Card } from '@/components/ui/Card'
@@ -17,10 +18,18 @@ function ErrorState({ heading, detail }: ErrorStateProps) {
     <PageContainer>
       <Card>
         <div className={styles.empty}>
-          <p className={styles.headline}>{heading}</p>
+          {/* The shared state anatomy (UI-9): a mark in a soft circle, a title, the detail and
+              one way onward. The mark is decoration; the heading says what happened. */}
+          <span className={styles.icon} aria-hidden="true">
+            <Compass size={22} />
+          </span>
+          {/* The page's one h1 (UI-2): the header's title is no longer a heading. */}
+          <h1 className={styles.headline}>{heading}</h1>
           <p className={styles.detail}>{detail}</p>
-          <p className={styles.detail}>
-            <Link to={ROUTES.dashboard}>Return to the dashboard</Link>
+          <p className={styles.action}>
+            <Link className={styles.actionLink} to={ROUTES.dashboard}>
+              Return to the dashboard
+            </Link>
           </p>
         </div>
       </Card>

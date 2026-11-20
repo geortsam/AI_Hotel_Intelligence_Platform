@@ -228,7 +228,7 @@ function Frame({ children }: { readonly children: ReactNode }) {
   return (
     <PageContainer>
       <SectionHeader
-        as="h2"
+        as="h1"
         title="Bookings"
         description="Arrivals, in-house stays and completed bookings for the selected property. Select a reference to open a booking."
       />

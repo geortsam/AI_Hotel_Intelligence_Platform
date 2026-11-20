@@ -21,7 +21,7 @@ export type LedgerCardsProps =
     }
 
 /**
- * The journal below 768px, as cards.
+ * The journal below 1024px, as cards.
  *
  * The same rows, not a subset: a nine-column table on a phone is either a horizontal scroll
  * nobody finds or six columns silently dropped, and on a financial record the dropped column

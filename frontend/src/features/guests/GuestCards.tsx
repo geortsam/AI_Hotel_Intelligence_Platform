@@ -13,7 +13,7 @@ export interface GuestCardsProps {
 }
 
 /**
- * The guest list below 768px, as cards.
+ * The guest list below 1024px, as cards.
  *
  * The same guests and the same fields, not a subset: a seven-column table on a phone is
  * either a horizontal scroll nobody finds or four columns silently dropped, and the dropped
