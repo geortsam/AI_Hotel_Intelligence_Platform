@@ -1,7 +1,7 @@
 /*
  * The payment ledger.
  *
- * The table scrolls inside its own box; the page never scrolls sideways. Below 768px the
+ * The table scrolls inside its own box; the page never scrolls sideways. Below 1024px the
  * component renders cards instead -- seven columns of financial data cannot be narrowed into
  * a phone without becoming unreadable, and a misread amount is worse than a longer page.
  */

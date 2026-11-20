@@ -23,7 +23,7 @@ export interface MemberListProps {
 /**
  * Who may reach this property.
  *
- * A table above 768px and cards below, the same switch every list in this application makes.
+ * A table above 1024px and cards below, the same switch every list in this application makes.
  * Nothing is dropped on a phone: a member list has five facts and the one most likely to be
  * needed away from a desk -- who has owner access -- is not the one worth hiding.
  *

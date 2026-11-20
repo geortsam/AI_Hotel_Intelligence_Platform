@@ -19,7 +19,7 @@ export interface RoomTypeListProps {
 /**
  * A property's room types.
  *
- * A table above 768px and cards below, the same switch every list in this application makes.
+ * A table above 1024px and cards below, the same switch every list in this application makes.
  * Both render the same fields: a type has nine of them and dropping four on a phone drops
  * the ones somebody needed.
  *

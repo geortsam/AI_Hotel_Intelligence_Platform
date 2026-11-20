@@ -1,8 +1,8 @@
 /*
- * The room-type list: a table above 768px, cards below.
+ * The anomaly list: a table above 1024px, cards below.
  *
  * The scroll container is the rule the layout is checked against: a table wider than its
- * column scrolls INSIDE this box and the page never scrolls sideways. Below 768px the page
+ * column scrolls INSIDE this box and the page never scrolls sideways. Below 1024px the page
  * renders cards instead (the cards below), so this never has to survive a phone.
  */
 
@@ -151,7 +151,7 @@
   white-space: nowrap;
 }
 
-/* --- the card layout, below 768px --------------------------------------------------------- */
+/* --- the card layout, below 1024px --------------------------------------------------------- */
 
 .cards {
   display: flex;

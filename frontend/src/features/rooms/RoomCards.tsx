@@ -14,7 +14,7 @@ export interface RoomCardsProps {
 }
 
 /**
- * The room list below 768px, as cards.
+ * The room list below 1024px, as cards.
  *
  * The same rooms and the same fields, not a subset: a seven-column table on a phone is either
  * a horizontal scroll nobody finds or four columns silently dropped. Fields the record does

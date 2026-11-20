@@ -3,7 +3,7 @@
  *
  * The scroll container is the rule the whole layout is checked against: a table wider than
  * its column scrolls INSIDE this box, and the page itself never scrolls sideways. Below
- * 768px the page renders cards instead (see `BookingCards`), so this never has to survive a
+ * 1024px the page renders cards instead (see `BookingCards`), so this never has to survive a
  * phone.
  */
 
