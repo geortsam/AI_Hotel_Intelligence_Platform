@@ -49,7 +49,7 @@
   height: 26px;
   border-radius: var(--radius-md);
   /* The accent's one permitted use besides the active rail: the brand (UI-2). Ink on brass,
-   * 8.5:1. */
+   * 8.0:1, measured. */
   background: var(--color-accent);
   color: var(--color-bg);
   flex-shrink: 0;
