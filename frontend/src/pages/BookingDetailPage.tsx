@@ -217,7 +217,7 @@ function Frame({ reference, status, children }: FrameProps) {
       </Link>
 
       <SectionHeader
-        as="h2"
+        as="h1"
         title={reference ? `Booking ${reference}` : 'Booking'}
         description="Stay, rooms, guest and financial position for this reservation."
         actions={status ? <BookingStatusBadge status={status} /> : undefined}

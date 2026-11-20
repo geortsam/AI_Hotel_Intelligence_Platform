@@ -142,7 +142,14 @@ describe('the header', () => {
   it('titles the page after the active navigation area', async () => {
     await renderShellAt(ROUTES.financials)
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Financials' })).toBeInTheDocument()
+    expect(within(screen.getByRole('banner')).getByText('Financials')).toBeInTheDocument()
+  })
+
+  it('holds no heading, so each page has exactly one h1 of its own', async () => {
+    // UI-2. The header's title used to be an `h1` beside every page's own.
+    await renderShellAt(ROUTES.financials)
+
+    expect(within(screen.getByRole('banner')).queryAllByRole('heading')).toEqual([])
   })
 
   it('shows the section a route belongs to', async () => {

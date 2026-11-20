@@ -98,6 +98,22 @@ button {
 }
 
 /*
+ * Page transitions (UI-2). The router starts a View Transition on navigation where the browser
+ * has one; only the main region (`view-transition-name: page`) cross-fades, briefly. The rest
+ * of the document does not animate.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-old(page),
+::view-transition-new(page) {
+  animation-duration: var(--duration-instant);
+  animation-timing-function: var(--ease-standard);
+}
+
+/*
  * Honour the viewer's motion preference.
  *
  * Not a nicety: for people with vestibular disorders, movement they did not ask for can
@@ -111,5 +127,11 @@ button {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

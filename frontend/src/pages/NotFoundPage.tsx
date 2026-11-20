@@ -17,7 +17,8 @@ function ErrorState({ heading, detail }: ErrorStateProps) {
     <PageContainer>
       <Card>
         <div className={styles.empty}>
-          <p className={styles.headline}>{heading}</p>
+          {/* The page's one h1 (UI-2): the header's title is no longer a heading. */}
+          <h1 className={styles.headline}>{heading}</h1>
           <p className={styles.detail}>{detail}</p>
           <p className={styles.detail}>
             <Link to={ROUTES.dashboard}>Return to the dashboard</Link>

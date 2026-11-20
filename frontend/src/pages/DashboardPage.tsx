@@ -188,7 +188,7 @@ function Shell({ period, onPeriodChange, hotel, rangeLabel, disabled, children }
   return (
     <PageContainer>
       <SectionHeader
-        as="h2"
+        as="h1"
         title="Overview"
         description={
           hotel
