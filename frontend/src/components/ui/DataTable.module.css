@@ -28,9 +28,23 @@
 }
 
 /* Available to assistive technology, absent from the visual design: the table's own heading
- * is the section header above it, and repeating it would be visual noise. */
+ * is the section header above it, and repeating it would be visual noise.
+ *
+ * Written out, NOT `composes: srOnly from './VisuallyHidden.module.css'`. The list modules
+ * that compose `caption` from here also compose `srOnly` directly; reaching VisuallyHidden
+ * by two `composes` paths made Vite place its rule at a different point in a chunk from one
+ * build to the next, so the bundle was not reproducible (found by CI's image-reproducibility
+ * job). One path per shared module keeps every build byte-identical. */
 .caption {
-  composes: srOnly from './VisuallyHidden.module.css';
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .table th,
