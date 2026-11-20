@@ -7,11 +7,13 @@
  * phone.
  */
 
+/* The shared data-display anatomy (UI-5), composed rather than restated. */
 .scroll {
-  overflow-x: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
+  composes: scroll from '../../components/ui/DataTable.module.css';
+}
+
+.caption {
+  composes: caption from '../../components/ui/DataTable.module.css';
 }
 
 .table {
@@ -20,20 +22,6 @@
   font-size: var(--text-sm);
   /* Below this the columns crush rather than scroll, and the scroll container takes over. */
   min-width: 880px;
-}
-
-/* Available to assistive technology, absent from the visual design: the table's own heading
- * is the section header above it, and repeating it would be visual noise. */
-.caption {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 .table th,
