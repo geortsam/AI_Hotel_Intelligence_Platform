@@ -205,6 +205,12 @@
   text-align: right;
 }
 
+/* `.nightsTable th, .nightsTable td` outrank a bare class; without this the rate column was
+ * never right-aligned (found in UI-5). */
+.nightsTable .numeric {
+  text-align: right;
+}
+
 @media (max-width: 599px) {
   .facts {
     grid-template-columns: 1fr;

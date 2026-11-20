@@ -109,6 +109,12 @@
   white-space: nowrap;
 }
 
+/* `.table th, .table td` set `text-align: left` and outrank a bare class, so without this
+ * the numbers were never right-aligned (UI-5 found every numeric cell computing `left`). */
+.table .numeric {
+  text-align: right;
+}
+
 .booked {
   color: var(--color-text-muted);
   white-space: nowrap;

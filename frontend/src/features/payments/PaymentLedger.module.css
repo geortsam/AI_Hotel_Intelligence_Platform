@@ -97,6 +97,12 @@
   white-space: nowrap;
 }
 
+/* `.table th, .table td` set `text-align: left` and outrank a bare class, so without this
+ * the numbers were never right-aligned (UI-5 found every numeric cell computing `left`). */
+.table .numeric {
+  text-align: right;
+}
+
 /* "less" prefixes a refund instead of a minus sign: the schema keeps amounts positive and
  * puts direction in `kind`, so negating one here would be reinterpreting it. */
 .less {

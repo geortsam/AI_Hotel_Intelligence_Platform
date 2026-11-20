@@ -45,7 +45,7 @@ export function RoomTable({ rooms, timeZone }: RoomTableProps) {
           <tr>
             <th scope="col">Room</th>
             <th scope="col">Type</th>
-            <th scope="col">Floor</th>
+            <th scope="col" className={styles.numeric}>Floor</th>
             <th scope="col">Status</th>
             <th scope="col">Service</th>
             <th scope="col">Notes</th>
