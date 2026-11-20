@@ -8,5 +8,6 @@
  * Order matters -- tokens must be defined before base can reference them.
  */
 
+@import './fonts.css';
 @import './tokens.css';
 @import './base.css';
