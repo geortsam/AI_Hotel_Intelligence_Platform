@@ -79,15 +79,17 @@ ARTIFACT_DIGESTS = {
         "6cefba9463356889f3e21471a03c1e807a6386ee1b0894ccbe9dc87901755cd1"
     ),
 }
-#: R2.10C: the `knowledge_retrieval_v2` baseline Decision F §12.6 pins, from CI run 44194081637
-#: (artifact `retrieval-eval-44194081637-1`). Both files are absent until pinned, then present
-#: together with exactly these bytes (`-text`, so not LF-normalised); a re-pin updates them here.
+#: R2.10C: the `knowledge_retrieval_v2` baseline Decision F §12.6 pins. First pinned from CI run
+#: 44194081637 (`b6defd7`); re-pinned from CI run 44678376755 (artifact
+#: `retrieval-eval-44678376755-1`, `82a57cd`) after E4 and E7 changed fingerprinted inputs, with
+#: the measured sections unchanged. Both files are absent until pinned, then present together
+#: with exactly these bytes (`-text`, so not LF-normalised); a re-pin updates them here.
 PINNED_RETRIEVAL_V2 = {
     "retrieval_report_v2.json": (
-        "a6ddeec598d264ff48d39f73f607d797f2d4da15be8252a6c0774ba9a78b0c15"
+        "158cbe99558c277fdc2cdcae843faba10ff2e008afae0d731f29c4f6358b91a8"
     ),
     "retrieval_report_v2.environment.json": (
-        "6836b5a378a3022a5b81555cff864ccc80fcb790c679b238cb37e9595468cbf7"
+        "9f3315c0b9bc7c259915668eca39c7ba75a3892e6bc163d5163b8a7d76830d85"
     ),
 }
 
