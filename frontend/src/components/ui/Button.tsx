@@ -9,6 +9,12 @@ interface BaseButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly variant?: ButtonVariant
   readonly size?: ButtonSize
   readonly children?: ReactNode
+  /**
+   * The action is in flight (UI-4). The button is disabled and `aria-busy`, a spinner
+   * replaces the label visually, and the label stays in place -- transparent, not removed --
+   * so the button keeps both its accessible name and its width, and nothing beside it moves.
+   */
+  readonly loading?: boolean
 }
 
 /**
@@ -51,6 +57,8 @@ export function Button({
   type = 'button',
   className,
   children,
+  loading = false,
+  disabled,
   ...rest
 }: ButtonProps) {
   const classes = [
@@ -58,14 +66,24 @@ export function Button({
     styles[variant],
     styles[size],
     iconOnly ? styles.iconOnly : undefined,
+    loading ? styles.loading : undefined,
     className,
   ]
     .filter(Boolean)
     .join(' ')
 
+  if (!loading) {
+    return (
+      <button type={type} className={classes} disabled={disabled} {...rest}>
+        {children}
+      </button>
+    )
+  }
+
   return (
-    <button type={type} className={classes} {...rest}>
-      {children}
+    <button type={type} className={classes} disabled aria-busy="true" {...rest}>
+      <span className={styles.spinner} aria-hidden="true" />
+      <span className={styles.label}>{children}</span>
     </button>
   )
 }

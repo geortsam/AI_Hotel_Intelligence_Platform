@@ -101,6 +101,40 @@
   background: var(--color-danger-hover);
 }
 
+/*
+ * In flight (UI-4). The label goes transparent rather than away, so the button keeps its
+ * accessible name and its width; the spinner sits over it in the label's own colour. Under
+ * reduced motion the global reset stops the rotation and the ring stays as a static mark.
+ */
+.loading {
+  position: relative;
+}
+
+.loading .label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  opacity: 0;
+}
+
+.spinner {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: var(--radius-full);
+  animation: button-spin 640ms linear infinite;
+}
+
+@keyframes button-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
 /* Lucide renders an <svg>; keep it from stretching the button. */
 .button svg {
   flex-shrink: 0;

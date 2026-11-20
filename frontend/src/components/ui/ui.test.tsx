@@ -19,6 +19,36 @@ import { Skeleton } from '@/components/ui/Skeleton'
  */
 
 describe('Button', () => {
+  it('in flight, is busy and disabled but keeps its name', () => {
+    // UI-4: the label stays in the accessibility tree; only the spinner is hidden from it.
+    render(<Button loading>Save changes</Button>)
+    const button = screen.getByRole('button', { name: 'Save changes' })
+
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('aria-busy', 'true')
+    expect(button.querySelector('[aria-hidden="true"]')).not.toBeNull()
+  })
+
+  it('is not busy unless it is loading', () => {
+    render(<Button>Save changes</Button>)
+
+    expect(screen.getByRole('button', { name: 'Save changes' })).not.toHaveAttribute('aria-busy')
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+  })
+
+  it('in flight, cannot be pressed again', async () => {
+    const onClick = vi.fn()
+    render(
+      <Button loading onClick={onClick}>
+        Save
+      </Button>,
+    )
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onClick).not.toHaveBeenCalled()
+  })
+
   it('renders a real button element', () => {
     render(<Button>Save</Button>)
 
