@@ -653,7 +653,7 @@ function Frame({ children }: { children: ReactNode }) {
     <PageContainer>
       <SectionHeader
         as="h1"
-        title="Intelligence"
+        title="Forecasting"
         description="Statistical forecasts, demand trend, anomalies and structured findings for this property. Every figure comes from the server; nothing on this page is calculated in your browser, and no text here is generated."
       />
       <div className={styles.page}>{children}</div>
