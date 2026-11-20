@@ -21,7 +21,10 @@
 .main {
   grid-area: main;
   min-width: 0; /* lets children shrink instead of forcing the page wider */
-  overflow-x: hidden;
+  /* `clip`, not `hidden` (UI-8): both stop sideways scrolling, but `hidden` also makes <main>
+   * a scroll container that never scrolls -- so nothing inside it could be `position:
+   * sticky` against the page. */
+  overflow-x: clip;
   /* UI-2: the only region a page change animates; the sidebar and header stay still. */
   view-transition-name: page;
 }
