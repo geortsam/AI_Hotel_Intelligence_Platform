@@ -20,6 +20,8 @@
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   padding: var(--space-4);
+  /* The status rail (UI-8), repeating the card's status badge. */
+  box-shadow: inset 3px 0 0 var(--rail, transparent);
 }
 
 .header {

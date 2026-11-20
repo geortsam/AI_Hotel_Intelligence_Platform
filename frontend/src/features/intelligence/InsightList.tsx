@@ -1,6 +1,7 @@
 import { AlertTriangle, Info, OctagonAlert } from 'lucide-react'
 
 import { Badge } from '@/components/ui/Badge'
+import rail from '@/components/ui/Rail.module.css'
 import { formatRatioAsPercent } from '@/features/dashboard/format'
 import { formatDate, formatMoney } from '@/lib/format'
 import type { Insight, InsightSeverity } from '@/types/intelligence'
@@ -50,7 +51,7 @@ export function InsightList({ insights }: InsightListProps) {
         return (
           <li
             key={`${insight.type}-${insight.date_from}-${index}`}
-            className={`${styles.item} ${styles[`rail-${shown.tone}`]}`}
+            className={`${styles.item} ${rail[shown.tone]}`}
           >
             <div className={styles.header}>
               <Icon size={18} aria-hidden="true" className={styles.icon} />

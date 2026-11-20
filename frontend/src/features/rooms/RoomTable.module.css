@@ -46,6 +46,9 @@
 .numberCell {
   font-weight: var(--weight-normal);
   white-space: nowrap;
+  /* The status rail (UI-8), on the row's first cell: a <tr> cannot reliably carry a shadow.
+   * It repeats the status badge in the same row; see components/ui/Rail.module.css. */
+  box-shadow: inset 3px 0 0 var(--rail, transparent);
 }
 
 /* A note is free text somebody typed; it wraps inside its cell rather than widening the
