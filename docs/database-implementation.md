@@ -13,8 +13,9 @@
 > `0018_composite_set_null_columns` (Issue H3, three composite `SET NULL` keys recreated with column lists, no
 > table); and `0019_review_external_id_scope` (Issue H4, the reviews' external-identifier key
 > scoped to the hotel, no table); and `0020_guest_email_rules` (Issue H7, a format CHECK and a
-> case-insensitive per-hotel key for guest emails, no table). The head is `0020` across 20 linear
-> revisions. In particular, §9's environment notes describe the machine as it
+> case-insensitive per-hotel key for guest emails, no table); and `0021_audit_platform_grants`
+> (R1.3a, two audit actions for the platform-administrator command, no table). The head is
+> `0021` across 21 linear revisions. In particular, §9's environment notes describe the machine as it
 > was at Stage 2B, not as it is. See [architecture.md](architecture.md) and
 > [../database/README.md](../database/README.md).
 

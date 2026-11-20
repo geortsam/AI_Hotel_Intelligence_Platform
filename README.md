@@ -43,7 +43,7 @@ more than one currency and the platform never converts between them.</sub></div>
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
 > **The backend and frontend suites run in CI on every push.** Schema head is
-> `0020_guest_email_rules` across 20 linear migrations.
+> `0021_audit_platform_grants` across 21 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
 > baseline — seasonal-naive day-of-week median forecasting, MAD-based intervals and anomaly
@@ -323,7 +323,7 @@ Full detail, including the rules later stages must follow:
 | Validation | Pydantic v2, pydantic-settings | Request/response schemas, environment config |
 | ORM | SQLAlchemy 2.0 | Data mapping across 17 model modules |
 | Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
-| Migrations | Alembic | 20 linear revisions, head `0020_guest_email_rules` |
+| Migrations | Alembic | 21 linear revisions, head `0021_audit_platform_grants` |
 | Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
 | Frontend | React 18, TypeScript 5.9, Vite 6 | Dashboard SPA, route-level code splitting |
 | Intelligence (V1) | Python standard library | Deterministic statistical baseline — no NumPy or pandas on its path |
@@ -516,22 +516,23 @@ POST /api/v1/auth/register  →  POST /api/v1/auth/login  →  POST /api/v1/hote
 ```
 
 **The first platform administrator has no API, by design.** `platform_admins` governs the
-catalogues every hotel shares, so the grant is a deliberate out-of-band database write rather
-than something an endpoint hands out — the same grant the integration suite performs. It
-requires that the intended person has already registered, and it is idempotent:
+catalogues every hotel shares, so the grant is a deliberate operator action rather than
+something an endpoint hands out. It is made with an operator command (R1.3a), which records
+the grant in the audit trail in the same transaction. It requires that the intended person
+has already registered, and repeating it changes nothing:
 
-```sql
-INSERT INTO platform_admins (user_id, role)
-SELECT u.id, 'platform_admin' FROM users u WHERE u.email = lower('ops@example.com')
-ON CONFLICT (user_id) DO NOTHING;
+```bash
+docker compose run --rm api python -m app.jobs.platform_admin grant ops@example.com
 ```
+
+`revoke` removes a grant the same way, and refuses to remove the last one unless told to.
 
 An empty database is not authorization: nothing here creates an administrator because it
 noticed no rows.
 
 **Read [docs/deployment/first-run-bootstrap.md](docs/deployment/first-run-bootstrap.md) before
 running the grant** — it covers the checks to make first, how to verify the result, secret
-handling, what is *not* audited, and what to do if the wrong user was granted.
+handling, what is and is not audited, and what to do if the wrong user was granted.
 
 **Demo data, optionally.** `scripts/seed_demo.py` fills a *new, empty, migrated* database with
 deterministic, synthetic data for two fictional hotels and a demo owner account. The data runs
@@ -614,7 +615,7 @@ shards, so GitHub Actions shows seven job runs per workflow run.
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 | `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical |
-| `Mutation checks` | re-applies the 836 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Mutation checks` | re-applies the 851 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
@@ -945,8 +946,9 @@ What remains genuinely missing is operational rather than functional:
   and it has not reached it; until it does, no Renovate and no Dependabot run. A pinned digest
   is a digest that goes stale, and sitting on a base image with a known CVE is the real cost
   of pinning; bumping one is a deliberate act, and a Dependabot proposal will be one too.
-- **No platform-administrator API.** Granting platform administration is a deliberate
-  out-of-band database write; see [First run](#first-run). That is by design, not an omission.
+- **No platform-administrator API.** Platform administration is granted and revoked by an
+  audited operator command; see [First run](#first-run). Who may do it through an API is an
+  open decision (R1.3b), so there is none.
 
 The V1 intelligence layer remains a transparent statistical baseline. The trained demand model
 sits beside it — served, but **not scientifically validated**, and shown on the Analytics page

@@ -12,7 +12,7 @@ database *as a database*, kept separate from the application code that queries i
 
 ## Current state
 
-**Twenty migrations, head `0020_guest_email_rules`,** applied by `alembic upgrade
+**Twenty-one migrations, head `0021_audit_platform_grants`,** applied by `alembic upgrade
 head`. They build **28 tables** and the `historical_room_overlaps` view; with Alembic's own
 `alembic_version`, a migrated database reports 30 entries in `information_schema.tables`. Every
 one of the 28 is ORM-mapped -- `tests/backend/test_model_metadata.py` pins the list, so a table
@@ -29,7 +29,7 @@ canonical SHA-256 over every revision file with line endings normalised to LF, s
 cannot be edited unnoticed on any platform:
 
 ```
-690a0cf9ced1f9e3c4b7a26980789449069b172b217c5a36781a59ccba11ea01
+dc753149d62affbff1a65e5839d2f1c8255124dea461f1bbaac612e39bbe0550
 ```
 
 Editing any shipped revision changes that digest and fails

@@ -34,6 +34,7 @@ def no_sleep(seconds: float) -> None:
 NOT_SCHEDULED = {
     "scheduler": "the scheduler itself",
     "demand_observation": "declares an observation period on an operator's say-so; not retention",
+    "platform_admin": "grants or revokes platform administration on an operator's say-so",
 }
 
 

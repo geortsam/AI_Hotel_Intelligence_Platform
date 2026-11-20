@@ -932,8 +932,9 @@ def test_the_migration_chain_did_not_move() -> None:
     # Issue H3 added 0018 (three foreign keys recreated; no table).
     # Issue H4 added 0019 (one unique index of `reviews` replaced; no table).
     # Issue H7 added 0020 (the guests' email key and format CHECK; no table).
-    assert len(revisions) == 20
-    assert revisions[-1].endswith("20261009_0020_guest_email_rules.py")
+    # R1.3a added 0021 (two audit actions for the platform-administrator command; no table).
+    assert len(revisions) == 21
+    assert revisions[-1].endswith("20261119_0021_audit_platform_grants.py")
 
 
 def test_the_model_identity_is_untouched() -> None:

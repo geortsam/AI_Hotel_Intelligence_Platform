@@ -40,9 +40,10 @@ class PlatformAdmin(TimestampMixin, Base):
         primary_key=True,
     )
     #: CHECK-constrained TEXT, as the schema's ten other vocabularies are. Stage 4.3 exposes
-    #: no API for granting platform administration, so the real grant path is an out-of-band
-    #: INSERT -- and the constraint is what stops that path storing a `superadmin` the
-    #: application would never recognise.
+    #: no API for granting platform administration; the grant path is the audited operator
+    #: command ``app.jobs.platform_admin`` (R1.3a). An out-of-band INSERT is still possible
+    #: for whoever holds the database credentials, and the constraint is what stops it
+    #: storing a `superadmin` the application would never recognise.
     role: Mapped[str] = mapped_column(Text, nullable=False)
 
     __table_args__ = (

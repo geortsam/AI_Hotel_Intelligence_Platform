@@ -364,7 +364,7 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/${{ env.POSTGRES_DB }}
         run: |
           set -euo pipefail
-          expected='0020_guest_email_rules'
+          expected='0021_audit_platform_grants'
 
           echo "--- declared head ---"
           heads="$(python -m alembic heads 2>&1)"
@@ -526,18 +526,19 @@ jobs:
   # ---------------------------------------------------------------------------------------
   # The recorded mutation checks, re-run on every push.
   #
-  # The 41 stages 7.6-7.14, F2, F16, I4, F1, F2-ADR, M1, M2, F2-COMP, F3, F4, G1, H1, H2, H3, H4,
-  # H6, H7, H8, R2.2, R2.2b, R2.8AA, R2.8AC, R2.8AE, R2.8AG, R2.8AI, R2.8AK, R2.9B, R2.9K, R2.9X,
-  # R2.10A, R2.10B and R2.10C each broke their own guarantees on purpose and reported that a test
-  # caught every break.
-  # `python -m tests.mutation` re-applies those 762 edits from tests/mutation/inventory.py -- in
+  # Every stage recorded in tests/mutation/test_harness.py's RECORDED_PER_STAGE broke its own
+  # guarantees on purpose and reported that a test caught every break. The stage list and the
+  # counts live in tests/README.md and README.md, where test_inventory_docs.py and
+  # test_readme_counts.py keep them equal to the inventory; none is restated here, so none
+  # can go stale here.
+  # `python -m tests.mutation` re-applies every recorded edit from tests/mutation/inventory.py -- in
   # a throwaway copy of the tracked files, never in this checkout -- and fails unless every named
   # killer fails under its mutation and passes without it. See tests/mutation/harness.py.
   #
   # A job of its own, parallel to the others, so its run -- 20m23s and 31m06s in two runs on
   # 2026-10-29; it varies -- happens beside quality-gates rather than after it. It needs both
-  # toolchains (762 mutations span Python and Vitest; 61 are Vitest) and its own disposable
-  # PostgreSQL for the 129 mutations whose killers are integration tests.
+  # toolchains (the mutations span Python and Vitest) and its own disposable PostgreSQL for the
+  # mutations whose killers are integration tests.
   # The limit is 90 minutes: the mutation step took 32m20s for 389 mutations (2026-11-05), and
   # at 606 it outgrew the earlier 45-minute limit and was cancelled (run 42885849036, 2026-11-10).
   # `--require-all` makes a mutation that could not run a failure, not a skip. Nothing here
@@ -887,8 +888,8 @@ jobs:
 
             revisions=$(ls /app/database/migrations/versions/*.py | wc -l)
             echo "  revisions present: $revisions"
-            if [ "$revisions" -ne 20 ]; then
-              echo "::error::expected 20 revisions, found $revisions"
+            if [ "$revisions" -ne 21 ]; then
+              echo "::error::expected 21 revisions, found $revisions"
               exit 1
             fi
 
@@ -1249,9 +1250,9 @@ jobs:
           echo "--- alembic_version, read from PostgreSQL ---"
           revision="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  $revision"
-          [ "$revision" = "0020_guest_email_rules" ] || {
-            echo "::error::expected 0020_guest_email_rules, got $revision"; exit 1; }
-          echo "  OK   schema is at 0020_guest_email_rules"
+          [ "$revision" = "0021_audit_platform_grants" ] || {
+            echo "::error::expected 0021_audit_platform_grants, got $revision"; exit 1; }
+          echo "  OK   schema is at 0021_audit_platform_grants"
 
           tables="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  public tables created: $tables"
@@ -1737,7 +1738,7 @@ jobs:
 
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc 'SELECT version_num FROM alembic_version')"
           echo "  after : $after"
-          [ "$after" = "0020_guest_email_rules" ] || {
+          [ "$after" = "0021_audit_platform_grants" ] || {
             echo "::error::revision moved to $after"; exit 1; }
           [ "$before" = "$after" ] || { echo "::error::revision changed"; exit 1; }
           echo "  OK   upgrade head is idempotent and the schema is unchanged"
@@ -1769,7 +1770,7 @@ jobs:
           after="$(dc exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")"
           echo "  revision after restart: $revision"
           echo "  tables after restart  : $after"
-          [ "$revision" = "0020_guest_email_rules" ] || {
+          [ "$revision" = "0021_audit_platform_grants" ] || {
             echo "::error::schema did not survive the restart"; exit 1; }
           [ "$rows" = "$after" ] || { echo "::error::table count changed across restart"; exit 1; }
           echo "  OK   the named volume preserved the schema across stop/start"
@@ -2460,9 +2461,9 @@ jobs:
           # The diff above is the real proof. These restate the few facts that must hold
           # absolutely, so a failure names what was wrong rather than only that something was.
           revision="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc 'SELECT version_num FROM alembic_version')"
-          [ "$revision" = "0020_guest_email_rules" ] || {
+          [ "$revision" = "0021_audit_platform_grants" ] || {
             echo "::error::restored revision is $revision"; exit 1; }
-          echo "  OK   alembic_version is 0020_guest_email_rules -- no upgrade or downgrade happened"
+          echo "  OK   alembic_version is 0021_audit_platform_grants -- no upgrade or downgrade happened"
 
           tables="$(docker exec "$RESTORE_CONTAINER" psql -U postgres -d hotel_restore -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'")"
           [ "$tables" -eq 29 ] || { echo "::error::restored database has $tables base tables, expected 29"; exit 1; }

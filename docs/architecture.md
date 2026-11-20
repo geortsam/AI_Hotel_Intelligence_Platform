@@ -199,7 +199,9 @@ reference. Issue H4 added the tenth, `0019_review_external_id_scope`, which repl
 reviews' global `(source, external_review_id)` unique index with one per hotel, so another
 property's reviews never refuse a recording. Issue H7 added the eleventh,
 `0020_guest_email_rules`, which gives a guest's email address the shape `users.email` already
-has and makes its per-hotel uniqueness case-insensitive. Head `0020` across 20 linear revisions, 28 application tables. Four of V2's tables reference `hotels` with `RESTRICT`, so — as V1's
+has and makes its per-hotel uniqueness case-insensitive. R1.3a added the twelfth,
+`0021_audit_platform_grants`, which widens the audit action CHECK by the platform-administrator
+grant and revocation. Head `0021` across 21 linear revisions, 28 application tables. Four of V2's tables reference `hotels` with `RESTRICT`, so — as V1's
 append-only audit trail already did — they can make a hotel undeletable: `DELETE /hotels/{id}`
 still answers 409 rather than cascading. See [v2-architecture.md](v2-architecture.md) §10. See [knowledge-documents.md](knowledge-documents.md) and
 [copilot-conversations.md](copilot-conversations.md).

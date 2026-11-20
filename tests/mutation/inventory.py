@@ -1352,7 +1352,7 @@ def runbook(name: str, breaks: str, path: str, old: str, new: str, *tests: str) 
 
 
 STALE = "`0011_demand_prediction_public_id`"
-CURRENT = "`0020_guest_email_rules`"
+CURRENT = "`0021_audit_platform_grants`"
 REVISIONS_IN_BACKUP = "test_every_revision_a_runbook_quotes_is_the_current_head[backup-restore]"
 
 STAGE_M1 = [
@@ -8967,8 +8967,8 @@ STAGE_R6_2 = [
         6,
         "the README's migration count goes stale",
         README,
+        "| 21 linear revisions, head",
         "| 20 linear revisions, head",
-        "| 19 linear revisions, head",
         "test_migrations_and_head",
     ),
     _r62(
@@ -9229,6 +9229,163 @@ STAGE_R4_2 = [
 ]
 
 
+# --- R1.3a (v2.0 roadmap, E4): the audited platform-administrator command ---------------------
+
+PLATFORM_ADMIN_COMMAND = "backend/app/jobs/platform_admin.py"
+GRANTS_MIGRATION = "database/migrations/versions/20261119_0021_audit_platform_grants.py"
+_PA = "tests/integration/test_platform_admin_command.py::"
+_PL = "tests/backend/test_platform_admin_layering.py::"
+
+
+def _r13a(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(f"R1.3a-M{number}", "R1.3a", breaks, one(path, old, new), killers)
+
+
+def _r13a_db(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """An R1.3a mutation whose killers run the command or the migration against PostgreSQL."""
+    return Mutation(
+        f"R1.3a-M{number}", "R1.3a", breaks, one(path, old, new), killers, needs_database=True
+    )
+
+
+STAGE_R1_3A = [
+    _r13a_db(
+        1,
+        "a grant is made without its audit event",
+        PLATFORM_ADMIN_COMMAND,
+        "    AuditTrail(AuditRepository(session)).record(\n"
+        "        AuditAction.PLATFORM_ADMIN_GRANTED,\n",
+        "    (lambda *_, **__: None)(\n        AuditAction.PLATFORM_ADMIN_GRANTED,\n",
+        f"{_PA}test_a_grant_and_its_audit_event_commit_together",
+        f"{_PL}test_it_records_each_change_with_an_enum_member",
+    ),
+    _r13a_db(
+        2,
+        "a revocation is made without its audit event",
+        PLATFORM_ADMIN_COMMAND,
+        "    AuditTrail(AuditRepository(session)).record(\n"
+        "        AuditAction.PLATFORM_ADMIN_REVOKED,\n",
+        "    (lambda *_, **__: None)(\n        AuditAction.PLATFORM_ADMIN_REVOKED,\n",
+        f"{_PA}test_a_revocation_and_its_audit_event_commit_together",
+        f"{_PL}test_it_records_each_change_with_an_enum_member",
+    ),
+    _r13a_db(
+        3,
+        "a grant is recorded as a revocation",
+        PLATFORM_ADMIN_COMMAND,
+        "    AuditTrail(AuditRepository(session)).record(\n"
+        "        AuditAction.PLATFORM_ADMIN_GRANTED,\n",
+        "    AuditTrail(AuditRepository(session)).record(\n"
+        "        AuditAction.PLATFORM_ADMIN_REVOKED,\n",
+        f"{_PA}test_a_grant_and_its_audit_event_commit_together",
+        f"{_PL}test_it_records_each_change_with_an_enum_member",
+    ),
+    _r13a_db(
+        4,
+        "the email is matched exactly as typed, not as registration stores it",
+        PLATFORM_ADMIN_COMMAND,
+        "select(User).where(User.email == email.strip().lower())",
+        "select(User).where(User.email == email)",
+        f"{_PA}test_the_email_is_matched_as_registration_stores_it",
+    ),
+    _r13a_db(
+        5,
+        "an unregistered email reaches the grant instead of being refused",
+        PLATFORM_ADMIN_COMMAND,
+        "    if user is None:\n",
+        "    if user is None and False:\n",
+        f"{_PA}test_an_unregistered_email_is_refused_and_nothing_is_created",
+    ),
+    _r13a_db(
+        6,
+        "a deactivated account is granted platform administration",
+        PLATFORM_ADMIN_COMMAND,
+        "    if not user.is_active:\n",
+        "    if False:\n",
+        f"{_PA}test_a_deactivated_account_is_refused",
+    ),
+    _r13a_db(
+        7,
+        "a repeated grant is attempted again instead of changing nothing",
+        PLATFORM_ADMIN_COMMAND,
+        "    if session.get(PlatformAdmin, user.id) is not None:\n"
+        '        return "already a platform administrator; nothing changed"\n',
+        "",
+        f"{_PA}test_a_repeated_grant_changes_nothing_and_records_nothing",
+    ),
+    _r13a_db(
+        8,
+        "revoking from a non-administrator revokes someone else",
+        PLATFORM_ADMIN_COMMAND,
+        '    if held is None:\n        return "not a platform administrator; nothing changed"\n',
+        "    if held is None:\n        held = granted[0]\n",
+        f"{_PA}test_revoking_from_a_non_administrator_changes_nothing",
+    ),
+    _r13a_db(
+        9,
+        "the last administrator can be revoked without --allow-none",
+        PLATFORM_ADMIN_COMMAND,
+        "    if len(granted) == 1 and not allow_none:\n",
+        "    if False:\n",
+        f"{_PA}test_the_last_administrator_is_kept_unless_none_is_intended",
+    ),
+    _r13a(
+        10,
+        "the revocation counts the administrators without locking them",
+        PLATFORM_ADMIN_COMMAND,
+        "select(PlatformAdmin).with_for_update()",
+        "select(PlatformAdmin)",
+        f"{_PL}test_the_revocation_locks_every_grant_before_counting",
+    ),
+    _r13a_db(
+        11,
+        "the output names the account",
+        PLATFORM_ADMIN_COMMAND,
+        '    return "platform administration granted"\n',
+        '    return f"platform administration granted to {user.email}"\n',
+        f"{_PA}test_the_output_names_nobody",
+    ),
+    _r13a_db(
+        12,
+        "a failure prints the exception, which can carry the connection string",
+        PLATFORM_ADMIN_COMMAND,
+        '            f"platform administration FAILED ({type(exc).__name__}); nothing changed",\n',
+        '            f"platform administration FAILED ({exc}); nothing changed",\n',
+        f"{_PA}test_a_failure_changes_nothing_and_leaks_nothing",
+        f"{_PL}test_it_prints_nothing_about_the_account",
+    ),
+    _r13a(
+        13,
+        "the grant events become hotel-scoped",
+        "backend/app/models/enums.py",
+        "        AuditAction.PLATFORM_ADMIN_GRANTED.value,\n"
+        "        AuditAction.PLATFORM_ADMIN_REVOKED.value,\n",
+        "",
+        "tests/backend/test_audit_layering.py::"
+        "test_the_hotel_scoped_actions_are_the_thirteen_a_property_owns",
+        f"{_PL}test_both_actions_are_platform_scoped",
+    ),
+    _r13a_db(
+        14,
+        "the migration does not widen the action CHECK, so the database refuses every grant",
+        GRANTS_MIGRATION,
+        "    op.execute(_check((*_PREVIOUS_ACTIONS, *_ADDED_ACTIONS)))\n",
+        "    op.execute(_check(_PREVIOUS_ACTIONS))\n",
+        f"{_PA}test_a_grant_and_its_audit_event_commit_together",
+        f"{_PA}test_the_head_permits_both_actions_and_the_downgrade_removes_only_them",
+    ),
+    _r13a_db(
+        15,
+        "the downgrade keeps the two actions, so it is no downgrade",
+        GRANTS_MIGRATION,
+        "    op.execute(_check(_PREVIOUS_ACTIONS))\n",
+        "    op.execute(_check((*_PREVIOUS_ACTIONS, *_ADDED_ACTIONS)))\n",
+        f"{_PA}test_the_head_permits_both_actions_and_the_downgrade_removes_only_them",
+        f"{_PA}test_the_downgrade_is_refused_while_a_grant_event_exists",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -9276,4 +9433,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R6_2,
     *STAGE_R0_4A,
     *STAGE_R4_2,
+    *STAGE_R1_3A,
 )
