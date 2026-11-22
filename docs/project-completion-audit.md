@@ -23,8 +23,8 @@
   - all 891 recorded mutations were killed;
   - ruff, the format check and mypy were clean;
   - the migration chain was checked, the image was verified at runtime, and both builds were reproducible.
-- **Overall completion:** 66.2% of all tracked work (47 of 71 items, §8). For work that needs no decision from you, the figure is 83.9% (47 of 56).
-- **Remaining autonomous work:** 9 tasks (§4). None is a functional gap. They cover supply-chain security, accessibility automation, metrics, and documentation that is now stale.
+- **Overall completion:** 67.6% of all tracked work (48 of 71 items, §8; it was 66.2% at the audit). For work that needs no decision from you, the figure is 85.7% (48 of 56).
+- **Remaining autonomous work:** 8 tasks (§4; A1 is done). None is a functional gap. They cover supply-chain security, accessibility automation, metrics, and documentation that is now stale.
 - **Remaining user decisions:** 13 open decision briefs (§5). Three of them have a do-nothing default.
 - **Readiness:** the platform is demo ready. It is not production ready, and §7 says exactly why.
 
@@ -81,7 +81,48 @@ licences, served from `/assets/`) and "Forecasting" (`a08bb95`).
 
 ---
 
-## 4. Remaining autonomous engineering tasks — 9
+## 4. Remaining autonomous engineering tasks — 8 (A1 done)
+
+### 4.1 A1, done (2026-11-22)
+
+The frontend dev-toolchain advisories are fixed. Only `frontend/package.json` and
+`frontend/package-lock.json` changed; nothing under `backend/`, `ci.yml` or the retrieval artifacts.
+
+| | Before (`f2b8d50`) | After |
+|---|---|---|
+| `npm audit` | **6**: 3 high (`vite` ≤6.4.3, `undici` 8.0.0–8.12.1, `source-map-js` 1.0.0–1.2.1), 3 moderate (`vitest`, `@vitest/mocker`, `@vitest/coverage-v8` 5.0.0-beta.1–5.0.2) | **0** |
+| `npm audit --omit=dev` | 0 | 0 |
+
+The advisories by package:
+- **vite:** `launch-editor` GHSA-587h-7wmj-h5pm (high), GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw; and Vite's own GHSA-9jrq-w75r-8gcw (low), GHSA-rq7h-c2jc-7f22.
+- **undici:** GHSA-xjj6-f33q-929c, GHSA-4w7w-5xrc-9h26, GHSA-2m5v-pch6-74hx, GHSA-qrxm-fqhp-jwvm (all high), plus four moderate.
+- **source-map-js:** GHSA-68fv-2mgg-jv7q.
+- **@vitest/mocker:** GHSA-qxg6-89mg-rqv8, GHSA-xp26-3454-mjgp.
+
+**How it was fixed:**
+- `npm audit fix` (no `--force`) moved three packages within their existing ranges, changing only the lockfile:
+  - `vite` 6.4.3 → 6.4.6;
+  - `undici` 8.10.2 → 8.13.1;
+  - `source-map-js` 1.2.1 → 1.2.4.
+- `npm audit fix` and `npm update` could not move the vitest pair, because `@vitest/coverage-v8` pins an exact `vitest` peer. The pair therefore took a same-major minimum bump: `vitest` and `@vitest/coverage-v8` `^5.0.0` → `^5.0.5`, both 5.0.0 → 5.0.5. That is the latest 5.0.x patch, not 5.1.x.
+- The 5.0.5 line also brings its own newer transitive dependencies (dev only):
+  - `@vitest/mocker` and `@vitest/spy` 5.0.5;
+  - `@vitest/istanbul-lib-*` 1.0.2;
+  - `obug` 3.0.0 and `why-is-node-running` 3.2.1;
+  - patch and minor bumps of `chai`, `magic-string`, `magicast`, `std-env`, `tinybench`, `tinyexec`, `tinyrainbow` and `ast-v8-to-istanbul`;
+  - `siginfo` and `stackback` dropped.
+- `esbuild` is unchanged at 0.25.12.
+
+**Local verification** (all on the changed tree):
+- `npm run typecheck` is clean.
+- Vitest 5.0.5: `Test Files 34 passed (34)`, `Tests 1353 passed (1353)`.
+- `npm run build` succeeds.
+- Two builds from empty output directories are byte-identical: 61 files, manifest sha256 `5487d54373f9aef7233f1a48d15450910ba4f28f83a9309ec49195b71bca2e33`.
+- The dev server (Vite v6.4.6) serves all 17 routes signed in. Each shows its expected `h1`, exactly one `h1`, no error alert and no sideways scroll, and there are no console errors.
+
+CI for the A1 commit is recorded with stage A6.
+
+### 4.2 The remaining tasks
 
 Each task can be done without a decision from you. They are ordered by the requested priorities.
 **F** marks a change to a fingerprinted file (`ci.yml`, `main.py`), which needs a re-measure and
@@ -89,7 +130,7 @@ re-pin under §12.6. Tasks marked F are batched into one re-pin stage.
 
 | # | Task | Priority | Touches | Depends on | Evidence |
 |---|---|---|---|---|---|
-| A1 | **Fix the frontend dev-toolchain advisories.** `npm audit`: 6 (3 high: `vite` ≤6.4.3, `undici` 8.0–8.12.1, `source-map-js` <1.2.2; 3 moderate: `vitest` / `@vitest/mocker` / `@vitest/coverage-v8` 5.0.0–5.0.2). Each has a fix within its current range (`fixAvailable: true`) | security | `frontend/package-lock.json` only (not fingerprinted) | — | the shipped runtime has **0** advisories (`npm audit --omit=dev`): these reach developer machines and CI, not deployments |
+| ~~A1~~ | **Done** (§4.1): 6 advisories → 0 | — | — | — | — |
 | A2 | **Scan dependencies for vulnerabilities in CI.** `npm audit --omit=dev` and `pip-audit` over both hashed locks; fail on high. Nothing in `ci.yml` scans today | security | F (`ci.yml`) | A1 first, or the new gate fails at once | grep of `ci.yml`: no `audit`, `osv`, `trivy` or `grype` |
 | A3 | **Generate an SBOM in CI** (the half of R4.3b that needs no signing identity): one SBOM per image, kept as an artifact | ops | F (`ci.yml`) | batch with A2 | R4.3b is "SBOM partly; signing no" |
 | A4 | **Automate accessibility checks.** axe over each page's rendered states in Vitest. No a11y tooling exists (`package.json` has no axe, Playwright or Cypress); UI-10's checks were run by hand | reliability / a11y | frontend only | A1 (toolchain first) | — |
@@ -172,8 +213,8 @@ the responsive audit (A9) and runtime metrics (A5).
 |---|---|---|
 | No password reset; deactivation only by setting `is_active` directly (enforced at login, refresh and session lookup, but there is no endpoint) | high for production | decision §3.4 |
 | Certificates replaced by hand; backups local, unencrypted, unscheduled; no PITR | high for production | decision §3.11 |
-| No dependency vulnerability gate; Dependabot inert off `main` | medium | A1, A2, decision §3.3 |
-| Dev-toolchain advisories (3 high) | medium (developer and CI machines) | A1 |
+| No dependency vulnerability gate; Dependabot inert off `main` | medium | A2, decision §3.3 |
+| Dev-toolchain advisories (3 high) | resolved: 6 → 0 | A1 done (§4.1) |
 | No runtime metrics or alerts | medium | A5, decision §3.12 |
 | Per-process rate limiter and copilot budgets | low at one worker | decision §3.6 |
 | Open registration, and hotel creation makes you its owner | by design for self-hosting | documented in the README |
@@ -224,17 +265,18 @@ implemented and its CI is green.
 | Delivered platform stages: the README's 13 stage groups (1 → 7.1–7.4) + V2 stages 7.5–7.14 (10). Stage 7.15 is counted under R2.3 | 23 | 23 | 100.0 |
 | UI redesign UI-0 … UI-10 | 11 | 11 | 100.0 |
 | v2.0 roadmap matrix | 29 | 13 | 44.8 |
-| Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 0 | 0.0 |
-| **All** | **71** | **47** | **66.2** |
+| Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 1 (A1) | 12.5 |
+| **All** | **71** | **48** | **67.6** |
 
-- **Within the decided scope** (the 15 decision-blocked rows removed): 47 of 56 = **83.9%**.
-- **Strict** (R0.2 and R0.4a not counted as done): 45 of 71 = 63.4%.
+- **Within the decided scope** (the 15 decision-blocked rows removed): 48 of 56 = **85.7%**.
+- **Strict** (R0.2 and R0.4a not counted as done): 46 of 71 = 64.8%.
+- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. A1 is counted on its local verification (§4.1). Its CI run is recorded with A6, and A1 is uncounted if that run fails.
 
 ---
 
 ## 9. Recommended implementation sequence
 
-1. **A1** — the dev-toolchain advisories. Lockfile only, no re-pin, unblocks A2 and A4.
+1. ~~**A1**~~ — done (§4.1).
 2. **A6** — correct the documentation, above all the README's LLM contradiction, with a stale-claim test.
 3. **A4** — axe accessibility checks in Vitest.
 4. **A7** — remove the dead placeholder routes.
