@@ -76,6 +76,11 @@ being reproducible. That happened from `6ac7d44` until `52fde7b` (§6).
   - Tables carry visually hidden captions.
   - Native selects and radios keep the platform's keyboard behaviour. Selects have one chevron, and forced-colours mode restores the system arrow.
   - Rails and chips only repeat a status already written as text.
+- **Automated accessibility checks (A4):** axe-core 4.14.0 runs in the Vitest suite on every route and state: tables and cards, open forms, loading, empty and failure states, and the shell with its landmarks. The helper is `frontend/src/test/axe.ts`, and colour contrast is excluded because jsdom renders nothing. The first run found and fixed genuine defects:
+  - skipped heading levels on eight pages;
+  - KPI term/value pairs broken on the dashboard and analytics;
+  - a prohibited `aria-label` that hid the review rating from some screen readers.
+  - Details are in [project-completion-audit.md](project-completion-audit.md) §4.3.
 - **Reduced motion:** a global rule in `base.css` cuts animation and transition durations to 0.01ms and disables view transitions. The animations (KPI rise, chart draw, page cross-fade, card fade) use opacity and transform only, so nothing reflows.
 
 ## 6. Stages

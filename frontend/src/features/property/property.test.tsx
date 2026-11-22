@@ -13,7 +13,9 @@ import {
   TEST_HOTEL,
   TEST_USER,
   type FetchStub,
+  stubCompactViewport,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 import type { Hotel } from '@/types/hotel'
 import type { RoomType } from '@/types/room'
 
@@ -993,5 +995,53 @@ describe('editing the property or a room type sends only what changed', () => {
     })
     expect(patchBody('/room-types/', 1)).toEqual({ name: 'Renamed' })
     expect(requestsFor('/room-types/', 'PATCH')[1]!.ifMatch).toBe(`"${NEWER}"`)
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('the property record and the room-type table have no axe violations', async () => {
+    renderPage()
+    await screen.findByText('Deluxe Sea View')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the compact room-type cards have no axe violations', async () => {
+    stubCompactViewport()
+    renderPage()
+    await screen.findByText('Deluxe Sea View')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the open property and room-type forms have no axe violations', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Deluxe Sea View')
+    await user.click(screen.getByRole('button', { name: 'Edit property' }))
+    await expectNoAxeViolations()
+
+    await user.click(screen.getByRole('button', { name: /Add room type/ }))
+    await expectNoAxeViolations()
+  })
+
+  it('the loading, empty and failure states have no axe violations', async () => {
+    fetchStub.on('GET', '/room-types?page=', { body: page([], 0, 0) })
+    const first = renderPage()
+    await expectNoAxeViolations()
+    await screen.findByText('No room types yet')
+    await expectNoAxeViolations()
+    first.unmount()
+
+    fetchStub.on('GET', `/hotels/${TEST_HOTEL.public_id}`, { networkError: true })
+    renderPage()
+    await screen.findByText('Could not reach the server')
+    await expectNoAxeViolations()
   })
 })

@@ -165,9 +165,80 @@ the last column (Entries) is cut, with a scrollbar inside the card. The page its
 scroll sideways, which is why the UI-10 audit did not flag it. It is a small UI fix, a candidate
 for the next frontend stage.
 
-CI for the A6 commit is recorded with the next stage.
+**CI:** [45046381883](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45046381883) on `485dd15`, all 7 jobs green: 12,510 backend tests passed (shards 10,155 + 1,096 + 1,259; 58 skipped), `899 mutations: 899 killed`, 9,548 backend and 68 frontend files byte-identical across two no-cache builds, Docker runtime verification passed.
 
-### 4.3 The remaining tasks
+### 4.3 A4 — implemented and verified locally; counted complete when its CI run is green
+
+**Dependency:** `axe-core` **4.14.0**, a dev dependency pinned exactly (`"axe-core": "4.14.0"`).
+- Source: `https://registry.npmjs.org/axe-core/-/axe-core-4.14.0.tgz`, integrity `sha512-9WTZxEjsZ7b13TH8JPmbV2z8CHbl80/2hm3XPEG4JgNdQLK81IBRXmSxHfMAOkSqQeRxT/0dwNDz2GOm3zzpcQ==`.
+- MPL-2.0, 31 files, 3,430,531 bytes unpacked, no dependencies.
+- Used directly. `vitest-axe` (0.1.0, January 2025, six dependencies) and `jest-axe` (Jest matchers, an older axe) were considered and not used.
+- 4.14.0 rather than the six-day-old 4.14.1.
+- `npm audit` and `npm audit --omit=dev` both report 0. axe-core is in no file of the production bundle.
+
+**Helper:** `frontend/src/test/axe.ts`.
+- **`color-contrast` is off**, because jsdom lays nothing out and `css: false` applies no stylesheet. Contrast is measured in a real browser and recorded beside the tokens.
+- **`html-has-lang` and `document-title` are off for page renders.** `src/index.node.test.ts` asserts that `index.html` has both.
+- **`region` and `landmark-one-main` are off for page renders and on for the shell**, which owns the landmarks.
+- **One project rule:** every `<table>` must have a caption or an `aria-label`. axe has no such rule, and every table here is named.
+- `src/test/harness.tsx` gains `stubCompactViewport()`.
+
+**Coverage:** 56 new tests: 54 axe checks in 16 existing test files, plus 2 `index.html` checks in a new file, `src/index.node.test.ts`.
+
+| Page | States checked |
+|---|---|
+| Dashboard | loaded (KPI tiles, trend charts), loading, empty period, failure |
+| Bookings | table, compact cards, loading, empty, failure |
+| Booking detail | loaded (operations, stay, rooms, money, payments) |
+| Guests | table, compact cards, open create form, loading, empty, failure |
+| Guest detail | loaded |
+| Rooms | table, compact cards, open create form, loading, empty, failure |
+| Room detail | loaded |
+| Availability | before search, an answer, empty answer, failure |
+| Financials | revenue journal and totals, compact cards, expense journal, open posting form, loading, empty, failure |
+| Analytics | loaded (KPIs, charts, tables, demand estimate), loading, failure |
+| Forecast performance | loading, three measured panels |
+| Forecasting (`/intelligence`) | loaded, revenue tab, compact anomaly cards, loading |
+| Reviews | summary and list, open form, loading, empty, failure |
+| Copilot | question form, an answer with citations and tool calls, conversation mode, switched off |
+| Property | record and room-type table, compact cards, open property and room-type forms, loading, empty, failure |
+| Administration | account, password form and member table, compact cards, open add-member form, loading, empty page, failure |
+| Platform | catalogue table, other tabs, open form, audit trail, compact cards, loading, failure |
+| Sign-in | page, refused sign-in with its alert, empty-submit field errors |
+| Not found | inside the real shell, landmark rules on |
+| Shell | navigation drawer open, landmark rules on |
+
+**Violations found and fixed** (all genuine; no rule was silenced):
+
+| Rule (impact) | Where | Impact | Fix |
+|---|---|---|---|
+| `heading-order` (moderate) | booking detail | section cards' `<h3>` directly under the `<h1>`, rooms `<h4>`: the outline skipped a level for heading navigation | `CardHeader` gains an optional `level` (default 3); the page's 10 cards pass `level={2}`; room titles `<h3>` |
+| `heading-order` | Bookings, Guests, Analytics, Dashboard: empty, failure and no-hotel messages | `StateMessage`'s `<h3>` directly under the `<h1>` | `StateMessage` gains `level` (default 3); the 16 page-level messages pass `level={2}` |
+| `heading-order` | Guests, compact | guest card names `<h3>` under the `<h1>` | `<h2>` |
+| `heading-order` | Financials | totals and journal titles `<h3>` under the `<h1>` | `<h2>` |
+| `heading-order` | Dashboard | section titles and board cards `<h3>` under the `<h1>` | `<h2>` (2 titles, 5 cards) |
+| `heading-order` | Copilot answer | citation and tool-call list titles `<h4>` under the thread's `<h2>` | `<h3>` |
+| `dlitem` (serious) | Analytics | KPI `<dt>`/`<dd>` with no `<dl>`: term and value not paired for assistive technology | KPI grid is a `<dl>` (`margin: 0`) |
+| `definition-list` (serious) | Dashboard, loading included | `<p>` caption and delta inside the tiles' `<dl>` groups | caption and delta are further `<dd>`s of the same term |
+| `aria-prohibited-attr` (serious) | Reviews | `aria-label` on a plain `<p>` rating, with the visible score `aria-hidden`: some screen readers announced no rating | `role="img"` on the rating |
+
+Every changed heading keeps its computed size, because its class sets it. Measured on the dev server:
+- dashboard section and card titles 16px/600; booking detail card titles 16px/600; room titles 14px/600; Financials block titles 14px/500;
+- 0 skipped heading levels on all 17 routes.
+
+**Mutations:** stage A4, 10 recorded (A4-M1–M10, Vitest killers):
+- the targets: a form label (guest form, sign-in), the rating's alternative text, a table caption, the navigation button's name, the `<main>` landmark, booking detail's heading level, `StateMessage`'s level, a KPI `<dd>`, and the rating's role;
+- result: **10 killed, 0 survived**;
+- the inventory now holds 909 (828 pytest, 81 Vitest, 166 needing a database).
+
+**Local verification:**
+- `npm audit` 0 and `--omit=dev` 0; typecheck clean.
+- Vitest: `Test Files 35 passed (35)`, `Tests 1409 passed (1409)`, the 1,353 before plus 56, none regressed.
+- Build passes; two clean builds byte-identical (61 files, manifest sha256 `66c12fc6d5e907ee12164e375c865549a90b57f7ae4e63f1eff6def8d2900a3c`).
+- ruff, format and mypy clean (546 files); the affected pytest files: 2,092 passed.
+- Dev server: all 17 routes signed in, each with its `h1`.
+
+### 4.4 The remaining tasks
 
 Each task can be done without a decision from you. They are ordered by the requested priorities.
 **F** marks a change to a fingerprinted file (`ci.yml`, `main.py`), which needs a re-measure and
@@ -178,7 +249,7 @@ re-pin under §12.6. Tasks marked F are batched into one re-pin stage.
 | ~~A1~~ | **Done** (§4.1): 6 advisories → 0 | — | — | — | — |
 | A2 | **Scan dependencies for vulnerabilities in CI.** `npm audit --omit=dev` and `pip-audit` over both hashed locks; fail on high. Nothing in `ci.yml` scans today | security | F (`ci.yml`) | A1 first, or the new gate fails at once | grep of `ci.yml`: no `audit`, `osv`, `trivy` or `grype` |
 | A3 | **Generate an SBOM in CI** (the half of R4.3b that needs no signing identity): one SBOM per image, kept as an artifact | ops | F (`ci.yml`) | batch with A2 | R4.3b is "SBOM partly; signing no" |
-| A4 | **Automate accessibility checks.** axe over each page's rendered states in Vitest. No a11y tooling exists (`package.json` has no axe, Playwright or Cypress); UI-10's checks were run by hand | reliability / a11y | frontend only | A1 (toolchain first) | — |
+| A4 | **Implemented, verified locally** (§4.3): axe-core checks on every route and state, 9 genuine violation kinds fixed, 10 mutations; counted when its CI is green | — | — | — | — |
 | A5 | **Add a metrics exporter, internal only** (the half of R4.3a that needs no alert destination): request counts and latencies in Prometheus format on the internal network, with no nginx route | ops | F (`main.py`, README counts) | batch with A2/A3 | `grep /metrics backend/app`: none |
 | ~~A6~~ | **Done** (§4.2): README, screenshots, frontend README, execution log, `ui-redesign.md`, 12 regression tests, 8 mutations | — | — | — | — |
 | A7 | **Remove the dead placeholder-route scaffolding.** All 13 navigation items are in `BUILT_AREAS`, so `featureRoutes` builds no route; `PlaceholderPage`, `plannedStage` and `AREA_DESCRIPTIONS` are unused. Move the shared state styles out of `PlaceholderPage.module.css` (Not Found uses them) | maintainability | frontend, `splitting.node.test.ts` | — | `AppRouter.tsx:163–176` |
@@ -315,7 +386,7 @@ implemented and its CI is green.
 
 - **Within the decided scope** (the 15 decision-blocked rows removed): 49 of 56 = **87.5%**.
 - **Strict** (R0.2 and R0.4a not counted as done): 47 of 71 = 66.2%.
-- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. A6 is counted on its local verification (§4.2); its CI run is recorded with the next stage, and A6 is uncounted if that run fails.
+- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. A6's CI run 45046381883 is green, so A6 is counted. A4 (§4.3) is not counted yet: it is counted complete once its own CI run is green.
 
 ---
 

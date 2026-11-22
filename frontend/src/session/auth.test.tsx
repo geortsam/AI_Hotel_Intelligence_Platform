@@ -16,6 +16,7 @@ import {
   TEST_USER,
   type FetchStub,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 
 /**
  * Authentication behaviour, end to end through the real router, provider and API client.
@@ -703,5 +704,37 @@ describe('the sign-in form', () => {
     expect(screen.getByLabelText('Email address')).toHaveAccessibleDescription(
       'Enter your email address.',
     )
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the sign-in page has no axe violations', async () => {
+    renderWithAuth(routes, { initialEntries: [ROUTES.login] })
+    await screen.findByRole('heading', { name: 'Sign in' })
+
+    await expectNoAxeViolations()
+  })
+
+  it('a refused sign-in, with its alert and field errors, has no axe violations', async () => {
+    const user = userEvent.setup()
+    fetchStub.on('POST', '/auth/session', {
+      status: 401,
+      body: {
+        error: { code: 'AUTHENTICATION_FAILED', message: 'Invalid email or password.', details: [] },
+      },
+    })
+    renderWithAuth(routes, { initialEntries: [ROUTES.login] })
+    await screen.findByRole('heading', { name: 'Sign in' })
+    await signIn(user)
+    await screen.findByRole('alert')
+    await expectNoAxeViolations()
+
+    // An empty submission: the per-field errors, wired by aria-describedby.
+    await user.clear(screen.getByLabelText('Email address'))
+    await user.clear(screen.getByLabelText('Password'))
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    await expectNoAxeViolations()
   })
 })

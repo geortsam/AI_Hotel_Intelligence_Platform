@@ -57,9 +57,10 @@ export function CitationList({ hotelPublicId, citations }: CitationListProps) {
 
   return (
     <section className={styles.citations} aria-labelledby={headingId}>
-      <h4 className={styles.heading} id={headingId}>
+      {/* h3 (A4): directly under the thread section h2; there is no h3 between. */}
+      <h3 className={styles.heading} id={headingId}>
         Sources cited
-      </h4>
+      </h3>
       <ul className={styles.list}>
         {citations.map((citation) => {
           const isOpen = open === citation.source

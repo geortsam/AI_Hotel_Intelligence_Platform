@@ -18,6 +18,7 @@ import {
   type FetchStub,
   type StubResponse,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 import type {
   ConversationSummary,
   ConversationTranscript,
@@ -1208,5 +1209,40 @@ describe('disclosure', () => {
     renderCopilot()
     expect(await screen.findByRole('radio', { name: /One-off question/ })).toBeChecked()
     expect(screen.getByRole('radio', { name: /Conversation/ })).not.toBeChecked()
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the question form has no axe violations', async () => {
+    renderCopilot()
+    await questionBox()
+
+    await expectNoAxeViolations()
+  })
+
+  it('an answer with its citations and tool calls has no axe violations', async () => {
+    renderCopilot()
+    await ask('Anything')
+    await screen.findByText('Occupancy was 0.72 over the period.')
+
+    await expectNoAxeViolations()
+  })
+
+  it('conversation mode has no axe violations', async () => {
+    renderCopilot()
+    await questionBox()
+    await chooseConversationMode()
+
+    await expectNoAxeViolations()
+  })
+
+  it('the switched-off state has no axe violations', async () => {
+    fetchStub.on('GET', '=/api/v1/', { body: apiMeta(false) })
+    renderCopilot()
+    await screen.findByText('The copilot is switched off in this deployment')
+
+    await expectNoAxeViolations()
   })
 })

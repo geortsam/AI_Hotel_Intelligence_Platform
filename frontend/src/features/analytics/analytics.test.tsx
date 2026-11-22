@@ -14,6 +14,7 @@ import {
   TEST_USER,
   type FetchStub,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 
 /**
  * Period reporting, and the first screen to ask the trained model anything.
@@ -628,5 +629,27 @@ describe('identifiers', () => {
       expect(call.url).not.toMatch(/\/hotels\/\d+(\/|$)/)
     }
     expect(screen.queryByText(TEST_HOTEL.public_id)).not.toBeInTheDocument()
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the report, its charts, tables and the demand estimate have no axe violations', async () => {
+    renderPage()
+    await screen.findByText('28.7%')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the loading and failure states have no axe violations', async () => {
+    fetchStub.on('GET', '/analytics/overview', {
+      status: 500,
+      body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.' } },
+    })
+    renderPage()
+    await expectNoAxeViolations()
+    await screen.findByRole('alert')
+    await expectNoAxeViolations()
   })
 })

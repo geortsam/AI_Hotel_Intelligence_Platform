@@ -14,7 +14,9 @@ import {
   TEST_TOKEN,
   TEST_USER,
   type FetchStub,
+  stubCompactViewport,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 import type { Member } from '@/types/member'
 
 /**
@@ -887,5 +889,47 @@ describe('the compact layout', () => {
     expect(
       screen.getByRole('button', { name: 'Remove dana.reception@example.test' }),
     ).toBeInTheDocument()
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the account, password form and member table have no axe violations', async () => {
+    renderPage()
+    await screen.findByText('Dana Reception')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the compact member cards have no axe violations', async () => {
+    stubCompactViewport()
+    renderPage()
+    await screen.findByText('Dana Reception')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the open add-member form has no axe violations', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Dana Reception')
+    await user.click(screen.getByRole('button', { name: /Add member/ }))
+
+    await expectNoAxeViolations()
+  })
+
+  it('the loading, empty-page and failure states have no axe violations', async () => {
+    fetchStub.on('GET', '/members?page=', { body: page([], 2, 1) })
+    const first = renderPage()
+    await expectNoAxeViolations()
+    await screen.findByText('No members on this page')
+    await expectNoAxeViolations()
+    first.unmount()
+
+    fetchStub.on('GET', '/members?page=', { networkError: true })
+    renderPage()
+    await screen.findByText('Could not reach the server')
+    await expectNoAxeViolations()
   })
 })

@@ -20,6 +20,12 @@ export interface StateMessageProps {
    * sound like a fault.
    */
   readonly tone: 'alert' | 'status'
+  /**
+   * The title's heading level (A4). `3` by default, for a message inside a section under an
+   * `<h2>`; `2` where the message stands in for a whole page's content directly under its
+   * `<h1>`, so the outline never skips a level for anyone navigating by heading.
+   */
+  readonly level?: 2 | 3
 }
 
 /**
@@ -34,12 +40,20 @@ export interface StateMessageProps {
  * nothing -- and printing it because a request timed out is the most consequential lie a
  * dashboard can tell, because it is indistinguishable from a real bad week.
  */
-export function StateMessage({ icon: Icon, title, detail, onRetry, tone }: StateMessageProps) {
+export function StateMessage({
+  icon: Icon,
+  title,
+  detail,
+  onRetry,
+  tone,
+  level = 3,
+}: StateMessageProps) {
+  const Heading = level === 2 ? 'h2' : 'h3'
   return (
     <Card className={styles.card}>
       <div className={styles.body} role={tone === 'alert' ? 'alert' : 'status'}>
         <Icon className={styles.icon} size={28} aria-hidden="true" />
-        <h3 className={styles.title}>{title}</h3>
+        <Heading className={styles.title}>{title}</Heading>
         <p className={styles.detail}>{detail}</p>
         {onRetry ? (
           <Button variant="secondary" size="sm" onClick={onRetry}>

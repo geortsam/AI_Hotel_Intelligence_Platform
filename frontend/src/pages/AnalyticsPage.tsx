@@ -69,6 +69,7 @@ export function AnalyticsPage() {
     return (
       <Shell period={period} onPeriodChange={setPeriod} hotel={null} rangeLabel={null} disabled>
         <StateMessage
+          level={2}
           icon={Building2}
           tone="status"
           title="No hotel is linked to your account"
@@ -82,6 +83,7 @@ export function AnalyticsPage() {
     return (
       <Shell period={period} onPeriodChange={setPeriod} hotel={null} rangeLabel={null} disabled>
         <StateMessage
+          level={2}
           icon={WifiOff}
           tone="alert"
           title="Could not load your hotels"
@@ -105,6 +107,7 @@ export function AnalyticsPage() {
     return (
       <Shell period={period} onPeriodChange={setPeriod} hotel={hotel} rangeLabel={rangeLabel}>
         <StateMessage
+          level={2}
           icon={AlertTriangle}
           tone="alert"
           title={notice.title}
@@ -169,7 +172,8 @@ export function AnalyticsPage() {
 
       <section aria-label="Performance">
         <SectionHeader title="Performance" />
-        <div className={styles.kpiGrid}>
+        {/* A <dl>, as on the dashboard: each KpiCard is a <dt>/<dd> group (A4). */}
+        <dl className={styles.kpiGrid}>
           <KpiCard
             label="Occupancy"
             value={formatRatioAsPercent(occupancy.occupancy_rate)}
@@ -206,7 +210,7 @@ export function AnalyticsPage() {
             unavailableReason="No room revenue was recorded in this period."
             caption="From nightly rates on occupied nights"
           />
-        </div>
+        </dl>
       </section>
 
       <section aria-label="Activity">

@@ -34,9 +34,10 @@ export function ToolCallList({ toolsUsed }: ToolCallListProps) {
 
   return (
     <section className={styles.lookups} aria-labelledby={headingId}>
-      <h4 className={styles.heading} id={headingId}>
+      {/* h3 (A4): directly under the thread section h2; there is no h3 between. */}
+      <h3 className={styles.heading} id={headingId}>
         Data lookups
-      </h4>
+      </h3>
       {toolsUsed === null ? (
         <p className={styles.note}>{LOOKUPS_NOT_RECORDED}</p>
       ) : toolsUsed.length === 0 ? (

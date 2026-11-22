@@ -352,7 +352,7 @@ function OperationsSection({
 
   return (
     <Card padded={false}>
-      <CardHeader title="Operations" />
+      <CardHeader level={2} title="Operations" />
       <CardBody>
         {/*
          * Success and failure are separate live regions with different urgency. A completed
@@ -501,7 +501,7 @@ const DEPARTURE_FAILURE_COPY = {
 function OverviewSection({ booking, timeZone }: { booking: Booking; timeZone: string }) {
   return (
     <Card padded={false}>
-      <CardHeader title="Overview" />
+      <CardHeader level={2} title="Overview" />
       <CardBody>
         <Facts>
           <Fact label="Reference">
@@ -531,7 +531,7 @@ function StaySection({ booking }: { booking: Booking }) {
 
   return (
     <Card padded={false}>
-      <CardHeader title="Stay" />
+      <CardHeader level={2} title="Stay" />
       <CardBody>
         <Facts>
           <Fact label="Check-in">{formatDate(booking.check_in_date)}</Fact>
@@ -576,7 +576,7 @@ function StaySection({ booking }: { booking: Booking }) {
 function GuestSection({ guest }: { guest: Guest | null }) {
   return (
     <Card padded={false}>
-      <CardHeader title="Guest" />
+      <CardHeader level={2} title="Guest" />
       <CardBody>
         {guest === null ? (
           <p className={styles.unavailable} role="status">
@@ -630,6 +630,7 @@ function RoomsSection({ booking }: { booking: Booking }) {
   return (
     <Card padded={false}>
       <CardHeader
+        level={2}
         title={`Rooms (${formatCount(booking.rooms.length)})`}
         actions={<Badge tone="neutral">{booking.currency}</Badge>}
       />
@@ -639,10 +640,10 @@ function RoomsSection({ booking }: { booking: Booking }) {
         ) : (
           booking.rooms.map((room) => (
             <section key={room.room_number} className={styles.room}>
-              <h4 className={styles.roomTitle}>
+              <h3 className={styles.roomTitle}>
                 Room {room.room_number}
                 <span className={styles.roomType}>{room.room_type_code}</span>
-              </h4>
+              </h3>
               <Facts>
                 <Fact label="Occupancy">
                   {formatCount(room.adults)} adult{room.adults === 1 ? '' : 's'}
@@ -724,7 +725,7 @@ function FinancialSection({
     const mixedCurrency = reconciliationError?.status === 409
     return (
       <Card padded={false}>
-        <CardHeader title="Financial summary" />
+        <CardHeader level={2} title="Financial summary" />
         <CardBody>
           <p className={styles.unavailable} role="status">
             {mixedCurrency
@@ -747,6 +748,7 @@ function FinancialSection({
   return (
     <Card padded={false}>
       <CardHeader
+        level={2}
         title="Financial summary"
         actions={<Badge tone={payment.tone}>{payment.label}</Badge>}
       />
@@ -841,6 +843,7 @@ function PaymentsSection({
   return (
     <Card padded={false}>
       <CardHeader
+        level={2}
         title="Payments"
         actions={
           payments.status === 'ready' ? (
@@ -1032,7 +1035,7 @@ const LEDGER_FAILURE_COPY = {
 function CancellationSection({ booking, timeZone }: { booking: Booking; timeZone: string }) {
   return (
     <Card padded={false}>
-      <CardHeader title="Cancellation" />
+      <CardHeader level={2} title="Cancellation" />
       <CardBody>
         <Facts>
           <Fact label="Cancelled">
@@ -1050,7 +1053,7 @@ function CancellationSection({ booking, timeZone }: { booking: Booking; timeZone
 function MetadataSection({ booking, timeZone }: { booking: Booking; timeZone: string }) {
   return (
     <Card padded={false}>
-      <CardHeader title="Record" />
+      <CardHeader level={2} title="Record" />
       <CardBody>
         <Facts>
           <Fact label="Created">{formatDateTime(booking.created_at, timeZone)}</Fact>

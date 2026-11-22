@@ -18,6 +18,7 @@ import {
   TEST_USER,
   type FetchStub,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 
 /**
  * The dashboard's consumption of the analytics API.
@@ -1218,5 +1219,41 @@ describe('the trend charts', () => {
     await screen.findByText('58.0%')
 
     expect(screen.getByText(/Occupancy could not be calculated for any day/i)).toBeInTheDocument()
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the KPI tiles, trend charts and summaries have no axe violations', async () => {
+    stubSession()
+    stubOverview(CURRENT_OVERVIEW)
+    fetchStub.on('GET', 'analytics/daily', { body: DAILY })
+    mount()
+    await screen.findByText('58.0%')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the loading and empty-period states have no axe violations', async () => {
+    stubSession()
+    stubOverview(EMPTY_OVERVIEW, EMPTY_OVERVIEW)
+    fetchStub.on('GET', 'analytics/daily', {
+      body: { ...DAILY, days: DAILY.days.map((day) => dailyRow(day.date, 0, null)) },
+    })
+    mount()
+    await expectNoAxeViolations()
+    await screen.findByText(/No activity in the last 7 days/i)
+    await expectNoAxeViolations()
+  })
+
+  it('the failure state has no axe violations', async () => {
+    stubSession()
+    fetchStub.on('GET', 'analytics/overview', { networkError: true })
+    fetchStub.on('GET', 'analytics/daily', { networkError: true })
+    mount()
+    await screen.findByRole('alert')
+
+    await expectNoAxeViolations()
   })
 })

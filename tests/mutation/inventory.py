@@ -9871,6 +9871,127 @@ STAGE_A6 = [
     ),
 ]
 
+FE = "frontend/src/"
+A4_GUESTS = "src/features/guests/guests.test.tsx"
+A4_AUTH = "src/session/auth.test.tsx"
+A4_REVIEWS = "src/features/reviews/reviews.test.tsx"
+A4_SHELL = "src/components/layout/AppShell.test.tsx"
+A4_BOOKINGS = "src/features/bookings/bookings.test.tsx"
+A4_DASHBOARD = "src/features/dashboard/dashboard.test.tsx"
+
+
+def a11y(name: str, breaks: str, edits: tuple[Edit, ...], killer: str) -> Mutation:
+    """An A4 accessibility mutation: killed by the axe check of the page it breaks (Vitest)."""
+    return Mutation(name, "A4", breaks, edits, (killer,), runner=Runner.VITEST)
+
+
+STAGE_A4 = [
+    a11y(
+        "A4-M1",
+        "a form control loses its label: the guest form's first-name label names no control",
+        one(
+            FE + "features/guests/GuestForm.tsx",
+            "          <label className={styles.label} htmlFor={firstId}>\n            First name",
+            "          <label className={styles.label}>\n            First name",
+        ),
+        f"{A4_GUESTS}::the open create form has no axe violations",
+    ),
+    a11y(
+        "A4-M2",
+        "the sign-in email field loses its label",
+        one(
+            FE + "pages/LoginPage.tsx",
+            "              <label className={styles.label} htmlFor={emailId}>\n"
+            "                Email address",
+            "              <label className={styles.label}>\n                Email address",
+        ),
+        f"{A4_AUTH}::the sign-in page has no axe violations",
+    ),
+    a11y(
+        "A4-M3",
+        "the review rating, an image, loses its alternative text",
+        one(
+            FE + "features/reviews/ReviewCard.tsx",
+            "            aria-label={describeReviewRating(review.rating, review.rating_scale)}\n",
+            "",
+        ),
+        f"{A4_REVIEWS}::the summary band and the review list have no axe violations",
+    ),
+    a11y(
+        "A4-M4",
+        "the guest table loses its caption, so it is an unnamed table",
+        one(
+            FE + "features/guests/GuestTable.tsx",
+            "        <caption className={styles.caption}>\n"
+            "          Guests of this property, ordered by surname then forename.\n"
+            "        </caption>\n",
+            "",
+        ),
+        f"{A4_GUESTS}::the guest table has no axe violations",
+    ),
+    a11y(
+        "A4-M5",
+        "the icon-only navigation button loses its accessible name",
+        one(
+            FE + "components/layout/Header.tsx",
+            "        aria-label={isSidebarOpen ? 'Close navigation' : 'Open navigation'}\n",
+            "",
+        ),
+        f"{A4_SHELL}::the shell around the real not-found page has no axe violations, landmarks "
+        "included",
+    ),
+    a11y(
+        "A4-M6",
+        "the shell's main landmark becomes a plain div",
+        (
+            Edit(
+                FE + "components/layout/AppShell.tsx",
+                '      <main className={styles.main} id="main-content">',
+                '      <div className={styles.main} id="main-content">',
+            ),
+            Edit(FE + "components/layout/AppShell.tsx", "      </main>", "      </div>"),
+        ),
+        f"{A4_SHELL}::the shell around the real not-found page has no axe violations, landmarks "
+        "included",
+    ),
+    a11y(
+        "A4-M7",
+        "booking detail's first section heading skips a level again (h1 -> h3)",
+        one(
+            FE + "pages/BookingDetailPage.tsx",
+            '      <CardHeader level={2} title="Operations" />',
+            '      <CardHeader title="Operations" />',
+        ),
+        f"{A4_BOOKINGS}::the booking detail page has no axe violations",
+    ),
+    a11y(
+        "A4-M8",
+        "a page-level state message ignores its level and skips from h1 to h3",
+        one(
+            FE + "features/dashboard/StateMessage.tsx",
+            "  const Heading = level === 2 ? 'h2' : 'h3'",
+            "  const Heading = 'h3'",
+        ),
+        f"{A4_BOOKINGS}::the loading, empty and failure states have no axe violations",
+    ),
+    a11y(
+        "A4-M9",
+        "a KPI tile's caption is a paragraph inside the definition list again",
+        one(
+            FE + "features/dashboard/KpiCard.tsx",
+            "        <dd className={styles.caption}>{caption}</dd>",
+            "        <p className={styles.caption}>{caption}</p>",
+        ),
+        f"{A4_DASHBOARD}::the KPI tiles, trend charts and summaries have no axe violations",
+    ),
+    a11y(
+        "A4-M10",
+        "the review rating loses role=img, so its aria-label is prohibited again",
+        one(FE + "features/reviews/ReviewCard.tsx", '            role="img"\n', ""),
+        f"{A4_REVIEWS}::the summary band and the review list have no axe violations",
+    ),
+]
+
 STAGE_R0_2 = [
     _r02(
         1,
@@ -9945,4 +10066,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R1_1,
     *STAGE_R0_2,
     *STAGE_A6,
+    *STAGE_A4,
 )

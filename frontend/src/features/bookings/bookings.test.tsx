@@ -14,7 +14,9 @@ import {
   TEST_HOTEL,
   TEST_USER,
   type FetchStub,
+  stubCompactViewport,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 import type { Booking, BookingStatus } from '@/types/booking'
 
 /**
@@ -1032,5 +1034,59 @@ describe('the compact layout', () => {
     expect(screen.getByRole('list')).toBeInTheDocument()
     // Still one accessible link per booking, not a card-sized anchor.
     expect(screen.getByRole('link', { name: /Booking MH-00162/ })).toBeInTheDocument()
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('the bookings table has no axe violations', async () => {
+    stubSession()
+    fetchStub.on('GET', '/bookings?', { body: bookingsPage([makeBooking()], 1) })
+    mountList()
+    await screen.findByText('MH-00162')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the compact booking cards have no axe violations', async () => {
+    stubSession()
+    fetchStub.on('GET', '/bookings?', { body: bookingsPage([makeBooking()], 1) })
+    stubCompactViewport()
+    mountList()
+    await screen.findByText('MH-00162')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the loading, empty and failure states have no axe violations', async () => {
+    stubSession()
+    fetchStub.on('GET', '/bookings?', { body: bookingsPage([], 0) })
+    const first = mountList()
+    await expectNoAxeViolations()
+    await screen.findByText('No bookings yet')
+    await expectNoAxeViolations()
+    first.unmount()
+
+    fetchStub.on('GET', '/bookings?', {
+      status: 500,
+      body: envelope('INTERNAL_ERROR', 'An internal error occurred.'),
+    })
+    mountList()
+    await screen.findByRole('alert')
+    await expectNoAxeViolations()
+  })
+
+  it('the booking detail page has no axe violations', async () => {
+    stubSession()
+    stubDetail(makeBooking())
+    mountRouted(bookingPath(makeBooking().public_id))
+    await screen.findByText('Booking MH-00162')
+
+    await expectNoAxeViolations()
   })
 })

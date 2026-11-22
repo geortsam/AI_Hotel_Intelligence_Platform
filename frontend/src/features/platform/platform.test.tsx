@@ -14,7 +14,9 @@ import {
   TEST_TOKEN,
   TEST_USER,
   type FetchStub,
+  stubCompactViewport,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 import type { PlatformAuditEvent } from '@/types/platform'
 
 /**
@@ -1060,5 +1062,47 @@ describe('editing a catalogue entry sends only what changed, conditionally', () 
     // The resubmission names the version it was reloaded at.
     expect(requestsFor('/amenities/', 'PATCH')[1]!.ifMatch).toBe(`"${NEWER}"`)
     expect(bodyOf('/amenities/', 'PATCH')).toEqual({ name: 'Sea outlook' })
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the catalogue tabs and the amenity table have no axe violations', async () => {
+    renderPage()
+    await screen.findByText('Sea view')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the other catalogue tabs, the open form and the audit trail have no axe violations', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Sea view')
+    await openTab(user, 'Revenue categories')
+    await screen.findByText('Food and beverage')
+    await expectNoAxeViolations()
+
+    await openTab(user, 'Amenities')
+    await screen.findByText('Sea view')
+    await user.click(screen.getByRole('button', { name: /Add amenity/ }))
+    await user.click(screen.getByRole('button', { name: /Load audit trail/ }))
+    await expectNoAxeViolations()
+  })
+
+  it('the compact catalogue cards have no axe violations', async () => {
+    stubCompactViewport()
+    renderPage()
+    await screen.findByText('Sea view')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the loading and failure states have no axe violations', async () => {
+    fetchStub.on('GET', '/amenities?page=', { networkError: true })
+    renderPage()
+    await expectNoAxeViolations()
+    await screen.findByText('Could not reach the server')
+    await expectNoAxeViolations()
   })
 })

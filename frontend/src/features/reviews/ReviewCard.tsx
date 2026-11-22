@@ -92,7 +92,13 @@ export function ReviewCard({ review, timeZone, onModerate, busy = false }: Revie
             * appear in one list, so "4 / 5" and "9 / 10" sit side by side and each says
             * which it is.
             */}
-          <p className={styles.rating} aria-label={describeReviewRating(review.rating, review.rating_scale)}>
+          {/* role="img" (A4): `aria-label` is prohibited on a plain paragraph, and some screen
+              readers ignored it -- with the visible score aria-hidden, they announced no rating. */}
+          <p
+            className={styles.rating}
+            role="img"
+            aria-label={describeReviewRating(review.rating, review.rating_scale)}
+          >
             <span aria-hidden="true">{formatReviewRating(review.rating, review.rating_scale)}</span>
           </p>
           <div className={styles.badges}>

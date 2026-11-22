@@ -33,18 +33,25 @@ export interface CardHeaderProps {
   readonly title: string
   /** Actions for this card, e.g. a filter or an overflow menu. */
   readonly actions?: ReactNode
+  /**
+   * The title's heading level. `3` by default; `2` for a card that sits directly under the
+   * page's `<h1>` with no section heading between (A4: booking detail's sections).
+   */
+  readonly level?: 2 | 3
 }
 
 /**
  * A card's title row.
  *
- * Renders an `<h3>`: cards sit under a page `<h1>` and a section `<h2>`, so this is the
- * level that keeps the document outline intact for anyone navigating by heading.
+ * Renders an `<h3>` by default: cards usually sit under a page `<h1>` and a section `<h2>`, so
+ * that is the level that keeps the document outline intact for anyone navigating by heading.
+ * A page whose cards are its sections passes `level={2}`.
  */
-export function CardHeader({ title, actions }: CardHeaderProps) {
+export function CardHeader({ title, actions, level = 3 }: CardHeaderProps) {
+  const Heading = level === 2 ? 'h2' : 'h3'
   return (
     <div className={styles.header}>
-      <h3 className={styles.title}>{title}</h3>
+      <Heading className={styles.title}>{title}</Heading>
       {actions}
     </div>
   )

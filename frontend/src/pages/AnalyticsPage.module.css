@@ -56,6 +56,8 @@
 /* Auto-fit rather than fixed columns: four KPIs on a desktop, two on a tablet, one on a phone,
    with no media query to keep in step with the card's own minimum width. */
 .kpiGrid {
+  /* A <dl> since A4: no browser default margin. */
+  margin: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: var(--space-4);

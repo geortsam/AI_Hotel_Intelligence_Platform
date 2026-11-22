@@ -65,6 +65,9 @@ const DELTA_ICON = {
  * Rendered as `<dt>`/`<dd>` inside the page's definition list: a KPI genuinely is a term and
  * its value, and the pairing is what lets a screen reader announce "Occupancy, 58.0%" rather
  * than reading two unrelated fragments.
+ *
+ * The caption and the delta are further `<dd>`s of the same term (A4): a `<dl>` group may hold
+ * only `<dt>` and `<dd>`, and a `<p>` among them broke the pairing for assistive technology.
  */
 export function KpiCard({
   label,
@@ -93,17 +96,17 @@ export function KpiCard({
       </dd>
 
       {isLoading ? (
-        <p className={styles.caption}>
+        <dd className={styles.caption}>
           <Skeleton width="80%" height="0.75rem" />
-        </p>
+        </dd>
       ) : value === null && unavailableReason ? (
-        <p className={styles.caption}>{unavailableReason}</p>
+        <dd className={styles.caption}>{unavailableReason}</dd>
       ) : caption ? (
-        <p className={styles.caption}>{caption}</p>
+        <dd className={styles.caption}>{caption}</dd>
       ) : null}
 
       {!isLoading && delta && DeltaIcon ? (
-        <p className={`${styles.delta} ${styles[delta.direction]}`}>
+        <dd className={`${styles.delta} ${styles[delta.direction]}`}>
           {/* The chip (UI-5/6) holds the direction and the figure; the comparison label
               stays outside it, as plain text. */}
           <span className={styles.deltaChip}>
@@ -114,7 +117,7 @@ export function KpiCard({
             {spoken !== shown ? <span className={styles.srOnly}>{spoken}</span> : null}
           </span>
           {deltaLabel ? <span className={styles.deltaLabel}>{deltaLabel}</span> : null}
-        </p>
+        </dd>
       ) : null}
     </Card>
   )

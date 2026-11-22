@@ -204,6 +204,24 @@ export function renderWithAuth(
   )
 }
 
+/**
+ * Make `useIsCompact` report a compact viewport, so list pages render cards instead of tables.
+ *
+ * jsdom evaluates no media queries, so the breakpoint is stubbed; `vi.unstubAllGlobals()` in the
+ * caller's `afterEach` undoes it. The same stub the feature suites' own compact-layout tests use,
+ * in one place for the accessibility checks (A4).
+ */
+export function stubCompactViewport(): void {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }),
+  )
+}
+
 /** Render arbitrary UI inside both providers, with no router. */
 export function renderInAuth(ui: ReactNode): RenderResult {
   return render(

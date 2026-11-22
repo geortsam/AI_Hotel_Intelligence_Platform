@@ -300,9 +300,9 @@ function LedgerChrome<TEntry, TBucket, TCreate, TCategory>({
       {/* --- the server's totals ---------------------------------------------------------- */}
 
       <section className={styles.block} aria-labelledby={`${kind}-totals`}>
-        <h3 className={styles.blockTitle} id={`${kind}-totals`}>
+        <h2 className={styles.blockTitle} id={`${kind}-totals`}>
           Totals for this period
-        </h3>
+        </h2>
         <p className={styles.blockNote}>
           Computed by the server, grouped by category and currency. The journal&rsquo;s filters
           below do not narrow them &mdash; the totals endpoint accepts a date range and nothing
@@ -327,9 +327,9 @@ function LedgerChrome<TEntry, TBucket, TCreate, TCategory>({
       <section className={styles.block} aria-labelledby={`${kind}-journal`}>
         <div className={styles.blockHeader}>
           <div>
-            <h3 className={styles.blockTitle} id={`${kind}-journal`}>
+            <h2 className={styles.blockTitle} id={`${kind}-journal`}>
               {vocabulary.title} journal
-            </h3>
+            </h2>
             <p className={styles.blockNote}>{vocabulary.summary}</p>
           </div>
           {open ? null : (
