@@ -23,8 +23,8 @@
   - all 891 recorded mutations were killed;
   - ruff, the format check and mypy were clean;
   - the migration chain was checked, the image was verified at runtime, and both builds were reproducible.
-- **Overall completion:** 67.6% of all tracked work (48 of 71 items, §8; it was 66.2% at the audit). For work that needs no decision from you, the figure is 85.7% (48 of 56).
-- **Remaining autonomous work:** 8 tasks (§4; A1 is done). None is a functional gap. They cover supply-chain security, accessibility automation, metrics, and documentation that is now stale.
+- **Overall completion:** 69.0% of all tracked work (49 of 71 items, §8; it was 66.2% at the audit and 67.6% after A1). For work that needs no decision from you, the figure is 87.5% (49 of 56).
+- **Remaining autonomous work:** 7 tasks (§4; A1 and A6 are done). None is a functional gap. They cover supply-chain security, accessibility automation, metrics, dead code and documentation consolidation.
 - **Remaining user decisions:** 13 open decision briefs (§5). Three of them have a do-nothing default.
 - **Readiness:** the platform is demo ready. It is not production ready, and §7 says exactly why.
 
@@ -81,7 +81,7 @@ licences, served from `/assets/`) and "Forecasting" (`a08bb95`).
 
 ---
 
-## 4. Remaining autonomous engineering tasks — 8 (A1 done)
+## 4. Remaining autonomous engineering tasks — 7 (A1 and A6 done)
 
 ### 4.1 A1, done (2026-11-22)
 
@@ -120,9 +120,54 @@ The advisories by package:
 - Two builds from empty output directories are byte-identical: 61 files, manifest sha256 `5487d54373f9aef7233f1a48d15450910ba4f28f83a9309ec49195b71bca2e33`.
 - The dev server (Vite v6.4.6) serves all 17 routes signed in. Each shows its expected `h1`, exactly one `h1`, no error alert and no sideways scroll, and there are no console errors.
 
-CI for the A1 commit is recorded with stage A6.
+**CI:** [45035486687](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45035486687) on `044df52`, all 7 jobs green, `891 mutations: 891 killed`, and all 68 served frontend files byte-identical across two no-cache image builds.
 
-### 4.2 The remaining tasks
+### 4.2 A6, done (2026-11-22)
+
+The stale and contradictory documentation is corrected. Only documentation, screenshots and tests
+changed; nothing under `backend/app`, no migration, no `ci.yml`, no frozen artifact.
+
+- **README.md:**
+  - The stage table now runs past 7.1–7.4. It adds 7.5–7.14, 7.15 as conditional and untriggered, the done R-stage work, UI-1–UI-10 and A1, each checked against the code.
+  - The false "any LLM/RAG/agent capability" sentence is replaced by what exists: seven read-only tools named as the registry names them, PostgreSQL full-text search, off by default, Ollama or Anthropic as configured, no autonomous action, and the one declared idempotent write. The not-implemented list now names vector search, agents and writing tools explicitly.
+  - `app/llm/` is no longer said to hold a single provider adapter.
+  - The screenshot intro states the dataset actually shown, and two image captions and one alt text were corrected.
+  - The mutation count is 899.
+- **Screenshots:** all 12 under `docs/screenshots/` were replaced.
+  - Same file names and sizes: 1440×900, and Analytics 1440×1760.
+  - Captured from the redesigned UI with headless Edge over the DevTools protocol, signed in as the seeded demo owner.
+  - The data is synthetic (`scripts/seed_demo.py --reference-date today`: 2 properties, 2,483 bookings, 25 rooms, 2,181 guests, 669 reviews; `@example.com` addresses). No credential, token or secret appears in any image; each was reviewed.
+- **frontend/README.md:**
+  - Covers the self-hosted Inter and Source Serif 4 (`fonts.css`, `assets/fonts`, OFL licences); the shared `components/ui` modules with measured usage (Form 8, DataTable 12, VisuallyHidden 12, Rail 3 components); and the one-`composes`-path rule.
+  - Gives the breakpoints as the code has them: 600 / 768 / 1024 / 1280 documented in `tokens.css`, cards below 1024px, and the remaining one-off widths named as open work. The stage brief's "600 / 1024 / 1280" would have omitted the 768px rules the code still uses.
+  - Also corrected: the directory tree (features, lib, session, fonts), the `services/` description ("no endpoints yet") and the cookie-session behaviour of the API client.
+- **docs/roadmap-v2.0-execution.md:**
+  - The pin-3 row is completed (`05b9ba9`, `a69b44d`, `847adfe`; 44752923061 red on E501 only, 44761729436 green).
+  - Rows added for UI-1–UI-10, the reproducibility fix, the audit and A1, with exact hashes and run IDs.
+  - The R6.1 row now says it was not done.
+- **docs/ui-redesign.md (new):** direction, tokens, typography, shared modules, breakpoints, accessibility and reduced motion, every stage with its commits, and the `52fde7b` fix.
+- **Regression tests** (`tests/backend/test_capability_and_breakpoint_docs.py`, 12 tests):
+  - Both stale claims are checked for absence, with positive controls for the original wrapping and a re-wrapped form.
+  - The README's tool list must equal the registry, and its stated count must match.
+  - Its declared write must be the only tool with a side effect.
+  - No mapped column may be a vector type, and knowledge search must be `TSVECTOR`.
+  - Every breakpoint row must be a media query the stylesheets use and must be documented in `tokens.css`.
+  - The stated card switch must be `useIsCompact`'s default.
+- **Mutations:** stage A6, 8 recorded (A6-M1–M8): 8 killed, 0 survived. The inventory holds 899 (828 pytest, 71 Vitest, 166 needing a database), and `tests/README.md` is updated to match. The first run had A6-M8 survive: the original-wrapping control passed with or without whitespace normalisation, because both claims sat on one line. The re-wrap test was added because of it.
+- **Local verification:**
+  - ruff `All checks passed!`; format `573 files already formatted`; mypy `Success: no issues found in 546 source files`.
+  - The affected pytest files: 1,896 passed. Every test reading the changed docs: 234 passed.
+  - Vitest: 34 files, 1,353 tests passed.
+
+**Found during A6, not yet counted in the 71-item framework:** on Analytics at 1440px the
+"Expenses by category" table is 542px wide in a 475px box. Its "Fixed cost" badges widen it, so
+the last column (Entries) is cut, with a scrollbar inside the card. The page itself does not
+scroll sideways, which is why the UI-10 audit did not flag it. It is a small UI fix, a candidate
+for the next frontend stage.
+
+CI for the A6 commit is recorded with the next stage.
+
+### 4.3 The remaining tasks
 
 Each task can be done without a decision from you. They are ordered by the requested priorities.
 **F** marks a change to a fingerprinted file (`ci.yml`, `main.py`), which needs a re-measure and
@@ -135,7 +180,7 @@ re-pin under §12.6. Tasks marked F are batched into one re-pin stage.
 | A3 | **Generate an SBOM in CI** (the half of R4.3b that needs no signing identity): one SBOM per image, kept as an artifact | ops | F (`ci.yml`) | batch with A2 | R4.3b is "SBOM partly; signing no" |
 | A4 | **Automate accessibility checks.** axe over each page's rendered states in Vitest. No a11y tooling exists (`package.json` has no axe, Playwright or Cypress); UI-10's checks were run by hand | reliability / a11y | frontend only | A1 (toolchain first) | — |
 | A5 | **Add a metrics exporter, internal only** (the half of R4.3a that needs no alert destination): request counts and latencies in Prometheus format on the internal network, with no nginx route | ops | F (`main.py`, README counts) | batch with A2/A3 | `grep /metrics backend/app`: none |
-| A6 | **Correct the stale and contradictory documentation:** (a) README "Development stages" stops at 7.1–7.4, though 7.5–7.14 shipped; (b) the README says "any LLM/RAG/agent capability" is not implemented, which contradicts the copilot (`backend/app/copilot`, `llm`, `knowledge`) and the README's own Copilot sections; (c) the README screenshots date from 2026-09-22, before the redesign; (d) `frontend/README.md` predates the redesign: no fonts, no shared `components/ui` modules, breakpoints given as 768/1024 when the code uses 600/1024/1280; (e) `roadmap-v2.0-execution.md` pin-3 row still says "(this commit)" with no CI (it is `a69b44d` + `847adfe`, CI 44761729436 green); (f) the UI redesign record lives outside the repository (`AI_Hotel_Platform/ui-baseline/`). Add a stale-claim test as M2 did, so (b) cannot return | documentation (but (b) is a correctness error) | docs; the README is not fingerprinted | — | §7.2 |
+| ~~A6~~ | **Done** (§4.2): README, screenshots, frontend README, execution log, `ui-redesign.md`, 12 regression tests, 8 mutations | — | — | — | — |
 | A7 | **Remove the dead placeholder-route scaffolding.** All 13 navigation items are in `BUILT_AREAS`, so `featureRoutes` builds no route; `PlaceholderPage`, `plannedStage` and `AREA_DESCRIPTIONS` are unused. Move the shared state styles out of `PlaceholderPage.module.css` (Not Found uses them) | maintainability | frontend, `splitting.node.test.ts` | — | `AppRouter.tsx:163–176` |
 | A8 | **R6.1: consolidate the stage-snapshot documents** (35 under `docs/` + 6 under `docs/deployment/`) into a small set of maintained current-state documents | documentation | docs; tests that pin doc text (`test_current_state_docs.py`, `test_runbook_schema_facts.py`, others) must move with it | A6 (fix the facts before moving them) | the earlier "14 of 29" counted R6.1 as done; it was never performed |
 | A9 | **Regression-test the responsive audit.** Codify the UI-10 51-check overflow and one-`h1` audit as an automated browser test against the CI stack | reliability | F (`ci.yml`) | batch with A2/A3/A5; needs a pinned browser image | the audit exists only as a manual browser script |
@@ -204,7 +249,7 @@ the responsive audit (A9) and runtime metrics (A5).
 | Level | Verdict | Basis |
 |---|---|---|
 | **Feature complete** | **Yes, for the decided scope.** | Every built area and every V1/V2 stage is implemented and tested; every decision-free roadmap task is done except R6.1. Stage 7.15 and R5 are out of reach only because they wait on decisions, not because engineering is missing |
-| **Demo ready** | **Yes.** | Deterministic demo seed, synthetic data labelled as such, the full stack runs locally and in CI, and the UI is finished at three widths. Caveats: the README screenshots show the old UI and the README misstates the copilot (A6); the copilot can be shown only with a configured model, which under your constraints means local Ollama |
+| **Demo ready** | **Yes.** | Deterministic demo seed, synthetic data labelled as such, the full stack runs locally and in CI, and the UI is finished at three widths. The README's screenshots and copilot description are current (A6). One caveat: the copilot can be shown only with a configured model, which under your constraints means local Ollama |
 | **Production ready** | **No.** | No password reset, email or deactivation flow (R1.2); manual certificates, local-only backups, no point-in-time recovery (R4.1); no metrics or alerting (R4.3); Dependabot inactive and no vulnerability scanning (R0.4a, A2); intelligence accuracy unproven on real data (R2); open registration by design. Each needs a decision in §5 or a task in §4 |
 
 ### 7.2 Security and operational risks
@@ -220,7 +265,7 @@ the responsive audit (A9) and runtime metrics (A5).
 | Open registration, and hotel creation makes you its owner | by design for self-hosting | documented in the README |
 | Unauthenticated health probes | low (reachable only through nginx, no business data) | documented |
 | Unproven model accuracy and unevaluated copilot | credibility, not safety: never claimed | decisions §3.7, §3.8 |
-| README contradiction about LLM capability | documentation correctness | A6(b) |
+| README contradiction about LLM capability | resolved, and now guarded by a test | A6 done (§4.2) |
 
 ---
 
@@ -265,19 +310,19 @@ implemented and its CI is green.
 | Delivered platform stages: the README's 13 stage groups (1 → 7.1–7.4) + V2 stages 7.5–7.14 (10). Stage 7.15 is counted under R2.3 | 23 | 23 | 100.0 |
 | UI redesign UI-0 … UI-10 | 11 | 11 | 100.0 |
 | v2.0 roadmap matrix | 29 | 13 | 44.8 |
-| Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 1 (A1) | 12.5 |
-| **All** | **71** | **48** | **67.6** |
+| Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 2 (A1, A6) | 25.0 |
+| **All** | **71** | **49** | **69.0** |
 
-- **Within the decided scope** (the 15 decision-blocked rows removed): 48 of 56 = **85.7%**.
-- **Strict** (R0.2 and R0.4a not counted as done): 46 of 71 = 64.8%.
-- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. A1 is counted on its local verification (§4.1). Its CI run is recorded with A6, and A1 is uncounted if that run fails.
+- **Within the decided scope** (the 15 decision-blocked rows removed): 49 of 56 = **87.5%**.
+- **Strict** (R0.2 and R0.4a not counted as done): 47 of 71 = 66.2%.
+- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. A6 is counted on its local verification (§4.2); its CI run is recorded with the next stage, and A6 is uncounted if that run fails.
 
 ---
 
 ## 9. Recommended implementation sequence
 
 1. ~~**A1**~~ — done (§4.1).
-2. **A6** — correct the documentation, above all the README's LLM contradiction, with a stale-claim test.
+2. ~~**A6**~~ — done (§4.2).
 3. **A4** — axe accessibility checks in Vitest.
 4. **A7** — remove the dead placeholder routes.
 5. **Re-pin batch: A2 + A3 + A5 + A9**, measured and re-pinned once under §12.6.

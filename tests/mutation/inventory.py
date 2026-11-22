@@ -9793,6 +9793,84 @@ def _r02(number: int, breaks: str, old: str, new: str, *killers: str) -> Mutatio
     return Mutation(f"R0.2-M{number}", "R0.2", breaks, one(CI_WORKFLOW, old, new), killers)
 
 
+CAPABILITY_DOCS = "tests/backend/test_capability_and_breakpoint_docs.py"
+
+
+def capability_docs(name: str, breaks: str, path: str, old: str, new: str, test: str) -> Mutation:
+    """An A6 documentation mutation, killed by the capability and breakpoint guards."""
+    return Mutation(name, "A6", breaks, one(path, old, new), (f"{CAPABILITY_DOCS}::{test}",))
+
+
+STAGE_A6 = [
+    capability_docs(
+        "A6-M1",
+        "the README says again that no LLM/RAG/agent capability is implemented",
+        "README.md",
+        "What is **not** implemented, and not claimed anywhere in this repository:"
+        " vector search or\n",
+        "What is **not** implemented, and not claimed anywhere in this repository:"
+        " any LLM/RAG/agent capability, vector search or\n",
+        STALE_ABSENT,
+    ),
+    capability_docs(
+        "A6-M2",
+        "the frontend README gives the pre-redesign breakpoints again",
+        "frontend/README.md",
+        "**Breakpoints.** A media query cannot read `var()`",
+        "Breakpoints are `< 768px` (mobile), `>= 768px` (tablet) and `>= 1024px` (desktop).\n\n"
+        "**Breakpoints.** A media query cannot read `var()`",
+        STALE_ABSENT,
+    ),
+    capability_docs(
+        "A6-M3",
+        "the README's tool list drops a registered copilot tool",
+        "README.md",
+        "`get_revenue_breakdown`, `get_demand_forecast`, `get_forecast_accuracy`,\n",
+        "`get_revenue_breakdown`, `get_demand_forecast`,\n",
+        "test_the_readme_lists_exactly_the_registered_copilot_tools",
+    ),
+    capability_docs(
+        "A6-M4",
+        "the README states the wrong number of copilot tools",
+        "README.md",
+        "about one hotel through seven read-only tools",
+        "about one hotel through six read-only tools",
+        "test_the_readme_lists_exactly_the_registered_copilot_tools",
+    ),
+    capability_docs(
+        "A6-M5",
+        "the demand-forecast tool stops declaring its write, so the README's one write is false",
+        "backend/app/copilot/tools/demand_forecast.py",
+        '    side_effect="records_served_prediction",',
+        '    side_effect="none",',
+        "test_the_readme_s_one_declared_write_is_the_only_tool_with_a_side_effect",
+    ),
+    capability_docs(
+        "A6-M6",
+        "the frontend README names a breakpoint no stylesheet uses",
+        "frontend/README.md",
+        "| below 768px | tighter page padding",
+        "| below 700px | tighter page padding",
+        "test_every_breakpoint_row_is_a_media_query_the_stylesheets_use",
+    ),
+    capability_docs(
+        "A6-M7",
+        "the card switch moves away from 1024px while the README still says 1023px",
+        "frontend/src/lib/useIsCompact.ts",
+        "export function useIsCompact(maxWidth = 1023): boolean {",
+        "export function useIsCompact(maxWidth = 767): boolean {",
+        "test_the_card_switch_the_readme_states_is_use_is_compact_s_default",
+    ),
+    capability_docs(
+        "A6-M8",
+        "the matcher no longer ignores line wrapping, so a re-wrapped claim would slip through",
+        CAPABILITY_DOCS,
+        '    return re.sub(r"\\s+", " ", text)',
+        "    return text",
+        "test_the_matcher_finds_each_claim_rewrapped_across_lines",
+    ),
+]
+
 STAGE_R0_2 = [
     _r02(
         1,
@@ -9866,4 +9944,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R3_3,
     *STAGE_R1_1,
     *STAGE_R0_2,
+    *STAGE_A6,
 )

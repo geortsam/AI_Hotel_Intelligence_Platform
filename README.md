@@ -24,8 +24,8 @@ and readable.
 ![The dashboard: occupancy, ADR, RevPAR and room revenue for one property over a chosen period](docs/screenshots/dashboard.png)
 
 <div align="center"><sub>The overview screen. Every figure is computed server-side and labelled
-with the window it covers; the multi-currency banner appears because the period holds entries in
-more than one currency and the platform never converts between them.</sub></div>
+with the window it covers; a period holding entries in more than one currency gets a banner
+listing them instead of a sum, because the platform never converts between them.</sub></div>
 
 > ### Current state: **V1 complete and verified; V2 complete through Stage 7.14**
 >
@@ -101,9 +101,12 @@ more than one currency and the platform never converts between them.</sub></div>
 
 ## Screenshots
 
-Captured from the running application — the real React build against the real API against real
-PostgreSQL — on the demo dataset: two properties, 166 bookings, 16 rooms, 55 reviews and a
-populated financial ledger. No mock-ups, and no data invented for the picture.
+Captured at 1440px from the running application — the real React front end against the real
+API against real PostgreSQL — after the UI redesign (UI-1 to UI-10, see
+[docs/ui-redesign.md](docs/ui-redesign.md)), signed in as the seeded demo owner. The data is the
+**synthetic** demo dataset from `scripts/seed_demo.py --reference-date today`: two properties,
+2,483 bookings, 25 rooms, 2,181 guests, 669 reviews and a populated financial ledger. No
+mock-ups, and nothing real: every name and address is generated (`@example.com`).
 
 ### Bookings
 
@@ -115,7 +118,7 @@ server-side search to back them.
 
 ### Availability
 
-![The availability search and its answer: sixteen rooms free across the listed types](docs/screenshots/availability.png)
+![The availability search beside its answer: five rooms free across three room types for a one-night stay](docs/screenshots/availability.png)
 
 What the property could sell for a given stay. The answer comes from the database — a GiST
 exclusion constraint over half-open date ranges is what makes an overlapping allocation
@@ -131,7 +134,7 @@ figure is shown, because adding currencies together would not produce money.
 
 ### Forecasting and demand trend
 
-![The intelligence screen: forecast horizon, training history and an occupancy forecast beside what is already on the books](docs/screenshots/forecasting.png)
+![The forecasting screen: forecast horizon, training history and an occupancy forecast with its interval beside what is already on the books](docs/screenshots/forecasting.png)
 
 The deterministic statistical layer: seasonal-naive day-of-week median forecasting with MAD-based
 intervals, demand trend and anomaly detection. What is already booked is shown *beside* what the
@@ -406,11 +409,37 @@ one began.
 | 6.1–6.11 | Demand model lifecycle: leakage-safe dataset, versioned training data, offline backtest, metric-blind acceptance, artifact, serving, packaging, prediction persistence, accuracy measurement, distribution observation, stored-prediction read API | **done** |
 | 7.1–7.2 | V2 definition and the analytics reporting view: period KPIs, category breakdowns, activity charts, and the first interface to the served demand model | **done** |
 | 7.3–7.4 | The frozen accuracy and distribution protocols exposed over HTTP, and made legible: forecast against actual, measured error per calibration segment, and the claim boundary on screen | **done** |
+| 7.5–7.8 | The language-model boundary and a read-only copilot: a `ChatModel` protocol with provider adapters, a declared tool boundary, single-turn questions, and an evaluation harness over recorded exchanges | **done** |
+| 7.9–7.10 | Hotel knowledge documents searched with PostgreSQL full-text search, and grounded answers whose every citation is checked against what that request retrieved | **done** |
+| 7.11–7.13 | Copilot conversations (each caller's own, retention-bound), the deterministic attention list, and the copilot screen | **done** |
+| 7.14 | Three **offline** demand models at 7, 14 and 28 days, each measured beside its own baseline; none is served | **done** |
+| 7.15 | Vector retrieval (pgvector) — conditional, not triggered: it cannot be assessed without real hotel documents | not started — waits on decision R2.3 |
+| R0, R1 | Sharded CI, hashed Python locks, a Docker Hub mirror for the Docker jobs, Dependabot configuration (inert until it reaches `main`); `HttpOnly` cookie sessions with refresh rotation and CSRF, an audited platform-administrator command, request-size limits, 429 declared on every limited route, IANA time zones | **done** (the rest waits on decisions) |
+| R2.2, R2.2b | Frozen hold-out evaluation of the served model and a hotel-transfer diagnostic, on the synthetic demo data — no generalisation or production accuracy claimed | **done** |
+| R2.7–R2.10 | Copilot evaluation: a local Ollama provider, live-evaluation scoring, and the layered retrieval evaluation (Decision F, C.1–C.7) with its pinned baseline | **done** |
+| R3.3, R4.2, R6.2 | `If-Match` on the global catalogues; an opt-in retention scheduler and audit archival; README counts computed by a test | **done** |
+| UI-1–UI-10 | The UI redesign: design tokens, self-hosted Inter and Source Serif 4, shared form, data-table and status-rail styles, cards below 1024px, sticky side panels — [docs/ui-redesign.md](docs/ui-redesign.md) | **done** |
+| A1 | Frontend dev-toolchain advisories fixed, 6 → 0 | **done** |
 
-What is **not** implemented, and not claimed anywhere in this repository: review sentiment,
-room-image classification, recommendations, any LLM/RAG/agent capability, drift detection,
-retraining, a registry holding more than one model, and the operational items listed under
-[Known limitations](#known-limitations). See
+What remains — the autonomous tasks and the decisions only the owner can make — is counted in
+[docs/project-completion-audit.md](docs/project-completion-audit.md).
+
+**What the language-model side is, exactly.** The copilot (Stages 7.5–7.13) answers questions
+about one hotel through seven read-only tools — `get_hotel_kpis`, `get_daily_series`,
+`get_revenue_breakdown`, `get_demand_forecast`, `get_forecast_accuracy`,
+`search_hotel_knowledge` and `get_hotel_priorities` — and cites the hotel's own documents, found
+by PostgreSQL full-text search. It is off by default (`503 LLM_DISABLED`) and calls a model only
+through the provider the operator configures: a local Ollama model or the Anthropic API. It takes
+no autonomous action and changes no booking, payment, membership or catalogue row; its one
+declared write is that `get_demand_forecast` records the prediction it serves, idempotently, so
+the accuracy protocol can score it later.
+
+What is **not** implemented, and not claimed anywhere in this repository: vector search or
+embeddings (Stage 7.15 is conditional and untriggered), an agent or any autonomous multi-step
+action, a copilot tool that writes business data, review sentiment, room-image classification,
+guest recommendations (Stage 7.12's attention list is manager-facing and deterministic), drift
+*detection* (Stage 6.10 observes and decides nothing), retraining, serving more than one model,
+and the operational items listed under [Known limitations](#known-limitations). See
 [docs/development-roadmap.md](docs/development-roadmap.md) for the split.
 
 Detail and exit criteria: **[docs/development-roadmap.md](docs/development-roadmap.md)**.
@@ -615,7 +644,7 @@ shards, so GitHub Actions shows seven job runs per workflow run.
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 | `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical |
-| `Mutation checks` | re-applies the 891 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Mutation checks` | re-applies the 899 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
@@ -743,7 +772,8 @@ See [docs/ml-training-data.md](docs/ml-training-data.md),
 [docs/ml-forecast-performance-api.md](docs/ml-forecast-performance-api.md).
 
 **No language model is called by CI or by the shipped image.** Stage 7.5 added the seam:
-`app/llm/` holds a `ChatModel` protocol, one provider adapter, versioned checksummed prompts,
+`app/llm/` holds a `ChatModel` protocol, one provider adapter (R2.7O added a second, for a local
+Ollama model), versioned checksummed prompts,
 the six declared failure modes and four test doubles. Stage 7.6 added five read-only copilot
 tools over existing services, Stage 7.7 the single-turn `POST …/copilot/ask`, and Stage 7.8 an
 evaluation harness that replays recorded exchanges. The provider SDK lives in
