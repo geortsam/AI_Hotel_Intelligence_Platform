@@ -247,7 +247,56 @@ Every changed heading keeps its computed size, because its class sets it. Measur
 
 A4 is counted complete from this run.
 
-### 4.4 The remaining tasks
+### 4.4 A7 — implemented and verified locally; counted complete when its CI run is green
+
+**Established first, from the code:**
+- All 13 `NAV_ITEMS` entries were in `BUILT_AREAS`, so `featureRoutes` (`NAV_ITEMS` minus `BUILT_AREAS`) was an empty list.
+- No placeholder route had been produced since Stage 7.2.
+- `AREA_DESCRIPTIONS` was empty.
+- `plannedStage` was read only by the placeholder.
+
+**Removed:**
+- `frontend/src/pages/PlaceholderPage.tsx`;
+- from `AppRouter.tsx`: `AREA_DESCRIPTIONS`, `BUILT_AREAS`, `featureRoutes` and its spread into the route tree, plus the now-unused imports;
+- the `plannedStage` field from `NavItem`, and its 13 values in `navigation.ts`;
+- the placeholder's entries in `splitting.node.test.ts`'s eager-import lists.
+
+**Kept exactly:**
+- Every real route, the route order and the `*` fallback.
+- The Not Found styles. `PlaceholderPage.module.css` is renamed to `NotFoundPage.module.css` (a git rename, contents unchanged). Every class in it was already the Not Found page's.
+
+**Guarantee replaced, not dropped.** The scaffolding existed so a sidebar entry could never point at nothing.
+- The route tree is now exported as `APP_ROUTES`, and the router is built from it unchanged.
+- `src/router/navigationRoutes.test.tsx` (20 tests) resolves every navigation item, the three detail pages and sign-in against it with React Router's `matchRoutes`. Each must land on a route of its own, never the `*` fallback.
+
+**Computed-style digests of `/nowhere`** (every element in the document, before and after):
+
+| Width | Before | After | Differing elements |
+|---|---|---|---|
+| 375px | `179e140f9c9299111fcff1e2cdc9b4c6df7dbb5291dc788b118f10f00e18e260` (174 elements) | identical | 0 |
+| 1440px | `ebf4753008a835f1bce9ac01701fa52c116b6f7463a3348f58a4c774c4094488` (174 elements) | identical | 0 |
+
+The heading's class hash changed to `_headline_s8jox_…`, which shows the renamed stylesheet was the one being served.
+
+**Mutations:** stage A7, 4 recorded, Vitest killers:
+- the Reviews route dropped;
+- the dashboard index route dropped;
+- Platform declared at a path its entry does not link to;
+- the room-detail route dropped.
+
+Result: 4 killed, 0 survived. The inventory holds 913 (828 pytest, 85 Vitest, 166 needing a database).
+
+The harness matches a Vitest killer by its literal title. The killers are therefore two fixed-title tests ("every sidebar entry…", "every detail page…"), and the per-entry `it.each` tests remain for diagnosis.
+
+**Local verification:**
+- typecheck clean;
+- Vitest `Test Files 36 passed (36)`, `Tests 1427 passed (1427)`: 1,409 + 20 new − 2 removed list entries, no other test changed;
+- build passes; two clean builds byte-identical (61 files, manifest sha256 `457e3e6e2b9a55aa1a9193456d65cf26697d838b9b0b6965ae5d09395e7e0a37`); no placeholder text in the bundle;
+- `npm audit` 0 and `--omit=dev` 0;
+- dev server: all 17 routes render their own `h1`, none falls through to "Page not found", 0 skipped heading levels;
+- ruff, format and mypy clean (546 files); harness and doc tests 2,100 passed.
+
+### 4.5 The remaining tasks
 
 Each task can be done without a decision from you. They are ordered by the requested priorities.
 **F** marks a change to a fingerprinted file (`ci.yml`, `main.py`), which needs a re-measure and
@@ -261,7 +310,7 @@ re-pin under §12.6. Tasks marked F are batched into one re-pin stage.
 | ~~A4~~ | **Done** (§4.3): axe-core checks on every route and state, 9 genuine violation kinds fixed, 10 mutations; CI 45063664775 green | — | — | — | — |
 | A5 | **Add a metrics exporter, internal only** (the half of R4.3a that needs no alert destination): request counts and latencies in Prometheus format on the internal network, with no nginx route | ops | F (`main.py`, README counts) | batch with A2/A3 | `grep /metrics backend/app`: none |
 | ~~A6~~ | **Done** (§4.2): README, screenshots, frontend README, execution log, `ui-redesign.md`, 12 regression tests, 8 mutations | — | — | — | — |
-| A7 | **Remove the dead placeholder-route scaffolding.** All 13 navigation items are in `BUILT_AREAS`, so `featureRoutes` builds no route; `PlaceholderPage`, `plannedStage` and `AREA_DESCRIPTIONS` are unused. Move the shared state styles out of `PlaceholderPage.module.css` (Not Found uses them) | maintainability | frontend, `splitting.node.test.ts` | — | `AppRouter.tsx:163–176` |
+| A7 | **Implemented, verified locally** (§4.4): placeholder scaffolding removed, Not Found styles identical (digests), the navigation-to-route guarantee now a test, 4 mutations; counted when its CI is green | — | — | — | — |
 | A8 | **R6.1: consolidate the stage-snapshot documents** (35 under `docs/` + 6 under `docs/deployment/`) into a small set of maintained current-state documents | documentation | docs; tests that pin doc text (`test_current_state_docs.py`, `test_runbook_schema_facts.py`, others) must move with it | A6 (fix the facts before moving them) | the earlier "14 of 29" counted R6.1 as done; it was never performed |
 | A9 | **Regression-test the responsive audit.** Codify the UI-10 51-check overflow and one-`h1` audit as an automated browser test against the CI stack | reliability | F (`ci.yml`) | batch with A2/A3/A5; needs a pinned browser image | the audit exists only as a manual browser script |
 

@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { PageContainer } from '@/components/ui/PageContainer'
 import { ROUTES } from '@/router/routes'
 
-import styles from './PlaceholderPage.module.css'
+import styles from './NotFoundPage.module.css'
 
 interface ErrorStateProps {
   readonly heading: string

@@ -9992,6 +9992,47 @@ STAGE_A4 = [
     ),
 ]
 
+A7_ROUTER = FE + "router/AppRouter.tsx"
+A7_GUARD = "src/router/navigationRoutes.test.tsx"
+
+
+def nav_route(name: str, breaks: str, old: str, new: str, killer: str) -> Mutation:
+    """An A7 router mutation: a navigation area or detail page loses its real route (Vitest)."""
+    killers = (f"{A7_GUARD}::{killer}",)
+    return Mutation(name, "A7", breaks, one(A7_ROUTER, old, new), killers, runner=Runner.VITEST)
+
+
+STAGE_A7 = [
+    nav_route(
+        "A7-M1",
+        "the Reviews route is dropped, so its sidebar entry falls through to the not-found page",
+        "          { path: ROUTES.reviews, element: onDemand(<ReviewsPage />) },\n",
+        "",
+        "every sidebar entry reaches its own route, not the not-found fallback",
+    ),
+    nav_route(
+        "A7-M2",
+        "the dashboard's index route is dropped",
+        "          { index: true, element: <DashboardPage /> },\n",
+        "",
+        "every sidebar entry reaches its own route, not the not-found fallback",
+    ),
+    nav_route(
+        "A7-M3",
+        "the Platform route is declared at a path its sidebar entry does not link to",
+        "          { path: ROUTES.platform, element: onDemand(<PlatformPage />) },",
+        "          { path: '/platforms', element: onDemand(<PlatformPage />) },",
+        "every sidebar entry reaches its own route, not the not-found fallback",
+    ),
+    nav_route(
+        "A7-M4",
+        "the room detail route is dropped, so a room's own page is a 404",
+        "          { path: ROOM_DETAIL_PATTERN, element: onDemand(<RoomDetailPage />) },\n",
+        "",
+        "every detail page keeps its own route",
+    ),
+]
+
 STAGE_R0_2 = [
     _r02(
         1,
@@ -10067,4 +10108,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R0_2,
     *STAGE_A6,
     *STAGE_A4,
+    *STAGE_A7,
 )
