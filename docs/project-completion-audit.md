@@ -23,8 +23,8 @@
   - all 891 recorded mutations were killed;
   - ruff, the format check and mypy were clean;
   - the migration chain was checked, the image was verified at runtime, and both builds were reproducible.
-- **Overall completion:** 70.4% of all tracked work (50 of 71 items, §8; 66.2% at the audit, 67.6% after A1, 69.0% after A6). For work that needs no decision from you, the figure is 89.3% (50 of 56).
-- **Remaining autonomous work:** 6 tasks (§4; A1, A6 and A4 are done). None is a functional gap. They cover supply-chain security, metrics, dead code, the responsive-audit regression test and documentation consolidation.
+- **Overall completion:** 71.8% of all tracked work (51 of 71 items, §8; 66.2% at the audit, 67.6% after A1, 69.0% after A6, 70.4% after A4). For work that needs no decision from you, the figure is 91.1% (51 of 56).
+- **Remaining autonomous work:** 5 tasks (§4; A1, A6, A4 and A7 are done). None is a functional gap. They cover supply-chain security (A2, A3), metrics (A5), the responsive-audit regression test (A9) and documentation consolidation (A8).
 - **Remaining user decisions:** 13 open decision briefs (§5). Three of them have a do-nothing default.
 - **Readiness:** the platform is demo ready. It is not production ready, and §7 says exactly why.
 
@@ -81,7 +81,7 @@ licences, served from `/assets/`) and "Forecasting" (`a08bb95`).
 
 ---
 
-## 4. Remaining autonomous engineering tasks — 6 (A1, A6 and A4 done)
+## 4. Remaining autonomous engineering tasks — 5 (A1, A6, A4 and A7 done)
 
 ### 4.1 A1, done (2026-11-22)
 
@@ -247,7 +247,7 @@ Every changed heading keeps its computed size, because its class sets it. Measur
 
 A4 is counted complete from this run.
 
-### 4.4 A7 — implemented and verified locally; counted complete when its CI run is green
+### 4.4 A7, done (2026-11-23)
 
 **Established first, from the code:**
 - All 13 `NAV_ITEMS` entries were in `BUILT_AREAS`, so `featureRoutes` (`NAV_ITEMS` minus `BUILT_AREAS`) was an empty list.
@@ -296,6 +296,15 @@ The harness matches a Vitest killer by its literal title. The killers are theref
 - dev server: all 17 routes render their own `h1`, none falls through to "Page not found", 0 skipped heading levels;
 - ruff, format and mypy clean (546 files); harness and doc tests 2,100 passed.
 
+**CI:** [45150368805](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45150368805) on `5125b5b` (implementation), all 7 jobs green:
+- 12,538 backend tests passed (shards 10,183 + 1,096 + 1,259; 58 skipped).
+- Frontend: `Test Files 36 passed (36)`, `Tests 1427 passed (1427)`.
+- `913 mutations: 913 killed, 0 survived, 0 not run, 0 errors`.
+- 9,548 backend files and 68 served frontend files byte-identical across two no-cache builds.
+- Docker runtime verification passed.
+
+A7 is counted complete from this run. This record is the documentation commit that follows it.
+
 ### 4.5 The remaining tasks
 
 Each task can be done without a decision from you. They are ordered by the requested priorities.
@@ -310,7 +319,7 @@ re-pin under §12.6. Tasks marked F are batched into one re-pin stage.
 | ~~A4~~ | **Done** (§4.3): axe-core checks on every route and state, 9 genuine violation kinds fixed, 10 mutations; CI 45063664775 green | — | — | — | — |
 | A5 | **Add a metrics exporter, internal only** (the half of R4.3a that needs no alert destination): request counts and latencies in Prometheus format on the internal network, with no nginx route | ops | F (`main.py`, README counts) | batch with A2/A3 | `grep /metrics backend/app`: none |
 | ~~A6~~ | **Done** (§4.2): README, screenshots, frontend README, execution log, `ui-redesign.md`, 12 regression tests, 8 mutations | — | — | — | — |
-| A7 | **Implemented, verified locally** (§4.4): placeholder scaffolding removed, Not Found styles identical (digests), the navigation-to-route guarantee now a test, 4 mutations; counted when its CI is green | — | — | — | — |
+| ~~A7~~ | **Done** (§4.4): placeholder scaffolding removed, Not Found styles identical (digests), the navigation-to-route guarantee now a test, 4 mutations; CI 45150368805 green | — | — | — | — |
 | A8 | **R6.1: consolidate the stage-snapshot documents** (35 under `docs/` + 6 under `docs/deployment/`) into a small set of maintained current-state documents | documentation | docs; tests that pin doc text (`test_current_state_docs.py`, `test_runbook_schema_facts.py`, others) must move with it | A6 (fix the facts before moving them) | the earlier "14 of 29" counted R6.1 as done; it was never performed |
 | A9 | **Regression-test the responsive audit.** Codify the UI-10 51-check overflow and one-`h1` audit as an automated browser test against the CI stack | reliability | F (`ci.yml`) | batch with A2/A3/A5; needs a pinned browser image | the audit exists only as a manual browser script |
 
@@ -439,12 +448,12 @@ implemented and its CI is green.
 | Delivered platform stages: the README's 13 stage groups (1 → 7.1–7.4) + V2 stages 7.5–7.14 (10). Stage 7.15 is counted under R2.3 | 23 | 23 | 100.0 |
 | UI redesign UI-0 … UI-10 | 11 | 11 | 100.0 |
 | v2.0 roadmap matrix | 29 | 13 | 44.8 |
-| Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 3 (A1, A6, A4) | 37.5 |
-| **All** | **71** | **50** | **70.4** |
+| Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 4 (A1, A6, A4, A7) | 50.0 |
+| **All** | **71** | **51** | **71.8** |
 
-- **Within the decided scope** (the 15 decision-blocked rows removed): 50 of 56 = **89.3%**.
-- **Strict** (R0.2 and R0.4a not counted as done): 48 of 71 = 67.6%.
-- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. After A6 (`485dd15`, CI 45046381883 green): 49 / 71 = 69.0%. After A4 (`4c9a2a0`, CI 45063664775 green): 50 / 71 = 70.4%.
+- **Within the decided scope** (the 15 decision-blocked rows removed): 51 of 56 = **91.1%**.
+- **Strict** (R0.2 and R0.4a not counted as done): 49 of 71 = 69.0%.
+- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. After A6 (`485dd15`, CI 45046381883 green): 49 / 71 = 69.0%. After A4 (`4c9a2a0`, CI 45063664775 green): 50 / 71 = 70.4%. After A7 (`5125b5b`, CI 45150368805 green): 51 / 71 = 71.8%.
 
 ---
 
@@ -453,7 +462,7 @@ implemented and its CI is green.
 1. ~~**A1**~~ — done (§4.1).
 2. ~~**A6**~~ — done (§4.2).
 3. ~~**A4**~~ — done (§4.3).
-4. **A7** — remove the dead placeholder routes.
+4. ~~**A7**~~ — done (§4.4).
 5. **Re-pin batch: A2 + A3 + A5 + A9**, measured and re-pinned once under §12.6.
 6. **A8 / R6.1** — consolidate the documents, last, so the facts move only once.
 7. Then whatever your answers to §5 unlock. The first steps toward production are §3.4 (R1.2) and §3.11 (R4.1).
