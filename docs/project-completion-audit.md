@@ -23,8 +23,8 @@
   - all 891 recorded mutations were killed;
   - ruff, the format check and mypy were clean;
   - the migration chain was checked, the image was verified at runtime, and both builds were reproducible.
-- **Overall completion:** 69.0% of all tracked work (49 of 71 items, §8; it was 66.2% at the audit and 67.6% after A1). For work that needs no decision from you, the figure is 87.5% (49 of 56).
-- **Remaining autonomous work:** 7 tasks (§4; A1 and A6 are done). None is a functional gap. They cover supply-chain security, accessibility automation, metrics, dead code and documentation consolidation.
+- **Overall completion:** 70.4% of all tracked work (50 of 71 items, §8; 66.2% at the audit, 67.6% after A1, 69.0% after A6). For work that needs no decision from you, the figure is 89.3% (50 of 56).
+- **Remaining autonomous work:** 6 tasks (§4; A1, A6 and A4 are done). None is a functional gap. They cover supply-chain security, metrics, dead code, the responsive-audit regression test and documentation consolidation.
 - **Remaining user decisions:** 13 open decision briefs (§5). Three of them have a do-nothing default.
 - **Readiness:** the platform is demo ready. It is not production ready, and §7 says exactly why.
 
@@ -81,7 +81,7 @@ licences, served from `/assets/`) and "Forecasting" (`a08bb95`).
 
 ---
 
-## 4. Remaining autonomous engineering tasks — 7 (A1 and A6 done)
+## 4. Remaining autonomous engineering tasks — 6 (A1, A6 and A4 done)
 
 ### 4.1 A1, done (2026-11-22)
 
@@ -167,7 +167,7 @@ for the next frontend stage.
 
 **CI:** [45046381883](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45046381883) on `485dd15`, all 7 jobs green: 12,510 backend tests passed (shards 10,155 + 1,096 + 1,259; 58 skipped), `899 mutations: 899 killed`, 9,548 backend and 68 frontend files byte-identical across two no-cache builds, Docker runtime verification passed.
 
-### 4.3 A4 — implemented and verified locally; counted complete when its CI run is green
+### 4.3 A4, done (2026-11-23)
 
 **Dependency:** `axe-core` **4.14.0**, a dev dependency pinned exactly (`"axe-core": "4.14.0"`).
 - Source: `https://registry.npmjs.org/axe-core/-/axe-core-4.14.0.tgz`, integrity `sha512-9WTZxEjsZ7b13TH8JPmbV2z8CHbl80/2hm3XPEG4JgNdQLK81IBRXmSxHfMAOkSqQeRxT/0dwNDz2GOm3zzpcQ==`.
@@ -238,6 +238,15 @@ Every changed heading keeps its computed size, because its class sets it. Measur
 - ruff, format and mypy clean (546 files); the affected pytest files: 2,092 passed.
 - Dev server: all 17 routes signed in, each with its `h1`.
 
+**CI:** [45063664775](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45063664775) on `4c9a2a0`, all 7 jobs green:
+- 12,530 backend tests passed (shards 10,175 + 1,096 + 1,259; 58 skipped).
+- Frontend: `Test Files 35 passed (35)`, `Tests 1409 passed (1409)`.
+- `909 mutations: 909 killed, 0 survived, 0 not run, 0 errors`.
+- 9,548 backend files and 68 served frontend files byte-identical across two no-cache builds.
+- Docker runtime verification passed.
+
+A4 is counted complete from this run.
+
 ### 4.4 The remaining tasks
 
 Each task can be done without a decision from you. They are ordered by the requested priorities.
@@ -249,7 +258,7 @@ re-pin under §12.6. Tasks marked F are batched into one re-pin stage.
 | ~~A1~~ | **Done** (§4.1): 6 advisories → 0 | — | — | — | — |
 | A2 | **Scan dependencies for vulnerabilities in CI.** `npm audit --omit=dev` and `pip-audit` over both hashed locks; fail on high. Nothing in `ci.yml` scans today | security | F (`ci.yml`) | A1 first, or the new gate fails at once | grep of `ci.yml`: no `audit`, `osv`, `trivy` or `grype` |
 | A3 | **Generate an SBOM in CI** (the half of R4.3b that needs no signing identity): one SBOM per image, kept as an artifact | ops | F (`ci.yml`) | batch with A2 | R4.3b is "SBOM partly; signing no" |
-| A4 | **Implemented, verified locally** (§4.3): axe-core checks on every route and state, 9 genuine violation kinds fixed, 10 mutations; counted when its CI is green | — | — | — | — |
+| ~~A4~~ | **Done** (§4.3): axe-core checks on every route and state, 9 genuine violation kinds fixed, 10 mutations; CI 45063664775 green | — | — | — | — |
 | A5 | **Add a metrics exporter, internal only** (the half of R4.3a that needs no alert destination): request counts and latencies in Prometheus format on the internal network, with no nginx route | ops | F (`main.py`, README counts) | batch with A2/A3 | `grep /metrics backend/app`: none |
 | ~~A6~~ | **Done** (§4.2): README, screenshots, frontend README, execution log, `ui-redesign.md`, 12 regression tests, 8 mutations | — | — | — | — |
 | A7 | **Remove the dead placeholder-route scaffolding.** All 13 navigation items are in `BUILT_AREAS`, so `featureRoutes` builds no route; `PlaceholderPage`, `plannedStage` and `AREA_DESCRIPTIONS` are unused. Move the shared state styles out of `PlaceholderPage.module.css` (Not Found uses them) | maintainability | frontend, `splitting.node.test.ts` | — | `AppRouter.tsx:163–176` |
@@ -381,12 +390,12 @@ implemented and its CI is green.
 | Delivered platform stages: the README's 13 stage groups (1 → 7.1–7.4) + V2 stages 7.5–7.14 (10). Stage 7.15 is counted under R2.3 | 23 | 23 | 100.0 |
 | UI redesign UI-0 … UI-10 | 11 | 11 | 100.0 |
 | v2.0 roadmap matrix | 29 | 13 | 44.8 |
-| Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 2 (A1, A6) | 25.0 |
-| **All** | **71** | **49** | **69.0** |
+| Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 3 (A1, A6, A4) | 37.5 |
+| **All** | **71** | **50** | **70.4** |
 
-- **Within the decided scope** (the 15 decision-blocked rows removed): 49 of 56 = **87.5%**.
-- **Strict** (R0.2 and R0.4a not counted as done): 47 of 71 = 66.2%.
-- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. A6's CI run 45046381883 is green, so A6 is counted. A4 (§4.3) is not counted yet: it is counted complete once its own CI run is green.
+- **Within the decided scope** (the 15 decision-blocked rows removed): 50 of 56 = **89.3%**.
+- **Strict** (R0.2 and R0.4a not counted as done): 48 of 71 = 67.6%.
+- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. After A6 (`485dd15`, CI 45046381883 green): 49 / 71 = 69.0%. After A4 (`4c9a2a0`, CI 45063664775 green): 50 / 71 = 70.4%.
 
 ---
 
@@ -394,7 +403,7 @@ implemented and its CI is green.
 
 1. ~~**A1**~~ — done (§4.1).
 2. ~~**A6**~~ — done (§4.2).
-3. **A4** — axe accessibility checks in Vitest.
+3. ~~**A4**~~ — done (§4.3).
 4. **A7** — remove the dead placeholder routes.
 5. **Re-pin batch: A2 + A3 + A5 + A9**, measured and re-pinned once under §12.6.
 6. **A8 / R6.1** — consolidate the documents, last, so the facts move only once.
