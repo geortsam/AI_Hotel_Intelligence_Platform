@@ -97,6 +97,9 @@ listing them instead of a sum, because the platform never converts between them.
 12. [What the intelligence layer is, and is not](#what-the-intelligence-layer-is-and-is-not)
 13. [Known limitations](#known-limitations)
 
+The rest of the documentation, with the status of each document, is indexed in
+[docs/README.md](docs/README.md).
+
 ---
 
 ## Screenshots
@@ -357,7 +360,7 @@ Five areas at the top level, with one-way dependencies between them.
 | **`frontend/`** | React + TypeScript SPA and its nginx production image | the API over HTTP, nothing else |
 | **`database/`** | 11 linear Alembic revisions and the init SQL | — |
 | **`ml/`** | Offline dataset, backtest, acceptance, artifact. Records committed, payloads never | `app.ml.dataset` only — the Stage 6.1 contract |
-| **`docs/`** | Architecture, roadmap, design records, model card, deployment runbooks | — |
+| **`docs/`** | Architecture, roadmap, design records, model card, deployment runbooks. Start at [`docs/README.md`](docs/README.md) | — |
 
 ```
 backend/app/
@@ -387,6 +390,7 @@ docker-compose.yml  db → migrate → api → frontend, each gated on the last
 | What the model is, and is not | [`docs/ml-model-card.md`](docs/ml-model-card.md) |
 | How the model reaches production | [`docs/ml-production-runtime.md`](docs/ml-production-runtime.md) |
 | What was built, stage by stage | [`docs/development-roadmap.md`](docs/development-roadmap.md) |
+| Every other document, and which are current | [`docs/README.md`](docs/README.md), the documentation index |
 
 ## Development stages
 
@@ -651,7 +655,7 @@ scanned.
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 | `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical; then catalogues both builds of each image with Syft 1.57.1 (checksum-verified) into a **CycloneDX 1.6 SBOM**, validates it against the schema, requires every locked backend package at its exact version and the pinned nginx, requires the two builds' SBOMs to list the same components, rejects any host path or credential in them, and keeps one SBOM per image as the `sbom-<run>-<attempt>` artifact ([`scripts/sbom_check.py`](scripts/sbom_check.py)) |
-| `Mutation checks` | re-applies the 963 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Mutation checks` | re-applies the 980 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
 | `Responsive audit` | builds and starts the Compose stack, seeds it with the synthetic demo data, and runs UI-10's **51 checks** (17 routes at 375, 768 and 1440px: no sideways scroll, no escaping element, exactly one `h1`) in the pinned Playwright image's Chromium; any failing check fails the run and is named. It also reports, without counting it, whether the known Analytics expenses-table clipping still reproduces ([`frontend/e2e/`](frontend/e2e/)) |
 
 | Workflow | Job | What it runs |

@@ -10568,6 +10568,167 @@ STAGE_A9 = [
 ]
 
 
+# --- A8 (completion audit, roadmap R6.1): the documentation index and its link checker ---------
+
+_A8_CHECKER = "scripts/doc_links.py"
+_A8_TESTS = "tests/backend/test_doc_links.py::"
+_A8_INDEX = "docs/README.md"
+#: The real documentation's own test: no broken link or anchor, nothing unreachable.
+_A8_DOCS_CLEAN = "test_the_documentation_has_no_broken_link_anchor_or_unreachable_document"
+
+
+def _a8(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """The checker stops looking, or the documentation gains the fault it exists to catch."""
+    return Mutation(
+        f"A8-M{number}", "A8", breaks, one(path, old, new), tuple(_A8_TESTS + k for k in killers)
+    )
+
+
+STAGE_A8 = [
+    _a8(
+        1,
+        "a link to a file that does not exist is no longer reported",
+        _A8_CHECKER,
+        "                if not _exists_exactly(root, resolved):",
+        "                if False:",
+        "test_a_broken_relative_file_link_is_caught",
+    ),
+    _a8(
+        2,
+        "an anchor that names no heading is no longer reported",
+        _A8_CHECKER,
+        "                if fragment not in anchors_of(target):",
+        "                if False:",
+        "test_a_missing_heading_anchor_is_caught",
+        "test_a_missing_anchor_in_the_same_file_is_caught",
+    ),
+    _a8(
+        3,
+        "a document the index cannot reach is no longer reported",
+        _A8_CHECKER,
+        '        if name.startswith(DOCS_DIR + "/") and name not in seen',
+        '        if name.startswith(DOCS_DIR + "/") and name not in seen and False',
+        "test_an_unreachable_document_is_caught",
+    ),
+    _a8(
+        4,
+        "reachability starts from the root README as well, so the index need not list everything",
+        _A8_CHECKER,
+        "    seen = reachable(INDEX, graph)",
+        "    seen = reachable(INDEX, graph) | reachable(ROOT_README, graph)",
+        "test_a_document_linked_only_from_the_root_readme_is_still_unreachable",
+    ),
+    _a8(
+        5,
+        "file names are matched ignoring case, as a Windows checkout would",
+        _A8_CHECKER,
+        "        if part not in names:",
+        "        if part.lower() not in {name.lower() for name in names}:",
+        "test_a_link_spelled_in_the_wrong_case_is_caught",
+    ),
+    _a8(
+        6,
+        "inline code is no longer blanked, so a path quoted as code is checked as a link",
+        _A8_CHECKER,
+        '            out.append(_INLINE_CODE.sub(lambda m: " " * len(m.group(0)), line))',
+        "            out.append(line)",
+        "test_links_inside_code_are_not_checked",
+    ),
+    _a8(
+        7,
+        "fenced code blocks are no longer skipped",
+        _A8_CHECKER,
+        "            if opened:",
+        "            if False:",
+        "test_links_inside_code_are_not_checked",
+        "test_headings_inside_code_are_not_anchors",
+    ),
+    _a8(
+        8,
+        "any fragment into a non-Markdown file is accepted",
+        _A8_CHECKER,
+        "            elif not _LINE_ANCHOR.match(fragment):",
+        "            elif False:",
+        "test_anchors_into_other_files_must_be_line_anchors",
+    ),
+    _a8(
+        9,
+        "repeated headings all get the same anchor, as GitHub does not",
+        _A8_CHECKER,
+        '        found.add(slug if count == 0 else f"{slug}-{count}")',
+        "        found.add(slug)",
+        "test_duplicate_headings_are_numbered_and_setext_headings_count",
+    ),
+    _a8(
+        10,
+        "a file under docs/ that nothing links is no longer reported",
+        _A8_CHECKER,
+        "        if asset not in referenced:",
+        "        if False:",
+        "test_an_unlinked_file_under_docs_is_caught",
+    ),
+    _a8(
+        11,
+        "a link that climbs out of the repository is treated as an ordinary path",
+        _A8_CHECKER,
+        "            if not parts:\n                return None\n",
+        "            if not parts:\n                continue\n",
+        "test_a_link_out_of_the_repository_is_caught",
+    ),
+    _a8(
+        12,
+        "the command exits 0 when it found a problem, so CI would not fail",
+        _A8_CHECKER,
+        "    return 1 if report.problems else 0",
+        "    return 0",
+        "test_the_command_exits_non_zero_on_a_problem",
+    ),
+    _a8(
+        13,
+        "slugs keep punctuation, so every numbered-section anchor stops resolving",
+        _A8_CHECKER,
+        '        if category[0] in "LMN" or category == "Pc" or character in " -":',
+        '        if category[0] in "LMNP" or character in " -":',
+        _A8_DOCS_CLEAN,
+    ),
+    _a8(
+        14,
+        "the index drops a document's entry, leaving it unreachable",
+        _A8_INDEX,
+        "| [ml-public-dataset-feasibility.md](ml-public-dataset-feasibility.md) | R2.4: whether a "
+        "public hotel-demand dataset could replace the current one (sources read 2026-10-11) "
+        "| Frozen record |\n",
+        "",
+        _A8_DOCS_CLEAN,
+        "test_the_index_gives_every_document_exactly_one_entry",
+    ),
+    _a8(
+        15,
+        "an index link names a file that does not exist",
+        _A8_INDEX,
+        "| [deployment/tls.md](deployment/tls.md) |",
+        "| [deployment/tls.md](deployment/tsl.md) |",
+        _A8_DOCS_CLEAN,
+    ),
+    _a8(
+        16,
+        "a README anchor names a heading that does not exist",
+        "README.md",
+        "(docs/architecture.md#71-session-handling-and-its-limitation)",
+        "(docs/architecture.md#71-session-handling)",
+        _A8_DOCS_CLEAN,
+    ),
+    _a8(
+        17,
+        "an index entry carries none of the three statuses",
+        _A8_INDEX,
+        "| Superseded for status by [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) |",
+        "| See [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) |",
+        "test_every_index_entry_states_one_of_the_three_statuses",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -10626,4 +10787,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_A3,
     *STAGE_A5,
     *STAGE_A9,
+    *STAGE_A8,
 )
