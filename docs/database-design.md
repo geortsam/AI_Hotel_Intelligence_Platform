@@ -7,7 +7,7 @@
 > observation periods, the LLM-invocation retention rule, the platform-administrator audit
 > actions, the catalogues' versions, cookie sessions); the head is now `0023_auth_sessions`
 > (R1.1, the `auth_sessions` table of refresh-token digests)
-> over 28 application tables. The "design only" status line below
+> over 29 application tables. The "design only" status line below
 > describes this document at the time it was written, not the repository today.
 
 **Status: design only. No ORM models, no migrations, no SQL has been written.**

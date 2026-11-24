@@ -358,25 +358,31 @@ Five areas at the top level, with one-way dependencies between them.
 |---|---|---|
 | **`backend/`** | The FastAPI application and its Dockerfile | `database/`, and `ml/`'s reading half |
 | **`frontend/`** | React + TypeScript SPA and its nginx production image | the API over HTTP, nothing else |
-| **`database/`** | 11 linear Alembic revisions and the init SQL | — |
+| **`database/`** | Alembic migrations — 23 linear revisions, head `0023_auth_sessions` — and the init SQL | — |
 | **`ml/`** | Offline dataset, backtest, acceptance, artifact. Records committed, payloads never | `app.ml.dataset` only — the Stage 6.1 contract |
 | **`docs/`** | Architecture, roadmap, design records, model card, deployment runbooks. Start at [`docs/README.md`](docs/README.md) | — |
 
+Each figure is the package's `.py` files, `__init__.py` included:
+
 ```
 backend/app/
-├── api/            29  HTTP layer: v1 routers, dependency wiring
-├── services/       28  domain rules, transaction boundaries
-├── schemas/        24  Pydantic request and response types
-├── repositories/   20  query construction — no commits, ever
-├── models/         15  SQLAlchemy ORM mapping
-├── ml/              9  statistical layer, artifact store, serving,
+├── api/            38  HTTP layer: v1 routers, dependency wiring
+├── services/       41  domain rules, transaction boundaries
+├── schemas/        29  Pydantic request and response types
+├── repositories/   26  query construction — no commits, ever
+├── models/         20  SQLAlchemy ORM mapping
+├── ml/             10  statistical layer, artifact store, serving,
 │                       accuracy and distribution protocols
-├── core/            9  config, errors, security, logging
+├── llm/            12  the provider boundary: providers, circuit breaker, registry
+├── copilot/        16  the copilot's loop, tools, grounding and citations
+├── knowledge/       2  document chunking for full-text search
+├── jobs/            8  operator commands: retention, platform admin, scheduler
+├── core/           10  config, errors, security, logging, rate limits, metrics
 ├── db/              3  engine and request-scoped session
-├── middleware/      3  request id, security headers
+├── middleware/      5  request id, security headers, body size cap, metrics
 └── main.py             app factory
 
-tests/              backend/ and integration/, mirroring the source layout
+tests/              backend/, integration/, evaluation/, ml/ and mutation/ (tests/README.md)
 pyproject.toml      ruff · mypy · pytest · coverage
 docker-compose.yml  db → migrate → api → frontend, each gated on the last
 ```
@@ -655,7 +661,7 @@ scanned.
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 | `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical; then catalogues both builds of each image with Syft 1.57.1 (checksum-verified) into a **CycloneDX 1.6 SBOM**, validates it against the schema, requires every locked backend package at its exact version and the pinned nginx, requires the two builds' SBOMs to list the same components, rejects any host path or credential in them, and keeps one SBOM per image as the `sbom-<run>-<attempt>` artifact ([`scripts/sbom_check.py`](scripts/sbom_check.py)) |
-| `Mutation checks` | re-applies the 980 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Mutation checks` | re-applies the 987 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
 | `Responsive audit` | builds and starts the Compose stack, seeds it with the synthetic demo data, and runs UI-10's **51 checks** (17 routes at 375, 768 and 1440px: no sideways scroll, no escaping element, exactly one `h1`) in the pinned Playwright image's Chromium; any failing check fails the run and is named. It also reports, without counting it, whether the known Analytics expenses-table clipping still reproduces ([`frontend/e2e/`](frontend/e2e/)) |
 
 | Workflow | Job | What it runs |
@@ -895,9 +901,10 @@ R2.2b adds same-hotel controls for that cross-hotel experiment, with signed erro
 prediction ranges, under its own pre-registered protocol; the served model is not involved. See
 [docs/ml-hotel-transfer-diagnostic.md](docs/ml-hotel-transfer-diagnostic.md).
 
-### V2 — NOT IMPLEMENTED
+### Further ML modules — NOT IMPLEMENTED
 
-None of these exists. Each would be built as its own stage, with its dependencies in
+V2's copilot, knowledge search and attention list exist (above). These ML modules, also once
+planned for V2, do not: none of them exists. Each would be built as its own stage, with its dependencies in
 `ml/requirements-ml.txt`, its pipeline in `ml/pipelines/`, and its artifacts plus evaluation
 record in `ml/models/<model_version>/` — which is where Stage 6.3 wrote the first `metrics.json`.
 

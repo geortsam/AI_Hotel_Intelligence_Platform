@@ -36,6 +36,7 @@ from app.main import create_app
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 README = REPOSITORY_ROOT / "README.md"
 VERSIONS = REPOSITORY_ROOT / "database" / "migrations" / "versions"
+APP_PACKAGE = REPOSITORY_ROOT / "backend" / "app"
 PRODUCTION_BUILDER = REPOSITORY_ROOT / "ml" / "pipelines" / "build_production_artifact.py"
 METHODS = {"get", "post", "put", "patch", "delete"}
 
@@ -152,6 +153,18 @@ def test_migrations_and_head(readme: str) -> None:
         assert (head, int(count)) == (chain[-1], len(chain))
     for count, head in stated(readme, r"(\d+) linear revisions, head `([0-9a-z_]+)`"):
         assert (head, int(count)) == (chain[-1], len(chain))
+
+
+def test_backend_package_file_counts(readme: str) -> None:
+    """A8: the project-structure tree names every package of `backend/app` and, for each, its
+    `.py` files with `__init__.py` included. It said `api/ 29` and `models/ 15` long after both
+    had grown, and left out `llm/`, `copilot/`, `knowledge/` and `jobs/`."""
+    rows = stated(readme, r"[├└]── ([a-z_]+)/ (\d+) ")
+    packages = {path.name for path in APP_PACKAGE.iterdir() if path.is_dir()} - {"__pycache__"}
+    assert sorted(name for name, _ in rows) == sorted(packages)
+    for name, count in rows:
+        files = [p for p in (APP_PACKAGE / name).rglob("*.py") if "__pycache__" not in p.parts]
+        assert int(count) == len(files), f"backend/app/{name}/ holds {len(files)} .py files"
 
 
 def test_no_test_suite_size_is_stated(readme: str) -> None:

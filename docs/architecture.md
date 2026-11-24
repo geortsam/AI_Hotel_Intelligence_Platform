@@ -121,7 +121,10 @@ identifiers at the API boundary are UUIDs; internal `BIGINT` keys are never seri
 `repositories/` 18, `models/` 14, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 2 — and the HTTP
 surface was 82 operations, of which 77 required authentication.
 
-**Current state (through Stage 7.14):** `api/` 34 files, `services/` 35, `schemas/` 29,
+**At Stage 7.14** *(the v2.0 line has added files and operations since; the README's
+[project structure](../README.md#project-structure) and overview give the current counts, and
+`tests/backend/test_readme_counts.py` computes the operation figures from the OpenAPI document)*:
+`api/` 34 files, `services/` 35, `schemas/` 29,
 `repositories/` 23, `models/` 18, `core/` 9, `db/` 3, `middleware/` 3, `ml/` 10, and the V2
 packages `llm/` 11, `copilot/` 16, `knowledge/` 2 and `jobs/` 2 (tracked `.py` files, each
 `__init__.py` included). The HTTP surface is **64 paths / 99 operations**, of which **94 require

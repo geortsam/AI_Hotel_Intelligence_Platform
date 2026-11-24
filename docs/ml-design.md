@@ -2,9 +2,11 @@
 
 > **Stage snapshot, not a current-state document.** This records the design of the statistical
 > intelligence layer at Stage 3B.11 and is not maintained since. What it describes is still
-> exactly what that layer is — a deterministic standard-library baseline, with no LLM anywhere in
-> the repository — and Stages 6.1–6.11 have since added a *separate* trained demand model beside
-> it, which changes nothing in this document.
+> exactly what that layer is — a deterministic standard-library baseline that uses no LLM — and
+> Stages 6.1–6.11 have since added a *separate* trained demand model beside it, which changes
+> nothing in this document. Since Stage 7.7 the repository also holds V2's copilot, whose
+> language-model boundary is separate from this layer too; see
+> [v2-architecture.md](v2-architecture.md).
 > [architecture.md §5](architecture.md#5-data-and-intelligence-architecture) is the current
 > summary. V2 machine-learning direction is in
 > [development-roadmap.md](development-roadmap.md).

@@ -1,7 +1,7 @@
 # Database implementation — Stage 2B
 
 > **Stage snapshot, not a current-state document.** This records how the Stage 2A schema was
-> built, and is not maintained since. Sixteen migrations have been added after its
+> built, and is not maintained since. Twenty-two migrations have been added after its
 > `0001_initial_schema`: V1's `0002`–`0009` (payment public ids, users, memberships, platform
 > admins, password-change timestamps, audit events, the audit archive, the booking-deleted audit
 > action); `0010`–`0011` for served demand predictions (Stages 6.8, 6.11); and V2's `0012`–`0015`

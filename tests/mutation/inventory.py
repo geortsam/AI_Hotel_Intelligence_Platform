@@ -10572,6 +10572,7 @@ STAGE_A9 = [
 
 _A8_CHECKER = "scripts/doc_links.py"
 _A8_TESTS = "tests/backend/test_doc_links.py::"
+_A8_CONSOLIDATED = "tests/backend/test_consolidated_docs.py::"
 _A8_INDEX = "docs/README.md"
 #: The real documentation's own test: no broken link or anchor, nothing unreachable.
 _A8_DOCS_CLEAN = "test_the_documentation_has_no_broken_link_anchor_or_unreachable_document"
@@ -10725,6 +10726,70 @@ STAGE_A8 = [
         "| Superseded for status by [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) |",
         "| See [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) |",
         "test_every_index_entry_states_one_of_the_three_statuses",
+    ),
+    *(
+        Mutation(f"A8-M{number}", "A8", breaks, one(path, old, new), (killer,))
+        for number, breaks, path, old, new, killer in (
+            (
+                18,
+                "the README's package tree gives a package's old file count",
+                "README.md",
+                "├── api/            38  HTTP layer",
+                "├── api/            34  HTTP layer",
+                f"{_README_COUNTS}test_backend_package_file_counts",
+            ),
+            (
+                19,
+                "the README's package tree leaves out a package",
+                "README.md",
+                "├── jobs/            8  operator commands: retention, platform admin, scheduler\n",
+                "",
+                f"{_README_COUNTS}test_backend_package_file_counts",
+            ),
+            (
+                20,
+                "the project-structure table's migration count goes stale again",
+                "README.md",
+                "Alembic migrations — 23 linear revisions",
+                "Alembic migrations — 11 linear revisions",
+                f"{_README_COUNTS}test_migrations_and_head",
+            ),
+            (
+                21,
+                "the database design's banner gives the table count before R1.1 again",
+                "docs/database-design.md",
+                "> over 29 application tables.",
+                "> over 28 application tables.",
+                f"{_A8_CONSOLIDATED}test_the_database_design_banner_states_the_table_count",
+            ),
+            (
+                22,
+                "the database implementation's banner miscounts the later migrations again",
+                "docs/database-implementation.md",
+                "Twenty-two migrations have been added after its",
+                "Sixteen migrations have been added after its",
+                f"{_A8_CONSOLIDATED}"
+                "test_the_database_implementation_banner_counts_the_migrations_after_the_first",
+            ),
+            (
+                23,
+                "the ML design says again that the repository holds no LLM",
+                "docs/ml-design.md",
+                "a deterministic standard-library baseline that uses no LLM — and",
+                "a deterministic standard-library baseline, with no LLM anywhere in the "
+                "repository — and",
+                f"{_A8_CONSOLIDATED}test_ml_design_no_longer_says_the_repository_holds_no_llm",
+            ),
+            (
+                24,
+                "the tests README states a frontend test count again",
+                "tests/README.md",
+                "CI runs them in their own `Frontend quality gates` job",
+                "There are 37 test files and 1,444 tests. CI runs them in their own "
+                "`Frontend quality gates` job",
+                f"{_A8_CONSOLIDATED}test_the_tests_readme_states_no_frontend_test_count",
+            ),
+        )
     ),
 ]
 
