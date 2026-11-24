@@ -84,15 +84,16 @@ ARTIFACT_DIGESTS = {
 #: `retrieval-eval-44678376755-1`, `82a57cd`) after E4 and E7 changed fingerprinted inputs, and
 #: again from CI run 44703063590 (`retrieval-eval-44703063590-1`, `c5de382`) after E8, and from
 #: CI run 44745383909 (`retrieval-eval-44745383909-1`) after E9 fingerprinted the cookie-session
-#: modules, each time with the measured sections unchanged. Both files are absent until pinned,
-#: then present together with exactly these bytes (`-text`, so not LF-normalised); a re-pin
-#: updates them here.
+#: modules, and from CI run 45390743636 (`retrieval-eval-45390743636-1`, `fda8718`) after A2
+#: changed ci.yml and both Python locks, each time with the measured sections unchanged. Both
+#: files are absent until pinned, then present together with exactly these bytes (`-text`, so not
+#: LF-normalised); a re-pin updates them here.
 PINNED_RETRIEVAL_V2 = {
     "retrieval_report_v2.json": (
-        "1a8e1c5372ed1d74d10be4db5a068d9abee489ac92e6a33ee9ff42df71f96c87"
+        "567ace340acb33370cf75bc6a0ad2696ad98554f5ad1183bde5099a951c09116"
     ),
     "retrieval_report_v2.environment.json": (
-        "f8dcf1625aa190769c505b33e96fd7f5db36a92dac565abd53df98e8cf8a9895"
+        "28adf2c2da00abf25a8c5fbfa765c80d920d602bfe6249129c72b07297c5891a"
     ),
 }
 
