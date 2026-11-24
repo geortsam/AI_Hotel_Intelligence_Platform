@@ -71,6 +71,8 @@ being reproducible. That happened from `6ac7d44` until `52fde7b` (§6).
   - The shell's content column is `minmax(0, 1fr)`, so the header's min-content can't widen the page.
   - `<main>` uses `overflow-x: clip` rather than `hidden`, so sticky panels work.
   - UI-10's audit, re-run after the fonts: 17 routes × 375, 768 and 1440px, with no sideways scroll, no escaping element and exactly one `h1` per page.
+  - **Automated since A9:** the CI job `responsive-audit` runs the same 51 checks, by the same method, in a digest-pinned Playwright Chromium against the seeded Compose stack (`frontend/e2e/`), and any failing check fails CI.
+  - **Known defect, open:** at 1440px the Analytics expenses table is wider than its box and its last column is clipped. It is not one of the 51 checks (the page itself does not scroll sideways); the job reports it separately on every run. It is not fixed.
 - **Semantics:**
   - One `h1` per page, and the header title is no longer a heading.
   - Tables carry visually hidden captions.
@@ -97,7 +99,7 @@ being reproducible. That happened from `6ac7d44` until `52fde7b` (§6).
 | UI-7 | Forecast chart: the interval in the forecast's own colour; tab underlines on the rule; insight severity rails; copilot as an 820px reading column | `25acc8c` … `9642a65` |
 | UI-8 | `<main>` clipped instead of hidden; booking detail with a sticky Operations panel; availability's form beside its answer; room status rails; guest and room records as 880px columns | `e337e46` … `b61fd59` |
 | UI-9 | Split-screen sign-in with the brass mark; a not-found state with a mark and a way onward; review figures in the display face | `1175aa3`, `9704e68`, `b1d1b0d` |
-| UI-10 | Final audit (51 checks) and report | — |
+| UI-10 | Final audit (51 checks) and report; automated in CI by A9 | `7858c27` (A9) |
 | Decisions | Self-hosted Inter and Source Serif 4; the `/intelligence` page titled "Forecasting" | `bf8bcef`, `a08bb95` |
 | Fix | The bundle made reproducible again: DataTable's caption states the clip rule itself instead of composing `srOnly`, so no module reaches `VisuallyHidden` by two paths. Local builds went from 4 distinct outputs in 4 to 1 in 6, and CI's image-reproducibility job passed | `52fde7b` |
 
@@ -108,4 +110,4 @@ being reproducible. That happened from `6ac7d44` until `52fde7b` (§6).
 - **A settings-page section nav:** two or three sections per page.
 
 The tasks that remain are counted in [project-completion-audit.md](project-completion-audit.md). The
-open accessibility-automation work is A4, and the responsive-audit regression test is A9.
+accessibility automation (A4) and the responsive-audit regression test (A9) are both done.

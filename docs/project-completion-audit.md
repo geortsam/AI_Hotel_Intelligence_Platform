@@ -23,8 +23,8 @@
   - all 891 recorded mutations were killed;
   - ruff, the format check and mypy were clean;
   - the migration chain was checked, the image was verified at runtime, and both builds were reproducible.
-- **Overall completion:** 73.2% of all tracked work (52 of 71 items, §8; 66.2% at the audit, 67.6% after A1, 69.0% after A6, 70.4% after A4, 71.8% after A7). For work that needs no decision from you, the figure is 92.9% (52 of 56).
-- **Remaining autonomous work:** 4 tasks (§4; A1, A6, A4, A7 and A2 are done). None is a functional gap. They cover supply-chain security (A3), metrics (A5), the responsive-audit regression test (A9) and documentation consolidation (A8).
+- **Overall completion:** 77.5% of all tracked work (55 of 71 items, §8; 66.2% at the audit, 67.6% after A1, 69.0% after A6, 70.4% after A4, 71.8% after A7, 73.2% after A2). For work that needs no decision from you, the figure is 98.2% (55 of 56).
+- **Remaining autonomous work:** 1 task (§4; A1, A6, A4, A7, A2, A3, A5 and A9 are done, A2 with the trigger correction of §4.6). It is not a functional gap: documentation consolidation (A8 = R6.1).
 - **Remaining user decisions:** 13 open decision briefs (§5). Three of them have a do-nothing default.
 - **Readiness:** the platform is demo ready. It is not production ready, and §7 says exactly why.
 
@@ -81,7 +81,7 @@ licences, served from `/assets/`) and "Forecasting" (`a08bb95`).
 
 ---
 
-## 4. Remaining autonomous engineering tasks — 4 (A1, A6, A4, A7 and A2 done)
+## 4. Remaining autonomous engineering tasks — 1 (A1, A6, A4, A7, A2, A3, A5 and A9 done)
 
 ### 4.1 A1, done (2026-11-22)
 
@@ -327,7 +327,7 @@ Both locks were regenerated with uv 0.12.24, and nothing else in either lock mov
 - Locked with its dependencies in `scripts/dependency_audit_lock.txt`: 28 packages, about 47 MB installed, every entry hashed.
 - Installed with `--no-deps --require-hashes` into a venv of its own, so it never shares an environment with what it scans.
 
-**The gate.** CI job "Dependency vulnerability scan" (`dependency-audit`), on every workflow run, with no `if:`, no `needs:`, no `env:`, no services and no secret. The checkout does not persist its token. In order:
+**The gate.** CI job "Dependency vulnerability scan" (`dependency-audit`), as first landed in `ci.yml`: on every run of that workflow (not every push; corrected in §4.6), with no `if:`, no `needs:`, no `env:`, no services and no secret. The checkout does not persist its token. In order:
 1. Install pip-audit from its lock.
 2. **Positive controls:** audit `tests/fixtures/dependency_audit/pyjwt-2.13.0.lock`, which must report GHSA-ffc3-869f-jxw9, and an npm fixture pinning lodash 4.17.20, which must report GHSA-35jh-r3h4-6jhm.
 3. `npm audit --omit=dev --audit-level=high` on `frontend/`.
@@ -386,33 +386,103 @@ Both locks were regenerated with uv 0.12.24, and nothing else in either lock mov
 - Docker runtime verification passed;
 - the scan job: both controls reported, npm 0, and 40, 57 and 28 entries audited with 0 advisories.
 
-A2 is counted complete from this run. The plan in §9 batched A2 with A3, A5 and A9. The A2 stage prompt asked for its own re-pin, so A3, A5 and A9 remain the batch.
+A2 was counted complete from this run, but its trigger fell short of "every push" (see the limitations below); that was corrected and verified in §4.6. The plan in §9 batched A2 with A3, A5 and A9. The A2 stage prompt asked for its own re-pin, so A3, A5 and A9 remained the batch.
 
 **Limitations:**
 - The gate needs the public advisory services (the PyPI JSON API and the npm registry's bulk advisory endpoint). An outage fails the run rather than passing it.
 - pip-audit sees what PyPI's vulnerability data holds, so an advisory that has not reached it yet cannot be caught.
-- The gate runs whenever the workflow runs: on a push to `main` and on every push to a pull request targeting `main`. A push to a branch with no pull request runs no CI at all, as before.
+- **As first landed, the scan did not run on every push.** It was a job in `ci.yml`, whose `push` trigger is restricted to `main`, so it ran on a push to `main` and on pull requests to `main`, but a push to any other branch without a pull request was never scanned. The test that claimed "runs on every push" checked only that the job had no `if:`, not the workflow's triggers. **A2's acceptance criterion was therefore not fully met by `6a91858`.** It is corrected, and the correction verified, in §4.6.
 
-### 4.6 The remaining tasks
+### 4.6 A2 trigger correction, A3, A5 and A9, done (2026-11-24)
 
-Each task can be done without a decision from you. They are ordered by the requested priorities.
+One batch, one re-pin. Implementation `7858c27`; re-pin `133c5be` (the report and environment bytes alone) and `f4503e4` (the digests admitted, the decision-record row).
+
+**A2 correction: the scan now runs on every push to any branch.**
+- The job moved, unchanged in what it runs, from `ci.yml` to a workflow of its own, `.github/workflows/dependency-audit.yml`, triggered by `push:` with no branch filter and by `pull_request` to `main`. `main` and pull-request behaviour are preserved; `ci.yml` itself is untouched in its triggers.
+- Its concurrency group includes the event name, so a branch's push run and its pull-request run never cancel each other; `permissions: contents: read`; the checkout does not persist its token.
+- Nothing in the scan was weakened: the same hash-locked pip-audit, the same positive controls first, `npm audit --omit=dev --audit-level=high`, every lock entry, outages failing. The Python-lock list gains A3's `scripts/sbom_lock.txt`.
+- `tests/backend/test_ci_dependency_audit.py` now reads the workflow's **triggers**: a push to an arbitrary non-`main` branch (`feature/x`, `r2.10c3c-adjudication`) must start it, a pull request to `main` must start it, and `ci.yml` must no longer hold the job. Mutations A2-M10 to M13 restore a `main`-only filter, drop the `push` trigger, drop the pull-request trigger, and put the job back in `ci.yml`; all are killed.
+- **Verified live:** [45463421113](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45463421113) and [45476878966](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476878966) are `push`-event runs of the scan on `r2.10c3c-adjudication`, a branch `ci.yml`'s `push` trigger does not match, both green; the pull-request runs ([45476887470](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476887470)) are green too. With that, A2 meets its criterion of scanning on every push.
+
+**A3: an SBOM per image, from the images themselves.**
+- In the `image-reproducibility` job, after both no-cache builds of each image: Syft 1.57.1 (Anchore, Apache-2.0), its release archive checked against the pinned SHA-256 `bf52519e…44eef0c` before it is unpacked, catalogues each built image (`syft scan docker:<tag>`) into **CycloneDX 1.6 JSON**, for both builds of both images.
+- `scripts/sbom_check.py`, run from a hash-locked venv (`scripts/sbom_lock.txt`, cyclonedx-python-lib 11.12.0 with its JSON validation, 27 entries, 0 advisories), requires of every SBOM:
+  - **valid:** CycloneDX 1.6, valid against the official schema in strict mode, generated by Syft 1.57.1, with components;
+  - **accurate:** for the backend, every entry of `backend/requirements-lock.txt` that installs on the image's platform (linux, x86_64, CPython 3.14.7: 39 of the 40, `tzdata` being Windows-only) as a `pkg:pypi` component at its exact locked version, and the Debian base; for the frontend, the pinned nginx 1.27.5 and the Alpine base;
+  - **reproducible:** the two builds' SBOMs list the same components (type, name, version, purl);
+  - **clean:** no runner host path and no credential value or credential shape.
+- A deliberately invalid SBOM (`tests/fixtures/sbom/invalid-component-type.cdx.json`) must be rejected first, for the schema reason, so a checker that accepts everything cannot pass.
+- One SBOM per image is kept as the artifact `sbom-<run>-<attempt>`. Nothing is published, signed or sent anywhere; signing stays with decision §3.12.
+- In run [45476887432](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476887432): 2,882 backend and 1,305 frontend components, identical across the two builds; 39 of 39 locked packages; Debian 13.6 and Alpine 3.21.3; artifact `sbom-45476887432-1`.
+- **Coverage:** the two images this repository builds, `backend` (also run as `migrate`) and `frontend`. The `postgres` image is upstream's, pinned by digest, and has no SBOM from this job; no claim is made for it.
+- `tests/backend/test_ci_sbom.py`, 43 tests; mutation stage A3, 12 recorded.
+
+**A5: an internal metrics endpoint.**
+- `GET /metrics` serves the Prometheus text format 0.0.4: `http_requests_total` (counter, by `method`, `route`, `status`) and `http_request_duration_seconds` (histogram, by `method` and `route`, fixed buckets 5 ms to 10 s).
+- **Bounded labels:** `route` is the matched route's template (`/api/v1/hotels/{hotel_id}`), never the path; an unmatched request is `unmatched`; a method outside the seven routable ones is `OTHER`. No identifier, e-mail address, query string or body can become a label.
+- **Internal only:** nginx forwards only `/api/`, the API publishes no host port, and a request carrying any forwarding header (`Forwarded`, `X-Forwarded-*`, `X-Real-IP`) gets the ordinary 404. It is not in the OpenAPI document. It reads no database and sends nothing anywhere; where alerts go remains decision §3.12.
+- `RequestMetricsMiddleware`, pure ASGI, sits just inside the security headers and only observes; a failing request is counted as 500.
+- **Verified on the real stack** (`docker-runtime`): from inside the network the API answers 200 with the right content type, both families and the health probes counted, and 404 to a request with `X-Forwarded-For`; through nginx, `/metrics`, `/api/metrics`, `/api/v1/metrics` and `/api/../metrics` never return a metric (nginx answers the first and last with the frontend's page and the others with 404).
+- `/metrics` joins the public-path list of `tests/backend/test_authorization_surface.py`, with its argument; every other boundary is unchanged.
+- **Fingerprint:** `core/metrics.py` and `middleware/metrics.py` are fingerprinted (`METRICS_SOURCES`) rather than excluded, because the middleware runs on every measured request; `api/routes/metrics.py` is excluded as not run; 55 sources, 170 exclusions. Recorded for your review in the decision record's fifth re-pin row.
+- `tests/backend/test_metrics_endpoint.py`, 25 tests with a strict exposition parser; mutation stage A5, 12 recorded.
+
+**A9: UI-10's 51 checks, automated.**
+- `frontend/e2e/responsive-checks.mjs` holds UI-10's specification unchanged: the 17 routes in its order, 375, 768 and 1440px at a 900px height, and per page no sideways scroll, no element escaping the viewport and exactly one `h1`, measured with UI-10's own method. `frontend/e2e/responsive-audit.mjs` drives it.
+- The CI job `responsive-audit` builds and starts the Compose stack, seeds it with the **synthetic** demo data (`scripts/seed_demo.py`, generated credentials, masked), grants the platform role, and runs the audit in Chromium from `mcr.microsoft.com/playwright:v1.65.0-noble`, pinned by digest, whose version is the `playwright-core` 1.65.0 the lockfile installs. Viewports are set explicitly, so nothing depends on a local display. Any failing check fails the job and is named; the JSON report is uploaded.
+- In run [45476887432](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476887432): **51 of 51 checks passed.**
+- **The known defect stays visible.** The Analytics expenses table at 1440px is not one of the 51 and is not marked fixed: the job probes it separately and reports, without counting it, that it still reproduces ("Ledger expenses": a 525px table in a 482px box).
+- `frontend/e2e/responsive-checks.test.mjs`, 18 Vitest tests; `tests/backend/test_ci_responsive_audit.py`, 13 tests; mutation stage A9, 13 recorded (9 Vitest, 4 pytest).
+
+**Mutations:** stage A2 13 (9 + 4 for the correction), A3 12, A5 12, A9 13: **963 in all**, every one killed in run [45476887432](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476887432).
+
+**Re-pin (Decision F §12.6).** `ci.yml`, `main.py`, `retrieval_fingerprint.py` and the new metrics modules are fingerprinted.
+1. Run [45463427755](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45463427755) on `7858c27` was red only on the pin gate: `inputs changed: sources`. Its other 7 jobs passed, including the SBOM steps, the metrics step and the 51 checks, with 963/963 mutations killed.
+2. Its artifact `retrieval-eval-45463427755-1` verified offline with `python -m tests.evaluation.retrieval_artifacts verify` against the job log's digests: files, digests, fingerprint, components, tree and repository groups.
+3. The `report`, `results`, `signoff` and `manifest` sections are identical to the previous pin. Only `inputs.sources` (exactly `ci.yml`, `core/__init__.py`, `core/metrics.py`, `main.py`, `middleware/__init__.py`, `middleware/metrics.py` and `retrieval_fingerprint.py`), the `sources` component and the fingerprint moved.
+4. Pinned, bytes unchanged, in `133c5be`:
+   - report `4a697ebd6c05f6e566aae11a3d8378ff69c5324cf5fc89890481d2e40a89be2b`;
+   - environment `8594fc287defc30b3f5c489b5484dfb2a948ecbc26d8287efa054752665b656c`;
+   - fingerprint `068f8bd16983e66f3391945b89becec4e9b5c03c0fd9e304e3fffe776f963f1b`.
+5. `f4503e4` admitted the digests and recorded the re-pin.
+
+**CI:** [45476887432](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476887432) on `f4503e4`, all 8 jobs green (the scan left `ci.yml` and `responsive-audit` joined it, so a run is still 8 jobs):
+- 12,771 backend tests passed (shards 10,416 + 1,096 + 1,259; 58 skipped), with the pin gate passing against the new pin;
+- Frontend: `Test Files 37 passed (37)`, `Tests 1444 passed (1444)`;
+- `963 mutations: 963 killed, 0 survived, 0 not run, 0 errors`;
+- 9,551 backend files and 68 served frontend files byte-identical across two no-cache builds, then the SBOMs above;
+- Docker runtime verification passed, the metrics step included;
+- the responsive audit: 51 of 51.
+
+The dependency scan ran beside it as its own workflow: [45476878966](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476878966) (`push`) and [45476887470](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476887470) (`pull_request`), both green.
+
+A3, A5 and A9 are counted complete from this run, and A2's limitation is closed by it.
+
+**Limitations:**
+- The SBOMs describe what Syft can catalogue in the image. Files no package manager owns (the application's own source) are not components.
+- The metrics live in the worker's memory and start at zero with it; nothing scrapes them, and no alert exists (§3.12).
+- The responsive audit runs Chromium only, as UI-10 did.
+
+### 4.7 The remaining task
+
+It can be done without a decision from you.
 **F** marks a change to a fingerprinted file (`ci.yml`, `main.py`), which needs a re-measure and
 re-pin under §12.6. Tasks marked F are batched into one re-pin stage.
 
 | # | Task | Priority | Touches | Depends on | Evidence |
 |---|---|---|---|---|---|
 | ~~A1~~ | **Done** (§4.1): 6 advisories → 0 | — | — | — | — |
-| ~~A2~~ | **Done** (§4.5): CI job "Dependency vulnerability scan" (npm audit at high, pip-audit 2.10.1 on every lock entry, positive controls first, outages fail); PyJWT 2.13.0 → 2.15.1 and certifi → 2026.10.23 fixed first; 9 mutations; re-pinned, CI 45398092718 green | — | — | — | — |
-| A3 | **Generate an SBOM in CI** (the half of R4.3b that needs no signing identity): one SBOM per image, kept as an artifact | ops | F (`ci.yml`) | batch with A2 | R4.3b is "SBOM partly; signing no" |
+| ~~A2~~ | **Done** (§4.5, corrected in §4.6): "Dependency vulnerability scan" (npm audit at high, pip-audit 2.10.1 on every lock entry, positive controls first, outages fail); PyJWT 2.13.0 → 2.15.1 and certifi → 2026.10.23 fixed first; re-pinned, CI 45398092718 green. It first ran only on `main` and pull requests; since `7858c27` it is its own workflow on every push, verified by `push`-event runs; 13 mutations | — | — | — | — |
+| ~~A3~~ | **Done** (§4.6): Syft 1.57.1 (checksum-verified) CycloneDX 1.6 SBOMs of both builds of both images, schema-valid, every locked package at its version, identical across builds, no host path or credential, kept as `sbom-<run>-<attempt>`; 12 mutations; CI 45476887432 green | — | — | — | — |
 | ~~A4~~ | **Done** (§4.3): axe-core checks on every route and state, 9 genuine violation kinds fixed, 10 mutations; CI 45063664775 green | — | — | — | — |
-| A5 | **Add a metrics exporter, internal only** (the half of R4.3a that needs no alert destination): request counts and latencies in Prometheus format on the internal network, with no nginx route | ops | F (`main.py`, README counts) | batch with A2/A3 | `grep /metrics backend/app`: none |
+| ~~A5~~ | **Done** (§4.6): `GET /metrics`, Prometheus text, request counts and latencies by method, route template and status; no nginx route, 404 to proxied requests, proven on the real stack; 12 mutations; CI 45476887432 green | — | — | — | — |
 | ~~A6~~ | **Done** (§4.2): README, screenshots, frontend README, execution log, `ui-redesign.md`, 12 regression tests, 8 mutations | — | — | — | — |
 | ~~A7~~ | **Done** (§4.4): placeholder scaffolding removed, Not Found styles identical (digests), the navigation-to-route guarantee now a test, 4 mutations; CI 45150368805 green | — | — | — | — |
 | A8 | **R6.1: consolidate the stage-snapshot documents** (35 under `docs/` + 6 under `docs/deployment/`) into a small set of maintained current-state documents | documentation | docs; tests that pin doc text (`test_current_state_docs.py`, `test_runbook_schema_facts.py`, others) must move with it | A6 (fix the facts before moving them) | the earlier "14 of 29" counted R6.1 as done; it was never performed |
-| A9 | **Regression-test the responsive audit.** Codify the UI-10 51-check overflow and one-`h1` audit as an automated browser test against the CI stack | reliability | F (`ci.yml`) | batch with A2/A3/A5; needs a pinned browser image | the audit exists only as a manual browser script |
+| ~~A9~~ | **Done** (§4.6): CI job `responsive-audit`, UI-10's 51 checks in a digest-pinned Playwright 1.65.0 Chromium against the seeded Compose stack; the Analytics expenses-table clipping reported separately and still open; 13 mutations; CI 45476887432 green | — | — | — | — |
 
-**Dependencies, so no work is done twice:** A1 → A2 and A1 → A4; A6 → A8. A2, A3, A5 and A9 share
-one re-pin. Nothing here waits on you.
+**Dependencies, so no work is done twice:** A6 → A8, which is last so the facts move only once.
+Nothing here waits on you.
 
 ---
 
@@ -463,8 +533,9 @@ implemented and green (§3).
 | Reproducibility | backend image contents byte-identical across two no-cache builds; frontend bundle byte-identical (the step that failed on `bf8bcef` passed here); every external image pinned by digest |
 | Retrieval pin gate | inside shard 1's pytest; artifacts' SHA-256 printed and uploaded |
 
-**Not covered by any gate today:** dependency vulnerability scanning (A2), accessibility (A4),
-the responsive audit (A9) and runtime metrics (A5).
+**Not covered by any gate at the audit:** dependency vulnerability scanning (A2), accessibility
+(A4), the responsive audit (A9) and runtime metrics (A5). All four are gated now (§4.3, §4.5,
+§4.6).
 
 ---
 
@@ -476,7 +547,7 @@ the responsive audit (A9) and runtime metrics (A5).
 |---|---|---|
 | **Feature complete** | **Yes, for the decided scope.** | Every built area and every V1/V2 stage is implemented and tested; every decision-free roadmap task is done except R6.1. Stage 7.15 and R5 are out of reach only because they wait on decisions, not because engineering is missing |
 | **Demo ready** | **Yes.** | Deterministic demo seed, synthetic data labelled as such, the full stack runs locally and in CI, and the UI is finished at three widths. The README's screenshots and copilot description are current (A6). One caveat: the copilot can be shown only with a configured model, which under your constraints means local Ollama |
-| **Production ready** | **No.** | No password reset, email or deactivation flow (R1.2); manual certificates, local-only backups, no point-in-time recovery (R4.1); no metrics or alerting (R4.3); Dependabot inactive and no vulnerability scanning (R0.4a, A2); intelligence accuracy unproven on real data (R2); open registration by design. Each needs a decision in §5 or a task in §4 |
+| **Production ready** | **No.** | No password reset, email or deactivation flow (R1.2); manual certificates, local-only backups, no point-in-time recovery (R4.1); an internal metrics endpoint but no alerting (R4.3, A5); Dependabot inactive, though every push is scanned (R0.4a, A2); intelligence accuracy unproven on real data (R2); open registration by design. Each needs a decision in §5 or a task in §4 |
 
 ### 7.2 Security and operational risks
 
@@ -484,9 +555,10 @@ the responsive audit (A9) and runtime metrics (A5).
 |---|---|---|
 | No password reset; deactivation only by setting `is_active` directly (enforced at login, refresh and session lookup, but there is no endpoint) | high for production | decision §3.4 |
 | Certificates replaced by hand; backups local, unencrypted, unscheduled; no PITR | high for production | decision §3.11 |
-| No dependency vulnerability gate; Dependabot inert off `main` | medium | A2, decision §3.3 |
+| No dependency vulnerability gate; Dependabot inert off `main` | resolved for scanning: every push is scanned (A2, §4.5–§4.6); Dependabot still inert | decision §3.3 |
 | Dev-toolchain advisories (3 high) | resolved: 6 → 0 | A1 done (§4.1) |
-| No runtime metrics or alerts | medium | A5, decision §3.12 |
+| No runtime metrics or alerts | metrics resolved, internal only (A5, §4.6); no alerts | decision §3.12 |
+| Analytics expenses table clipped at 1440px (last column) | low, cosmetic | **open**: found on 2026-11-24, after A2; reported by every responsive-audit run, not one of the 51 checks and not fixed |
 | Per-process rate limiter and copilot budgets | low at one worker | decision §3.6 |
 | Open registration, and hotel creation makes you its owner | by design for self-hosting | documented in the README |
 | Unauthenticated health probes | low (reachable only through nginx, no business data) | documented |
@@ -536,12 +608,13 @@ implemented and its CI is green.
 | Delivered platform stages: the README's 13 stage groups (1 → 7.1–7.4) + V2 stages 7.5–7.14 (10). Stage 7.15 is counted under R2.3 | 23 | 23 | 100.0 |
 | UI redesign UI-0 … UI-10 | 11 | 11 | 100.0 |
 | v2.0 roadmap matrix | 29 | 13 | 44.8 |
-| Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 5 (A1, A6, A4, A7, A2) | 62.5 |
-| **All** | **71** | **52** | **73.2** |
+| Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 8 | 100.0 |
+| **All** | **71** | **55** | **77.5** |
 
-- **Within the decided scope** (the 15 decision-blocked rows removed): 52 of 56 = **92.9%**.
-- **Strict** (R0.2 and R0.4a not counted as done): 50 of 71 = 70.4%.
-- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. After A6 (`485dd15`, CI 45046381883 green): 49 / 71 = 69.0%. After A4 (`4c9a2a0`, CI 45063664775 green): 50 / 71 = 70.4%. After A7 (`5125b5b`, CI 45150368805 green): 51 / 71 = 71.8%. After A2 (`6a91858`, re-pinned in `fda8718` and `9fec999`, CI 45398092718 green): 52 / 71 = 73.2%.
+- **Within the decided scope** (the 15 decision-blocked rows removed): 55 of 56 = **98.2%**. The one left is R6.1 (A8).
+- **Strict** (R0.2 and R0.4a not counted as done): 53 of 71 = 74.6%.
+- A3 and A5 are the local halves of R4.3b and R4.3a. They count as audit findings; the two roadmap rows stay decision-blocked, because signing and alert destinations still need §3.12.
+- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. After A6 (`485dd15`, CI 45046381883 green): 49 / 71 = 69.0%. After A4 (`4c9a2a0`, CI 45063664775 green): 50 / 71 = 70.4%. After A7 (`5125b5b`, CI 45150368805 green): 51 / 71 = 71.8%. After A2 (`6a91858`, re-pinned in `fda8718` and `9fec999`, CI 45398092718 green): 52 / 71 = 73.2%. After the A2 correction, A3, A5 and A9 (`7858c27`, re-pinned in `133c5be` and `f4503e4`, CI 45476887432 green): 55 / 71 = 77.5%.
 
 ---
 
@@ -551,7 +624,7 @@ implemented and its CI is green.
 2. ~~**A6**~~ — done (§4.2).
 3. ~~**A4**~~ — done (§4.3).
 4. ~~**A7**~~ — done (§4.4).
-5. ~~**A2**~~ — done (§4.5), re-pinned on its own as its stage prompt asked.
-6. **Re-pin batch: A3 + A5 + A9**, measured and re-pinned once under §12.6.
+5. ~~**A2**~~ — done (§4.5), re-pinned on its own as its stage prompt asked; its trigger corrected in §4.6.
+6. ~~**Re-pin batch: A2 correction + A3 + A5 + A9**~~ — done (§4.6), re-pinned once under §12.6.
 7. **A8 / R6.1** — consolidate the documents, last, so the facts move only once.
 8. Then whatever your answers to §5 unlock. The first steps toward production are §3.4 (R1.2) and §3.11 (R4.1).
