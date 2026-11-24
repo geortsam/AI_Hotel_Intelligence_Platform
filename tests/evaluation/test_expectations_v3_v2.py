@@ -85,15 +85,18 @@ ARTIFACT_DIGESTS = {
 #: again from CI run 44703063590 (`retrieval-eval-44703063590-1`, `c5de382`) after E8, and from
 #: CI run 44745383909 (`retrieval-eval-44745383909-1`) after E9 fingerprinted the cookie-session
 #: modules, and from CI run 45390743636 (`retrieval-eval-45390743636-1`, `fda8718`) after A2
-#: changed ci.yml and both Python locks, each time with the measured sections unchanged. Both
+#: changed ci.yml and both Python locks, and from CI run 45463427755
+#: (`retrieval-eval-45463427755-1`, `133c5be`) after the A2 correction, A3, A5 and A9 changed
+#: ci.yml and main.py and fingerprinted A5's metrics modules, each time with the measured
+#: sections unchanged. Both
 #: files are absent until pinned, then present together with exactly these bytes (`-text`, so not
 #: LF-normalised); a re-pin updates them here.
 PINNED_RETRIEVAL_V2 = {
     "retrieval_report_v2.json": (
-        "567ace340acb33370cf75bc6a0ad2696ad98554f5ad1183bde5099a951c09116"
+        "4a697ebd6c05f6e566aae11a3d8378ff69c5324cf5fc89890481d2e40a89be2b"
     ),
     "retrieval_report_v2.environment.json": (
-        "28adf2c2da00abf25a8c5fbfa765c80d920d602bfe6249129c72b07297c5891a"
+        "8594fc287defc30b3f5c489b5484dfb2a948ecbc26d8287efa054752665b656c"
     ),
 }
 
