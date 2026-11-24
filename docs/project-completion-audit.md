@@ -23,8 +23,8 @@
   - all 891 recorded mutations were killed;
   - ruff, the format check and mypy were clean;
   - the migration chain was checked, the image was verified at runtime, and both builds were reproducible.
-- **Overall completion:** 71.8% of all tracked work (51 of 71 items, §8; 66.2% at the audit, 67.6% after A1, 69.0% after A6, 70.4% after A4). For work that needs no decision from you, the figure is 91.1% (51 of 56).
-- **Remaining autonomous work:** 5 tasks (§4; A1, A6, A4 and A7 are done). None is a functional gap. They cover supply-chain security (A2, A3), metrics (A5), the responsive-audit regression test (A9) and documentation consolidation (A8).
+- **Overall completion:** 73.2% of all tracked work (52 of 71 items, §8; 66.2% at the audit, 67.6% after A1, 69.0% after A6, 70.4% after A4, 71.8% after A7). For work that needs no decision from you, the figure is 92.9% (52 of 56).
+- **Remaining autonomous work:** 4 tasks (§4; A1, A6, A4, A7 and A2 are done). None is a functional gap. They cover supply-chain security (A3), metrics (A5), the responsive-audit regression test (A9) and documentation consolidation (A8).
 - **Remaining user decisions:** 13 open decision briefs (§5). Three of them have a do-nothing default.
 - **Readiness:** the platform is demo ready. It is not production ready, and §7 says exactly why.
 
@@ -81,7 +81,7 @@ licences, served from `/assets/`) and "Forecasting" (`a08bb95`).
 
 ---
 
-## 4. Remaining autonomous engineering tasks — 5 (A1, A6, A4 and A7 done)
+## 4. Remaining autonomous engineering tasks — 4 (A1, A6, A4, A7 and A2 done)
 
 ### 4.1 A1, done (2026-11-22)
 
@@ -305,7 +305,95 @@ The harness matches a Vitest killer by its literal title. The killers are theref
 
 A7 is counted complete from this run. This record is the documentation commit that follows it.
 
-### 4.5 The remaining tasks
+### 4.5 A2, done (2026-11-24)
+
+**Measured before the gate.** pip-audit 2.10.1 over both locks; `npm audit` with and without dev dependencies.
+
+| Package | Version | Where | Advisories | Fixed in |
+|---|---|---|---|---|
+| PyJWT | 2.13.0 | **shipped** (image lock and dev lock) | 15: 1 critical (GHSA-ffc3-869f-jxw9), 6 high (GHSA-p4g4-x82p-q773, GHSA-9v7f-9g4p-ffgj, GHSA-9j54-fg26-wv3r, GHSA-w2cx-738m-mc7w, GHSA-r6x4-923q-g947, GHSA-pxh4-856f-4h89), 8 moderate | 2.14.0 / 2.15.0; GHSA-gvp8-978c-rx2q lists 2.13.0 as its last affected version |
+| certifi | 2026.7.22 | development only (via httpx) | 1 critical: GHSA-6q48-6c7w-9gw2, compromised emSign roots | 2026.10.18 |
+| npm (frontend) | — | shipped and dev | 0 | — |
+
+**Fixed before the gate landed:**
+- **PyJWT → 2.15.1.** A direct pin in `backend/requirements.txt`, released before the locks' existing `--exclude-newer` cutoff.
+- **certifi → 2026.10.23.** Released after the cutoff, so it moves through one per-package `--exclude-newer-package` exception. The global timestamp, and with it every other package, is unchanged.
+
+Both locks were regenerated with uv 0.12.24, and nothing else in either lock moved. The 247 auth unit tests and about 300 auth integration tests (on the disposable `c4_scratch_test` database) pass on PyJWT 2.15.1. After the fixes there are no findings: 40 of 40, 57 of 57 and 28 of 28 entries audited, and npm 0.
+
+**The scanner.** pip-audit 2.10.1:
+- Published by the Python Packaging Authority (github.com/pypa/pip-audit), Apache-2.0, requires Python ≥ 3.10.
+- Wheel 62,023 bytes, sha256 `99ef3f60…4611a`.
+- Locked with its dependencies in `scripts/dependency_audit_lock.txt`: 28 packages, about 47 MB installed, every entry hashed.
+- Installed with `--no-deps --require-hashes` into a venv of its own, so it never shares an environment with what it scans.
+
+**The gate.** CI job "Dependency vulnerability scan" (`dependency-audit`), on every workflow run, with no `if:`, no `needs:`, no `env:`, no services and no secret. The checkout does not persist its token. In order:
+1. Install pip-audit from its lock.
+2. **Positive controls:** audit `tests/fixtures/dependency_audit/pyjwt-2.13.0.lock`, which must report GHSA-ffc3-869f-jxw9, and an npm fixture pinning lodash 4.17.20, which must report GHSA-35jh-r3h4-6jhm.
+3. `npm audit --omit=dev --audit-level=high` on `frontend/`.
+4. pip-audit `--require-hashes --disable-pip --strict` on `backend/requirements-lock.txt`, `backend/requirements-dev-lock.txt` and the scanner's own lock.
+
+**Policy:**
+- **Frontend:** high and critical fail.
+- **Backend:** pip-audit has no severity option, so any known advisory fails, a superset of high and critical.
+- **No suppressions:** no advisory is ignored or suppressed.
+
+**What `scripts/dependency_audit.py` adds:**
+- **Outages fail.** Both tools exit 1 both for findings and for an unreachable service, so an attempt counts only if it produced a real report. There are three attempts (10 s and 30 s apart), then exit 2.
+- **Every entry is audited.** pip-audit evaluates environment markers for the running interpreter and silently drops the rest: on the Linux runner, `tzdata` and `colorama`. Those are audited in a second pass from a marker-stripped copy, hashes kept, and an entry audited by neither pass fails the job.
+- **Fresh data.** Each run gets an empty advisory cache, and `setup-python` has no pip cache.
+- **Two exit codes.** It cross-checks npm's exit code against the report's counts.
+
+**Checked locally against the real services:**
+- the lock fixture as an audited lock gives exit 1 with 15 findings;
+- an unreachable proxy or registry gives exit 2 after 3 attempts, for both pip-audit and npm;
+- an unhashed entry is refused;
+- `--audit-level=critical` lets the lodash fixture's high advisory through, so the threshold matters.
+
+**Tests and mutations:**
+- `tests/backend/test_ci_dependency_audit.py`: 28 tests. They cover:
+  - the workflow: the job and step order, that it runs on every push, no secret, the hashed install, the npm scan, both locks, and the controls first;
+  - the pins and fixtures;
+  - the wrapper's decisions, checked offline with a fake scanner.
+- Mutation stage A2, 9 recorded, all killed:
+  1. the scanning steps removed;
+  2. the threshold lowered to critical;
+  3. the dev lock left out;
+  4. the frontend scan removed;
+  5. high dropped from the failing severities;
+  6. `--require-hashes` dropped;
+  7. an outage passing once the retries are spent;
+  8. a skipped entry tolerated;
+  9. the positive control removed.
+
+  The inventory holds 922 (837 pytest, 85 Vitest, 166 needing a database).
+
+**Re-pin (Decision F §12.6).** `ci.yml` and both locks are fingerprinted.
+1. Run [45390743636](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45390743636) on `6a91858` was red only on the pin gate: `inputs changed: sources, python`. Its other 7 jobs passed, with 922/922 mutations killed and the scan job green.
+2. Its artifact `retrieval-eval-45390743636-1` verified offline against the job log's digests: files, digests, fingerprint, components, tree and repository groups.
+3. The `report`, `results`, `signoff` and `manifest` sections are identical to the previous pin. Only `inputs.sources` (`ci.yml` and the two locks), `inputs.python.installed_set_sha256`, the `sources` and `python` components and the fingerprint moved.
+4. It was pinned, bytes unchanged, in `fda8718`:
+   - report `567ace340acb33370cf75bc6a0ad2696ad98554f5ad1183bde5099a951c09116`;
+   - environment `28adf2c2da00abf25a8c5fbfa765c80d920d602bfe6249129c72b07297c5891a`;
+   - fingerprint `3213ac9f2cb3554c52e8f01a778df1a5270d9b59edd8f3d77245c02099ab8f36`.
+5. `9fec999` admitted the digests and recorded the re-pin in the decision record.
+
+**CI:** [45398092718](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45398092718) on `9fec999`, all 8 jobs green (the new scan job makes a run 8 jobs, not 7):
+- 12,584 backend tests passed (shards 10,229 + 1,096 + 1,259; 58 skipped), with the pin gate passing against the new pin;
+- Frontend: `Test Files 36 passed (36)`, `Tests 1427 passed (1427)`;
+- `922 mutations: 922 killed, 0 survived, 0 not run, 0 errors`;
+- 9,548 backend files and 68 served frontend files byte-identical across two no-cache builds;
+- Docker runtime verification passed;
+- the scan job: both controls reported, npm 0, and 40, 57 and 28 entries audited with 0 advisories.
+
+A2 is counted complete from this run. The plan in §9 batched A2 with A3, A5 and A9. The A2 stage prompt asked for its own re-pin, so A3, A5 and A9 remain the batch.
+
+**Limitations:**
+- The gate needs the public advisory services (the PyPI JSON API and the npm registry's bulk advisory endpoint). An outage fails the run rather than passing it.
+- pip-audit sees what PyPI's vulnerability data holds, so an advisory that has not reached it yet cannot be caught.
+- The gate runs whenever the workflow runs: on a push to `main` and on every push to a pull request targeting `main`. A push to a branch with no pull request runs no CI at all, as before.
+
+### 4.6 The remaining tasks
 
 Each task can be done without a decision from you. They are ordered by the requested priorities.
 **F** marks a change to a fingerprinted file (`ci.yml`, `main.py`), which needs a re-measure and
@@ -314,7 +402,7 @@ re-pin under §12.6. Tasks marked F are batched into one re-pin stage.
 | # | Task | Priority | Touches | Depends on | Evidence |
 |---|---|---|---|---|---|
 | ~~A1~~ | **Done** (§4.1): 6 advisories → 0 | — | — | — | — |
-| A2 | **Scan dependencies for vulnerabilities in CI.** `npm audit --omit=dev` and `pip-audit` over both hashed locks; fail on high. Nothing in `ci.yml` scans today | security | F (`ci.yml`) | A1 first, or the new gate fails at once | grep of `ci.yml`: no `audit`, `osv`, `trivy` or `grype` |
+| ~~A2~~ | **Done** (§4.5): CI job "Dependency vulnerability scan" (npm audit at high, pip-audit 2.10.1 on every lock entry, positive controls first, outages fail); PyJWT 2.13.0 → 2.15.1 and certifi → 2026.10.23 fixed first; 9 mutations; re-pinned, CI 45398092718 green | — | — | — | — |
 | A3 | **Generate an SBOM in CI** (the half of R4.3b that needs no signing identity): one SBOM per image, kept as an artifact | ops | F (`ci.yml`) | batch with A2 | R4.3b is "SBOM partly; signing no" |
 | ~~A4~~ | **Done** (§4.3): axe-core checks on every route and state, 9 genuine violation kinds fixed, 10 mutations; CI 45063664775 green | — | — | — | — |
 | A5 | **Add a metrics exporter, internal only** (the half of R4.3a that needs no alert destination): request counts and latencies in Prometheus format on the internal network, with no nginx route | ops | F (`main.py`, README counts) | batch with A2/A3 | `grep /metrics backend/app`: none |
@@ -448,12 +536,12 @@ implemented and its CI is green.
 | Delivered platform stages: the README's 13 stage groups (1 → 7.1–7.4) + V2 stages 7.5–7.14 (10). Stage 7.15 is counted under R2.3 | 23 | 23 | 100.0 |
 | UI redesign UI-0 … UI-10 | 11 | 11 | 100.0 |
 | v2.0 roadmap matrix | 29 | 13 | 44.8 |
-| Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 4 (A1, A6, A4, A7) | 50.0 |
-| **All** | **71** | **51** | **71.8** |
+| Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 5 (A1, A6, A4, A7, A2) | 62.5 |
+| **All** | **71** | **52** | **73.2** |
 
-- **Within the decided scope** (the 15 decision-blocked rows removed): 51 of 56 = **91.1%**.
-- **Strict** (R0.2 and R0.4a not counted as done): 49 of 71 = 69.0%.
-- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. After A6 (`485dd15`, CI 45046381883 green): 49 / 71 = 69.0%. After A4 (`4c9a2a0`, CI 45063664775 green): 50 / 71 = 70.4%. After A7 (`5125b5b`, CI 45150368805 green): 51 / 71 = 71.8%.
+- **Within the decided scope** (the 15 decision-blocked rows removed): 52 of 56 = **92.9%**.
+- **Strict** (R0.2 and R0.4a not counted as done): 50 of 71 = 70.4%.
+- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. After A6 (`485dd15`, CI 45046381883 green): 49 / 71 = 69.0%. After A4 (`4c9a2a0`, CI 45063664775 green): 50 / 71 = 70.4%. After A7 (`5125b5b`, CI 45150368805 green): 51 / 71 = 71.8%. After A2 (`6a91858`, re-pinned in `fda8718` and `9fec999`, CI 45398092718 green): 52 / 71 = 73.2%.
 
 ---
 
@@ -463,6 +551,7 @@ implemented and its CI is green.
 2. ~~**A6**~~ — done (§4.2).
 3. ~~**A4**~~ — done (§4.3).
 4. ~~**A7**~~ — done (§4.4).
-5. **Re-pin batch: A2 + A3 + A5 + A9**, measured and re-pinned once under §12.6.
-6. **A8 / R6.1** — consolidate the documents, last, so the facts move only once.
-7. Then whatever your answers to §5 unlock. The first steps toward production are §3.4 (R1.2) and §3.11 (R4.1).
+5. ~~**A2**~~ — done (§4.5), re-pinned on its own as its stage prompt asked.
+6. **Re-pin batch: A3 + A5 + A9**, measured and re-pinned once under §12.6.
+7. **A8 / R6.1** — consolidate the documents, last, so the facts move only once.
+8. Then whatever your answers to §5 unlock. The first steps toward production are §3.4 (R1.2) and §3.11 (R4.1).
