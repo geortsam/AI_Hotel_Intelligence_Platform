@@ -524,6 +524,70 @@ jobs:
         run: npm run build
 
   # ---------------------------------------------------------------------------------------
+  # A2: dependency vulnerability scanning, on every run of this workflow.
+  #
+  # A known advisory in a dependency fails the run. The frontend's shipped tree is audited with
+  # `npm audit --omit=dev --audit-level=high` (high and critical fail); every hashed Python lock
+  # with pip-audit, which has no severity option and so fails on ANY known advisory. The policy,
+  # the tool's provenance and the measured findings are in docs/project-completion-audit.md
+  # (A2); the mechanics are in scripts/dependency_audit.py's docstring.
+  #
+  # A job of its own, with no `env:`, no `services:` and no secret: it needs the repository's
+  # files and the public advisory services, nothing else. The checkout does not persist its
+  # token. pip-audit runs from a venv of its own, installed from its hashed lock, so the scanner
+  # never shares an environment with what it scans, and gets an empty advisory cache each run.
+  #
+  # Outages fail, they never pass: an attempt counts only when it produced a report, three
+  # attempts are made, and after that the step fails by name. The first step after the installs
+  # audits two fixtures pinned to known-vulnerable versions and fails unless the named advisory
+  # is reported, so a scanner that silently finds nothing cannot pass the steps after it.
+  dependency-audit:
+    name: Dependency vulnerability scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          # The interpreter quality-gates runs, so the locks' environment markers are evaluated
+          # as they are where the tests run. No pip cache: pip-audit would otherwise be handed
+          # a cache of earlier advisory answers.
+          python-version: '3.14.7'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          # The frontend job's Node and npm. npm audit reads frontend/package-lock.json; it does
+          # not need node_modules, so nothing is installed.
+          node-version: '24.21.0'
+
+      - name: Install pip-audit from its hashed lock
+        run: |
+          python -m venv "$RUNNER_TEMP/pip-audit"
+          "$RUNNER_TEMP/pip-audit/bin/python" -m pip install --no-deps --require-hashes -r scripts/dependency_audit_lock.txt
+          "$RUNNER_TEMP/pip-audit/bin/python" -m pip check
+          "$RUNNER_TEMP/pip-audit/bin/python" -m pip_audit --version
+
+      - name: Prove the scanners report a known advisory
+        run: |
+          "$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py expect-python-finding tests/fixtures/dependency_audit/pyjwt-2.13.0.lock GHSA-ffc3-869f-jxw9
+          "$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py expect-npm-finding tests/fixtures/dependency_audit GHSA-35jh-r3h4-6jhm
+
+      - name: Audit the shipped frontend dependencies
+        run: '"$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py npm frontend'
+
+      - name: Audit the Python locks
+        # The image's lock, the test environment's lock and the scanner's own.
+        run: |
+          "$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py python backend/requirements-lock.txt backend/requirements-dev-lock.txt scripts/dependency_audit_lock.txt
+
+  # ---------------------------------------------------------------------------------------
   # The recorded mutation checks, re-run on every push.
   #
   # Every stage recorded in tests/mutation/test_harness.py's RECORDED_PER_STAGE broke its own

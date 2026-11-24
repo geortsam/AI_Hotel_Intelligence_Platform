@@ -10055,6 +10055,111 @@ STAGE_R0_2 = [
 ]
 
 
+# --- A2 (completion audit): dependency vulnerability scanning in CI ---------------------------
+
+AUDIT_SCRIPT = "scripts/dependency_audit.py"
+_AUDIT = "tests/backend/test_ci_dependency_audit.py::"
+_PY = '          "$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py'
+_FRONTEND_STEP = (
+    "      - name: Audit the shipped frontend dependencies\n"
+    '        run: \'"$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py'
+    " npm frontend'\n"
+    "\n"
+)
+
+
+def _a2(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(
+        f"A2-M{number}", "A2", breaks, one(path, old, new), tuple(_AUDIT + k for k in killers)
+    )
+
+
+STAGE_A2 = [
+    _a2(
+        1,
+        "the scanning steps are removed, so the job installs a scanner and audits nothing",
+        CI_WORKFLOW,
+        _FRONTEND_STEP + "      - name: Audit the Python locks\n"
+        "        # The image's lock, the test environment's lock and the scanner's own.\n"
+        "        run: |\n"
+        f"{_PY} python backend/requirements-lock.txt backend/requirements-dev-lock.txt"
+        " scripts/dependency_audit_lock.txt\n",
+        "",
+        "test_the_dependency_vulnerability_gate_exists",
+    ),
+    _a2(
+        2,
+        "the frontend threshold is lowered to critical, so a high advisory passes",
+        AUDIT_SCRIPT,
+        'NPM_AUDIT = ("audit", "--omit=dev", "--audit-level=high")',
+        'NPM_AUDIT = ("audit", "--omit=dev", "--audit-level=critical")',
+        "test_the_frontend_production_dependency_scan_is_present",
+    ),
+    _a2(
+        3,
+        "the test environment's lock is left out of the backend scan",
+        CI_WORKFLOW,
+        " python backend/requirements-lock.txt backend/requirements-dev-lock.txt"
+        " scripts/dependency_audit_lock.txt\n",
+        " python backend/requirements-lock.txt scripts/dependency_audit_lock.txt\n",
+        "test_both_backend_locks_and_the_scanners_own_are_scanned",
+    ),
+    _a2(
+        4,
+        "the frontend production dependency scan is removed",
+        CI_WORKFLOW,
+        _FRONTEND_STEP,
+        "",
+        "test_the_frontend_production_dependency_scan_is_present",
+    ),
+    _a2(
+        5,
+        "a high npm advisory is no longer counted as a finding",
+        AUDIT_SCRIPT,
+        'FAILING_NPM_SEVERITIES = ("high", "critical")',
+        'FAILING_NPM_SEVERITIES = ("critical",)',
+        "test_high_severity_findings_fail_the_gate[high]",
+    ),
+    _a2(
+        6,
+        "pip-audit is no longer told to require a hash for every lock entry",
+        AUDIT_SCRIPT,
+        'PIP_AUDIT_FLAGS = ("--require-hashes", "--disable-pip", "--strict",',
+        'PIP_AUDIT_FLAGS = ("--disable-pip", "--strict",',
+        "test_hash_enforcement_is_active",
+    ),
+    _a2(
+        7,
+        "an advisory service outage passes once the retries are spent",
+        AUDIT_SCRIPT,
+        '    raise AuditUnavailableError(f"{what}: no report after {attempts} attempts")',
+        '    return Attempt(0, {"dependencies": []})',
+        "test_an_advisory_service_outage_fails_after_every_retry",
+    ),
+    _a2(
+        8,
+        "a lock entry the scanner silently skipped is tolerated",
+        AUDIT_SCRIPT,
+        "    if audited != here:",
+        "    if not audited <= here:",
+        "test_an_entry_the_scanner_did_not_audit_fails_the_gate",
+    ),
+    _a2(
+        9,
+        "the positive control is removed, so a scanner that reports nothing can pass",
+        CI_WORKFLOW,
+        "      - name: Prove the scanners report a known advisory\n"
+        "        run: |\n"
+        f"{_PY} expect-python-finding tests/fixtures/dependency_audit/pyjwt-2.13.0.lock"
+        " GHSA-ffc3-869f-jxw9\n"
+        f"{_PY} expect-npm-finding tests/fixtures/dependency_audit GHSA-35jh-r3h4-6jhm\n"
+        "\n",
+        "",
+        "test_the_positive_controls_run_before_the_real_audits",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -10109,4 +10214,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_A6,
     *STAGE_A4,
     *STAGE_A7,
+    *STAGE_A2,
 )
