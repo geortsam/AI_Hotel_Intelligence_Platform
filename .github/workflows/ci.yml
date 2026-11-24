@@ -524,70 +524,6 @@ jobs:
         run: npm run build
 
   # ---------------------------------------------------------------------------------------
-  # A2: dependency vulnerability scanning, on every run of this workflow.
-  #
-  # A known advisory in a dependency fails the run. The frontend's shipped tree is audited with
-  # `npm audit --omit=dev --audit-level=high` (high and critical fail); every hashed Python lock
-  # with pip-audit, which has no severity option and so fails on ANY known advisory. The policy,
-  # the tool's provenance and the measured findings are in docs/project-completion-audit.md
-  # (A2); the mechanics are in scripts/dependency_audit.py's docstring.
-  #
-  # A job of its own, with no `env:`, no `services:` and no secret: it needs the repository's
-  # files and the public advisory services, nothing else. The checkout does not persist its
-  # token. pip-audit runs from a venv of its own, installed from its hashed lock, so the scanner
-  # never shares an environment with what it scans, and gets an empty advisory cache each run.
-  #
-  # Outages fail, they never pass: an attempt counts only when it produced a report, three
-  # attempts are made, and after that the step fails by name. The first step after the installs
-  # audits two fixtures pinned to known-vulnerable versions and fails unless the named advisory
-  # is reported, so a scanner that silently finds nothing cannot pass the steps after it.
-  dependency-audit:
-    name: Dependency vulnerability scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          # The interpreter quality-gates runs, so the locks' environment markers are evaluated
-          # as they are where the tests run. No pip cache: pip-audit would otherwise be handed
-          # a cache of earlier advisory answers.
-          python-version: '3.14.7'
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          # The frontend job's Node and npm. npm audit reads frontend/package-lock.json; it does
-          # not need node_modules, so nothing is installed.
-          node-version: '24.21.0'
-
-      - name: Install pip-audit from its hashed lock
-        run: |
-          python -m venv "$RUNNER_TEMP/pip-audit"
-          "$RUNNER_TEMP/pip-audit/bin/python" -m pip install --no-deps --require-hashes -r scripts/dependency_audit_lock.txt
-          "$RUNNER_TEMP/pip-audit/bin/python" -m pip check
-          "$RUNNER_TEMP/pip-audit/bin/python" -m pip_audit --version
-
-      - name: Prove the scanners report a known advisory
-        run: |
-          "$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py expect-python-finding tests/fixtures/dependency_audit/pyjwt-2.13.0.lock GHSA-ffc3-869f-jxw9
-          "$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py expect-npm-finding tests/fixtures/dependency_audit GHSA-35jh-r3h4-6jhm
-
-      - name: Audit the shipped frontend dependencies
-        run: '"$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py npm frontend'
-
-      - name: Audit the Python locks
-        # The image's lock, the test environment's lock and the scanner's own.
-        run: |
-          "$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py python backend/requirements-lock.txt backend/requirements-dev-lock.txt scripts/dependency_audit_lock.txt
-
-  # ---------------------------------------------------------------------------------------
   # The recorded mutation checks, re-run on every push.
   #
   # Every stage recorded in tests/mutation/test_harness.py's RECORDED_PER_STAGE broke its own
@@ -1702,6 +1638,53 @@ jobs:
             exit 1
           fi
           echo "  OK   /api/ is proxied, not swallowed by try_files"
+
+      - name: Verify the metrics endpoint is internal only
+        run: |
+          set -euo pipefail
+
+          # A5. GET /metrics answers on the Compose network, where a scraper would sit, and
+          # nowhere else: nginx forwards only /api/, so the public port serves the SPA for this
+          # path, and the API's port is not published (the trust-boundary step above proves it).
+          # The requests above have already been counted, so the scrape cannot be empty.
+          echo "--- from inside the network: the API container scraping itself ---"
+          dc exec -T api python -c "
+          import urllib.request
+          with urllib.request.urlopen('http://127.0.0.1:8000/metrics', timeout=5) as r:
+              body = r.read().decode()
+              assert r.status == 200, r.status
+              assert r.headers['Content-Type'] == 'text/plain; version=0.0.4; charset=utf-8', r.headers['Content-Type']
+          assert '# TYPE http_requests_total counter' in body, body[:400]
+          assert '# TYPE http_request_duration_seconds histogram' in body, body[:400]
+          assert 'route=\"/health\"' in body, body[:400]
+          print('  OK   Prometheus text, %d lines, the health probes counted' % len(body.splitlines()))
+          "
+
+          echo "--- a request carrying a forwarding header is refused there too ---"
+          dc exec -T api python -c "
+          import urllib.error, urllib.request
+          request = urllib.request.Request('http://127.0.0.1:8000/metrics', headers={'X-Forwarded-For': '203.0.113.7'})
+          try:
+              urllib.request.urlopen(request, timeout=5)
+          except urllib.error.HTTPError as e:
+              assert e.code == 404, e.code
+              print('  OK   404 for a proxied request')
+          else:
+              raise SystemExit('a proxied /metrics request was answered')
+          "
+
+          echo "--- through nginx, the public entry point ---"
+          body="$RUNNER_TEMP/metrics-body"
+          base="https://127.0.0.1:${HTTPS_PORT}"
+          for path in /metrics /api/metrics /api/v1/metrics /api/../metrics; do
+            code="$(curl -sS --path-as-is --cacert "$CERT_DIR/fullchain.pem" -o "$body" -w '%{http_code}' --max-time 15 "$base$path")"
+            if grep -q 'http_requests_total' "$body"; then
+              echo "::error::$path through nginx served the metrics (HTTP $code)"
+              exit 1
+            fi
+            echo "  OK   GET $path -> HTTP $code, no metric in the body"
+          done
+          rm -f "$body"
 
       - name: Verify secrets do not reach the frontend
         run: |
@@ -3720,6 +3703,91 @@ jobs:
           "
           echo "  (every one of these is pinned with == in backend/requirements.txt)"
 
+      # A3: one CycloneDX SBOM per image, generated from the images built above -- the Docker
+      # daemon's images themselves, not the lockfiles -- validated, and kept as an artifact. Both
+      # builds of each image are catalogued and must list the same components, so the SBOM is
+      # reproducible where the image is. The half of roadmap R4.3b that needs no signing
+      # identity: nothing is signed, pushed or published (docs/roadmap-v2.0-execution.md §3.12).
+      # The steps are tested by tests/backend/test_ci_sbom.py; the checks are
+      # scripts/sbom_check.py's.
+      - name: Set up Python for the SBOM checker
+        uses: actions/setup-python@v6
+        with:
+          # The interpreter scripts/sbom_lock.txt was resolved for. No cache.
+          python-version: '3.14.7'
+
+      - name: Install Syft and the SBOM checker
+        env:
+          # The generator: Anchore's Syft (https://github.com/anchore/syft, Apache-2.0), the
+          # release archive pinned by version and by the SHA-256 the release publishes for it in
+          # syft_1.57.1_checksums.txt (GitHub's own digest of the asset agrees). The archive is
+          # checked before it is opened, and the binary must report the pinned version.
+          SYFT_VERSION: '1.57.1'
+          SYFT_SHA256: 'bf52519eb57f675d47c07d43213cb6dff6449f3d6d1147ff6701ed91f44eef0c'
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL --retry 3 --retry-all-errors --max-time 180 -o "$archive" \
+            "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          echo "${SYFT_SHA256}  ${archive}" | sha256sum --check --strict -
+          mkdir -p "$RUNNER_TEMP/syft"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/syft" syft
+          rm -f "$archive"
+          got="$("$RUNNER_TEMP/syft/syft" version | awk '/^Version:/ { print $2 }')"
+          [ "$got" = "$SYFT_VERSION" ] || {
+            echo "::error::syft reports version '$got', the pin is $SYFT_VERSION"; exit 1; }
+          echo "  OK   syft $got, archive sha256 verified"
+
+          # The checker's own venv, from its hashed lock, apart from everything it checks.
+          python -m venv "$RUNNER_TEMP/sbom-check"
+          "$RUNNER_TEMP/sbom-check/bin/python" -m pip install --no-deps --require-hashes -r scripts/sbom_lock.txt
+          "$RUNNER_TEMP/sbom-check/bin/python" -m pip check
+
+      - name: Generate an SBOM for each image, from both builds
+        env:
+          SYFT_CHECK_FOR_APP_UPDATE: 'false'
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/sbom"
+          mkdir -p "$out"
+          # Named by image and commit rather than by the run-scoped tags, so both builds of an
+          # image describe themselves identically.
+          for spec in "$TAG_A backend a" "$TAG_B backend b" "$FE_TAG_A frontend a" "$FE_TAG_B frontend b"; do
+            read -r tag image slot <<< "$spec"
+            "$RUNNER_TEMP/syft/syft" scan "docker:$tag" -q \
+              --source-name "hotel-intelligence-$image" --source-version "$GITHUB_SHA" \
+              -o "cyclonedx-json@1.6=$out/$image-$slot.cdx.json"
+            echo "  wrote $image-$slot.cdx.json ($(wc -c < "$out/$image-$slot.cdx.json") bytes)"
+          done
+
+      - name: Prove the SBOM checker rejects an invalid SBOM
+        run: '"$RUNNER_TEMP/sbom-check/bin/python" scripts/sbom_check.py expect-invalid tests/fixtures/sbom/invalid-component-type.cdx.json'
+
+      - name: Validate the SBOMs
+        run: |
+          set -euo pipefail
+          check() { "$RUNNER_TEMP/sbom-check/bin/python" scripts/sbom_check.py "$@"; }
+          out="$RUNNER_TEMP/sbom"
+          check validate "$out/backend-a.cdx.json" "$out/backend-b.cdx.json" "$out/frontend-a.cdx.json" "$out/frontend-b.cdx.json"
+          check backend "$out/backend-a.cdx.json" backend/requirements-lock.txt
+          check frontend "$out/frontend-a.cdx.json" 1.27.5
+          check same "$out/backend-a.cdx.json" "$out/backend-b.cdx.json"
+          check same "$out/frontend-a.cdx.json" "$out/frontend-b.cdx.json"
+          check clean "$out"/*.cdx.json
+          # Both builds' copies have proved the SBOM reproducible; one per image is kept.
+          mv "$out/backend-a.cdx.json" "$out/backend.cdx.json"
+          mv "$out/frontend-a.cdx.json" "$out/frontend.cdx.json"
+          rm -f "$out/backend-b.cdx.json" "$out/frontend-b.cdx.json"
+          echo "--- the SBOMs kept ---"
+          sha256sum "$out"/*.cdx.json
+
+      - name: Upload the SBOMs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sbom/
+          if-no-files-found: error
+
       - name: Report what is reproducible and what is not
         run: |
           set -euo pipefail
@@ -3762,3 +3830,191 @@ jobs:
           echo "--- images left from this job (expected: none) ---"
           docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -E "^ahip-repro-(fe-)?${GITHUB_RUN_ID}"
           echo "(a grep with no output above means none survived, which is the expectation)"
+
+  # ---------------------------------------------------------------------------------------
+  # A9: UI-10's responsive audit, automated against the real stack.
+  #
+  # UI-10 (docs/ui-redesign.md §5) checked 17 routes at 375, 768 and 1440px -- 51 checks: no
+  # sideways scroll, no element escaping the viewport, exactly one h1 -- once, by hand, in a
+  # browser. This job runs the same 51 checks on every workflow run, so a layout regression
+  # fails CI instead of waiting for the next manual pass. The checks and their rule are
+  # frontend/e2e/responsive-checks.mjs (held by its Vitest suite); the browser driver is
+  # frontend/e2e/responsive-audit.mjs; tests/backend/test_ci_responsive_audit.py holds this job.
+  #
+  # The stack is the Compose stack, as docker-runtime runs it: nginx serving the built bundle
+  # over TLS, the API, PostgreSQL, all built from this commit, in a run-scoped project. It is
+  # seeded with scripts/seed_demo.py's synthetic data -- invented, never evidence -- because
+  # the pages need bookings, guests and rooms to lay out at all, and the seeded owner is granted
+  # the platform role so /platform renders. The credentials are generated per run and masked.
+  #
+  # The browser is the pinned Playwright image's Chromium, headless, at a device scale factor
+  # of 1, so the result depends on no one's display. playwright-core (frontend/package-lock.json)
+  # is the same version as the image, so the two agree on which Chromium to drive.
+  #
+  # Every check that fails is named with its route, its width and what was wrong. The known
+  # Analytics defect (the expenses table clipped at 1440px) is not one of the 51; the run reports
+  # whether it still reproduces, every time, and never counts it.
+  responsive-audit:
+    name: Responsive audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      COMPOSE_PROJECT: hotel-intelligence-ui-${{ github.run_id }}
+      # Not secrets: a database created for this job and destroyed with it.
+      POSTGRES_USER: hotel_ui
+      POSTGRES_DB: hotel_intelligence_ui
+      HTTP_PORT: '28080'
+      HTTPS_PORT: '28443'
+      # Pinned by digest, like every external image; v1.65.0 is playwright-core's version.
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe
+      # scripts/seed_demo.py's default owner, under example.com (RFC 2606).
+      DEMO_OWNER_EMAIL: demo.owner@example.com
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Pull Docker Hub images through a mirror, Docker Hub the fallback
+        # R0.2, as in the two Docker jobs above: the stack's base images come from Docker Hub.
+        run: |
+          set -euo pipefail
+          config=/etc/docker/daemon.json
+          current='{}'
+          if sudo test -s "$config"; then current="$(sudo cat "$config")"; fi
+          printf '%s' "$current" \
+            | jq '. + {"registry-mirrors": ["https://mirror.gcr.io"]}' \
+            | sudo tee "$config" > /dev/null
+          sudo systemctl restart docker
+          for attempt in $(seq 1 30); do
+            docker info > /dev/null 2>&1 && break
+            [ "$attempt" -lt 30 ] || { echo "::error::the Docker daemon did not come back"; exit 1; }
+            sleep 1
+          done
+          mirrors="$(docker info --format '{{json .RegistryConfig.Mirrors}}')"
+          echo "  registry mirrors: $mirrors"
+          case "$mirrors" in
+            *'https://mirror.gcr.io/'*) echo "  OK   Docker Hub pulls try mirror.gcr.io first" ;;
+            *) echo "::error::the registry mirror is not active"; exit 1 ;;
+          esac
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.21.0'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install the frontend dependencies
+        # playwright-core, which the audit imports. It downloads no browser.
+        working-directory: frontend
+        run: npm ci
+
+      - name: Prepare the disposable environment
+        run: |
+          set -euo pipefail
+          ENV_FILE="$RUNNER_TEMP/compose.ui.env"
+          CERT_DIR="$RUNNER_TEMP/tls"
+          umask 077
+          PG_PASSWORD="$(openssl rand -hex 24)"
+          APP_SECRET="$(openssl rand -base64 48 | tr -d '\n=')"
+          OWNER_PASSWORD="$(openssl rand -hex 18)"
+          echo "::add-mask::$PG_PASSWORD"
+          echo "::add-mask::$APP_SECRET"
+          echo "::add-mask::$OWNER_PASSWORD"
+          {
+            echo "POSTGRES_USER=$POSTGRES_USER"
+            echo "POSTGRES_PASSWORD=$PG_PASSWORD"
+            echo "POSTGRES_DB=$POSTGRES_DB"
+            echo "SECRET_KEY=$APP_SECRET"
+            echo "ENVIRONMENT=production"
+            echo "LOG_LEVEL=WARNING"
+            echo "CORS_ORIGINS="
+            echo "HTTP_PORT=$HTTP_PORT"
+            echo "HTTPS_PORT=$HTTPS_PORT"
+            echo "TLS_CERT_DIR=$CERT_DIR"
+          } > "$ENV_FILE"
+          # A disposable self-signed certificate for 127.0.0.1, outside the workspace.
+          mkdir -p "$CERT_DIR"
+          chmod 700 "$CERT_DIR"
+          openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout "$CERT_DIR/privkey.pem" -out "$CERT_DIR/fullchain.pem" \
+            -days 2 -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null
+          chmod 600 "$CERT_DIR/privkey.pem"
+          chmod 644 "$CERT_DIR/fullchain.pem"
+          mkdir -p "$RUNNER_TEMP/audit"
+          {
+            echo "ENV_FILE=$ENV_FILE"
+            echo "CERT_DIR=$CERT_DIR"
+            echo "PG_PASSWORD=$PG_PASSWORD"
+            echo "OWNER_PASSWORD=$OWNER_PASSWORD"
+          } >> "$GITHUB_ENV"
+          echo "wrote $(wc -l < "$ENV_FILE") variables; no value printed"
+
+      - name: Build and start the stack
+        run: |
+          set -euo pipefail
+          dc() { docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" "$@"; }
+          # `up` honours the depends_on conditions: db healthy, migrate exited 0, api healthy.
+          dc up -d --build frontend
+          for attempt in $(seq 1 60); do
+            state="$(docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q frontend)" 2>/dev/null || true)"
+            [ "$state" = "healthy" ] && break
+            if [ "$attempt" -eq 60 ]; then
+              echo "::error::the frontend did not become healthy (last state: ${state:-none})"
+              dc ps -a
+              dc logs --no-color --tail 40
+              exit 1
+            fi
+            sleep 5
+          done
+          dc ps -a
+          echo "  OK   db, migrate, api and frontend up; nginx healthy"
+
+      - name: Seed the synthetic demo data
+        run: |
+          set -euo pipefail
+          # Through the image the stack runs, on the Compose network, into the empty migrated
+          # database. The script refuses a database that holds any row, and never migrates.
+          DEMO_OWNER_PASSWORD="$OWNER_PASSWORD" docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" \
+            run --rm --no-deps -T -e DEMO_OWNER_PASSWORD -v "$PWD/scripts:/app/scripts:ro" migrate \
+            python scripts/seed_demo.py \
+              --database-url "postgresql+psycopg://${POSTGRES_USER}:${PG_PASSWORD}@db:5432/${POSTGRES_DB}" \
+              --reference-date today --owner-email "$DEMO_OWNER_EMAIL"
+          # The documented operator command (docs/deployment/first-run-bootstrap.md), so
+          # /platform renders for the audit's user.
+          docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" \
+            run --rm --no-deps -T api python -m app.jobs.platform_admin grant "$DEMO_OWNER_EMAIL"
+
+      - name: Run the 51-check responsive audit
+        run: |
+          set -euo pipefail
+          AUDIT_PASSWORD="$OWNER_PASSWORD" docker run --rm --network host --ipc=host \
+            -v "$PWD/frontend:/work:ro" -v "$RUNNER_TEMP/audit:/out" -w /work \
+            -e AUDIT_BASE_URL="https://127.0.0.1:${HTTPS_PORT}" \
+            -e AUDIT_EMAIL="$DEMO_OWNER_EMAIL" -e AUDIT_PASSWORD \
+            -e AUDIT_REPORT=/out/responsive-audit.json \
+            "$PLAYWRIGHT_IMAGE" node e2e/responsive-audit.mjs
+
+      - name: Upload the audit report
+        # Kept when the audit fails too: the report names every failing check's measurement.
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: responsive-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/audit/
+          if-no-files-found: error
+
+      - name: Tear down the disposable environment
+        if: always()
+        run: |
+          # Cleanup only; no assertion lives here, so none is suppressed by `set +e`.
+          set +e
+          set -u
+          docker compose -p "$COMPOSE_PROJECT" --env-file "$ENV_FILE" down -v --remove-orphans
+          rm -rf "$CERT_DIR" "$ENV_FILE"
+          echo "--- containers left from this job (expected: none) ---"
+          docker ps -a --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --format '{{.Names}}'

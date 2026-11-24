@@ -482,6 +482,7 @@ Start the API:
 |---|---|
 | http://localhost:8000/health | `{"status":"ok", ...}` |
 | http://localhost:8000/health/db | `{"status":"ok","database":"reachable", ...}`, or 503 when it is not |
+| http://localhost:8000/metrics | request counts and latencies in the Prometheus text format (A5); internal only, see [Security posture](#security-posture) |
 | http://localhost:8000/docs | Swagger UI — 68 paths, 104 operations. Disabled when `ENVIRONMENT=production` |
 
 ### Frontend
@@ -634,19 +635,28 @@ Tests live at the repository root and import `app` via `pythonpath = ["backend"]
 
 ### Continuous integration
 
-Every push and pull request to `main` runs six jobs in parallel on `ubuntu-latest`
-(`.github/workflows/ci.yml`). Six job definitions, that is: `quality-gates` is split into three
-shards, so GitHub Actions shows eight job runs per workflow run (seven before A2 added the
-dependency scan).
+Every push to `main` and every pull request to `main` runs six jobs in parallel on
+`ubuntu-latest` (`.github/workflows/ci.yml`). Six job definitions, that is: `quality-gates` is
+split into three shards, so GitHub Actions shows eight job runs per workflow run.
+
+The dependency vulnerability scan is a workflow of its own
+(`.github/workflows/dependency-audit.yml`), and it runs on **every push to any branch** as well
+as on pull requests to `main`. Until the A2 trigger correction it was a job inside `ci.yml`,
+whose triggers are restricted to `main`, so a feature branch without a pull request was never
+scanned.
 
 | Job | What it runs |
 |---|---|
 | `quality-gates` | Ruff lint, Ruff format check, mypy, the Alembic chain against a disposable PostgreSQL 18.6, then the full pytest suite |
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
-| `Dependency vulnerability scan` | `npm audit --omit=dev --audit-level=high` on the shipped frontend tree, and pip-audit 2.10.1 (hash-locked, its own venv) on every entry of both Python locks. Any finding, or an advisory service still unreachable after 3 attempts, fails the run. Two known-vulnerable fixtures are audited first, so a scanner that reports nothing cannot pass ([`scripts/dependency_audit.py`](scripts/dependency_audit.py)) |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
-| `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical |
-| `Mutation checks` | re-applies the 922 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical; then catalogues both builds of each image with Syft 1.57.1 (checksum-verified) into a **CycloneDX 1.6 SBOM**, validates it against the schema, requires every locked backend package at its exact version and the pinned nginx, requires the two builds' SBOMs to list the same components, rejects any host path or credential in them, and keeps one SBOM per image as the `sbom-<run>-<attempt>` artifact ([`scripts/sbom_check.py`](scripts/sbom_check.py)) |
+| `Mutation checks` | re-applies the 963 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Responsive audit` | builds and starts the Compose stack, seeds it with the synthetic demo data, and runs UI-10's **51 checks** (17 routes at 375, 768 and 1440px: no sideways scroll, no escaping element, exactly one `h1`) in the pinned Playwright image's Chromium; any failing check fails the run and is named. It also reports, without counting it, whether the known Analytics expenses-table clipping still reproduces ([`frontend/e2e/`](frontend/e2e/)) |
+
+| Workflow | Job | What it runs |
+|---|---|---|
+| `dependency-audit.yml` | `Dependency vulnerability scan` | `npm audit --omit=dev --audit-level=high` on the shipped frontend tree, and pip-audit 2.10.1 (hash-locked, its own venv) on every entry of both Python locks and the two tool locks. Any finding, or an advisory service still unreachable after 3 attempts, fails the run. Two known-vulnerable fixtures are audited first, so a scanner that reports nothing cannot pass ([`scripts/dependency_audit.py`](scripts/dependency_audit.py)) |
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
@@ -939,6 +949,13 @@ left to be discovered.
 - **The two health probes are unauthenticated**, and `/health/db` opens a database connection.
   Neither returns business data; both are reachable only through nginx, since the API has no
   host port.
+- **`GET /metrics` is unauthenticated and internal only (A5).** It serves request counts and
+  latencies (`http_requests_total`, `http_request_duration_seconds`) labelled only by method,
+  route template and status code, so no identifier or personal data can appear in it. nginx
+  forwards only `/api/`, the API has no host port, and a request carrying a forwarding header
+  gets the ordinary 404; CI proves all three on the real stack. It is not in the OpenAPI
+  document. Nothing scrapes it and no alert is sent: where alerts go is an open decision
+  ([docs/roadmap-v2.0-execution.md §3.12](docs/roadmap-v2.0-execution.md)).
 
 ### Operational
 

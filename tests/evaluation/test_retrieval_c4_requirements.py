@@ -387,7 +387,7 @@ def forbidden_uses(tree: ast.AST) -> list[str]:
 
 
 def test_the_audited_exclusions_register_no_listeners_read_no_environment_import_nothing() -> None:
-    assert len(AUDITED) == 168
+    assert len(AUDITED) == 167
     for path in AUDITED:
         tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
         assert forbidden_uses(tree) == [], path

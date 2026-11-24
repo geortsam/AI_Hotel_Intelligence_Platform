@@ -160,6 +160,22 @@ venv:
 uv pip compile scripts/dependency_audit_requirements.txt --universal --python-version 3.14 --generate-hashes --exclude-newer 2026-11-10T00:00:00Z -o scripts/dependency_audit_lock.txt
 ```
 
+The scan moved to a workflow of its own, `.github/workflows/dependency-audit.yml`, in the A2
+trigger correction, so it runs on every push to any branch rather than only where `ci.yml` runs.
+
+**A3 (SBOMs).** The image-reproducibility job catalogues both builds of each image with Syft
+1.57.1 (a release archive pinned by version and SHA-256 in `ci.yml`) into CycloneDX 1.6, and
+`scripts/sbom_check.py` validates them and requires the two builds' SBOMs to list the same
+components -- so the SBOM is reproducible wherever the image is; its `serialNumber` and
+`timestamp` differ by design and are not compared. The checker has a lock of its own,
+`scripts/sbom_lock.txt` (27 packages: `cyclonedx-python-lib[json-validation]` 11.12.0, the
+version pip-audit 2.10.1 already uses, and `packaging` 26.3), installed only into that job's
+venv and audited by the dependency scan:
+
+```bash
+uv pip compile scripts/sbom_requirements.txt --universal --python-version 3.14 --generate-hashes --exclude-newer 2026-11-10T00:00:00Z -o scripts/sbom_lock.txt
+```
+
 ### Stage 6.7: the model, and six more transitive packages
 
 The backend image now carries a trained model and the runtime that executes it. Three things

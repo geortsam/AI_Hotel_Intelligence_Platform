@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -796,9 +797,13 @@ def test_every_artifact_is_printed_and_uploaded_whatever_the_tests_did() -> None
 
 
 def test_the_upload_pin_carries_its_version_comment() -> None:
+    # Since A3 and A9 the workflow uploads three artifacts (the retrieval report, the SBOMs
+    # and the responsive-audit report). Every use is v4.6.2's verified commit, with its
+    # version comment; none may pin anything else.
     text = (ROOT / fp.CI_FILE).read_text(encoding="utf-8")
-    assert text.count("actions/upload-artifact@") == 1
-    assert f"uses: actions/upload-artifact@{UPLOAD_ARTIFACT_SHA} # v4.6.2\n" in text
+    uses = re.findall(r"^\s*uses: (actions/upload-artifact@.*)$", text, re.MULTILINE)
+    assert text.count("actions/upload-artifact@") == len(uses) == 3
+    assert set(uses) == {f"actions/upload-artifact@{UPLOAD_ARTIFACT_SHA} # v4.6.2"}
 
 
 def test_the_measurement_reads_the_files_the_workflow_writes() -> None:

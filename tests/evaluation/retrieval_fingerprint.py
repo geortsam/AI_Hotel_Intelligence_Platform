@@ -442,6 +442,9 @@ PACKAGE_INITS: Final = (
     "backend/app/schemas/__init__.py",
     "backend/app/models/__init__.py",
     "backend/app/db/__init__.py",
+    # A5: the packages of the two fingerprinted metrics modules.
+    "backend/app/core/__init__.py",
+    "backend/app/middleware/__init__.py",
 )
 #: The cookie session's modules (R1.1, E8). Fingerprinted rather than excluded: they hold the
 #: application's authentication logic and are in its import closure, so a change to any of them
@@ -453,6 +456,14 @@ AUTH_SOURCES: Final = (
     "backend/app/repositories/auth_session.py",
     "backend/app/services/session.py",
     "backend/app/api/session_cookies.py",
+)
+#: A5's request metrics. Fingerprinted rather than excluded: the middleware runs on every
+#: measured request, and the registry it records into is built with the application. Hashing
+#: them changes nothing that is measured -- the middleware only observes, adding no header and
+#: changing no body or status, and nothing it holds is part of §12.4's state.
+METRICS_SOURCES: Final = (
+    "backend/app/core/metrics.py",
+    "backend/app/middleware/metrics.py",
 )
 #: §12.3 "sources", in its order; the migration versions are added from the commit's tree.
 SOURCE_FILES: Final = (
@@ -473,6 +484,7 @@ SOURCE_FILES: Final = (
     "backend/app/models/knowledge.py",
     "backend/app/models/enums.py",
     *AUTH_SOURCES,
+    *METRICS_SOURCES,
     "database/migrations/env.py",
     "tests/conftest.py",
     "tests/integration/conftest.py",
@@ -514,7 +526,6 @@ _OTHER_SCHEMA = (
 EXCLUDED_SOURCES: Final = {
     "database/migrations/script.py.mako": "never executed",
     "tests/db_safety.py": _REFUSE_ONLY,
-    "backend/app/core/__init__.py": "a docstring; its package holds no fingerprinted module",
     "backend/app/core/config.py": _REFUSE_ONLY,
     "backend/app/core/client_address.py": _REFUSE_ONLY,
     "backend/app/core/errors.py": _REFUSE_ONLY,
@@ -627,6 +638,7 @@ EXCLUDED_SOURCES: Final = {
         for name in (
             "__init__",
             "health",
+            "metrics",
         )
     },
     **{
@@ -697,7 +709,6 @@ EXCLUDED_SOURCES: Final = {
             "registry",
         )
     },
-    "backend/app/middleware/__init__.py": _NOT_RUN,
     **{
         f"backend/app/ml/{name}.py": _NOT_RUN
         for name in (
@@ -1472,6 +1483,7 @@ __all__ = [
     "INPUT_SPEC",
     "INTEGRATION_TEST",
     "MANIFEST_SPEC",
+    "METRICS_SOURCES",
     "PACKAGE_INITS",
     "REASONS",
     "REPOSITORY_GROUPS",

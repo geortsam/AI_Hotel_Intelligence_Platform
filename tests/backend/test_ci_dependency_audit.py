@@ -1,11 +1,12 @@
 """A2: the dependency vulnerability gate exists, covers both ecosystems and every lock, and bites.
 
-Two halves. The workflow half reads .github/workflows/ci.yml, split on its own indentation as
-test_ci_registry_mirror.py does (no YAML library is a declared test dependency), and holds what
-the job runs, in what order, with what it is given. The behaviour half drives
-scripts/dependency_audit.py with a fake scanner -- no network, no npm, no pip-audit -- and holds
-the decisions the wrapper makes: a finding fails, an outage fails after its retries, an entry the
-scanner skipped fails, an unhashed lock is refused.
+Two halves. The workflow half reads .github/workflows/dependency-audit.yml, the scan's own
+workflow since the A2 trigger correction, split on its own indentation as
+test_ci_registry_mirror.py does (no YAML library is a declared test dependency), and holds
+what the job runs, in what order, with what it is given -- and that a push to ANY branch
+runs it. The behaviour half drives scripts/dependency_audit.py with a fake scanner -- no
+network, no npm, no pip-audit -- and holds the decisions the wrapper makes: a finding fails, an
+outage fails after its retries, an entry the scanner skipped fails, an unhashed lock is refused.
 
 The live half -- that pip-audit 2.10.1 and npm really report the two fixtures' advisories -- is the
 job's own "Prove the scanners report a known advisory" step, run before the real audits on every
@@ -25,10 +26,13 @@ import pytest
 from scripts import dependency_audit as audit
 
 ROOT = Path(__file__).resolve().parents[2]
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+WORKFLOW = ROOT / ".github" / "workflows" / "dependency-audit.yml"
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 JOB_ID = "dependency-audit"
 SCRIPT = "scripts/dependency_audit.py"
 TOOL_LOCK = "scripts/dependency_audit_lock.txt"
+#: A3's SBOM checker, installed in the image-reproducibility job from its own hashed lock.
+SBOM_LOCK = "scripts/sbom_lock.txt"
 BACKEND_LOCKS = ("backend/requirements-lock.txt", "backend/requirements-dev-lock.txt")
 FIXTURES = ROOT / "tests" / "fixtures" / "dependency_audit"
 PYTHON_CONTROL = ("tests/fixtures/dependency_audit/pyjwt-2.13.0.lock", "GHSA-ffc3-869f-jxw9")
@@ -51,7 +55,7 @@ def jobs() -> dict[str, str]:
 
 def audit_job() -> str:
     found = jobs()
-    assert JOB_ID in found, "the dependency vulnerability scan job is missing from ci.yml"
+    assert JOB_ID in found, "the dependency vulnerability scan job is missing from its workflow"
     return found[JOB_ID]
 
 
@@ -76,6 +80,69 @@ def run_lines() -> list[str]:
     ]
 
 
+def triggers(path: Path = WORKFLOW) -> dict[str, dict[str, list[str]]]:
+    """The `on:` block: event -> filter -> values, read by indentation.
+
+    Two spaces name an event, four a filter; a filter's values are a `[a, b]` flow list or
+    `- item` lines below it. Anything else in the block fails the read rather than being skipped,
+    so a construct this reader does not model cannot widen or narrow a trigger unseen.
+    """
+    text = path.read_text(encoding="utf-8")
+    block = text[text.index("\non:\n") + len("\non:\n") : text.index("\nconcurrency:")]
+    events: dict[str, dict[str, list[str]]] = {}
+    event: str | None = None
+    key: str | None = None
+    for line in block.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if match := re.fullmatch(r"  ([a-z_]+):", line):
+            event, key = match.group(1), None
+            events[event] = {}
+        elif event and (match := re.fullmatch(r"    ([a-z-]+):(?: \[(.*)\])?", line)):
+            key = match.group(1)
+            values = match.group(2)
+            events[event][key] = (
+                [v.strip().strip("'\"") for v in values.split(",")] if values else []
+            )
+        elif event and key and (match := re.fullmatch(r"      - (.+)", line)):
+            events[event][key].append(match.group(1).strip().strip("'\""))
+        else:
+            raise AssertionError(f"an `on:` line this test does not model: {line!r}")
+    return events
+
+
+def glob_match(pattern: str, name: str) -> bool:
+    """GitHub's filter globs: `*` matches anything but `/`, `**` anything at all."""
+    regex = "".join(
+        ".*" if part == "**" else "[^/]*" if part == "*" else re.escape(part)
+        for part in re.split(r"(\*\*|\*)", pattern)
+    )
+    return re.fullmatch(regex, name) is not None
+
+
+def runs_on(event: str, branch: str, changed: Collection[str] = ("README.md",)) -> bool:
+    """Would a `push` of `branch` (or a pull request into it) start this workflow?
+
+    GitHub's documented filter semantics, for the filters a push or pull request can carry:
+    a branch must match `branches` if given and none of `branches-ignore`; a changed file must
+    match `paths` if given, and the run is skipped when every changed file matches
+    `paths-ignore`; an event that lists only `tags` ignores branch pushes.
+    """
+    filters = triggers().get(event)
+    if filters is None:
+        return False
+    if "tags" in filters and "branches" not in filters and "branches-ignore" not in filters:
+        return False
+    if "branches" in filters and not any(glob_match(p, branch) for p in filters["branches"]):
+        return False
+    if any(glob_match(p, branch) for p in filters.get("branches-ignore", [])):
+        return False
+    if "paths" in filters and not any(glob_match(p, f) for p in filters["paths"] for f in changed):
+        return False
+    ignored = filters.get("paths-ignore", [])
+    return not (ignored and all(any(glob_match(p, f) for p in ignored) for f in changed))
+
+
 # --- the workflow -----------------------------------------------------------------------------
 
 
@@ -93,15 +160,58 @@ def test_the_dependency_vulnerability_gate_exists() -> None:
 
 
 def test_it_runs_on_every_push_and_pull_request_and_nothing_skips_it() -> None:
-    text = WORKFLOW.read_text(encoding="utf-8")
-    triggers = text[text.index("\non:\n") : text.index("\nconcurrency:")]
-    assert "\n  push:\n" in triggers
-    assert "\n  pull_request:\n" in triggers
+    assert triggers() == {"push": {}, "pull_request": {"branches": ["main"]}}
     job = audit_job()
     # No condition, and no dependency on another job that could skip it when that job fails.
     assert not re.search(r"^\s+if:", job, re.MULTILINE)
     assert "needs:" not in job
     assert "continue-on-error" not in job
+
+
+@pytest.mark.parametrize(
+    "branch", ["feature/sbom", "r2.10c3c-adjudication", "fix-123", "dependabot/npm/vite-9", "main"]
+)
+@pytest.mark.parametrize(
+    "changed", [("README.md",), ("frontend/src/App.tsx",), ("backend/requirements-lock.txt",)]
+)
+def test_a_push_to_any_branch_triggers_the_scan(branch: str, changed: tuple[str, ...]) -> None:
+    # The A2 trigger correction: the scan used to live in ci.yml, whose push trigger is
+    # `branches: [main]`, so a feature branch without a pull request was never scanned.
+    assert runs_on("push", branch, changed)
+
+
+def test_the_push_trigger_carries_no_filter_at_all() -> None:
+    assert triggers()["push"] == {}
+    text = WORKFLOW.read_text(encoding="utf-8")
+    on_block = text[text.index("\non:\n") : text.index("\nconcurrency:")]
+    for word in ("branches-ignore", "paths", "paths-ignore", "tags", "types"):
+        assert f"{word}:" not in on_block
+
+
+def test_pull_requests_to_main_still_trigger_the_scan() -> None:
+    assert runs_on("pull_request", "main")
+
+
+def test_the_trigger_reader_sees_the_restriction_the_scan_used_to_have() -> None:
+    # ci.yml keeps the old triggers; the reader must find them restrictive, or the tests above
+    # could pass against a workflow that scans main only.
+    assert triggers(CI_WORKFLOW)["push"] == {"branches": ["main"]}
+    assert glob_match("main", "main")
+    assert not glob_match("main", "feature/sbom")
+    assert glob_match("feature/**", "feature/a/b")
+    assert not glob_match("feature/*", "feature/a/b")
+
+
+def test_ci_yml_no_longer_carries_the_scan_so_main_is_not_scanned_twice() -> None:
+    text = CI_WORKFLOW.read_text(encoding="utf-8")
+    assert "dependency-audit:" not in text
+    assert "scripts/dependency_audit.py" not in text
+    assert "name: Dependency vulnerability scan" not in text
+
+
+def test_a_push_run_and_a_pull_request_run_never_cancel_each_other() -> None:
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "group: dependency-audit-${{ github.event_name }}-${{ github.ref }}" in text
 
 
 def test_the_job_is_given_no_secret_no_environment_and_no_token() -> None:
@@ -134,7 +244,7 @@ def test_the_frontend_production_dependency_scan_is_present() -> None:
 def test_both_backend_locks_and_the_scanners_own_are_scanned() -> None:
     (line,) = [line for line in run_lines() if f"{SCRIPT} python " in line]
     locks = line.split(f"{SCRIPT} python ", 1)[1].split()
-    assert locks == [*BACKEND_LOCKS, TOOL_LOCK]
+    assert locks == [*BACKEND_LOCKS, TOOL_LOCK, SBOM_LOCK]
 
 
 def test_the_positive_controls_run_before_the_real_audits() -> None:
@@ -159,7 +269,7 @@ def test_the_pinned_scanner_version_is_the_one_its_lock_installs() -> None:
     assert f"\npip-audit=={audit.PIP_AUDIT_VERSION}\n" in declared
 
 
-@pytest.mark.parametrize("lock", [*BACKEND_LOCKS, TOOL_LOCK])
+@pytest.mark.parametrize("lock", [*BACKEND_LOCKS, TOOL_LOCK, SBOM_LOCK])
 def test_every_entry_of_a_real_lock_is_parsed_and_hashed(lock: str) -> None:
     text = (ROOT / lock).read_text(encoding="utf-8")
     pins = re.findall(r"^[A-Za-z0-9][A-Za-z0-9_.\-]*==", text, re.MULTILINE)

@@ -35,7 +35,8 @@ export default defineConfig({
      * queries exist.
      */
     css: false,
-    include: ['src/**/*.test.{ts,tsx}'],
+    // e2e/: A9's responsive-audit rules (plain ESM, shared with the browser runner).
+    include: ['src/**/*.test.{ts,tsx}', 'e2e/**/*.test.mjs'],
     /*
      * Half the machine's cores, not all but one (Vitest's default). Every worker boots its own
      * jsdom, and on a loaded machine a full set of them starved one another until tests hit

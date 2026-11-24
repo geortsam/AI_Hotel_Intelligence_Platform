@@ -623,7 +623,7 @@ can be obtained, and times.
 | document state, chunk state | §12.4 |
 | query parsing | `(query_id, configuration, limit, websearch_to_tsquery(configuration, query)::text)` for every query and every language of the evaluated hotel's active documents; the tsquery may be empty, which PostgreSQL returns for a query of stop words alone |
 | schema | the Alembic head; a canonical digest of the live definitions of `hotel_documents` and `hotel_document_chunks` |
-| sources | Git blob content (§12.6) of `.github/workflows/ci.yml`, `.gitattributes`, `pyproject.toml`, `alembic.ini`; `backend/app/main.py`, `api/deps.py`, `api/v1/router.py`, `api/v1/endpoints/knowledge.py`, `services/knowledge.py`, `services/scope.py`, `repositories/hotel.py`, `repositories/knowledge.py`, `knowledge/chunking.py`, `schemas/knowledge.py`, `models/knowledge.py`, `models/enums.py`; the cookie session's `models/auth_session.py`, `repositories/auth_session.py`, `services/session.py` and `api/session_cookies.py` (since R1.1, E8; fingerprinted rather than excluded); `database/migrations/env.py` and every file under `database/migrations/versions/`; `tests/conftest.py`, `tests/integration/conftest.py`, `tests/evaluation/retrieval.py`, `retrieval_schema.py`, `retrieval_metrics.py`; the C.4 harness, `tests/evaluation/retrieval_canonical.py`, `retrieval_fingerprint.py`, `retrieval_probes.py`, `retrieval_artifacts.py`, `retrieval_numerics.py`, `retrieval_review.py`, `retrieval_signoff.py` and `retrieval_v2.py`; the C.4 integration test `tests/integration/test_knowledge_retrieval_v2_eval.py`; the dataset JSON; the package `__init__.py` files of `tests/`, `tests/evaluation/`, `tests/integration/`, `backend/app/` and its `api/`, `api/v1/`, `api/v1/endpoints/`, `services/`, `repositories/`, `knowledge/`, `schemas/`, `models/` and `db/`; `backend/requirements-lock.txt` and `backend/requirements-dev-lock.txt` |
+| sources | Git blob content (§12.6) of `.github/workflows/ci.yml`, `.gitattributes`, `pyproject.toml`, `alembic.ini`; `backend/app/main.py`, `api/deps.py`, `api/v1/router.py`, `api/v1/endpoints/knowledge.py`, `services/knowledge.py`, `services/scope.py`, `repositories/hotel.py`, `repositories/knowledge.py`, `knowledge/chunking.py`, `schemas/knowledge.py`, `models/knowledge.py`, `models/enums.py`; the cookie session's `models/auth_session.py`, `repositories/auth_session.py`, `services/session.py` and `api/session_cookies.py` (since R1.1, E8; fingerprinted rather than excluded); A5's request metrics, `core/metrics.py` and `middleware/metrics.py` (fingerprinted rather than excluded: the middleware runs on every measured request and only observes); `database/migrations/env.py` and every file under `database/migrations/versions/`; `tests/conftest.py`, `tests/integration/conftest.py`, `tests/evaluation/retrieval.py`, `retrieval_schema.py`, `retrieval_metrics.py`; the C.4 harness, `tests/evaluation/retrieval_canonical.py`, `retrieval_fingerprint.py`, `retrieval_probes.py`, `retrieval_artifacts.py`, `retrieval_numerics.py`, `retrieval_review.py`, `retrieval_signoff.py` and `retrieval_v2.py`; the C.4 integration test `tests/integration/test_knowledge_retrieval_v2_eval.py`; the dataset JSON; the package `__init__.py` files of `tests/`, `tests/evaluation/`, `tests/integration/`, `backend/app/` and its `api/`, `api/v1/`, `api/v1/endpoints/`, `services/`, `repositories/`, `knowledge/`, `schemas/`, `models/`, `db/`, `core/` and `middleware/` (the last two since A5); `backend/requirements-lock.txt` and `backend/requirements-dev-lock.txt` |
 | python | CPython 3.14.7 and its build string; the float format (53-bit mantissa, radix 2, maximum exponent 1024, short repr); the `_decimal` and libmpdec versions; the SHA-256 of the canonical installed set |
 | dataset | identity, schema version, canonical SHA-256 |
 | metrics | the metrics version; `V2_METRIC_CONFIG` in full, bootstrap settings included; the discount table and the numeric contract's identifier |
@@ -638,7 +638,6 @@ and two tests hold those import closures to this list.
 - `database/migrations/script.py.mako`: never executed.
 - `core/config.py`, `core/client_address.py`, `core/errors.py`, `core/request_id.py`,
   `core/security_headers.py`, the scope policy and `tests/db_safety.py`: they can only refuse.
-- `core/__init__.py`: a docstring; its package holds no fingerprinted module.
 - `db/base.py` (the declarative base, identity key and timestamp mixin): the tables' DDL,
   identity generation included, is defined in the fingerprinted migrations and read from the
   live definitions. (This record once named `models/base.py`, which does not exist.)
@@ -668,9 +667,10 @@ route table every measured request is dispatched through, is fingerprinted inste
 - `api/openapi.py`: it changes only the OpenAPI document.
 - `repositories/room_type.py` and `repositories/ml_prediction_removal.py`: constructed by a
   dependency the measured routes share; none of their methods is called.
-- The other 113, every remaining module of `api/` (`preconditions.py`, `routes/`, the 24 other
-  endpoint modules), `copilot/`, `llm/`, `ml/`, `core/logging.py`, `middleware/__init__.py`,
-  16 repositories, 12 schemas and 28 services: loaded by the application's imports; only their
+- The other 113, every remaining module of `api/` (`preconditions.py`, `routes/` -- with
+  `routes/metrics.py` since A5, whose `/metrics` handler no measured request reaches -- the
+  24 other endpoint modules), `copilot/`, `llm/`, `ml/`, `core/logging.py`, 16 repositories,
+  12 schemas and 28 services: loaded by the application's imports; only their
   import-time definitions run, and nothing in them runs on a measured request. That is what the
   trace observed, not what the code guarantees: if a later change made one of them run and alter
   a result, gate 2 still fails, as "results changed with unchanged inputs".

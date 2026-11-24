@@ -1,0 +1,34 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:3e671687-395b-41f5-a30f-a58921a69b79",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-11-24T00:00:00Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "author": "anchore",
+          "name": "syft",
+          "version": "1.57.1"
+        }
+      ]
+    },
+    "component": {
+      "bom-ref": "image",
+      "type": "container",
+      "name": "positive-control",
+      "version": "0"
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "pkg:pypi/fastapi@0.141.1",
+      "type": "not-a-component-type",
+      "name": "fastapi",
+      "version": "0.141.1",
+      "purl": "pkg:pypi/fastapi@0.141.1"
+    }
+  ]
+}

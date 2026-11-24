@@ -7865,8 +7865,11 @@ STAGE_R2_10C = [
         178,
         "the upload action is pinned to a SHA that is not v4.6.2's",
         ".github/workflows/ci.yml",
-        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2\n",
-        "actions/upload-artifact@ea165f8d65b6e75b8a5d1f2a6bd1ed9b6d7f7e0b # v4.6.2\n",
+        # The retrieval upload's own pin (A3 and A9 added two more uploads to ci.yml).
+        "        if: always() && matrix.shard == 1\n"
+        "        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2\n",
+        "        if: always() && matrix.shard == 1\n"
+        "        uses: actions/upload-artifact@ea165f8d65b6e75b8a5d1f2a6bd1ed9b6d7f7e0b # v4.6.2\n",
         f"{_RA}test_every_artifact_is_printed_and_uploaded_whatever_the_tests_did",
         f"{_RA}test_the_upload_pin_carries_its_version_comment",
     ),
@@ -10058,6 +10061,8 @@ STAGE_R0_2 = [
 # --- A2 (completion audit): dependency vulnerability scanning in CI ---------------------------
 
 AUDIT_SCRIPT = "scripts/dependency_audit.py"
+#: The scan's own workflow since the A2 trigger correction (it was a job in ci.yml).
+AUDIT_WORKFLOW = ".github/workflows/dependency-audit.yml"
 _AUDIT = "tests/backend/test_ci_dependency_audit.py::"
 _PY = '          "$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py'
 _FRONTEND_STEP = (
@@ -10078,12 +10083,13 @@ STAGE_A2 = [
     _a2(
         1,
         "the scanning steps are removed, so the job installs a scanner and audits nothing",
-        CI_WORKFLOW,
+        AUDIT_WORKFLOW,
         _FRONTEND_STEP + "      - name: Audit the Python locks\n"
-        "        # The image's lock, the test environment's lock and the scanner's own.\n"
+        "        # The image's lock, the test environment's lock, the scanner's own and the SBOM\n"
+        "        # checker's (A3).\n"
         "        run: |\n"
         f"{_PY} python backend/requirements-lock.txt backend/requirements-dev-lock.txt"
-        " scripts/dependency_audit_lock.txt\n",
+        " scripts/dependency_audit_lock.txt scripts/sbom_lock.txt\n",
         "",
         "test_the_dependency_vulnerability_gate_exists",
     ),
@@ -10098,16 +10104,17 @@ STAGE_A2 = [
     _a2(
         3,
         "the test environment's lock is left out of the backend scan",
-        CI_WORKFLOW,
+        AUDIT_WORKFLOW,
         " python backend/requirements-lock.txt backend/requirements-dev-lock.txt"
-        " scripts/dependency_audit_lock.txt\n",
-        " python backend/requirements-lock.txt scripts/dependency_audit_lock.txt\n",
+        " scripts/dependency_audit_lock.txt scripts/sbom_lock.txt\n",
+        " python backend/requirements-lock.txt scripts/dependency_audit_lock.txt"
+        " scripts/sbom_lock.txt\n",
         "test_both_backend_locks_and_the_scanners_own_are_scanned",
     ),
     _a2(
         4,
         "the frontend production dependency scan is removed",
-        CI_WORKFLOW,
+        AUDIT_WORKFLOW,
         _FRONTEND_STEP,
         "",
         "test_the_frontend_production_dependency_scan_is_present",
@@ -10147,7 +10154,7 @@ STAGE_A2 = [
     _a2(
         9,
         "the positive control is removed, so a scanner that reports nothing can pass",
-        CI_WORKFLOW,
+        AUDIT_WORKFLOW,
         "      - name: Prove the scanners report a known advisory\n"
         "        run: |\n"
         f"{_PY} expect-python-finding tests/fixtures/dependency_audit/pyjwt-2.13.0.lock"
@@ -10156,6 +10163,407 @@ STAGE_A2 = [
         "\n",
         "",
         "test_the_positive_controls_run_before_the_real_audits",
+    ),
+    # The A2 trigger correction: a push to any branch runs the scan.
+    _a2(
+        10,
+        "the scan's push trigger is restricted to main again, so a feature branch is not scanned",
+        AUDIT_WORKFLOW,
+        "on:\n  push:\n  pull_request:\n",
+        "on:\n  push:\n    branches: [main]\n  pull_request:\n",
+        "test_a_push_to_any_branch_triggers_the_scan[changed0-feature/sbom]",
+        "test_the_push_trigger_carries_no_filter_at_all",
+    ),
+    _a2(
+        11,
+        "the push trigger is removed, so only pull requests are scanned",
+        AUDIT_WORKFLOW,
+        "on:\n  push:\n  pull_request:\n",
+        "on:\n  pull_request:\n",
+        "test_a_push_to_any_branch_triggers_the_scan[changed0-r2.10c3c-adjudication]",
+        "test_it_runs_on_every_push_and_pull_request_and_nothing_skips_it",
+    ),
+    _a2(
+        12,
+        "a paths filter is added, so a push that changes only the frontend is not scanned",
+        AUDIT_WORKFLOW,
+        "on:\n  push:\n  pull_request:\n",
+        "on:\n  push:\n    paths: ['backend/**']\n  pull_request:\n",
+        "test_a_push_to_any_branch_triggers_the_scan[changed1-feature/sbom]",
+        "test_the_push_trigger_carries_no_filter_at_all",
+    ),
+    _a2(
+        13,
+        "the job is made conditional on main, so a branch push starts a run that scans nothing",
+        AUDIT_WORKFLOW,
+        "    runs-on: ubuntu-latest\n    timeout-minutes: 20\n",
+        "    runs-on: ubuntu-latest\n    if: github.ref == 'refs/heads/main'\n"
+        "    timeout-minutes: 20\n",
+        "test_it_runs_on_every_push_and_pull_request_and_nothing_skips_it",
+    ),
+]
+
+
+# --- A5 (completion audit): the internal metrics exporter ------------------------------------
+
+_METRICS_CORE = "backend/app/core/metrics.py"
+_METRICS_MIDDLEWARE = "backend/app/middleware/metrics.py"
+_METRICS_ROUTE = "backend/app/api/routes/metrics.py"
+_A5 = "tests/backend/test_metrics_endpoint.py::"
+
+
+def _a5(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(
+        f"A5-M{number}", "A5", breaks, one(path, old, new), tuple(_A5 + k for k in killers)
+    )
+
+
+STAGE_A5 = [
+    _a5(
+        1,
+        "requests are labelled by the requested path, so identifiers become label values",
+        _METRICS_MIDDLEWARE,
+        '    template = getattr(scope.get("route"), "path_format", None)\n',
+        '    template = scope.get("path")\n',
+        "test_requests_are_counted_by_route_template_never_by_path",
+        "test_every_unknown_path_shares_one_series",
+    ),
+    _a5(
+        2,
+        "a request carrying forwarding headers is served the metrics",
+        _METRICS_ROUTE,
+        "    if any(name in request.headers for name in FORWARDING_HEADERS):\n",
+        "    if False and any(name in request.headers for name in FORWARDING_HEADERS):\n",
+        "test_a_proxied_request_gets_the_ordinary_404[x-forwarded-for]",
+    ),
+    _a5(
+        3,
+        "X-Real-IP, which nginx adds, no longer marks a request as proxied",
+        _METRICS_ROUTE,
+        '"x-forwarded-proto",\n                      "x-real-ip")  # fmt: skip',
+        '"x-forwarded-proto")  # fmt: skip',
+        "test_the_headers_nginx_adds_are_all_refused",
+    ),
+    _a5(
+        4,
+        "the route is published in the OpenAPI document",
+        _METRICS_ROUTE,
+        '@router.get("/metrics", include_in_schema=False)',
+        '@router.get("/metrics", include_in_schema=True)',
+        "test_it_is_not_in_the_openapi_document",
+    ),
+    _a5(
+        5,
+        "the histogram's buckets stop being cumulative",
+        _METRICS_CORE,
+        "            if seconds <= bound:\n                self.buckets[index] += 1\n",
+        "            if seconds <= bound:\n                self.buckets[index] += 1\n"
+        "                break\n",
+        "test_the_latency_histogram_is_cumulative_and_agrees_with_the_counter",
+    ),
+    _a5(
+        6,
+        "an invented HTTP method mints a series of its own",
+        _METRICS_CORE,
+        "    return upper if upper in METHODS else OTHER_METHOD\n",
+        "    return upper\n",
+        "test_an_invented_method_cannot_mint_a_series",
+    ),
+    _a5(
+        7,
+        "an exception that escapes the application is counted as a success",
+        _METRICS_MIDDLEWARE,
+        "        status = 500\n",
+        "        status = 200\n",
+        "test_an_exception_is_counted_as_the_500_it_becomes",
+    ),
+    _a5(
+        8,
+        "the middleware is not installed, so nothing is ever counted",
+        "backend/app/main.py",
+        "    app.add_middleware(RequestMetricsMiddleware, metrics=app.state.metrics)\n",
+        "",
+        "test_the_first_scrape_sees_no_request_but_its_own_is_counted_by_the_next",
+        "test_requests_are_counted_by_route_template_never_by_path",
+    ),
+    _a5(
+        9,
+        "the response is no longer the Prometheus text format",
+        _METRICS_CORE,
+        'CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"',
+        'CONTENT_TYPE = "application/json"',
+        "test_the_endpoint_serves_the_prometheus_text_format",
+    ),
+    _a5(
+        10,
+        "label values are written unescaped, so a quote breaks the exposition",
+        _METRICS_CORE,
+        '    return value.replace("\\\\", "\\\\\\\\")'
+        '.replace(\'"\', \'\\\\"\').replace("\\n", "\\\\n")\n',
+        "    return value\n",
+        "test_label_values_are_escaped",
+    ),
+    _a5(
+        11,
+        "an included router's prefix is dropped from the route label",
+        _METRICS_MIDDLEWARE,
+        "    if isinstance(full, str) and full.endswith(template):\n",
+        "    if False:\n",
+        "test_requests_are_counted_by_route_template_never_by_path",
+    ),
+    _a5(
+        12,
+        "a scrape is no longer marked uncacheable",
+        _METRICS_ROUTE,
+        '        headers={"Cache-Control": "no-store"},\n',
+        "",
+        "test_the_endpoint_serves_the_prometheus_text_format",
+    ),
+]
+
+
+# --- A3 (completion audit): one CycloneDX SBOM per image, generated and checked in CI ----------
+
+_SBOM = "scripts/sbom_check.py"
+_A3 = "tests/backend/test_ci_sbom.py::"
+
+
+def _a3(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(
+        f"A3-M{number}", "A3", breaks, one(path, old, new), tuple(_A3 + k for k in killers)
+    )
+
+
+STAGE_A3 = [
+    _a3(
+        1,
+        "the frontend image is no longer catalogued, so it ships without an SBOM",
+        CI_WORKFLOW,
+        '"$TAG_A backend a" "$TAG_B backend b" "$FE_TAG_A frontend a" "$FE_TAG_B frontend b"',
+        '"$TAG_A backend a" "$TAG_B backend b"',
+        "test_both_images_and_both_builds_are_catalogued_from_the_daemon",
+    ),
+    _a3(
+        2,
+        "the Syft archive is opened without its SHA-256 being checked",
+        CI_WORKFLOW,
+        '          echo "${SYFT_SHA256}  ${archive}" | sha256sum --check --strict -\n',
+        "",
+        "test_syft_is_pinned_by_version_and_sha256_and_checked_before_it_is_opened",
+    ),
+    _a3(
+        3,
+        "the lock-coverage check tolerates a few missing packages",
+        _SBOM,
+        "    if missing:\n        raise CheckFailedError(\n",
+        "    if len(missing) > 4:\n        raise CheckFailedError(\n",
+        "test_a_package_missing_from_the_image_fails[pyjwt]",
+    ),
+    _a3(
+        4,
+        "the SBOM upload no longer fails when there is no SBOM",
+        CI_WORKFLOW,
+        "          path: ${{ runner.temp }}/sbom/\n          if-no-files-found: error\n",
+        "          path: ${{ runner.temp }}/sbom/\n          if-no-files-found: warn\n",
+        "test_one_validated_sbom_per_image_is_uploaded_and_a_missing_one_fails",
+    ),
+    _a3(
+        5,
+        "schema validation is skipped",
+        _SBOM,
+        '    error = (schema or schema_errors)(path.read_text(encoding="utf-8"))\n',
+        "    error = None\n",
+        "test_a_schema_error_fails_validation",
+        "test_the_control_fixture_fails_only_on_its_schema",
+    ),
+    _a3(
+        6,
+        "a locked package counts as present at any version",
+        _SBOM,
+        "        if not any(_same_version(found, version) for found in"
+        " pypi.get(canonicalize_name(name), []))\n",
+        "        if not pypi.get(canonicalize_name(name))\n",
+        "test_a_package_at_another_version_fails",
+    ),
+    _a3(
+        7,
+        "two builds count as the same when they share any component",
+        _SBOM,
+        "    if first != second:\n",
+        "    if not set(first) & set(second):\n",
+        "test_two_builds_that_differ_fail[second0]",
+        "test_two_builds_that_differ_fail[second2]",
+    ),
+    _a3(
+        8,
+        "credential-named environment values are no longer searched for",
+        _SBOM,
+        'SECRET_NAME = re.compile(r"TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|PRIVATE|'
+        'API_KEY|_KEY$")',
+        'SECRET_NAME = re.compile(r"(?!)")',
+        "test_a_credential_value_fails_the_clean_check[API_TOKEN]",
+    ),
+    _a3(
+        9,
+        "the positive control is removed, so a validator that accepts anything can pass",
+        CI_WORKFLOW,
+        "      - name: Prove the SBOM checker rejects an invalid SBOM\n"
+        '        run: \'"$RUNNER_TEMP/sbom-check/bin/python" scripts/sbom_check.py expect-invalid'
+        " tests/fixtures/sbom/invalid-component-type.cdx.json'\n\n",
+        "",
+        "test_the_sbom_steps_run_in_order_after_both_images_are_built",
+        "test_the_positive_control_runs_before_the_real_sboms_are_checked",
+    ),
+    _a3(
+        10,
+        "an SBOM from any generator is accepted",
+        _SBOM,
+        '    if ("syft", SYFT_VERSION) not in generators:\n',
+        "    if False:\n",
+        "test_an_sbom_from_another_generator_fails",
+    ),
+    _a3(
+        11,
+        "the leak check is no longer run on the real SBOMs",
+        CI_WORKFLOW,
+        '          check clean "$out"/*.cdx.json\n',
+        "",
+        "test_every_check_runs_on_the_real_sboms",
+    ),
+    _a3(
+        12,
+        "the backend SBOM's coverage of the image's lock is no longer checked",
+        CI_WORKFLOW,
+        '          check backend "$out/backend-a.cdx.json" backend/requirements-lock.txt\n',
+        "",
+        "test_every_check_runs_on_the_real_sboms",
+    ),
+]
+
+
+# --- A9 (completion audit): UI-10's 51-check responsive audit, automated ---------------------
+
+_A9_CHECKS = "frontend/e2e/responsive-checks.mjs"
+_A9_VITEST = "e2e/responsive-checks.test.mjs::"
+_A9_CI = "tests/backend/test_ci_responsive_audit.py::"
+
+
+def _a9_rule(number: int, breaks: str, old: str, new: str, killer: str) -> Mutation:
+    """The audit's specification or verdict is weakened; its Vitest suite must fail."""
+    return Mutation(
+        f"A9-M{number}",
+        "A9",
+        breaks,
+        one(_A9_CHECKS, old, new),
+        (_A9_VITEST + killer,),
+        runner=Runner.VITEST,
+    )
+
+
+def _a9_ci(number: int, breaks: str, old: str, new: str, *killers: str) -> Mutation:
+    return Mutation(
+        f"A9-M{number}",
+        "A9",
+        breaks,
+        one(CI_WORKFLOW, old, new),
+        tuple(_A9_CI + k for k in killers),
+    )
+
+
+STAGE_A9 = [
+    _a9_rule(
+        1,
+        "a route is dropped from the audit, so /platform is never checked",
+        "  '/platform',\n",
+        "",
+        "is UI-10s 17 routes at 375, 768 and 1440px: 51 checks",
+    ),
+    _a9_rule(
+        2,
+        "the phone width is widened from 375px to 390px",
+        "export const WIDTHS = Object.freeze([375, 768, 1440])",
+        "export const WIDTHS = Object.freeze([390, 768, 1440])",
+        "is UI-10s 17 routes at 375, 768 and 1440px: 51 checks",
+    ),
+    _a9_rule(
+        3,
+        "the escape tolerance is raised from half a pixel to twenty",
+        "export const TOLERANCE_PX = 0.5",
+        "export const TOLERANCE_PX = 20",
+        "ignores sub-pixel overhang within half a pixel",
+    ),
+    _a9_rule(
+        4,
+        "a page with two h1 elements passes",
+        "  if (m.h1Count !== 1) {",
+        "  if (m.h1Count < 1) {",
+        "fails a page with two h1 elements",
+    ),
+    _a9_rule(
+        5,
+        "sideways scrolling no longer fails a check",
+        "  if (m.docScrollWidth !== m.clientWidth) {",
+        "  if (false) {",
+        "fails a page that scrolls sideways",
+    ),
+    _a9_rule(
+        6,
+        "content that only <main> clips is no longer counted as escaping",
+        "    return !c || c.tagName === 'MAIN' || c.getBoundingClientRect().right > cw + tolerance",
+        "    return !c || c.getBoundingClientRect().right > cw + tolerance",
+        "counts content that only main clips as escaping",
+    ),
+    _a9_rule(
+        7,
+        "a redirect to sign-in counts as the page asked for",
+        "  if (m.path !== check.path) {",
+        "  if (false) {",
+        "does not count a redirect to sign-in as the page",
+    ),
+    _a9_rule(
+        8,
+        "a run that checked fewer than 51 pages can pass",
+        "  const ok = results.length === CHECK_COUNT && failed.length === 0",
+        "  const ok = failed.length === 0",
+        "passes a run only when all 51 checks ran and passed",
+    ),
+    _a9_rule(
+        9,
+        "an escaping element no longer fails a check",
+        "  if (m.escaping.length > 0) {",
+        "  if (false) {",
+        "fails a page with an escaping element",
+    ),
+    _a9_ci(
+        10,
+        "the audit step is removed, so the job builds a stack and checks nothing",
+        "      - name: Run the 51-check responsive audit\n",
+        "      - name: Skip the 51-check responsive audit\n        if: false\n",
+        "test_the_responsive_audit_job_exists_with_its_steps_in_order",
+        "test_nothing_can_skip_or_excuse_the_audit",
+    ),
+    _a9_ci(
+        11,
+        "the browser image is no longer pinned by digest",
+        "      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:"
+        "9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe\n",
+        "      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.65.0-noble\n",
+        "test_the_browser_image_is_pinned_by_digest_at_the_lockfiles_playwright",
+    ),
+    _a9_ci(
+        12,
+        "the job may fail without failing the run",
+        "    name: Responsive audit\n    runs-on: ubuntu-latest\n",
+        "    name: Responsive audit\n    runs-on: ubuntu-latest\n    continue-on-error: true\n",
+        "test_nothing_can_skip_or_excuse_the_audit",
+    ),
+    _a9_ci(
+        13,
+        "the audit user loses the platform role, so /platform is audited as an error page",
+        "            run --rm --no-deps -T api python -m app.jobs.platform_admin grant"
+        ' "$DEMO_OWNER_EMAIL"\n',
+        "",
+        "test_the_stack_is_seeded_and_the_audit_user_holds_the_platform_role",
     ),
 ]
 
@@ -10215,4 +10623,7 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_A4,
     *STAGE_A7,
     *STAGE_A2,
+    *STAGE_A3,
+    *STAGE_A5,
+    *STAGE_A9,
 )

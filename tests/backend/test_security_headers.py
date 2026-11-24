@@ -39,6 +39,7 @@ from app.core.security_headers import (
     security_headers,
 )
 from app.main import create_app
+from app.middleware.metrics import RequestMetricsMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.request_size import RequestSizeLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -385,10 +386,13 @@ def test_the_middleware_order_is_the_one_that_makes_the_tests_above_pass(app: Fa
     outside CORS to reach a preflight; the request-id middleware stays inside CORS, exactly
     where Stage 4.5.4.1 left it. The request-body cap is innermost of all, so its 413 passes
     out through the request id, CORS and these headers like any other response
-    (tests/backend/test_request_size.py).
+    (tests/backend/test_request_size.py). A5's request metrics sit just inside the headers,
+    so they count what CORS and the body cap answer; they only observe
+    (tests/backend/test_metrics_endpoint.py).
     """
     assert [m.cls for m in app.user_middleware] == [
         SecurityHeadersMiddleware,
+        RequestMetricsMiddleware,
         CORSMiddleware,
         RequestIdMiddleware,
         RequestSizeLimitMiddleware,

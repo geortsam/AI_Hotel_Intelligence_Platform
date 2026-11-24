@@ -455,12 +455,13 @@ INITS = (
     "backend/app/schemas/__init__.py",
     "backend/app/models/__init__.py",
     "backend/app/db/__init__.py",
+    "backend/app/core/__init__.py",
+    "backend/app/middleware/__init__.py",
 )
 #: §12.3's exclusions, each by reason.
 EXCLUDED = (
     "database/migrations/script.py.mako",
     "tests/db_safety.py",
-    "backend/app/core/__init__.py",
     "backend/app/core/config.py",
     "backend/app/core/client_address.py",
     "backend/app/core/errors.py",
@@ -494,7 +495,7 @@ EXCLUDED = (
     *(
         f"backend/app/api/routes/{name}.py"
         for name in (
-            "__init__", "health",
+            "__init__", "health", "metrics",
         )
     ),
     *(
@@ -542,7 +543,7 @@ EXCLUDED = (
     *(
         f"backend/app/middleware/{name}.py"
         for name in (
-            "request_size", "request_id", "security_headers", "__init__",
+            "request_size", "request_id", "security_headers",
         )
     ),
     *(
@@ -591,16 +592,19 @@ AUTH = (
     "backend/app/services/session.py",
     "backend/app/api/session_cookies.py",
 )
+#: A5's request metrics: fingerprinted, never excluded (see `fp.METRICS_SOURCES`).
+METRICS = ("backend/app/core/metrics.py", "backend/app/middleware/metrics.py")
 
 
 def test_the_source_inventory_is_exactly_12_3s() -> None:
     assert fp.HARNESS_SOURCES == HARNESS
     assert fp.PACKAGE_INITS == INITS
     assert fp.AUTH_SOURCES == AUTH
+    assert fp.METRICS_SOURCES == METRICS
     assert sorted(fp.SOURCE_FILES) == sorted(
-        (*SPEC_SOURCES, *AUTH, *HARNESS, fp.INTEGRATION_TEST, *INITS)
+        (*SPEC_SOURCES, *AUTH, *METRICS, *HARNESS, fp.INTEGRATION_TEST, *INITS)
     )
-    assert len(fp.SOURCE_FILES) == 51
+    assert len(fp.SOURCE_FILES) == 55
 
 
 def test_the_cookie_session_modules_are_fingerprinted_and_not_excluded() -> None:
@@ -612,6 +616,21 @@ def test_the_cookie_session_modules_are_fingerprinted_and_not_excluded() -> None
     assert fp.SOURCE_FILES.count("backend/app/services/session.py") == 1
 
 
+def test_the_metrics_modules_are_fingerprinted_and_their_route_is_excluded_as_not_run() -> None:
+    """A5: the middleware and registry run on every measured request, so both are hashed and
+    their packages' __init__ files with them; the /metrics route never runs on one."""
+    for path in METRICS:
+        assert path in fp.SOURCE_FILES, path
+        assert path not in fp.EXCLUDED_SOURCES, path
+        assert (ROOT / path).is_file(), path
+    assert {"backend/app/core/__init__.py", "backend/app/middleware/__init__.py"} <= set(
+        fp.PACKAGE_INITS
+    )
+    route = "backend/app/api/routes/metrics.py"
+    assert route not in fp.SOURCE_FILES
+    assert fp.EXCLUDED_SOURCES[route] == fp.EXCLUDED_SOURCES["backend/app/api/routes/health.py"]
+
+
 def test_the_canonical_sources_have_no_duplicate_and_no_overlap_with_the_exclusions() -> None:
     assert len(set(fp.SOURCE_FILES)) == len(fp.SOURCE_FILES)
     assert not set(fp.SOURCE_FILES) & set(fp.EXCLUDED_SOURCES)
@@ -620,7 +639,7 @@ def test_the_canonical_sources_have_no_duplicate_and_no_overlap_with_the_exclusi
 
 def test_the_exclusions_are_exactly_12_3s_each_with_a_reason() -> None:
     assert sorted(fp.EXCLUDED_SOURCES) == sorted(EXCLUDED)
-    assert len(fp.EXCLUDED_SOURCES) == 171
+    assert len(fp.EXCLUDED_SOURCES) == 170
     assert all(reason.strip() for reason in fp.EXCLUDED_SOURCES.values())
     # §12.3 once named this path; the declarative base lives in app/db/base.py.
     assert "backend/app/models/base.py" not in fp.EXCLUDED_SOURCES

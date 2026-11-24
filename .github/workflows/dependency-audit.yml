@@ -1,0 +1,97 @@
+# A2: dependency vulnerability scanning, on EVERY push to ANY branch and on pull requests to main.
+#
+# Why a workflow of its own. A2's acceptance criterion is a scan on every push. Until the A2
+# trigger correction the scan was a job inside ci.yml, whose triggers are `push: branches: [main]`
+# and `pull_request: branches: [main]` -- so a push to a feature branch with no pull request was
+# never scanned. Widening ci.yml's own trigger would run the whole pipeline (three test shards,
+# mutation checks, two Docker jobs) on every branch push to get one 30-second job; this file
+# runs only the scan. ci.yml no longer carries the job, so main and pull requests are not
+# scanned twice by two workflows.
+#
+# `push:` carries no filter: no `branches`, `branches-ignore`, `paths`, `paths-ignore` or `tags`.
+# A push of any branch triggers it (and a tag push too, which costs one short run).
+# `pull_request` keeps the event the scan already had: it also covers a pull request from a fork,
+# whose pushes do not run workflows in this repository.
+#
+# A known advisory in a dependency fails the run. The frontend's shipped tree is audited with
+# `npm audit --omit=dev --audit-level=high` (high and critical fail); every hashed Python lock
+# with pip-audit, which has no severity option and so fails on ANY known advisory. The policy,
+# the tool's provenance and the measured findings are in docs/project-completion-audit.md
+# (A2); the mechanics are in scripts/dependency_audit.py's docstring.
+#
+# One job, with no `env:`, no `services:` and no secret: it needs the repository's files and the
+# public advisory services, nothing else. The token is read-only and the checkout does not
+# persist it. pip-audit runs from a venv of its own, installed from its hashed lock, so the
+# scanner never shares an environment with what it scans, and gets an empty advisory cache each
+# run.
+#
+# Outages fail, they never pass: an attempt counts only when it produced a report, three
+# attempts are made, and after that the step fails by name. The first step after the installs
+# audits two fixtures pinned to known-vulnerable versions and fails unless the named advisory
+# is reported, so a scanner that silently finds nothing cannot pass the steps after it.
+#
+# Tested by tests/backend/test_ci_dependency_audit.py, which reads this file.
+
+name: Dependency vulnerability scan
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+# A second push to the same branch makes the first scan's result irrelevant. The event is part
+# of the group, so a branch's push run and its pull request's run never cancel each other.
+concurrency:
+  group: dependency-audit-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-audit:
+    name: Dependency vulnerability scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          # The interpreter quality-gates runs, so the locks' environment markers are evaluated
+          # as they are where the tests run. No pip cache: pip-audit would otherwise be handed
+          # a cache of earlier advisory answers.
+          python-version: '3.14.7'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          # The frontend job's Node and npm. npm audit reads frontend/package-lock.json; it does
+          # not need node_modules, so nothing is installed.
+          node-version: '24.21.0'
+
+      - name: Install pip-audit from its hashed lock
+        run: |
+          python -m venv "$RUNNER_TEMP/pip-audit"
+          "$RUNNER_TEMP/pip-audit/bin/python" -m pip install --no-deps --require-hashes -r scripts/dependency_audit_lock.txt
+          "$RUNNER_TEMP/pip-audit/bin/python" -m pip check
+          "$RUNNER_TEMP/pip-audit/bin/python" -m pip_audit --version
+
+      - name: Prove the scanners report a known advisory
+        run: |
+          "$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py expect-python-finding tests/fixtures/dependency_audit/pyjwt-2.13.0.lock GHSA-ffc3-869f-jxw9
+          "$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py expect-npm-finding tests/fixtures/dependency_audit GHSA-35jh-r3h4-6jhm
+
+      - name: Audit the shipped frontend dependencies
+        run: '"$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py npm frontend'
+
+      - name: Audit the Python locks
+        # The image's lock, the test environment's lock, the scanner's own and the SBOM
+        # checker's (A3).
+        run: |
+          "$RUNNER_TEMP/pip-audit/bin/python" scripts/dependency_audit.py python backend/requirements-lock.txt backend/requirements-dev-lock.txt scripts/dependency_audit_lock.txt scripts/sbom_lock.txt

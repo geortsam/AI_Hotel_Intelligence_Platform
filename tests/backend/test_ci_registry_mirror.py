@@ -22,7 +22,7 @@ MIRROR = "https://mirror.gcr.io"
 STEP = "Pull Docker Hub images through a mirror, Docker Hub the fallback"
 #: The jobs whose steps pull or build images. The others pull only `services:` containers,
 #: which the runner fetches before any step can configure anything.
-MIRRORED_JOBS = ("docker-runtime", "image-reproducibility")
+MIRRORED_JOBS = ("docker-runtime", "image-reproducibility", "responsive-audit")
 
 JOB = re.compile(r"^  ([a-z][a-z0-9-]*):\n", re.MULTILINE)
 STEP_START = re.compile(r"^      - name: (.+)$", re.MULTILINE)
