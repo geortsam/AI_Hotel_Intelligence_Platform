@@ -16,14 +16,14 @@
   - All 13 navigation areas are built and tested.
   - Every V1 and V2 stage (1 through 7.14) is implemented.
   - The UI redesign is finished (UI-0 to UI-10, plus your two decisions).
-  - Every v2.0 roadmap task that needs no business decision is done; R6.1, consolidating the documentation, was the last (A8, §4.7). R6.1 was met as an index and a link check, **not** by merging the stage snapshots as the roadmap worded it; the figures below count it as done on A8's criteria, and §8.2 gives them with R6.1 read literally.
+  - Every v2.0 roadmap task that needs no business decision is done; R6.1, consolidating the documentation, was the last (A8, §4.7). A8 met R6.1 as an index and a link check; the literal merge of the six stage snapshots followed on 2026-11-25 (§4.7, last part), so R6.1 is done under either reading and the figures below are the same under both.
 - **CI was green on the audited HEAD.** Run [44829954281](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/44829954281) passed all 7 jobs:
   - 12,482 backend tests passed and 58 were skipped;
   - 1,353 frontend tests passed;
   - all 891 recorded mutations were killed;
   - ruff, the format check and mypy were clean;
   - the migration chain was checked, the image was verified at runtime, and both builds were reproducible.
-- **Latest CI:** run [45509617278](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45509617278) on `b6c6c65` (A8) passed all 8 jobs, with 987 of 987 mutations killed (§4.7). The run above is the audit's own evidence and stays as recorded.
+- **Latest CI:** run [45649328024](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45649328024) on `03c58de` (R6.1, the literal consolidation) passed all 8 jobs, with 999 of 999 mutations killed (§4.7). The run above is the audit's own evidence and stays as recorded.
 - **Overall completion:** 78.9% of all tracked work (56 of 71 items, §8; 66.2% at the audit, 67.6% after A1, 69.0% after A6, 70.4% after A4, 71.8% after A7, 73.2% after A2, 77.5% after the A2 correction, A3, A5 and A9). For work that needs no decision from you, the figure is 100% (56 of 56).
 - **Remaining autonomous work:** none (§4; A1–A9 are all done, A2 with the trigger correction of §4.6, A8 in §4.7). What remains waits on your decisions.
 - **Remaining user decisions:** 13 open decision briefs (§5). Three of them have a do-nothing default.
@@ -573,6 +573,30 @@ A8 is counted complete from this run.
 - Anchors follow GitHub's slugging; another renderer may slug differently.
 - A frozen record's stage-dated figures stay as written. The index says which documents those are.
 
+#### R6.1 read literally: the snapshots merged (2026-11-25)
+
+After the closure audit, the one deviation above was closed. Commits `a3d996f` (the
+consolidation and the redirects) and `03c58de` (tests, index, mutations); documentation, tests
+and the link checker only, no fingerprinted source, so no re-pin. CI run
+[45649328024](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45649328024)
+passed all 8 jobs, 999 of 999 mutations killed, and re-measured the C.4 report byte-identical to
+the pin.
+- The six superseded snapshots are merged into three maintained documents: `architecture.md`
+  (`backend-architecture.md`, `analytics-design.md`, `ml-design.md`), `database/README.md`
+  (`database-design.md`, `database-implementation.md`) and `roadmap-v2.0-execution.md` §5
+  (`roadmap-v2.0.md`). Stage-dated statements are labelled with their stage; stale ones are given
+  their current state.
+- Each old path is a redirect with a section map, because code comments and frozen records cite
+  it. The index's statuses are now 23 current, 15 frozen records and 6 redirects; nothing is
+  superseded.
+- The 15 frozen records and the retrieval artifacts are byte-identical to `2a07405`, and the
+  fingerprint's `sources` and `metrics` digests equal the pin.
+- `tests/backend/test_snapshot_consolidation.py` holds the result; A8-M17 and M21–M23 follow their
+  statements; mutation stage R6.1 records 12 more: 999 in all.
+
+The figures do not change: R6.1 was already counted as done. What changes is that they no longer
+depend on how R6.1 is read.
+
 ### 4.8 The task table
 
 Every task is done.
@@ -684,7 +708,7 @@ implemented and green (§3).
 
 | Class | Rows | Count |
 |---|---|---|
-| 1. Implemented and verified | R0.3, R0.4b, R1.1, R1.3a, R1.4b, R1.4c, R1.5, R3.3, R4.2, R6.1 (A8, as an index — no snapshot merged, §4.7), R6.2, §2.5 | **12** |
+| 1. Implemented and verified | R0.3, R0.4b, R1.1, R1.3a, R1.4b, R1.4c, R1.5, R3.3, R4.2, R6.1 (A8 as an index, then the snapshots merged — §4.7), R6.2, §2.5 | **12** |
 | 2. Implemented, the rest awaiting verification on `main` or a decision | R0.2 (the mirror covers the Docker jobs; `services:` containers still pull from Docker Hub — §3.2), R0.4a (config tested; inert until on `main` — §3.3) | **2** |
 | 3. Autonomous engineering | none: R6.1 (A8) is done | **0** |
 | 4. Blocked by a decision, or by a row that is | decisions: R0.1, R1.2, R1.3b, R1.4a, R2.1, R2.3, R3.1, R3.4, R4.1, R4.3a, R4.3b, R5; dependent: R2.2, R2.4, R3.2 | **15** |
@@ -693,8 +717,8 @@ implemented and green (§3).
 **Reconciliation with the earlier "14 / 29 engineering, 15 decision-dependent":** the 15 is
 confirmed exactly. The 14 becomes **13**, because R6.1 was counted as done when only the execution
 matrix had been written; the stage-snapshot documents were never consolidated (35 + 6 remain).
-A8 has since done R6.1 (§4.7), by indexing and correcting them rather than merging them, so the
-13 is now 14.
+A8 has since done R6.1 (§4.7), by indexing and correcting them, so the 13 is now 14; the six
+superseded snapshots were then merged into maintained documents as well (§4.7, last part).
 R4.3a and R4.3b each have a local half that needs no decision, now tracked as A5 and A3. The rows
 themselves stay decision-dependent.
 
@@ -724,11 +748,11 @@ implemented and its CI is green.
 | Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 8 | 100.0 |
 | **All** | **71** | **56** | **78.9** |
 
-- **Within the decided scope** (the 15 decision-blocked rows removed): 56 of 56 = **100%**. Nothing decision-free is left on A8's criteria; read literally, R6.1's merge of the snapshots is the one optional item that would remain (below).
+- **Within the decided scope** (the 15 decision-blocked rows removed): 56 of 56 = **100%**. Nothing decision-free is left, under either reading of R6.1.
 - **Strict** (R0.2 and R0.4a not counted as done): 54 of 71 = 76.1%.
-- **With R6.1 read literally** (the stage snapshots merged into current-state documents, which A8 did not do): 55 of 71 = 77.5%, 55 of 56 = 98.2%, strict 53 of 71 = 74.6%, and the v2.0 matrix 13 of 29 = 44.8%. The difference is that one row; [project-closure-audit.md](project-closure-audit.md) §4 says what a literal consolidation would still involve.
+- **With R6.1 read literally** (the stage snapshots merged into current-state documents): the same figures, since the merge was done on 2026-11-25 (§4.7, last part). Before it, the literal reading gave 55 of 71 = 77.5%, 55 of 56 = 98.2%, strict 53 of 71 = 74.6%, and the v2.0 matrix 13 of 29 = 44.8%.
 - A3 and A5 are the local halves of R4.3b and R4.3a. They count as audit findings; the two roadmap rows stay decision-blocked, because signing and alert destinations still need §3.12.
-- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. After A6 (`485dd15`, CI 45046381883 green): 49 / 71 = 69.0%. After A4 (`4c9a2a0`, CI 45063664775 green): 50 / 71 = 70.4%. After A7 (`5125b5b`, CI 45150368805 green): 51 / 71 = 71.8%. After A2 (`6a91858`, re-pinned in `fda8718` and `9fec999`, CI 45398092718 green): 52 / 71 = 73.2%. After the A2 correction, A3, A5 and A9 (`7858c27`, re-pinned in `133c5be` and `f4503e4`, CI 45476887432 green): 55 / 71 = 77.5%. After A8 (`305f50c` and `b6c6c65`, no re-pin, CI 45509617278 green): 56 / 71 = 78.9%, 56 / 56 = 100%, strict 54 / 71 = 76.1%.
+- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. After A6 (`485dd15`, CI 45046381883 green): 49 / 71 = 69.0%. After A4 (`4c9a2a0`, CI 45063664775 green): 50 / 71 = 70.4%. After A7 (`5125b5b`, CI 45150368805 green): 51 / 71 = 71.8%. After A2 (`6a91858`, re-pinned in `fda8718` and `9fec999`, CI 45398092718 green): 52 / 71 = 73.2%. After the A2 correction, A3, A5 and A9 (`7858c27`, re-pinned in `133c5be` and `f4503e4`, CI 45476887432 green): 55 / 71 = 77.5%. After A8 (`305f50c` and `b6c6c65`, no re-pin, CI 45509617278 green): 56 / 71 = 78.9%, 56 / 56 = 100%, strict 54 / 71 = 76.1%. After R6.1's literal merge (`a3d996f` and `03c58de`, no re-pin, CI 45649328024 green): unchanged, now under either reading.
 
 ---
 
@@ -740,5 +764,5 @@ implemented and its CI is green.
 4. ~~**A7**~~ — done (§4.4).
 5. ~~**A2**~~ — done (§4.5), re-pinned on its own as its stage prompt asked; its trigger corrected in §4.6.
 6. ~~**Re-pin batch: A2 correction + A3 + A5 + A9**~~ — done (§4.6), re-pinned once under §12.6.
-7. ~~**A8 / R6.1**~~ — done (§4.7), last, so the facts moved only once.
+7. ~~**A8 / R6.1**~~ — done (§4.7), last, so the facts moved only once; the literal merge of the snapshots followed (§4.7, last part).
 8. Then whatever your answers to §5 unlock. The first steps toward production are §3.4 (R1.2) and §3.11 (R4.1).

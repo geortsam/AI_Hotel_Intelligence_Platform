@@ -10,6 +10,11 @@
 > The running record of the work is [project-completion-audit.md](project-completion-audit.md);
 > this document closes it. The decision briefs it summarises are
 > [roadmap-v2.0-execution.md §3](roadmap-v2.0-execution.md#3-decision-briefs).
+>
+> **Later the same day: R6.1's deviation closed** ([§12](#12-addendum-r61-completed-literally-2026-11-25)).
+> The six stage snapshots were merged into maintained documents (`a3d996f`, `03c58de`; CI run
+> 45649328024 green). The sections below are the audit as written at `15a29d1`; where they
+> describe the deviation as open, §12 is the current state.
 
 ## 1. Executive summary
 
@@ -17,7 +22,8 @@
   are complete, and every one was verified in CI.
 - **One deviation is recorded rather than hidden.** R6.1 asked for the stage snapshots to be
   consolidated into a small set of maintained documents. A8 met it with an index, a status for
-  every document and a link checker. It did **not** merge or move any snapshot (§4).
+  every document and a link checker. It did **not** merge or move any snapshot (§4). *Since
+  closed: the snapshots were merged after this audit (§12).*
 - **The repository is green.** CI run
   [45517429233](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45517429233)
   on `15a29d1` passed all 8 jobs, with 987 of 987 mutations killed. The dependency scan passed on
@@ -38,7 +44,8 @@
 | Open user decisions | **13** | decision briefs §3.1–§3.13 |
 
 These measure different things and are not combined (§3). All four rows count R6.1 as done; read
-literally, each falls by that one row (§3.3).
+literally, each fell by that one row at `15a29d1` (§3.3). Since the merge (§12) the two readings
+give the same figures.
 
 ## 2. Verified repository state
 
@@ -146,9 +153,13 @@ one row:
 | v2.0 roadmap matrix | 14 / 29 = 48.3% | 13 / 29 = 44.8% |
 
 Which basis to use is your call. The repository records the first, with the deviation stated
-wherever R6.1 is counted.
+wherever R6.1 is counted. *Since the merge of §12 the right-hand column equals the left: R6.1 is
+done under both readings.*
 
 ## 4. R6.1, reconciled
+
+*As found at `15a29d1`. The merge this section judged safe for the six snapshots was done later
+that day, exactly under the conditions below; see §12.*
 
 **What the roadmap asked.** [roadmap-v2.0.md](roadmap-v2.0.md) R6: "Consolidate the
 stage-snapshot documents into a small set of maintained current-state documents." The execution
@@ -225,7 +236,7 @@ R0.4a.
 R5).
 
 **Optional, needs no decision:** the literal R6.1 merge of the six superseded snapshots (§4).
-Doing it or not is a choice of scope.
+Doing it or not is a choice of scope. *Done since (§12).*
 
 ## 6. Capabilities and limitations
 
@@ -505,7 +516,8 @@ The platform is **not production ready**. Each gap is supported by the repositor
 - **Not production ready.** The project is not ready for production use.
 - **No measured accuracy or quality.** Neither the demand model's production accuracy nor any
   language model's answer quality is established.
-- **R6.1 is not met in its literal sense.** No stage snapshot was consolidated (§4).
+- **R6.1 was not met in its literal sense at `15a29d1`.** No stage snapshot had been consolidated
+  (§4). It has been since (§12); the 15 frozen records stay separate by design.
 - **No decision is assumed.** None of the 13 decisions has been taken here: the defaults above
   are what happens if nothing is decided, and the recommendations are advice.
 - **Nothing was released, merged or published.**
@@ -523,3 +535,59 @@ The verification found three statements stale or understated, and corrected only
 
 The completion audit's dated sections (§2, §3, §6, at `52fde7b`) stay as recorded: they are the
 audit's own evidence, and this document supersedes them for the current state.
+
+## 12. Addendum: R6.1 completed literally (2026-11-25)
+
+The one deviation of §4 was closed after this audit. Documentation, tests and the link checker
+only; no application code, migration, CI workflow or frozen record changed, and nothing was
+merged, released or published.
+
+**What was consolidated, and where it went:**
+
+| Snapshot | Now in | Redirect kept for |
+|---|---|---|
+| `backend-architecture.md` (Stage 3B.12) | [architecture.md](architecture.md) §2.1–§2.6, §4.1, §8 | `api/openapi.py`'s comment |
+| `analytics-design.md` (Stage 3B.10) | [architecture.md §5](architecture.md#analytics-stage-3b10) | `schemas/analytics.py`'s comment |
+| `ml-design.md` (Stage 3B.11) | [architecture.md §5](architecture.md#the-statistical-intelligence-layer-stage-3b11) | `ml/__init__.py`'s comment; the frozen `development-roadmap.md` and `ml-dataset-design.md` |
+| `database-design.md` (Stage 2A) | [the database README](../database/README.md#schema-design), §1–§13 | links and comments citing "approved decision N" |
+| `database-implementation.md` (Stage 2B/2C) | [the database README](../database/README.md#implementation) | the frozen `development-roadmap.md` |
+| `roadmap-v2.0.md` (proposal, 2026-10-10) | [roadmap-v2.0-execution.md §5](roadmap-v2.0-execution.md#5-the-proposal-as-written-on-2026-10-10) | links to the proposal |
+
+Every redirect maps each old section to its new place and names `2a07405` as the commit at which
+the snapshot as last written can be read. The index's statuses are now **23 current, 15 frozen
+records and 6 redirects**; no document is superseded.
+
+**Verified:**
+- **Commits:** `a3d996f` (consolidation and redirects), `03c58de` (tests, index, mutations),
+  pushed fast-forward from `2a07405`.
+- **CI:** run [45649328024](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45649328024)
+  on `03c58de`, all 8 jobs: backend `10597 passed, 58 skipped`, `1096 passed`, `1259 passed`;
+  frontend 1,444 tests in 37 files; `999 mutations: 999 killed`; `51 of 51 checks passed`; ruff,
+  `589 files already formatted`, mypy on 559 source files. Dependency scans
+  [45649324135](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45649324135)
+  (`push`) and [45649327867](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45649327867)
+  green.
+- **Retrieval pin:** the run re-measured the C.4 report as `4a697ebd…`, the pinned report
+  exactly. Recomputed at both commits, the fingerprint's 78 sources and its `sources`
+  (`7063845d…`) and `metrics` (`b1bb3912…`) digests equal the pin; no Markdown file is a source.
+  No re-pin.
+- **Frozen records:** the 15 frozen records, the pinned report and its environment, the sign-off,
+  the review sheet and the review form are byte-identical to `2a07405`.
+- **Tests:** `tests/backend/test_snapshot_consolidation.py` (redirects, moved sections, the
+  decision register, quoted constants); the three banner checks of `test_consolidated_docs.py`
+  follow their statements; `scripts/doc_links.py` now also checks the database README (47 files).
+  A8-M17 and M21–M23 re-pinned with notes; stage R6.1 adds 12 mutations: 999 in all.
+
+**Completion accounting:** unchanged at 56 / 71 = 78.9%, strict 54 / 71 = 76.1%, decision-free
+56 / 56 = 100%, v2.0 matrix 14 / 29 = 48.3%, and 13 open decisions — now under either reading of
+R6.1.
+
+**Documentation limitations that remain:**
+- **Decision numbering.** Six code comments cite "approved decision N" with numbers that do not
+  match the design register; they appear to follow the revision-2 approval message, which is not
+  in the repository. The database README's §12 gives the key; neither side was renumbered.
+- **Frozen records keep their stage-dated figures**, as frozen records do; current figures are in
+  the root README, computed by tests.
+- **The database README is long** (the whole Stage 2 design record now lives in it), and the
+  Stage 2A table specifications describe the sixteen core tables only; the thirteen later tables
+  are described in the documents the README's table names.
