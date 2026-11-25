@@ -35,7 +35,7 @@ in the [model card](ml-model-card.md).
 | Assessing the machine-learning claims | [ml-model-card.md](ml-model-card.md), then [ml-serving.md](ml-serving.md) §9 |
 | Assessing the copilot's evaluation | [copilot-evaluation.md](copilot-evaluation.md), then [retrieval-evaluation-decision.md](retrieval-evaluation-decision.md) |
 | Working on the front end | [../frontend/README.md](../frontend/README.md), then [ui-redesign.md](ui-redesign.md) |
-| Checking what is done and what is left | [project-completion-audit.md](project-completion-audit.md) and [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) |
+| Checking what is done and what is left | [project-closure-audit.md](project-closure-audit.md), then [project-completion-audit.md](project-completion-audit.md) and [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) |
 
 ## Status of a document
 
@@ -144,6 +144,7 @@ The roadmaps, oldest first. Each later one starts where the earlier one stopped.
 | [roadmap-v2.0.md](roadmap-v2.0.md) | The v2.0 line, R0–R6, as proposed on 2026-10-10 | Superseded for status by [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) |
 | [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) | R0–R6 task by task: done, done now, or waiting on a decision; the decision briefs (§3) and the stage log (§4) | Current |
 | [project-completion-audit.md](project-completion-audit.md) | The 71-item completion audit: what is verified, the open user decisions, risks and open defects | Current |
+| [project-closure-audit.md](project-closure-audit.md) | The closure audit at `15a29d1`: the verified repository state, what each completion metric measures, R6.1's deviation, the 13-decision register and the production-readiness gaps | Current |
 
 ## Elsewhere in the repository
 

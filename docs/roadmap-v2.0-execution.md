@@ -9,8 +9,9 @@
 ## 1. Constraints every row is held to
 
 - **The retrieval fingerprint.** Decision F (§12 of
-  [retrieval-evaluation-decision.md](retrieval-evaluation-decision.md)) fingerprints 47 files and
-  every migration version: among them `.github/workflows/ci.yml`, `pyproject.toml`, both lock
+  [retrieval-evaluation-decision.md](retrieval-evaluation-decision.md)) fingerprinted 47 files and
+  every migration version when this was written (at `15a29d1`: 55 files and all 23 migrations,
+  78 sources): among them `.github/workflows/ci.yml`, `pyproject.toml`, both lock
   files, `backend/app/main.py`, `api/v1/router.py`, `api/deps.py`, `models/enums.py` and
   `repositories/hotel.py`. Changing any of them makes the pinned C.4 report stale, and CI fails
   until it is re-measured and re-pinned (§12.6). Such changes are therefore **batched into one
@@ -56,7 +57,7 @@ policy, Ext = external service, Rel = release.
 | **R4.3a** metrics exporter | none | partly | F (`main.py`) | where alerts go | — | §3.12; **the local half done in A5**: an internal `GET /metrics` (Prometheus text, bounded labels, no nginx route, 404 to proxied requests); alerting still needs the decision |
 | **R4.3b** SBOM, image signing | none | SBOM partly; signing no | CI, Ext | a signing identity and a registry | — | §3.12; **the SBOM half done in A3**: a CycloneDX 1.6 SBOM per built image in CI, validated and kept as an artifact; signing and publication still need the decision |
 | **R5** portfolio view, exports, payments, OTA import, sentiment, housekeeping | none | no | — | the audience (roadmap §5) | — | **decision** — §3.13 |
-| **R6.1** consolidate the stage-snapshot documents | 36 files under `docs/` | yes | — | — | links resolve; doc tests pass | **done in A8** ([project-completion-audit.md](project-completion-audit.md) §4.7): [docs/README.md](README.md) indexes all 43 documents with a status (22 current, 15 frozen records, 6 superseded); `scripts/doc_links.py` checks every relative link and anchor and that every document is reachable, in CI; 8 contradictions resolved and guarded. No document was merged or moved, because paths are cited by fingerprinted sources and tests, and the stage records are kept as written |
+| **R6.1** consolidate the stage-snapshot documents | 36 files under `docs/` | yes | — | — | links resolve; doc tests pass | **met as an index in A8, not as a merge — a deviation** ([project-completion-audit.md](project-completion-audit.md) §4.7, [project-closure-audit.md](project-closure-audit.md) §4). Done: [docs/README.md](README.md) indexed all 43 documents with a status (22 current, 15 frozen records, 6 superseded; the closure audit has since made 23 current); `scripts/doc_links.py` checks every relative link and anchor and that every document is reachable, in CI; 8 contradictions resolved and guarded. **Not done:** no stage snapshot was merged into a current-state document, and none was moved, because paths are cited by fingerprinted sources and tests, and the stage records are kept as written. The completion figures count this row as done on A8's acceptance criteria |
 | **R6.2** README counts that cannot go stale | hand-maintained, and stale (`7984 backend tests`) | yes | — | — | a test computes each count from the code | **done in E3**: paths, operations, authenticated operations, tables, model modules (was stale: 15, really 17), migrations and head, approved values; test-suite sizes removed and forbidden |
 | §2.5 frontend suite on a loaded machine | `--maxWorkers=2` by hand | yes | — | — | Vitest config, frontend CI job | **done in E3**: `maxWorkers: '50%'` in `vitest.config.ts` |
 
