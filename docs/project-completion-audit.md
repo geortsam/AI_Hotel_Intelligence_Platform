@@ -16,15 +16,16 @@
   - All 13 navigation areas are built and tested.
   - Every V1 and V2 stage (1 through 7.14) is implemented.
   - The UI redesign is finished (UI-0 to UI-10, plus your two decisions).
-  - Every v2.0 roadmap task that needs no business decision is done, with one exception: R6.1, consolidating the documentation.
-- **CI is green on HEAD.** Run [44829954281](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/44829954281) passed all 7 jobs:
+  - Every v2.0 roadmap task that needs no business decision is done; R6.1, consolidating the documentation, was the last (A8, §4.7).
+- **CI was green on the audited HEAD.** Run [44829954281](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/44829954281) passed all 7 jobs:
   - 12,482 backend tests passed and 58 were skipped;
   - 1,353 frontend tests passed;
   - all 891 recorded mutations were killed;
   - ruff, the format check and mypy were clean;
   - the migration chain was checked, the image was verified at runtime, and both builds were reproducible.
-- **Overall completion:** 77.5% of all tracked work (55 of 71 items, §8; 66.2% at the audit, 67.6% after A1, 69.0% after A6, 70.4% after A4, 71.8% after A7, 73.2% after A2). For work that needs no decision from you, the figure is 98.2% (55 of 56).
-- **Remaining autonomous work:** 1 task (§4; A1, A6, A4, A7, A2, A3, A5 and A9 are done, A2 with the trigger correction of §4.6). It is not a functional gap: documentation consolidation (A8 = R6.1).
+- **Latest CI:** run [45509617278](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45509617278) on `b6c6c65` (A8) passed all 8 jobs, with 987 of 987 mutations killed (§4.7). The run above is the audit's own evidence and stays as recorded.
+- **Overall completion:** 78.9% of all tracked work (56 of 71 items, §8; 66.2% at the audit, 67.6% after A1, 69.0% after A6, 70.4% after A4, 71.8% after A7, 73.2% after A2, 77.5% after the A2 correction, A3, A5 and A9). For work that needs no decision from you, the figure is 100% (56 of 56).
+- **Remaining autonomous work:** none (§4; A1–A9 are all done, A2 with the trigger correction of §4.6, A8 in §4.7). What remains waits on your decisions.
 - **Remaining user decisions:** 13 open decision briefs (§5). Three of them have a do-nothing default.
 - **Readiness:** the platform is demo ready. It is not production ready, and §7 says exactly why.
 
@@ -81,7 +82,7 @@ licences, served from `/assets/`) and "Forecasting" (`a08bb95`).
 
 ---
 
-## 4. Remaining autonomous engineering tasks — 1 (A1, A6, A4, A7, A2, A3, A5 and A9 done)
+## 4. Remaining autonomous engineering tasks — 0 (A1–A9 all done)
 
 ### 4.1 A1, done (2026-11-22)
 
@@ -463,9 +464,118 @@ A3, A5 and A9 are counted complete from this run, and A2's limitation is closed 
 - The metrics live in the worker's memory and start at zero with it; nothing scrapes them, and no alert exists (§3.12).
 - The responsive audit runs Chromium only, as UI-10 did.
 
-### 4.7 The remaining task
+### 4.7 A8 (R6.1), done (2026-11-25)
 
-It can be done without a decision from you.
+Index and checker `305f50c`; contradictions `b6c6c65`. Documentation and tests only: no
+application code, no migration, no `ci.yml`, no fingerprinted source, so no re-pin.
+
+**What R6.1 asked, and how it was met.** The roadmap's wording is "consolidate the
+stage-snapshot documents into a small set of maintained current-state documents". The A8 prompt
+set the acceptance criteria: one entry point, no duplicated or contradictory statement, every
+relative link and anchor resolving, every document reachable from the index, and no frozen,
+checksum-bound or test-anchored text changed by accident. It also forbade rewriting historical
+records and asked that documents move only where navigation clearly improves. **No document was
+merged or moved**, and this is the one place the result differs from the roadmap's literal
+wording:
+- nine documents are cited by path from fingerprinted sources (`ci.yml`, the knowledge endpoint
+  and service, `core/metrics.py`, migration `0023` and the C.4 harness modules), so moving one
+  means a stale path or a re-pin;
+- about forty test and harness modules, and four mutation constants, name documents by path;
+- the stage snapshots are records of their stages. Merging them into current-state documents
+  would rewrite them.
+
+The small set of maintained documents is instead made explicit. `docs/README.md` gives each of
+the 43 documents one entry with a status: **22 current**, **15 frozen records** and
+**6 superseded**. Each superseded snapshot already says so at its top and names its current
+replacement, and the index names it too.
+
+**The index**, `docs/README.md`:
+- who reads what;
+- the three statuses, and why a stage-dated figure in a frozen record is not a contradiction;
+- the documents grouped as operators and deployment, machine learning and evaluation, frontend
+  and UI, architecture and technical decisions, and roadmap and completion audit;
+- the READMEs elsewhere in the repository;
+- the records bound by checksum: §3.5 of the decision record, the review sheet and form, and the
+  pinned report.
+
+The root README links to it from its table of contents and from its project structure.
+
+**The checker**, `scripts/doc_links.py` (`python -m scripts.doc_links`). It uses the standard
+library only, runs offline and needs no new dependency. Over the root README and the 44 Markdown
+files under `docs/` it checks:
+- **every relative link**: inline links and images, an image inside a link, reference
+  definitions, and HTML `href` and `src`. The target must exist with its exact case (a Windows
+  checkout would otherwise pass a link Linux breaks) and stay inside the repository;
+- **every anchor**: a fragment into Markdown must name a heading, slugged as GitHub slugs it
+  (duplicates numbered, setext headings included), or an explicit HTML `id` or `name`. A
+  fragment into any other file must be a line anchor;
+- **reachability**: every document under `docs/` is reachable from the index, and every other
+  file there (the 12 screenshots) is linked from some checked file.
+
+Fenced code and inline code are not read as links, and external links are not fetched. On
+`b6c6c65` it checks 45 files, 471 relative links and 87 anchors, with no problem.
+`tests/backend/test_doc_links.py` runs it over the repository, holds the index to one entry and
+one status per document, and plants each fault in a temporary tree: a broken file link, a
+missing heading anchor, an unreachable document, a wrong-case link, a link out of the
+repository, a non-line anchor into a source file, an unlinked screenshot and a missing index.
+CI runs it in backend shard 1, where every new test file lands.
+
+**Contradictions resolved: 8.** In each case the canonical source was existing code or a document
+that tests hold to the code. Only the non-canonical text changed.
+
+| Statement | Where | Canonical source | Resolution |
+|---|---|---|---|
+| `database/` holds "11 linear Alembic revisions" | README, project structure | the migration chain: 23, head `0023_auth_sessions` | now stated in the form `test_migrations_and_head` checks |
+| the `backend/app` tree: `api/ 29`, `models/ 15` …, without `llm/`, `copilot/`, `knowledge/`, `jobs/` | README, project structure | the packages on disk | every package, its `.py` files, checked by `test_backend_package_file_counts` |
+| "V2 — NOT IMPLEMENTED" over a table of further ML modules | README | the README's own "V2 complete through Stage 7.14" | heading names what it lists |
+| "Current state (through Stage 7.14)": 64 paths / 99 operations | `architecture.md` | the README's 68 / 104, computed by `test_readme_counts` | dated "At Stage 7.14", pointing to the README |
+| head `0023` "over 28 application tables" | `database-design.md` | `database/README.md`'s 29, pinned by `test_model_metadata` | 29 |
+| "Sixteen migrations have been added after `0001`", listing twenty-two | `database-implementation.md` | the migration chain | twenty-two |
+| "no LLM anywhere in the repository" | `ml-design.md` | the copilot, since Stage 7.7 | the layer uses none; the copilot is named |
+| "33 test files and 1,263 tests" (frontend) | `tests/README.md` | CI: 37 files, 1,444 tests | no suite size stated, as in the README (R6.2) |
+
+`tests/backend/test_consolidated_docs.py` holds each prose fix with a positive control. The
+counts are held by `test_readme_counts.py`.
+
+**Mutations:** stage A8, 24 recorded:
+- M1–M13: the checker stops looking for each fault;
+- M14–M17: the documentation gains each fault the checker exists to catch;
+- M18–M24: each resolved contradiction returns.
+
+All 24 were killed locally, and 987 mutations were killed in CI run
+[45509617278](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45509617278).
+
+**Frozen records, byte for byte.** At `80ddaee` and at `b6c6c65`:
+- `retrieval-evaluation-decision.md`: `24a0534d…c33d78`;
+- §3.5, the signed rubric: `c86149e5…72141458`;
+- the review sheet: `fb79c2fb…22e7908`;
+- the sign-off: `dc524890…e336994`;
+- the dataset: `de0cd929…b509739`;
+- the pinned report: `4a697ebd…a89be2b`;
+- its environment: `8594fc28…665b656c`.
+
+The fingerprint's 78 sources were re-measured at `b6c6c65`: no document is among them, and the
+`sources` and `metrics` digests equal the pin. Image inputs are unaffected, because the root
+`.dockerignore` excludes `docs/` and the frontend builds from `frontend/`.
+
+**CI:** [45509617278](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45509617278) on `b6c6c65`, all 8 jobs green:
+- 12,861 backend tests passed (shards 10,506 + 1,096 + 1,259; 58 skipped), with the pin gate passing against the unchanged pin;
+- frontend: `Test Files 37 passed (37)`, `Tests 1444 passed (1444)`;
+- `987 mutations: 987 killed, 0 survived, 0 not run, 0 errors`;
+- image reproducibility and the SBOM checks, Docker runtime verification, and the responsive audit at 51 of 51.
+
+The dependency scan ran beside it: [45509613321](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45509613321) (`push`) and [45509617354](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45509617354) (`pull_request`), both green.
+
+A8 is counted complete from this run.
+
+**Limitations:**
+- External links are not checked: the check is offline by design.
+- Anchors follow GitHub's slugging; another renderer may slug differently.
+- A frozen record's stage-dated figures stay as written. The index says which documents those are.
+
+### 4.8 The task table
+
+Every task is done.
 **F** marks a change to a fingerprinted file (`ci.yml`, `main.py`), which needs a re-measure and
 re-pin under §12.6. Tasks marked F are batched into one re-pin stage.
 
@@ -478,11 +588,11 @@ re-pin under §12.6. Tasks marked F are batched into one re-pin stage.
 | ~~A5~~ | **Done** (§4.6): `GET /metrics`, Prometheus text, request counts and latencies by method, route template and status; no nginx route, 404 to proxied requests, proven on the real stack; 12 mutations; CI 45476887432 green | — | — | — | — |
 | ~~A6~~ | **Done** (§4.2): README, screenshots, frontend README, execution log, `ui-redesign.md`, 12 regression tests, 8 mutations | — | — | — | — |
 | ~~A7~~ | **Done** (§4.4): placeholder scaffolding removed, Not Found styles identical (digests), the navigation-to-route guarantee now a test, 4 mutations; CI 45150368805 green | — | — | — | — |
-| A8 | **R6.1: consolidate the stage-snapshot documents** (35 under `docs/` + 6 under `docs/deployment/`) into a small set of maintained current-state documents | documentation | docs; tests that pin doc text (`test_current_state_docs.py`, `test_runbook_schema_facts.py`, others) must move with it | A6 (fix the facts before moving them) | the earlier "14 of 29" counted R6.1 as done; it was never performed |
+| ~~A8~~ | **Done** (§4.7): `docs/README.md` indexes all 43 documents with a status (22 current, 15 frozen records, 6 superseded); `scripts/doc_links.py` checks every relative link and anchor and that every document is reachable; 8 contradictions resolved and guarded; no document merged or moved; 24 mutations; CI 45509617278 green | — | — | — | — |
 | ~~A9~~ | **Done** (§4.6): CI job `responsive-audit`, UI-10's 51 checks in a digest-pinned Playwright 1.65.0 Chromium against the seeded Compose stack; the Analytics expenses-table clipping reported separately and still open; 13 mutations; CI 45476887432 green | — | — | — | — |
 
-**Dependencies, so no work is done twice:** A6 → A8, which is last so the facts move only once.
-Nothing here waits on you.
+**Dependencies, so no work was done twice:** A6 → A8, which came last so the facts moved only
+once. Nothing here waits on you.
 
 ---
 
@@ -545,7 +655,7 @@ implemented and green (§3).
 
 | Level | Verdict | Basis |
 |---|---|---|
-| **Feature complete** | **Yes, for the decided scope.** | Every built area and every V1/V2 stage is implemented and tested; every decision-free roadmap task is done except R6.1. Stage 7.15 and R5 are out of reach only because they wait on decisions, not because engineering is missing |
+| **Feature complete** | **Yes, for the decided scope.** | Every built area and every V1/V2 stage is implemented and tested; every decision-free roadmap task is done, R6.1 last (A8). Stage 7.15 and R5 are out of reach only because they wait on decisions, not because engineering is missing |
 | **Demo ready** | **Yes.** | Deterministic demo seed, synthetic data labelled as such, the full stack runs locally and in CI, and the UI is finished at three widths. The README's screenshots and copilot description are current (A6). One caveat: the copilot can be shown only with a configured model, which under your constraints means local Ollama |
 | **Production ready** | **No.** | No password reset, email or deactivation flow (R1.2); manual certificates, local-only backups, no point-in-time recovery (R4.1); an internal metrics endpoint but no alerting (R4.3, A5); Dependabot inactive, though every push is scanned (R0.4a, A2); intelligence accuracy unproven on real data (R2); open registration by design. Each needs a decision in §5 or a task in §4 |
 
@@ -564,6 +674,7 @@ implemented and green (§3).
 | Unauthenticated health probes | low (reachable only through nginx, no business data) | documented |
 | Unproven model accuracy and unevaluated copilot | credibility, not safety: never claimed | decisions §3.7, §3.8 |
 | README contradiction about LLM capability | resolved, and now guarded by a test | A6 done (§4.2) |
+| Documentation that contradicts itself or the code; broken links | 8 contradictions resolved and guarded; every relative link, anchor and document's reachability checked in CI | A8 done (§4.7) |
 
 ---
 
@@ -573,15 +684,17 @@ implemented and green (§3).
 
 | Class | Rows | Count |
 |---|---|---|
-| 1. Implemented and verified | R0.3, R0.4b, R1.1, R1.3a, R1.4b, R1.4c, R1.5, R3.3, R4.2, R6.2, §2.5 | **11** |
+| 1. Implemented and verified | R0.3, R0.4b, R1.1, R1.3a, R1.4b, R1.4c, R1.5, R3.3, R4.2, R6.1 (A8), R6.2, §2.5 | **12** |
 | 2. Implemented, the rest awaiting verification on `main` or a decision | R0.2 (the mirror covers the Docker jobs; `services:` containers still pull from Docker Hub — §3.2), R0.4a (config tested; inert until on `main` — §3.3) | **2** |
-| 3. Autonomous engineering | R6.1 (= A8) | **1** |
+| 3. Autonomous engineering | none: R6.1 (A8) is done | **0** |
 | 4. Blocked by a decision, or by a row that is | decisions: R0.1, R1.2, R1.3b, R1.4a, R2.1, R2.3, R3.1, R3.4, R4.1, R4.3a, R4.3b, R5; dependent: R2.2, R2.4, R3.2 | **15** |
 | 5. Explicitly out of scope | none — R5 becomes out of scope if you confirm the portfolio audience (§3.13) | **0** |
 
 **Reconciliation with the earlier "14 / 29 engineering, 15 decision-dependent":** the 15 is
 confirmed exactly. The 14 becomes **13**, because R6.1 was counted as done when only the execution
 matrix had been written; the stage-snapshot documents were never consolidated (35 + 6 remain).
+A8 has since done R6.1 (§4.7), by indexing and correcting them rather than merging them, so the
+13 is now 14.
 R4.3a and R4.3b each have a local half that needs no decision, now tracked as A5 and A3. The rows
 themselves stay decision-dependent.
 
@@ -595,8 +708,8 @@ themselves stay decision-dependent.
 | R3 data model | 4 | 1 | 25.0 |
 | R4 operations | 4 | 1 | 25.0 |
 | R5 product reach | 1 | 0 | 0.0 |
-| R6 + §2.5 documentation and engineering | 3 | 2 | 66.7 |
-| **v2.0 total** | **29** | **13** | **44.8** |
+| R6 + §2.5 documentation and engineering | 3 | 3 | 100.0 |
+| **v2.0 total** | **29** | **14** | **48.3** |
 
 ### 8.2 Whole project
 
@@ -607,14 +720,14 @@ implemented and its CI is green.
 |---|---|---|---|
 | Delivered platform stages: the README's 13 stage groups (1 → 7.1–7.4) + V2 stages 7.5–7.14 (10). Stage 7.15 is counted under R2.3 | 23 | 23 | 100.0 |
 | UI redesign UI-0 … UI-10 | 11 | 11 | 100.0 |
-| v2.0 roadmap matrix | 29 | 13 | 44.8 |
+| v2.0 roadmap matrix | 29 | 14 | 48.3 |
 | Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 8 | 100.0 |
-| **All** | **71** | **55** | **77.5** |
+| **All** | **71** | **56** | **78.9** |
 
-- **Within the decided scope** (the 15 decision-blocked rows removed): 55 of 56 = **98.2%**. The one left is R6.1 (A8).
-- **Strict** (R0.2 and R0.4a not counted as done): 53 of 71 = 74.6%.
+- **Within the decided scope** (the 15 decision-blocked rows removed): 56 of 56 = **100%**. Nothing decision-free is left.
+- **Strict** (R0.2 and R0.4a not counted as done): 54 of 71 = 76.1%.
 - A3 and A5 are the local halves of R4.3b and R4.3a. They count as audit findings; the two roadmap rows stay decision-blocked, because signing and alert destinations still need §3.12.
-- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. After A6 (`485dd15`, CI 45046381883 green): 49 / 71 = 69.0%. After A4 (`4c9a2a0`, CI 45063664775 green): 50 / 71 = 70.4%. After A7 (`5125b5b`, CI 45150368805 green): 51 / 71 = 71.8%. After A2 (`6a91858`, re-pinned in `fda8718` and `9fec999`, CI 45398092718 green): 52 / 71 = 73.2%. After the A2 correction, A3, A5 and A9 (`7858c27`, re-pinned in `133c5be` and `f4503e4`, CI 45476887432 green): 55 / 71 = 77.5%.
+- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. After A6 (`485dd15`, CI 45046381883 green): 49 / 71 = 69.0%. After A4 (`4c9a2a0`, CI 45063664775 green): 50 / 71 = 70.4%. After A7 (`5125b5b`, CI 45150368805 green): 51 / 71 = 71.8%. After A2 (`6a91858`, re-pinned in `fda8718` and `9fec999`, CI 45398092718 green): 52 / 71 = 73.2%. After the A2 correction, A3, A5 and A9 (`7858c27`, re-pinned in `133c5be` and `f4503e4`, CI 45476887432 green): 55 / 71 = 77.5%. After A8 (`305f50c` and `b6c6c65`, no re-pin, CI 45509617278 green): 56 / 71 = 78.9%, 56 / 56 = 100%, strict 54 / 71 = 76.1%.
 
 ---
 
@@ -626,5 +739,5 @@ implemented and its CI is green.
 4. ~~**A7**~~ — done (§4.4).
 5. ~~**A2**~~ — done (§4.5), re-pinned on its own as its stage prompt asked; its trigger corrected in §4.6.
 6. ~~**Re-pin batch: A2 correction + A3 + A5 + A9**~~ — done (§4.6), re-pinned once under §12.6.
-7. **A8 / R6.1** — consolidate the documents, last, so the facts move only once.
+7. ~~**A8 / R6.1**~~ — done (§4.7), last, so the facts moved only once.
 8. Then whatever your answers to §5 unlock. The first steps toward production are §3.4 (R1.2) and §3.11 (R4.1).
