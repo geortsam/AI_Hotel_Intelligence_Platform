@@ -26,7 +26,7 @@
 - **Latest CI:** run [45649328024](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45649328024) on `03c58de` (R6.1, the literal consolidation) passed all 8 jobs, with 999 of 999 mutations killed (§4.7). The run above is the audit's own evidence and stays as recorded.
 - **Overall completion:** 78.9% of all tracked work (56 of 71 items, §8; 66.2% at the audit, 67.6% after A1, 69.0% after A6, 70.4% after A4, 71.8% after A7, 73.2% after A2, 77.5% after the A2 correction, A3, A5 and A9). For work that needs no decision from you, the figure is 100% (56 of 56).
 - **Remaining autonomous work:** none (§4; A1–A9 are all done, A2 with the trigger correction of §4.6, A8 in §4.7). What remains waits on your decisions.
-- **Remaining user decisions:** 13 open decision briefs (§5). Three of them have a do-nothing default.
+- **Remaining user decisions:** 12 open decision briefs (§5). Three of them have a do-nothing default. A thirteenth, R5, was decided by the project owner on 2026-11-25: **Academic / Professional Portfolio** ([roadmap-v2.0-execution.md §3.13](roadmap-v2.0-execution.md#313-product-reach-r5)).
 - **Readiness:** the platform is demo ready. It is not production ready, and §7 says exactly why.
 
 ---
@@ -620,7 +620,7 @@ once. Nothing here waits on you.
 
 ---
 
-## 5. Remaining user decisions — 13 open briefs
+## 5. Remaining user decisions — 12 open briefs, R5 decided
 
 The briefs are in [roadmap-v2.0-execution.md §3](roadmap-v2.0-execution.md#3-decision-briefs).
 None can be inferred safely, because each one commits you to something outside the repository:
@@ -640,13 +640,19 @@ money, an account, a legal permission, a public act, or a change to past publish
 | §3.10 R3.4 | FX rates | only matters if multi-currency properties are a target | **transaction currency only (no action)** |
 | §3.11 R4.1 | domain, ACME CA account, off-site storage | external accounts and credentials | manual certificates, local backups |
 | §3.12 R4.3 | where alerts go; which registry images are published and signed in | external destinations and a signing identity | none (A3/A5 build the local halves) |
-| §3.13 R5 | the audience (portfolio/academic or pilot hotel) | sets the scope of R1 and R5 | none of R5 |
+| §3.13 R5 | ~~the audience (portfolio/academic or pilot hotel)~~ **Decided 2026-11-25 by the project owner: Academic / Professional Portfolio** | — | — |
 
 **Rows blocked by these, not decisions themselves:** R2.2 (waits on R2.1), R2.4 (waits on R2.2)
-and R3.2 (waits on a checkout flow, R5).
+and R3.2 (waits on a checkout flow, R5). Under the R5 decision all three are deferred, outside the current target.
 
 **Decisions already made (2026-11-20):** Inter + Source Serif 4, and "Forecasting". Both are
 implemented and green (§3).
+
+**R5, decided 2026-11-25:** Academic / Professional Portfolio — university presentation,
+professional portfolio, GitHub showcase and technical demonstration; no conditions. A scope
+decision: it implements nothing and decides none of the twelve briefs above. Its record, what it
+puts in and out of scope, and how it bears on each of the twelve are in
+[roadmap-v2.0-execution.md §3.13](roadmap-v2.0-execution.md#313-product-reach-r5).
 
 ---
 
@@ -711,8 +717,8 @@ implemented and green (§3).
 | 1. Implemented and verified | R0.3, R0.4b, R1.1, R1.3a, R1.4b, R1.4c, R1.5, R3.3, R4.2, R6.1 (A8 as an index, then the snapshots merged — §4.7), R6.2, §2.5 | **12** |
 | 2. Implemented, the rest awaiting verification on `main` or a decision | R0.2 (the mirror covers the Docker jobs; `services:` containers still pull from Docker Hub — §3.2), R0.4a (config tested; inert until on `main` — §3.3) | **2** |
 | 3. Autonomous engineering | none: R6.1 (A8) is done | **0** |
-| 4. Blocked by a decision, or by a row that is | decisions: R0.1, R1.2, R1.3b, R1.4a, R2.1, R2.3, R3.1, R3.4, R4.1, R4.3a, R4.3b, R5; dependent: R2.2, R2.4, R3.2 | **15** |
-| 5. Explicitly out of scope | none — R5 becomes out of scope if you confirm the portfolio audience (§3.13) | **0** |
+| 4. Blocked by a decision, or by a row that is | decisions: R0.1, R1.2, R1.3b, R1.4a, R2.1, R2.3, R3.1, R3.4, R4.1, R4.3a, R4.3b; dependent: R2.2, R2.4, R3.2 | **14** |
+| 5. Explicitly out of scope | R5 — decided 2026-11-25: Academic / Professional Portfolio, so none of R5's features is required (§3.13) | **1** |
 
 **Reconciliation with the earlier "14 / 29 engineering, 15 decision-dependent":** the 15 is
 confirmed exactly. The 14 becomes **13**, because R6.1 was counted as done when only the execution
@@ -748,7 +754,8 @@ implemented and its CI is green.
 | Audit findings not already on the roadmap (A1–A7, A9; A8 is R6.1) | 8 | 8 | 100.0 |
 | **All** | **71** | **56** | **78.9** |
 
-- **Within the decided scope** (the 15 decision-blocked rows removed): 56 of 56 = **100%**. Nothing decision-free is left, under either reading of R6.1.
+- **Within the decided scope** (the 15 rows removed that wait on a decision or are out of scope — 14 and R5 since its decision): 56 of 56 = **100%**. Nothing decision-free is left, under either reading of R6.1.
+- **R5 decided (2026-11-25).** The decision moves R5 from waiting to out of scope and leaves every figure above unchanged: R5 was never counted as done, and the denominator stays 71. Open decisions fall from 13 to 12.
 - **Strict** (R0.2 and R0.4a not counted as done): 54 of 71 = 76.1%.
 - **With R6.1 read literally** (the stage snapshots merged into current-state documents): the same figures, since the merge was done on 2026-11-25 (§4.7, last part). Before it, the literal reading gave 55 of 71 = 77.5%, 55 of 56 = 98.2%, strict 53 of 71 = 74.6%, and the v2.0 matrix 13 of 29 = 44.8%.
 - A3 and A5 are the local halves of R4.3b and R4.3a. They count as audit findings; the two roadmap rows stay decision-blocked, because signing and alert destinations still need §3.12.

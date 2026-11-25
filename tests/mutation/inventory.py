@@ -10949,6 +10949,57 @@ STAGE_R6_1 = [
 ]
 
 
+# --- R5 decided: Academic / Professional Portfolio, recorded in the decision register ----------
+
+_R5_TESTS = "tests/backend/test_decision_records.py::"
+_R5_REGISTER = "docs/roadmap-v2.0-execution.md"
+
+
+def _r5(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """The R5 record goes missing, another brief is marked decided, or a summary miscounts."""
+    return Mutation(
+        f"R5-M{number}", "R5", breaks, one(path, old, new), tuple(_R5_TESTS + k for k in killers)
+    )
+
+
+STAGE_R5 = [
+    _r5(
+        1,
+        "R5 is recorded as proposed rather than decided",
+        _R5_REGISTER,
+        "- **Status:** Decided.",
+        "- **Status:** Proposed.",
+        "test_r5_is_recorded_as_decided_by_the_project_owner",
+        "test_r5_decides_no_other_brief",
+    ),
+    _r5(
+        2,
+        "R0.1 is marked decided, as if R5 had authorised a merge or a release",
+        _R5_REGISTER,
+        "- **Your action:** say which tag and on which commit; the tag itself is one command.\n",
+        "- **Your action:** say which tag and on which commit; the tag itself is one command.\n"
+        "- **Status:** Decided.\n",
+        "test_r5_decides_no_other_brief",
+    ),
+    _r5(
+        3,
+        "a row the portfolio target defers loses its mark, as if it were deleted from scope",
+        _R5_REGISTER,
+        "**decision** — §3.11; **deferred, outside the current R5 target** (§3.13) |",
+        "**decision** — §3.11 |",
+        "test_the_rows_the_decision_defers_stay_in_the_matrix_marked",
+    ),
+    _r5(
+        4,
+        "the completion audit counts thirteen open decisions again",
+        "docs/project-completion-audit.md",
+        "## 5. Remaining user decisions — 12 open briefs, R5 decided",
+        "## 5. Remaining user decisions — 13 open briefs",
+        "test_the_audits_count_the_open_decisions_as_the_register_does",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -11009,4 +11060,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_A9,
     *STAGE_A8,
     *STAGE_R6_1,
+    *STAGE_R5,
 )

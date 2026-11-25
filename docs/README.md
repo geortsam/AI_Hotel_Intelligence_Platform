@@ -147,7 +147,7 @@ The roadmaps, oldest first. Each later one starts where the earlier one stopped.
 | [v2-roadmap.md](v2-roadmap.md) | Stage 7.1's V2 plan: Stages 7.2–7.14 done, the conditional 7.15 not triggered | Current |
 | [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) | The v2.0 line, R0–R6: task by task, done, done now, or waiting on a decision; the decision briefs (§3), the stage log (§4) and the proposal as written on 2026-10-10 (§5) | Current |
 | [project-completion-audit.md](project-completion-audit.md) | The 71-item completion audit: what is verified, the open user decisions, risks and open defects | Current |
-| [project-closure-audit.md](project-closure-audit.md) | The closure audit at `15a29d1`: the verified repository state, what each completion metric measures, the 13-decision register and the production-readiness gaps; §12, R6.1's deviation closed by the literal merge | Current |
+| [project-closure-audit.md](project-closure-audit.md) | The closure audit at `15a29d1`: the verified repository state, what each completion metric measures, the 13-decision register and the production-readiness gaps; §12, R6.1's deviation closed by the literal merge; §13, R5 decided (Academic / Professional Portfolio) | Current |
 
 ## Redirects
 

@@ -42,26 +42,26 @@ policy, Ext = external service, Rel = release.
 | **R0.4a** Dependabot | none | config yes; activation no | Ext (on `main`) | merging to `main` | config parses; it is inert off the default branch | **config done in E5** (`.github/dependabot.yml`: pip, npm, Docker, Compose and Actions, weekly, grouped, 3 open at most; a test checks every manifest is covered); activation is the §3.3 decision |
 | **R0.4b** transitive Python pinning | **done** (`53fdd0e`, hashed universal locks) | — | — | — | — | done |
 | **R1.1** `HttpOnly; Secure; SameSite` cookie session, refresh, CSRF | none; token in `sessionStorage` (architecture §7.1) | yes | Sec, F (`deps.py`) | — | backend and frontend suites, CSRF and revocation tests, mutations; re-pin | **done in E8**: `POST /auth/session`, `/session/refresh`, `/session/end`; `HttpOnly` access and refresh cookies, a CSRF token derived from the session; `auth_sessions` (migration 0023) with rotation and replay detection; a password change ends every session; the browser no longer holds a credential |
-| **R1.2** email channel, password reset, deactivation | none | no | Sec, Ext, M | who may deactivate a global `users` row; an email provider | — | **decision** — §3.4 |
+| **R1.2** email channel, password reset, deactivation | none | no | Sec, Ext, M | who may deactivate a global `users` row; an email provider | — | **decision** — §3.4; **deferred, outside the current R5 target** (§3.13) |
 | **R1.3a** platform-administrator bootstrap | out-of-band SQL | yes | Sec | — | CLI tests against the scratch database, audit row, mutations | **done in E4**: `python -m app.jobs.platform_admin grant/revoke EMAIL`, audited (`platform_admin.granted`/`.revoked`, migration `0021`); keeps the last administrator unless `--allow-none` |
 | **R1.3b** platform-administrator API | none | no | Sec | who may grant and revoke | — | **decision** — §3.5 |
-| **R1.4a** shared rate limiter (Redis or PostgreSQL) | per-process | no | Ext or M, F | the backing store; a deployment change | — | **decision** — §3.6 |
+| **R1.4a** shared rate limiter (Redis or PostgreSQL) | per-process | no | Ext or M, F | the backing store; a deployment change | — | **decision** — §3.6; **deferred, outside the current R5 target** (§3.13) |
 | **R1.4b** request-size limits | **done** (`bcdabeb`) | — | — | — | — | done |
 | **R1.4c** 429 declared in OpenAPI | declared on the rate-limited routes (login, copilot, conversations, knowledge) | yes | — | — | a test that every limited route declares 429 | **done in E2**: all 11 limited routes declare it; the limited surface is pinned |
 | **R1.5** `hotels.timezone` against IANA names | any text accepted, unknown zones fall back to UTC | yes | — (schema only) | — | API tests, mutations | **done in E2** |
-| **R2.1** a real or realistic data source | none verified (R2.4 feasibility `5b754f3`) | no | — | a dataset and its licence, or a pilot hotel | — | **decision** — §3.7 |
-| **R2.2** accuracy and drift protocols on that data | blocked by R2.1 | no | — | R2.1 | — | blocked |
-| **R2.3** live copilot evaluation, then Stage 7.15 | local Ollama pilots only; paid run excluded | no | Ext (paid) | spending; real documents | — | **decision** — §3.8 |
-| **R2.4** serve 7/14/28-day models; settle `daily_hotel_metrics` | offline only; table reserved | no | M, F | R2.2's evidence | — | blocked |
-| **R3.1** room-status history (`room_blocks`) | open decision 6, deferred | no | M, F | the block model and its constraint | — | **decision** — §3.9 |
-| **R3.2** pending holds with expiry | decision 12: when a checkout flow exists | no | M, F | a checkout flow (R5) | — | blocked |
+| **R2.1** a real or realistic data source | none verified (R2.4 feasibility `5b754f3`) | no | — | a dataset and its licence, or a pilot hotel | — | **decision** — §3.7; **deferred, outside the current R5 target** (§3.13) |
+| **R2.2** accuracy and drift protocols on that data | blocked by R2.1 | no | — | R2.1 | — | blocked; **deferred, outside the current R5 target** (§3.13) |
+| **R2.3** live copilot evaluation, then Stage 7.15 | local Ollama pilots only; paid run excluded | no | Ext (paid) | spending; real documents | — | **decision** — §3.8; **deferred, outside the current R5 target** (§3.13) |
+| **R2.4** serve 7/14/28-day models; settle `daily_hotel_metrics` | offline only; table reserved | no | M, F | R2.2's evidence | — | blocked; **deferred, outside the current R5 target** (§3.13) |
+| **R3.1** room-status history (`room_blocks`) | open decision 6, deferred | no | M, F | the block model and its constraint | — | **decision** — §3.9; **deferred, outside the current R5 target** (§3.13) |
+| **R3.2** pending holds with expiry | decision 12: when a checkout flow exists | no | M, F | a checkout flow (R5) | — | blocked; **deferred, outside the current R5 target** (§3.13: no checkout flow is planned) |
 | **R3.3** `updated_at` and `If-Match` on the global catalogues | not present (H6 covers hotel-scoped resources) | yes | M, F | — | migration on CI and scratch, API tests, mutations; re-pin | **done in E7**: migration `0022_catalogue_versions` (an `updated_at` and the shared trigger on `amenities`, `revenue_categories`, `expense_categories`; no `created_at`); the three PATCHes take `If-Match` (412 `STALE_UPDATE`, lock then compare); the platform page sends the loaded version and offers a reload |
-| **R3.4** FX rates | decision 14: transaction currency only | no | M | multi-currency properties | — | **decision** — §3.10 |
-| **R4.1** ACME certificates; off-site encrypted backups, PITR | manual certificates; local backups | no | Ext | a domain, a CA account, off-site storage | — | **decision** — §3.11 |
+| **R3.4** FX rates | decision 14: transaction currency only | no | M | multi-currency properties | — | **decision** — §3.10; **deferred, outside the current R5 target** (§3.13) |
+| **R4.1** ACME certificates; off-site encrypted backups, PITR | manual certificates; local backups | no | Ext | a domain, a CA account, off-site storage | — | **decision** — §3.11; **deferred, outside the current R5 target** (§3.13) |
 | **R4.2** a scheduler for the purges and the audit archival | operator commands | yes | — | — | job tests; Compose stays valid in CI | **done in E6**, opt-in: `python -m app.jobs.scheduler` runs the audit archival (new command `app.jobs.archive_audit_events`) and the three purges every 24 hours, a failed job stopping neither the others nor the schedule; `docker-compose.scheduler.yml` adds it as a service, the base stack unchanged; runbook `docs/deployment/retention-scheduler.md` |
-| **R4.3a** metrics exporter | none | partly | F (`main.py`) | where alerts go | — | §3.12; **the local half done in A5**: an internal `GET /metrics` (Prometheus text, bounded labels, no nginx route, 404 to proxied requests); alerting still needs the decision |
-| **R4.3b** SBOM, image signing | none | SBOM partly; signing no | CI, Ext | a signing identity and a registry | — | §3.12; **the SBOM half done in A3**: a CycloneDX 1.6 SBOM per built image in CI, validated and kept as an artifact; signing and publication still need the decision |
-| **R5** portfolio view, exports, payments, OTA import, sentiment, housekeeping | none | no | — | the audience (roadmap §5) | — | **decision** — §3.13 |
+| **R4.3a** metrics exporter | none | partly | F (`main.py`) | where alerts go | — | §3.12; **the local half done in A5**: an internal `GET /metrics` (Prometheus text, bounded labels, no nginx route, 404 to proxied requests); alerting still needs the decision; **deferred, outside the current R5 target** (§3.13) |
+| **R4.3b** SBOM, image signing | none | SBOM partly; signing no | CI, Ext | a signing identity and a registry | — | §3.12; **the SBOM half done in A3**: a CycloneDX 1.6 SBOM per built image in CI, validated and kept as an artifact; signing and publication still need the decision; **deferred, outside the current R5 target** (§3.13) |
+| **R5** portfolio view, exports, payments, OTA import, sentiment, housekeeping | none | no | — | the audience (roadmap §5) | — | **decided 2026-11-25: Academic / Professional Portfolio** (§3.13). None of R5's features is built or required for that target; they stay listed, deferred |
 | **R6.1** consolidate the stage-snapshot documents | 36 files under `docs/` | yes | — | — | links resolve; doc tests pass | **done, literally** (2026-11-25; CI green, §4, the R6.1 row). In two parts. **A8** (`305f50c`, `b6c6c65`): [docs/README.md](README.md), one entry and one status per document; `scripts/doc_links.py`, every relative link and anchor and every document's reachability, in CI; 8 contradictions resolved and guarded. That alone met the row as an index, not as a merge — the deviation recorded in [project-completion-audit.md](project-completion-audit.md) §4.7 and [project-closure-audit.md](project-closure-audit.md) §4. **The literal merge** (2026-11-25, from `a3d996f`): the six superseded stage snapshots consolidated into three maintained documents — [architecture.md](architecture.md) (the backend at 3B.12, analytics at 3B.10, the statistical layer at 3B.11), the [database README](../database/README.md) (the Stage 2A design and the Stage 2B/2C build) and §5 of this file (the proposal) — and each old path a redirect with a section map, so the code comments and frozen records that cite them still resolve. The 15 frozen records are untouched, and no fingerprinted source changed |
 | **R6.2** README counts that cannot go stale | hand-maintained, and stale (`7984 backend tests`) | yes | — | — | a test computes each count from the code | **done in E3**: paths, operations, authenticated operations, tables, model modules (was stale: 15, really 17), migrations and head, approved values; test-suite sizes removed and forbidden |
 | §2.5 frontend suite on a loaded machine | `--maxWorkers=2` by hand | yes | — | — | Vitest config, frontend CI job | **done in E3**: `maxWorkers: '50%'` in `vitest.config.ts` |
@@ -176,6 +176,64 @@ you would have to do.
 - **Recommended:** as a portfolio project, none of R5 is needed.
 - **Your action:** name the audience.
 
+**Decision record (2026-11-25).**
+
+- **Decision:** Academic / Professional Portfolio.
+- **Status:** Decided.
+- **Decision authority:** Project owner.
+- **Date:** 2026-11-25. It supersedes the undecided state above, which is kept as the brief.
+- **Scope:** University presentation, professional portfolio, GitHub showcase and technical
+  demonstration.
+- **Conditions:** none.
+
+**In scope for this target:** complete and reliable application functionality; a professional
+frontend and responsive UI; backend API and database integrity; AI/ML functionality with
+reproducible evaluation; copilot functionality with documented capabilities and limitations;
+automated tests, CI and dependency vulnerability scanning; a reproducible development and demo
+setup; high-quality architecture, installation and user documentation; screenshots, a demo
+workflow and portfolio presentation material; clear security boundaries and honest disclosure of
+limitations.
+
+**Not required for this target** — deferred, not deleted. Each keeps its row in §2, its brief and
+its ID, and returns if the target changes or another approved requirement needs it: a commercial
+domain; production certificate management; a commercial email provider; off-site production
+backups; enterprise monitoring and alerting; multi-hotel commercial operations; production
+deployment and operational support. R5's own features (portfolio view, exports, payments, OTA
+import, sentiment, housekeeping) are not built and not required.
+
+**What this decision does not authorise.** Weakening security; removing tests or quality gates;
+faking AI evaluation results; presenting synthetic evaluation data as real hotel data; claiming
+production readiness; removing known limitations or defects from the documentation (the Analytics
+expenses-table clipping stays listed until it is fixed and verified); changing the frozen
+retrieval evaluation artifacts; re-pinning the retrieval evaluation outside §12.6. It is a scope
+decision: it starts no implementation, and it decides none of the twelve briefs below.
+
+**Consequences for the other twelve briefs.** Each stays open; this classifies how the portfolio
+target bears on it, and decides nothing.
+
+| Brief | Bearing on the portfolio target | Why |
+|---|---|---|
+| §3.1 R0.1 release | **Recommended for portfolio quality** | The GitHub showcase presents `main`, which is `2a14dc6` and lacks everything on PR #1. Merging PR #1 and tagging still need your separate, explicit authorization |
+| §3.2 R0.2 Docker Hub | **Independent of R5** | CI reliability. The default (keep the mirror) suffices |
+| §3.3 R0.4a Dependabot | **Recommended for portfolio quality** | Visible dependency hygiene on a showcase repository; the dependency scan already runs on every push. Activates only on `main`, so it follows §3.1 |
+| §3.4 R1.2 reset, email, deactivation | **Deferred: pilot/production only** | Needs a commercial email provider, which this target excludes. The gap stays disclosed (README, closure audit G1) |
+| §3.5 R1.3b administrator API | **Independent of R5** | A security-policy choice; the default (the audited operator command) suffices |
+| §3.6 R1.4a shared limiter | **Deferred: pilot/production only** | Matters only past one API worker; the demo stack runs one |
+| §3.7 R2.1 data source | **Deferred: pilot/production only** | Evaluation is reproducible on the published dataset; real data would only support accuracy claims, which stay unmade and disclosed |
+| §3.8 R2.3 live copilot evaluation, Stage 7.15 | **Deferred: pilot/production only** | Paid runs are excluded by your evaluation constraints and no real documents exist; the local Ollama evaluation and its documented limits are what the target needs |
+| §3.9 R3.1 room-status history | **Deferred: pilot/production only** | An accuracy refinement that changes past figures; the current-inventory basis is stated in every payload |
+| §3.10 R3.4 FX | **Deferred: pilot/production only** | Only multi-currency commercial properties need it; per-currency figures are correct as they are |
+| §3.11 R4.1 certificates, backups | **Deferred: pilot/production only** | Production certificates and off-site backups are excluded by this target; CI proves TLS and backup → restore locally |
+| §3.12 R4.3 alerts, registry, signing | **Deferred: pilot/production only** | Enterprise alerting and publishing are excluded; the local halves (A3 SBOMs, A5 `/metrics`) are done |
+
+**Rows this defers outright:** R3.2 (pending holds) waited on a checkout flow, and the target plans
+none, so it is deferred outside the target; R2.2 and R2.4 wait on R2.1 and are deferred with it.
+
+**What the target still asks of the repository** — engineering, not decisions, and not started by
+this record: the Analytics expenses-table clipping at 1440px is a defect in "a professional,
+responsive UI" and should be fixed and verified; and the README has screenshots and run
+instructions but no single scripted demo walkthrough or presentation summary.
+
 ## 4. Stage log
 
 | Stage | Tasks | Commit | CI |
@@ -203,6 +261,7 @@ you would have to do.
 | A2 fix, A3, A5, A9 | **A2 correction:** the dependency scan moved to its own workflow, `dependency-audit.yml`, on every push to any branch and on pull requests to `main` (it had run only on `main` and pull requests, so A2's "every push" was not met until now); trigger tests and 4 mutations. **A3:** Syft 1.57.1 CycloneDX 1.6 SBOMs of both builds of both images, schema-validated, checked against the lock and nginx pin, identical across builds, no host path or credential, artifact `sbom-<run>-<attempt>`. **A5:** internal `GET /metrics` (request counts and latencies, route templates only), unreachable through nginx. **A9:** CI job `responsive-audit` runs UI-10's 51 checks in a digest-pinned Playwright Chromium on the seeded stack; the Analytics expenses-table clipping is reported separately, still open. Mutation stages A2 +4, A3 12, A5 12, A9 13: 963 in all. Re-pinned once by §12.6 (measured sections unchanged; A5's metrics modules fingerprinted, 55 sources) | `7858c27`, re-pin `133c5be` + `f4503e4` | [45463427755](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45463427755): red only on the pin gate, as expected; [45476887432](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476887432): all 8 green, 963/963, 51/51; scan [45476878966](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476878966) (`push`) and [45476887470](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476887470) green |
 | A8 | R6.1: the documentation index `docs/README.md` (one entry and one status per document); `scripts/doc_links.py`, an offline checker of every relative link, anchor and the index's reach; 8 contradictions resolved (README project structure and V2 heading, `architecture.md`, `database-design.md`, `database-implementation.md`, `ml-design.md`, `tests/README.md`) and guarded by tests; mutation stage A8, 24 recorded: 987 in all. No fingerprinted source changed, so no re-pin | `305f50c`, `b6c6c65` | [45509617278](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45509617278): all 8 green, 987/987, 51/51; scan [45509613321](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45509613321) (`push`) and [45509617354](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45509617354) green |
 | R6.1 | R6.1 read literally: the six superseded stage snapshots consolidated into `architecture.md` (§2.1–§2.6, §4.1, §5, §8), the database README (schema design §1–§13 with a "Now" column and a numbering key for the decision register; the implementation and its Stage 2C verification) and §5 of this file; each old path a redirect; the index's statuses are now Current, Frozen record and Redirect; `scripts/doc_links.py` also checks the database README; A8-M17 and M21–M23 re-pinned to where their statements moved; mutation stage R6.1, 12 recorded: 999 in all. No fingerprinted source changed, so no re-pin | `a3d996f`, `03c58de` | [45649328024](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45649328024): all 8 green, 999/999, 51/51, the C.4 report re-measured byte-identical to the pin; scan [45649324135](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45649324135) (`push`) and [45649327867](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45649327867) green |
+| R5 decision | R5 decided by the project owner: **Academic / Professional Portfolio** (§3.13). Recorded with its scope, what it does not authorise and how it bears on the twelve open briefs; R5 and the twelve deferred rows marked in §2, none deleted. A scope decision: no implementation, no other decision taken; documentation and its tests only, no fingerprinted source | the commit that adds this row | that commit's own CI run |
 
 ## 5. The proposal as written on 2026-10-10
 
@@ -365,7 +424,7 @@ proposal valued most. Each task's outcome is its row in §2.
 ### 5.5 The decisions it asked for before any stage started
 
 - **Audience:** a portfolio or academic project, or a real pilot hotel? This sets how far R1 and
-  R5 go. *Still open: §3.13.*
+  R5 go. *Decided 2026-11-25 by the project owner: Academic / Professional Portfolio (§3.13).*
 - **Data:** is a real data source available for R2, and is a paid LLM evaluation acceptable?
   *Still open: §3.7 and §3.8; your evaluation constraints exclude paid runs.*
 - **Naming:** keep "v2.0 / R-stages" as above, or extend the existing "V2" stage numbering.

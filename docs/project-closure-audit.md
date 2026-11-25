@@ -15,6 +15,10 @@
 > The six stage snapshots were merged into maintained documents (`a3d996f`, `03c58de`; CI run
 > 45649328024 green). The sections below are the audit as written at `15a29d1`; where they
 > describe the deviation as open, §12 is the current state.
+>
+> **R5 decided (2026-11-25), [§13](#13-addendum-r5-decided-2026-11-25).** The project owner chose
+> **Academic / Professional Portfolio**. Twelve decisions remain open; where the sections below
+> count thirteen, §13 is the current state.
 
 ## 1. Executive summary
 
@@ -30,7 +34,7 @@
   both its push run and its pull-request run.
 - **The retrieval pin holds.** In that run the C.4 report was re-measured and came out
   byte-identical to the pinned report.
-- **13 decisions are yours** (§7). Each one commits you to something outside the repository:
+- **13 decisions were yours at `15a29d1`** (§7); R5 has since been decided, so 12 are open (§13). Each one commits you to something outside the repository:
   money, an account, a legal permission, a public act, or a change to past figures.
 - **The platform is demo ready and is not production ready** (§8). One known defect is open:
   the Analytics expenses table is clipped at 1440px (§9).
@@ -41,7 +45,7 @@
 | Strict completion | **54 / 71 = 76.1%** | the same, without the two half-activated rows |
 | Decision-free work | **56 / 56 = 100%** | only the items that need no decision from you |
 | v2.0 roadmap matrix | **14 / 29 = 48.3%** | only the roadmap's 29 rows |
-| Open user decisions | **13** | decision briefs §3.1–§3.13 |
+| Open user decisions | **12** (13 at `15a29d1`; R5 decided since, §13) | decision briefs §3.1–§3.12 |
 
 These measure different things and are not combined (§3). All four rows count R6.1 as done; read
 literally, each fell by that one row at `15a29d1` (§3.3). Since the merge (§12) the two readings
@@ -459,6 +463,10 @@ That includes every new migration, since every migration version is fingerprinte
   scraping configuration, `docs/deployment/reproducibility.md` and the README.
 
 ### §3.13 R5 — product reach
+
+**Decided 2026-11-25 by the project owner: Academic / Professional Portfolio** (§13). The entry
+below is the brief as it stood at `15a29d1`.
+
 - **Meaning:** the audience. Portfolio or academic, or a pilot hotel.
 - **Options:**
   - **Portfolio.** None of R5 is needed, and R5 becomes out of scope.
@@ -518,7 +526,8 @@ The platform is **not production ready**. Each gap is supported by the repositor
   language model's answer quality is established.
 - **R6.1 was not met in its literal sense at `15a29d1`.** No stage snapshot had been consolidated
   (§4). It has been since (§12); the 15 frozen records stay separate by design.
-- **No decision is assumed.** None of the 13 decisions has been taken here: the defaults above
+- **No decision is assumed.** None of the 13 decisions was taken by this audit; R5 was since
+  decided by the project owner (§13), and the other 12 stay open: the defaults above
   are what happens if nothing is decided, and the recommendations are advice.
 - **Nothing was released, merged or published.**
 
@@ -591,3 +600,37 @@ R6.1.
 - **The database README is long** (the whole Stage 2 design record now lives in it), and the
   Stage 2A table specifications describe the sixteen core tables only; the thirteen later tables
   are described in the documents the README's table names.
+
+## 13. Addendum: R5 decided (2026-11-25)
+
+| Field | Record |
+|---|---|
+| Decision ID | §3.13 R5 — product reach |
+| Decision | **Academic / Professional Portfolio** |
+| Status | **Decided** |
+| Decision authority | Project owner |
+| Date | 2026-11-25 |
+| Scope | University presentation, professional portfolio, GitHub showcase and technical demonstration |
+| Conditions | None |
+
+The full record — what is in and out of scope, what it does not authorise, and how it bears on
+each of the other twelve briefs — is
+[roadmap-v2.0-execution.md §3.13](roadmap-v2.0-execution.md#313-product-reach-r5), the decision
+register. It is a scope decision: it implements nothing, and none of the twelve is decided by it.
+
+**What changes in this audit:**
+- **Open decisions: 12**, not 13. R0.1 still needs your separate, explicit authorization to merge
+  PR #1 or release anything.
+- **Readiness levels (§8) are unchanged in substance.** The platform is still not production
+  ready, and nothing here claims it is. The gaps that only a pilot or production needs (G1–G5,
+  G7–G12) are deferred, outside the current target; they stay listed. G13, "open registration",
+  is by design for a self-hosted demonstration.
+- **Deferred rows:** R1.2, R1.4a, R2.1, R2.2, R2.3, R2.4, R3.1, R3.2, R3.4, R4.1, R4.3a, R4.3b and
+  R5's own features. Each keeps its ID, row and brief.
+- **Still asked of the repository by this target**, as engineering, not decisions: the Analytics
+  expenses-table clipping (§9) — still open — and a single scripted demo walkthrough, which the
+  README does not have.
+
+**Completion accounting:** unchanged. 56 / 71 = 78.9% overall, strict 54 / 71 = 76.1%,
+decision-free 56 / 56 = 100%, v2.0 matrix 14 / 29 = 48.3%. R5 was never counted as done; its
+decision moves it from waiting to out of scope, and the 71-item denominator stays.
