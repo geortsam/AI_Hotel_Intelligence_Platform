@@ -41,7 +41,9 @@ def test_the_check_reads_the_root_readme_and_every_document_under_docs(
         path.relative_to(REPOSITORY_ROOT).as_posix()
         for path in (REPOSITORY_ROOT / "docs").rglob("*.md")
     )
-    assert report.files == ["README.md", *on_disk]
+    # The database README holds the schema's design and implementation record since R6.1, so it
+    # is checked like the root README.
+    assert report.files == ["README.md", "database/README.md", *on_disk]
     assert "docs/README.md" in on_disk and "docs/deployment/tls.md" in on_disk
     # Hundreds of relative links and dozens of anchors: a parser that matched nothing would pass
     # the check above, and fails here.
@@ -75,6 +77,11 @@ def test_the_index_gives_every_document_exactly_one_entry() -> None:
     assert {doc: entries[doc] for doc in sorted(documents)} == dict.fromkeys(sorted(documents), 1)
 
 
+#: Since R6.1 consolidated the six superseded snapshots, a document is current, a frozen
+#: record, or a redirect to where its content went. "Superseded" is no longer a status.
+STATUSES = ("Current", "Frozen record", "Redirect")
+
+
 def test_every_index_entry_states_one_of_the_three_statuses() -> None:
     text = (REPOSITORY_ROOT / doc_links.INDEX).read_text(encoding="utf-8")
     rows = [
@@ -85,12 +92,18 @@ def test_every_index_entry_states_one_of_the_three_statuses() -> None:
     assert rows
     for row in rows:
         status = row.rsplit("|", 2)[1].strip()
-        assert status.startswith(("Current", "Frozen record", "Superseded")), row
+        assert status.startswith(STATUSES), row
 
 
 def test_the_root_readme_points_to_the_index() -> None:
     readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
     assert "](docs/README.md)" in readme
+
+
+def test_the_checker_reads_the_maintained_documents_outside_docs(tmp_path: Path) -> None:
+    """A broken link in the database README is caught, as one in the root README is."""
+    healthy(tmp_path, {"database/README.md": "# Database\n\nSee [the design](design.md).\n"})
+    assert problems(tmp_path) == ["database/README.md:3: design.md: no such file"]
 
 
 # --- the checker, on planted faults --------------------------------------------------------------

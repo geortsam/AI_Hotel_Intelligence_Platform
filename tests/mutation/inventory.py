@@ -10576,12 +10576,25 @@ _A8_CONSOLIDATED = "tests/backend/test_consolidated_docs.py::"
 _A8_INDEX = "docs/README.md"
 #: The real documentation's own test: no broken link or anchor, nothing unreachable.
 _A8_DOCS_CLEAN = "test_the_documentation_has_no_broken_link_anchor_or_unreachable_document"
+_A8_MOVED = (
+    "Re-pinned by R6.1 (2026-11-25): the stage snapshot whose banner this edited was consolidated "
+    "into a maintained document and became a redirect. The corrected statement moved with it; "
+    "the mutation applies the same edit there, and its killer, renamed for the new location, "
+    "asserts the same thing."
+)
 
 
-def _a8(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+def _a8(
+    number: int, breaks: str, path: str, old: str, new: str, *killers: str, note: str = ""
+) -> Mutation:
     """The checker stops looking, or the documentation gains the fault it exists to catch."""
     return Mutation(
-        f"A8-M{number}", "A8", breaks, one(path, old, new), tuple(_A8_TESTS + k for k in killers)
+        f"A8-M{number}",
+        "A8",
+        breaks,
+        one(path, old, new),
+        tuple(_A8_TESTS + k for k in killers),
+        note=note,
     )
 
 
@@ -10723,12 +10736,26 @@ STAGE_A8 = [
         17,
         "an index entry carries none of the three statuses",
         _A8_INDEX,
-        "| Superseded for status by [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) |",
-        "| See [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) |",
+        "| Redirect to [roadmap-v2.0-execution.md §5]"
+        "(roadmap-v2.0-execution.md#5-the-proposal-as-written-on-2026-10-10) |",
+        "| See [roadmap-v2.0-execution.md §5]"
+        "(roadmap-v2.0-execution.md#5-the-proposal-as-written-on-2026-10-10) |",
         "test_every_index_entry_states_one_of_the_three_statuses",
+        note=(
+            "Re-pinned by R6.1 (2026-11-25): the row it edited said 'Superseded for status by'; "
+            "the proposal is now a redirect, and the three statuses are Current, Frozen record "
+            "and Redirect. The edit still strips the status from the same row."
+        ),
     ),
     *(
-        Mutation(f"A8-M{number}", "A8", breaks, one(path, old, new), (killer,))
+        Mutation(
+            f"A8-M{number}",
+            "A8",
+            breaks,
+            one(path, old, new),
+            (killer,),
+            note=_A8_MOVED if number in (21, 22, 23) else "",
+        )
         for number, breaks, path, old, new, killer in (
             (
                 18,
@@ -10754,31 +10781,34 @@ STAGE_A8 = [
                 "Alembic migrations — 11 linear revisions",
                 f"{_README_COUNTS}test_migrations_and_head",
             ),
+            # M21-M23 held the banners of three stage snapshots. R6.1 consolidated the
+            # snapshots (2026-11-25) and their corrected statements moved; each mutation now
+            # breaks the same statement where it lives, with the same edit.
             (
                 21,
-                "the database design's banner gives the table count before R1.1 again",
-                "docs/database-design.md",
-                "> over 29 application tables.",
-                "> over 28 application tables.",
-                f"{_A8_CONSOLIDATED}test_the_database_design_banner_states_the_table_count",
+                "the schema's table count is the one before R1.1 again",
+                "database/README.md",
+                "The schema has 29 application tables:",
+                "The schema has 28 application tables:",
+                f"{_A8_CONSOLIDATED}test_the_database_readme_states_the_table_count",
             ),
             (
                 22,
-                "the database implementation's banner miscounts the later migrations again",
-                "docs/database-implementation.md",
-                "Twenty-two migrations have been added after its",
-                "Sixteen migrations have been added after its",
-                f"{_A8_CONSOLIDATED}"
-                "test_the_database_implementation_banner_counts_the_migrations_after_the_first",
+                "the count of migrations after the first is wrong again",
+                "database/README.md",
+                "Twenty-two migrations have been added after `0001_initial_schema`",
+                "Sixteen migrations have been added after `0001_initial_schema`",
+                f"{_A8_CONSOLIDATED}test_the_database_readme_counts_the_migrations_after_the_first",
             ),
             (
                 23,
-                "the ML design says again that the repository holds no LLM",
-                "docs/ml-design.md",
+                "the statistical layer's sentence says again that the repository holds no LLM",
+                "docs/architecture.md",
                 "a deterministic standard-library baseline that uses no LLM — and",
                 "a deterministic standard-library baseline, with no LLM anywhere in the "
                 "repository — and",
-                f"{_A8_CONSOLIDATED}test_ml_design_no_longer_says_the_repository_holds_no_llm",
+                f"{_A8_CONSOLIDATED}"
+                "test_the_statistical_layer_no_longer_says_the_repository_holds_no_llm",
             ),
             (
                 24,
@@ -10790,6 +10820,131 @@ STAGE_A8 = [
                 f"{_A8_CONSOLIDATED}test_the_tests_readme_states_no_frontend_test_count",
             ),
         )
+    ),
+]
+
+
+# --- R6.1, read literally: the six stage snapshots consolidated, their paths kept as redirects ---
+
+_R61_TESTS = "tests/backend/test_snapshot_consolidation.py::"
+_R61_REDIRECT_TEST = f"{_R61_TESTS}test_a_redirect_is_a_short_map_to_its_destination"
+_R61_SECTIONS_TEST = f"{_R61_TESTS}test_every_section_of_the_snapshots_lives_in_its_destination"
+
+
+def _r61(number: int, breaks: str, path: str, old: str, new: str, *killers: str) -> Mutation:
+    """A redirect grows back, a moved section goes missing, or a quoted figure goes stale."""
+    return Mutation(f"R6.1-M{number}", "R6.1", breaks, one(path, old, new), killers)
+
+
+STAGE_R6_1 = [
+    _r61(
+        1,
+        "the index calls a consolidated snapshot superseded again",
+        _A8_INDEX,
+        "| Redirect to [roadmap-v2.0-execution.md §5]"
+        "(roadmap-v2.0-execution.md#5-the-proposal-as-written-on-2026-10-10) |",
+        "| Superseded by [roadmap-v2.0-execution.md §5]"
+        "(roadmap-v2.0-execution.md#5-the-proposal-as-written-on-2026-10-10) |",
+        f"{_R61_TESTS}test_the_index_marks_exactly_the_six_snapshots_as_redirects",
+        f"{_R61_TESTS}test_no_document_is_superseded_any_more",
+    ),
+    _r61(
+        2,
+        "a redirect grows a section of its own back, a second copy of moved content",
+        "docs/analytics-design.md",
+        "| 8. Deferred to later stages | the same section, and [the database README §8]"
+        "(../database/README.md#8-daily-metrics-strategy) |\n",
+        "| 8. Deferred to later stages | the same section, and [the database README §8]"
+        "(../database/README.md#8-daily-metrics-strategy) |\n\n## 2. Metric definitions\n\n"
+        "Occupancy is counted from the night rows.\n",
+        _R61_REDIRECT_TEST,
+    ),
+    _r61(
+        3,
+        "a redirect no longer names the commit at which its snapshot can be read",
+        "docs/ml-design.md",
+        "(`git show 2a07405:docs/ml-design.md`)",
+        "(`git log -- docs/ml-design.md`)",
+        _R61_REDIRECT_TEST,
+    ),
+    _r61(
+        4,
+        "a section moved from the backend snapshot goes missing from architecture.md",
+        "docs/architecture.md",
+        "### 4.1 Error handling",
+        "### Error handling",
+        _R61_SECTIONS_TEST,
+        f"{_A8_TESTS}{_A8_DOCS_CLEAN}",
+    ),
+    _r61(
+        5,
+        "the design register loses a decision: two rows claim number 19",
+        "database/README.md",
+        "| 20 | **`checked_out` releases inventory",
+        "| 19 | **`checked_out` releases inventory",
+        f"{_R61_TESTS}test_the_design_register_keeps_each_decision_once",
+    ),
+    _r61(
+        6,
+        "the moved statistical-layer text quotes a fallback threshold the code does not use",
+        "docs/architecture.md",
+        "`MIN_BUCKET_OBSERVATIONS` (2)",
+        "`MIN_BUCKET_OBSERVATIONS` (3)",
+        f"{_R61_TESTS}test_the_statistical_layer_quotes_its_own_constants",
+    ),
+    _r61(
+        7,
+        "the moved analytics text quotes a range limit the code does not enforce",
+        "docs/architecture.md",
+        "maximum range is **366 days**",
+        "maximum range is **365 days**",
+        f"{_R61_TESTS}test_analytics_quotes_its_own_range_limit",
+    ),
+    _r61(
+        8,
+        "the link checker stops reading the database README, which now holds the schema record",
+        _A8_CHECKER,
+        'MAINTAINED_OUTSIDE_DOCS: Final = ("database/README.md",)',
+        "MAINTAINED_OUTSIDE_DOCS: Final = ()",
+        f"{_A8_TESTS}test_the_checker_reads_the_maintained_documents_outside_docs",
+        f"{_A8_TESTS}test_the_check_reads_the_root_readme_and_every_document_under_docs",
+    ),
+    _r61(
+        9,
+        "the index drops a redirect, so a path code comments cite is no longer listed",
+        _A8_INDEX,
+        "| [ml-design.md](ml-design.md) | Stage 3B.11: the deterministic statistical intelligence "
+        "layer | Redirect to [architecture.md §5]"
+        "(architecture.md#the-statistical-intelligence-layer-stage-3b11) |\n",
+        "",
+        f"{_R61_TESTS}test_the_index_marks_exactly_the_six_snapshots_as_redirects",
+        f"{_A8_TESTS}test_the_index_gives_every_document_exactly_one_entry",
+    ),
+    _r61(
+        10,
+        "a redirect carries the old stage-snapshot banner again",
+        "docs/database-design.md",
+        "# Database design — moved\n",
+        "# Database design — moved\n\n> **Stage snapshot, not a current-state document.** "
+        "Kept as written.\n",
+        f"{_R61_TESTS}test_no_document_is_superseded_any_more",
+    ),
+    _r61(
+        11,
+        "a code comment cites a decision number the register does not hold",
+        "backend/app/models/finance.py",
+        "Room revenue is NOT posted here (approved decision 21).",
+        "Room revenue is NOT posted here (approved decision 22).",
+        f"{_R61_TESTS}test_every_decision_number_cited_in_code_is_in_the_register",
+    ),
+    _r61(
+        12,
+        "a section of the moved roadmap proposal goes missing",
+        "docs/roadmap-v2.0-execution.md",
+        "### 5.4 The recommended order, as proposed",
+        "### The recommended order",
+        _R61_SECTIONS_TEST,
+        f"{_A8_TESTS}{_A8_DOCS_CLEAN}",
     ),
 ]
 
@@ -10853,4 +11008,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_A5,
     *STAGE_A9,
     *STAGE_A8,
+    *STAGE_R6_1,
 )

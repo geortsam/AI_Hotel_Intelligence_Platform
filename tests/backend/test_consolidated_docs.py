@@ -11,6 +11,11 @@ pass by matching nothing.
 * ``docs/ml-design.md`` said there was no LLM anywhere in the repository; there is a copilot.
 * ``docs/architecture.md`` called its Stage 7.14 counts the current state.
 * ``tests/README.md`` stated a frontend test count that no test computed, long out of date.
+
+The first three documents were consolidated on 2026-11-25 (R6.1, read literally) and are now
+redirects: their corrected statements moved, and are held where they now live -- the table
+count and the migration count in ``database/README.md``, the language-model sentence in
+``docs/architecture.md`` §5 -- just as strictly.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ from app.db.base import Base
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DOCS = REPOSITORY_ROOT / "docs"
+DATABASE_README = REPOSITORY_ROOT / "database" / "README.md"
 VERSIONS = REPOSITORY_ROOT / "database" / "migrations" / "versions"
 TESTS_README = REPOSITORY_ROOT / "tests" / "README.md"
 
@@ -69,14 +75,18 @@ def read(path: Path) -> str:
     return flat(path.read_text(encoding="utf-8"))
 
 
-def test_the_database_design_banner_states_the_table_count() -> None:
-    found = re.findall(r"over (\d+) application tables", read(DOCS / "database-design.md"))
+def test_the_database_readme_states_the_table_count() -> None:
+    """Moved from the Stage 2A record's banner: every "N application tables" is the real N."""
+    found = re.findall(r"(\d+) application tables", read(DATABASE_README))
     assert found and {int(n) for n in found} == {len(Base.metadata.tables)}
 
 
-def test_the_database_implementation_banner_counts_the_migrations_after_the_first() -> None:
-    text = read(DOCS / "database-implementation.md")
-    found = re.findall(r"([A-Za-z]+(?:-[a-z]+)?) migrations have been added after its", text)
+def test_the_database_readme_counts_the_migrations_after_the_first() -> None:
+    """Moved from the Stage 2B record's banner, and spelled as a word, as it was there."""
+    text = read(DATABASE_README)
+    found = re.findall(
+        r"([A-Za-z]+(?:-[a-z]+)?) migrations have been added after `0001_initial_schema`", text
+    )
     assert found
     assert [number_word(word) for word in found] == [len(list(VERSIONS.glob("*.py"))) - 1]
 
@@ -95,8 +105,12 @@ STALE_CURRENT_STATE = "Current state (through Stage 7.14)"
 STALE_FRONTEND_COUNT = re.compile(r"\d[\d,]* test files and \d[\d,]* tests")
 
 
-def test_ml_design_no_longer_says_the_repository_holds_no_llm() -> None:
-    assert STALE_NO_LLM not in read(DOCS / "ml-design.md")
+def test_the_statistical_layer_no_longer_says_the_repository_holds_no_llm() -> None:
+    """The ML design's sentence now lives in architecture.md §5; there, too, it names the layer,
+    not the repository, which holds V2's copilot."""
+    text = read(DOCS / "architecture.md")
+    assert "a deterministic standard-library baseline that uses no LLM" in text
+    assert STALE_NO_LLM not in text
 
 
 def test_architecture_no_longer_calls_its_stage_7_14_counts_current() -> None:

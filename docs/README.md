@@ -4,7 +4,8 @@ The entry point to this repository's documentation: what each document is for, w
 and whether it describes the repository as it is now or records a stage as it was. Every
 Markdown document under `docs/` has exactly one entry in the tables below, and
 `python -m scripts.doc_links` fails if one is not reachable from this page, or if any relative
-link or anchor in `docs/` or the root [README](../README.md) does not resolve.
+link or anchor in `docs/`, the root [README](../README.md) or the
+[database README](../database/README.md) does not resolve.
 
 The root [README](../README.md) is the project overview: what the platform is, how to run it,
 and its [known limitations](../README.md#known-limitations). This page does not repeat it.
@@ -23,6 +24,7 @@ in the [model card](ml-model-card.md).
 - [Frontend and UI](#frontend-and-ui)
 - [Architecture and technical decisions](#architecture-and-technical-decisions)
 - [Roadmap and completion audit](#roadmap-and-completion-audit)
+- [Redirects](#redirects)
 - [Elsewhere in the repository](#elsewhere-in-the-repository)
 - [Frozen and checksum-bound records](#frozen-and-checksum-bound-records)
 
@@ -31,7 +33,7 @@ in the [model card](ml-model-card.md).
 | If you are… | Start with |
 |---|---|
 | Deploying or operating the stack | [first-run-bootstrap.md](deployment/first-run-bootstrap.md), then [backup-restore.md](deployment/backup-restore.md) and [tls.md](deployment/tls.md) |
-| Reviewing the system's design | [architecture.md](architecture.md), then [v2-architecture.md](v2-architecture.md) for the copilot |
+| Reviewing the system's design | [architecture.md](architecture.md), then the [database README](../database/README.md) for the schema and [v2-architecture.md](v2-architecture.md) for the copilot |
 | Assessing the machine-learning claims | [ml-model-card.md](ml-model-card.md), then [ml-serving.md](ml-serving.md) §9 |
 | Assessing the copilot's evaluation | [copilot-evaluation.md](copilot-evaluation.md), then [retrieval-evaluation-decision.md](retrieval-evaluation-decision.md) |
 | Working on the front end | [../frontend/README.md](../frontend/README.md), then [ui-redesign.md](ui-redesign.md) |
@@ -46,11 +48,14 @@ Each entry below carries one of three statuses.
 - **Frozen record** — the record of a stage, a measurement or a decision, kept as written. It is
   accurate about what it records; later work is recorded elsewhere, not by editing it. Some are
   bound by checksum (see [below](#frozen-and-checksum-bound-records)).
-- **Superseded** — a snapshot whose subject has since changed. It says so at its top and names
-  the current document, which the entry below names too.
+- **Redirect** — a path kept because code comments, stage records or links cite it. The stage
+  snapshot that lived there was consolidated into a current document on 2026-11-25 (roadmap
+  R6.1); the page is a short map from each of its old sections to where that section is now,
+  and names the commit at which the snapshot as last written can still be read. There is no
+  longer any superseded snapshot.
 
 Stage-dated figures (a migration head, an operation count, a number of tools) in a frozen record
-or a superseded snapshot are correct for that stage. The current figures are in the root
+are correct for that stage. The current figures are in the root
 [README](../README.md), where `tests/backend/test_readme_counts.py` computes each one from the
 code.
 
@@ -117,13 +122,12 @@ code.
 
 | Document | What it covers | Status |
 |---|---|---|
-| [architecture.md](architecture.md) | The architecture and the rules it is held to: layering, tenancy, authentication, the data and intelligence layers | Current |
+| [architecture.md](architecture.md) | The architecture and the rules it is held to: layering, domains, transactions, tenancy, identifiers, authentication, errors; the analytics definitions, the statistical layer and the demand model (§5); the backend's known limitations and deliberate absences (§8) | Current |
 | [v2-architecture.md](v2-architecture.md) | Stage 7.1's specification of V2 — the LLM boundary, tools, copilot — with numbered amendments that describe what exists | Current, through its amendments |
-| [backend-architecture.md](backend-architecture.md) | The backend at Stage 3B.12 | Superseded by [architecture.md](architecture.md) |
-| [database-design.md](database-design.md) | Stage 2A: the schema design and its rationale | Superseded by [../database/README.md](../database/README.md) for the schema as built |
-| [database-implementation.md](database-implementation.md) | Stage 2B: how that schema was first built | Superseded by [../database/README.md](../database/README.md) |
-| [analytics-design.md](analytics-design.md) | Stage 3B.10: the analytics metrics and their sources; the definitions still hold | Superseded by [architecture.md](architecture.md) |
-| [ml-design.md](ml-design.md) | Stage 3B.11: the deterministic statistical intelligence layer | Superseded by [architecture.md §5](architecture.md#5-data-and-intelligence-architecture) |
+
+The schema — what the migrations build, its design and decisions, and how it was built and is
+tested — is in the [database README](../database/README.md), listed under
+[Elsewhere](#elsewhere-in-the-repository).
 
 ### V2 copilot features
 
@@ -141,16 +145,29 @@ The roadmaps, oldest first. Each later one starts where the earlier one stopped.
 |---|---|---|
 | [development-roadmap.md](development-roadmap.md) | V1, stage by stage, and what was left for V2 | Frozen record of V1 |
 | [v2-roadmap.md](v2-roadmap.md) | Stage 7.1's V2 plan: Stages 7.2–7.14 done, the conditional 7.15 not triggered | Current |
-| [roadmap-v2.0.md](roadmap-v2.0.md) | The v2.0 line, R0–R6, as proposed on 2026-10-10 | Superseded for status by [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) |
-| [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) | R0–R6 task by task: done, done now, or waiting on a decision; the decision briefs (§3) and the stage log (§4) | Current |
+| [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) | The v2.0 line, R0–R6: task by task, done, done now, or waiting on a decision; the decision briefs (§3), the stage log (§4) and the proposal as written on 2026-10-10 (§5) | Current |
 | [project-completion-audit.md](project-completion-audit.md) | The 71-item completion audit: what is verified, the open user decisions, risks and open defects | Current |
 | [project-closure-audit.md](project-closure-audit.md) | The closure audit at `15a29d1`: the verified repository state, what each completion metric measures, R6.1's deviation, the 13-decision register and the production-readiness gaps | Current |
+
+## Redirects
+
+The six stage snapshots consolidated on 2026-11-25 (roadmap R6.1). Each path stays, because code
+comments, frozen records or links cite it; each page maps its old sections to where they are now.
+
+| Document | What it was | Status |
+|---|---|---|
+| [backend-architecture.md](backend-architecture.md) | The backend at Stage 3B.12 | Redirect to [architecture.md](architecture.md) §2, §4.1 and §8 |
+| [analytics-design.md](analytics-design.md) | Stage 3B.10: the analytics metrics and their sources | Redirect to [architecture.md §5](architecture.md#analytics-stage-3b10) |
+| [ml-design.md](ml-design.md) | Stage 3B.11: the deterministic statistical intelligence layer | Redirect to [architecture.md §5](architecture.md#the-statistical-intelligence-layer-stage-3b11) |
+| [database-design.md](database-design.md) | Stage 2A: the schema design and its rationale | Redirect to [the database README](../database/README.md#schema-design) |
+| [database-implementation.md](database-implementation.md) | Stage 2B: how that schema was first built | Redirect to [the database README](../database/README.md#implementation) |
+| [roadmap-v2.0.md](roadmap-v2.0.md) | The v2.0 line, R0–R6, as proposed on 2026-10-10 | Redirect to [roadmap-v2.0-execution.md §5](roadmap-v2.0-execution.md#5-the-proposal-as-written-on-2026-10-10) |
 
 ## Elsewhere in the repository
 
 | Document | What it covers |
 |---|---|
-| [../database/README.md](../database/README.md) | The migrations, the tables they build, and the demo data |
+| [../database/README.md](../database/README.md) | The schema, maintained: what the migrations build now, the Stage 2 design and its rationale with the decision register (§1–§13), how it was built and is tested, and the demo data |
 | [../ml/README.md](../ml/README.md) | The offline `ml` package and its pipelines |
 | [../tests/README.md](../tests/README.md) | The test suites, the mutation checks and how to run them |
 | [../tests/fixtures/sbom/README.md](../tests/fixtures/sbom/README.md) | The SBOM check's fixtures |

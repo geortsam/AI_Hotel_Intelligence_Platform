@@ -1,8 +1,9 @@
 """Relative links and anchors in the documentation, checked (A8, roadmap R6.1).
 
-The documentation is the root ``README.md`` and every Markdown file under ``docs/``; its entry
-point is ``docs/README.md``. Three things are checked, offline and with the standard library
-only:
+The documentation is the root ``README.md``, the database README (``database/README.md``, which
+since R6.1 holds the schema's design and implementation record) and every Markdown file under
+``docs/``; its entry point is ``docs/README.md``. Three things are checked, offline and with the
+standard library only:
 
 1. **Links resolve.** Every relative link -- an inline link or image, a reference definition, an
    HTML ``href`` or ``src`` -- names a file or directory that exists, spelled with the exact case
@@ -44,6 +45,9 @@ REPOSITORY_ROOT: Final = Path(__file__).resolve().parents[1]
 INDEX: Final = "docs/README.md"
 ROOT_README: Final = "README.md"
 DOCS_DIR: Final = "docs"
+#: Maintained documents outside docs/, checked like the root README. Not subject to the
+#: reachability rule, which is about docs/ only; the index links them anyway.
+MAINTAINED_OUTSIDE_DOCS: Final = ("database/README.md",)
 
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _INLINE_CODE = re.compile(r"(`+)(.+?)\1")
@@ -196,8 +200,10 @@ def anchors(text: str) -> set[str]:
 
 
 def documentation_files(root: Path) -> list[str]:
-    """The checked files: the root README and every Markdown file under docs/, sorted."""
+    """The checked files: the root README, the maintained documents outside docs/, and every
+    Markdown file under docs/, sorted."""
     files = [ROOT_README] if (root / ROOT_README).is_file() else []
+    files += [name for name in MAINTAINED_OUTSIDE_DOCS if (root / name).is_file()]
     docs = root / DOCS_DIR
     if docs.is_dir():
         files += sorted(
