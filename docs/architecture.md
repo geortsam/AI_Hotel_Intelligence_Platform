@@ -1,15 +1,17 @@
 # Architecture
 
-This document describes the architecture of the system as it stands at V1, and the rules it is
-held to. Where something is planned rather than built, it says so in those words.
+This document describes the architecture of the system as it is, and the rules it is held to.
+Where something is planned rather than built, it says so in those words. Where a passage records
+the stage that introduced something, or a figure true only at one stage, it names the stage.
 
 It was originally written as a statement of intent before the code existed. It is now a
 description of what is there: every rule below is enforced by code and asserted by the test
-suite. The stage-dated companions -- [`backend-architecture.md`](backend-architecture.md),
-[`database-design.md`](database-design.md), [`database-implementation.md`](database-implementation.md),
-[`analytics-design.md`](analytics-design.md) and [`ml-design.md`](ml-design.md) -- are snapshots
-of the stage each one names, kept as the record of how the system was built. This document and
-the runbooks under [`deployment/`](deployment/) are the ones maintained as current.
+suite. On 2026-11-25 (roadmap R6.1) it absorbed three stage snapshots that had stopped being
+maintained: the backend at Stage 3B.12 (now §2.1–§2.6, §4.1 and §8), the analytics design of
+Stage 3B.10 and the statistical intelligence layer of Stage 3B.11 (both now in §5). The schema's
+design and implementation records went to [the database README](../database/README.md) the same
+day. Their old paths are short redirects. This document, the database README and the runbooks
+under [`deployment/`](deployment/) are the ones maintained as current.
 
 ---
 
@@ -212,6 +214,206 @@ append-only audit trail already did — they can make a hotel undeletable: `DELE
 still answers 409 rather than cascading. See [v2-architecture.md](v2-architecture.md) §10. See [knowledge-documents.md](knowledge-documents.md) and
 [copilot-conversations.md](copilot-conversations.md).
 
+### 2.1 Domains
+
+Stage 3B built the domain API one domain per stage, over the Stage 2 schema:
+
+| Domain | Stage | Scope | Lifecycle |
+|---|---|---|---|
+| Hotels | 3B.1 | root tenant | CRUD, delete RESTRICTed by dependents |
+| Room types | 3B.2 | per hotel, keyed by `code` | CRUD |
+| Rooms | 3B.3 | per hotel, keyed by `room_number` | CRUD |
+| Amenities | 3B.4 | **global catalogue** + per-room-type assignment | CRUD + assign/unassign |
+| Guests | 3B.5 | per hotel | CRUD |
+| Bookings | 3B.6 | per hotel, with allocations and priced nights | CRUD |
+| Payments | 3B.7 | per booking | **append-only** |
+| Reviews | 3B.8 | per stay (singleton) + hotel-wide listing | create + moderate, no delete |
+| Financial ledger | 3B.9 | revenue/expenses per hotel; **global** categories | ledger **append-only**, categories CRUD |
+| Analytics | 3B.10 | per hotel | **read-only** — §5 |
+| Intelligence | 3B.11 | per hotel | **read-only** — §5 |
+
+At the end of Stage 3B.12 that was 38 paths and 68 operations, with no authentication at all.
+V1 then added authentication and membership, platform administration, availability search, the
+booking state machine and stay operations, and the audit trail; V2 and the v2.0 line added the
+routes in the table above and the cookie session. The routers are the modules under
+`backend/app/api/v1/endpoints/`, and the current path and operation counts are in the
+[README](../README.md), where a test computes them from the OpenAPI document.
+
+Three collections sit outside the hotel hierarchy — `amenities`, `revenue-categories`,
+`expense-categories` — and only because the **schema** models them as global: none of those
+three tables has a `hotel_id` column. `tests/backend/test_architecture_audit.py` asserts that
+justification against the models rather than taking it on trust, and requires every other domain
+collection to be hotel-scoped.
+
+### 2.2 What each layer owns, and how that is enforced
+
+```
+router  →  service  →  repository  →  SQLAlchemy  →  PostgreSQL
+```
+
+| Layer | Owns | Must not |
+|---|---|---|
+| Router | HTTP: paths, status codes, query/path binding | build queries, hold a `Session`, commit, raise `HTTPException`, import a model or repository |
+| Service | domain rules, **transaction boundaries**, SQLSTATE translation, orchestration | construct SQLAlchemy queries, import FastAPI |
+| Repository | queries; `flush` when the database must assign something | `commit`, `rollback`, translate domain errors, know about HTTP |
+
+`tests/backend/test_architecture_audit.py` enforces this **by discovery**: it walks
+`app.api.v1.endpoints`, `app.repositories` and `app.services` with `pkgutil` and audits every
+module found, so a domain added later is covered the day it appears. The checks are AST-based.
+Text scanning produced four false positives early in the project — `RoomRevenueRow` contains
+"Revenue", a docstring explaining that `exc_info` is avoided contains "exc_info", a router
+description explaining that payments are *not* a revenue proxy contains "Payment" — so
+identifiers are matched exactly and docstrings are stripped first.
+
+**One documented exemption:** `health` runs a connectivity probe from its repository and owns
+no domain rules. It is excluded at parametrize time, not skipped, so the test count never
+hides a gap.
+
+### 2.3 Transaction boundaries and conditional updates
+
+A repository **flushes**; a service **commits**. A service that writes must both `commit()`
+and `rollback()`, and a read-only service must do neither. That asymmetry is asserted rather
+than assumed: `analytics` and `intelligence` are proven to be in the read-only set, and every
+write domain in the other.
+
+The hardest case is booking creation: header, allocations and priced nights are one
+transaction, because the night-completeness trigger is `DEFERRABLE INITIALLY DEFERRED` and
+judges the whole thing at COMMIT. An allocation is legitimately incomplete part-way through —
+that is exactly what deferring buys — which is why it cannot be split across requests.
+
+Rollback is verified end to end for the write domains in
+`tests/integration/test_cross_domain.py`: a rejected booking, an overlapping booking, a
+duplicate payment reference, a second review of one stay, a refused category delete, a rejected
+guest update and a refused booking delete each leave the database unchanged.
+
+**Conditional updates (Issue H6, R3.3).** Without help, a PATCH is last-write-wins: a client
+that loaded a record, waited and saved overwrote whatever was written in between. Eight routes
+take an optional `If-Match` — the hotel, guest, room type, room and booking PATCHes (Issue H6),
+and the amenity, revenue-category and expense-category PATCHes (R3.3) — carrying the record's
+own `updated_at` as a strong entity-tag, exactly as the API returned it
+(`"2026-10-09T10:00:00.123456Z"`):
+
+- **Lock, then compare, in the update's own transaction.** With the header, the service
+  re-reads the row under a row lock (`populate_existing`) before anything else the update does
+  — the empty-update shortcut included — and compares `updated_at` by **instant and exact
+  equality**. Never by order: the `set_updated_at` trigger stamps `now()`, the transaction's
+  *start*, so stamps need not follow commit order. A writer that commits while the update
+  waits for the lock is therefore seen, not overwritten.
+- **The lock** is the one the row's other writers already contend on: `FOR UPDATE` on a
+  booking (`BookingRepository.lock_for_update`, shared with status transitions and stay
+  moves); `FOR NO KEY UPDATE` on a hotel, guest, room type, room or catalogue entry — the lock
+  PostgreSQL's own non-key UPDATE takes, so it serialises with every writer of the row without
+  making the foreign-key checks of unrelated inserts (`FOR KEY SHARE`) wait behind an edit.
+- **A mismatch is `412 STALE_UPDATE`**, raised before anything is flushed: nothing is written.
+  A malformed header — a weak `W/` tag, an unquoted value, a list, a timestamp without a zone
+  or finer than a microsecond — is the usual `422 VALIDATION_ERROR` located at
+  `["header", "If-Match"]`. `*` constrains nothing.
+- **No header, no change.** The update runs exactly as before: no lock, no comparison. Every
+  existing client keeps working; the frontend always sends one from its edit forms.
+- **Not on commands.** Booking status changes and stay moves are judged against the current
+  state under the booking's lock already; member role changes, review moderation and the room
+  status control are single deliberate commands. None of them carries the precondition.
+- **The global catalogues since R3.3.** H6 could not cover `amenities`, `revenue_categories`
+  and `expense_categories`: they had no `updated_at`, so there was no version to name. Migration
+  `0022_catalogue_versions` gave each one — and no `created_at` — maintained by the same
+  `set_updated_at` trigger; rows that existed before it received the migration's own time, a
+  valid version though not a record of their last write. Their PATCHes take the same
+  precondition, and the platform page sends the loaded version and offers the same explicit
+  reload on a 412.
+
+The edit forms send only the fields that differ from the record as loaded (each side put
+through the same draft-to-payload function), so even without a precondition an update cannot
+restore, from a stale form, a value someone else saved to a field this operator never touched.
+
+### 2.4 Tenant isolation, in detail
+
+**The hotel is resolved first, always.** `HotelScopeResolver.require_hotel` turns the URL's
+`public_id` into an internal key before any child query runs, and no repository method accepts
+a public id — so a query cannot be issued before the tenant is established. Since V1 the
+caller's membership is checked on the way in (`HotelAccessPolicyDep`, above), and an unknown
+hotel and a non-member get the same 404.
+
+**Scoping is structural, not conditional.** Where a cross-tenant lookup would be possible, the
+method simply does not exist. `PaymentRepository` has no `get_by_public_id`; `ReviewRepository`
+requires hotel *and* booking. That matters because `public_id` is globally unique: a
+booking-only lookup would succeed across tenants for anyone holding another property's id.
+
+**Composite foreign keys carry `hotel_id`** throughout, so the database refuses a cross-tenant
+reference even if application code tried. Two places where the key alone is *not* enough, and
+the service closes the gap:
+
+- `payments.refunded_payment_id` is a single-column foreign key with no tenant in it. A
+  refund's parent is resolved through `get_in_booking`, so a refund can only reverse a payment
+  the caller already had access to.
+- `revenue.booking_id` is resolved hotel-first, turning what would be a 409 into an honest 404.
+
+Verified end to end in `tests/integration/test_cross_domain.py`: two hotels with the same room
+numbers, the same room-type code and the same shape, and every meaningful cross-hotel operation
+attempted — guest, booking, payment, refund, review, room and room-type, amenity assignment,
+revenue posting, analytics and intelligence. Each returns 404 and changes nothing.
+
+### 2.5 Identifiers and credentials
+
+| Table | URL identity | Why |
+|---|---|---|
+| hotels, guests, bookings, payments | `public_id` UUID | server-assigned, non-enumerable |
+| room_types, amenities, revenue/expense categories | `code` | natural key, `UNIQUE` |
+| rooms | `room_number` | `UNIQUE (hotel_id, room_number)` |
+| reviews | its **booking's** `public_id` | `uq_reviews_booking_id` makes it a singleton |
+| revenue, expenses | **none — not individually addressable** | no `public_id`, no unique key at all |
+
+The tables added after Stage 3B that are addressed by URL (stored demand predictions, knowledge
+documents, copilot conversations) carry a `public_id` UUID too. No internal BIGINT appears in
+any path or any response: every path parameter must end in `public_id` or be one of four named
+natural keys, and every generated OpenAPI component is scanned for
+`id`/`hotel_id`/`guest_id`/`booking_id`/`room_id`/`category_id`/`payment_id`.
+
+The last row of the table is the interesting one. `revenue` and `expenses` have no `public_id`
+and no unique constraint beyond the primary key — two byte-identical lines coexist — so there is
+no key a single-entry URL could use, and the sequential BIGINT is not an acceptable substitute.
+Those journals are therefore **append-only with no single-entry route**, which is also what the
+schema's own design points at: `amount` carries no positivity CHECK while `tax_amount` does,
+making a compensating negative line the correction mechanism.
+
+**Two credentials, one identity (R1.1).** `get_current_user` accepts either an
+`Authorization: Bearer` token — `POST /auth/login`, for API clients — or the browser's cookie
+session from `POST /auth/session`. The header wins when both are present. **A
+cookie-authenticated request that is not a GET must carry the session's CSRF token in
+`X-CSRF-Token`, or it is `403 CSRF_FAILED`** before the route runs: a browser attaches a cookie
+to any request, a header only to its own. This holds on every unsafe operation, so the OpenAPI
+document adds the 403 wherever none is declared (`app.api.openapi`); where a role or platform 403
+already is, its description stands and this rule applies beside it. A cookie session's access
+token names its session (`sid`), and the request is refused once that session has ended. The
+session design is in [§7.1](#71-session-handling-and-its-limitation).
+
+### 2.6 Guarantees the database owns
+
+These correctness guarantees come from PostgreSQL, and the application deliberately does
+**not** re-implement them as pre-checks — a check-then-insert would be both redundant and
+raceable. Their design is in [the database README](../database/README.md#schema-design).
+
+| Guarantee | Mechanism | Constraint |
+|---|---|---|
+| No double-booked room | **EXCLUDE USING gist** | `excl_booking_rooms_room_no_overlap`, `WHERE booking_status IN ('confirmed','checked_in')` |
+| Every night of a stay is priced | **deferred constraint trigger** | `trg_booking_room_nights_complete` |
+| Webhook idempotency | **partial UNIQUE** | `uq_payments_provider_transaction_reference WHERE transaction_reference IS NOT NULL` |
+| One review per stay | **partial UNIQUE** | `uq_reviews_booking_id WHERE booking_id IS NOT NULL` |
+| One guest email per hotel, whatever its case | **partial UNIQUE** on an expression | `uq_guests_hotel_id_lower_email` — `(hotel_id, lower(email)) WHERE email IS NOT NULL`; a duplicate is a 409 that never quotes the address |
+| A guest email has the shape a user's has | **CHECK** | `ck_guests_email_format` — the pattern of `ck_users_email_format`, mirrored as a 422 at the edge |
+| One review per platform reference, per hotel | **partial UNIQUE** | `uq_reviews_hotel_source_external_review_id WHERE external_review_id IS NOT NULL` — `(hotel_id, source, external_review_id)`; a duplicate is a 409 `DUPLICATE_EXTERNAL_REVIEW` |
+| Unique hotel slug / room number / booking reference / category code | **UNIQUE** | `uq_hotels_slug`, `uq_rooms_hotel_id_room_number`, `uq_bookings_hotel_id_reference`, `uq_*_categories_code` |
+| Category in use cannot be deleted | **FK ON DELETE RESTRICT** | `fk_revenue_category_id_*`, `fk_expenses_category_id_*` |
+| Cross-tenant reference refused | **composite FK** | `(child_id, hotel_id) → parent(id, hotel_id)` throughout |
+| Value vocabularies and ranges | **CHECK** | statuses, currencies, rating scale, recurrence biconditional |
+| Derived values cannot contradict inputs | **GENERATED ALWAYS** | `rating_normalized`, `booking_rooms.nights`, the `daily_hotel_metrics` ratios |
+
+Two tests in `tests/integration/test_cross_domain.py` prove the *absence* of a pre-check: a
+`pending` booking can reuse a room another pending booking holds (because the exclusion
+constraint's `WHERE` excludes pending — an application-level "is this room free" check would
+almost certainly have got that wrong), and a two-night night-list for a three-night stay is
+refused by the trigger at COMMIT. Optimistic concurrency is §2.3's `If-Match`; creation races
+were always decided by the database.
+
 ---
 
 ## 3. Configuration
@@ -256,16 +458,235 @@ envelope is deliberately uninformative about internals, and 500-class faults car
 sentence so that a client cannot learn a constraint name, a relation or a SQLSTATE from an
 error response. The detail goes to the logs, correlated by the request id from step 1.
 
+### 4.1 Error handling
+
+One envelope, everywhere:
+
+```json
+{"error": {"code": "...", "message": "...", "details": []}}
+```
+
+Services translate SQLSTATEs using the **single shared vocabulary** in `app/core/errors.py`.
+`tests/backend/test_architecture_audit.py` asserts that no service declares its own `"23505"`,
+`"23514"`, `"23503"`, `"23001"`, `"23502"` or `"23P01"`, and that the shared vocabulary is the
+one used.
+
+Two distinctions that are easy to get wrong and are therefore centralised:
+
+- **`23001` vs `23503`** — an explicit `ON DELETE RESTRICT` raises `restrict_violation`, not
+  `foreign_key_violation`. Checking only `23503` falls silently through to a generic message.
+- **`23502` is not a dependency signal** in general — on an INSERT it means a required column
+  was omitted. `core/errors.py` documents the one narrow case in which the code reads it as one:
+  a composite `ON DELETE SET NULL` that could not fire, which is what all three such keys did
+  before migration `0018` ([the database README](../database/README.md#4-relationships-and-cardinality)).
+
+**Nothing vendor-specific escapes.** Every conflict the cross-domain suite can produce is
+checked against one list of forbidden strings — `psycopg`, `sqlalchemy`, `DETAIL:`, SQL
+keywords, `Traceback`, every SQLSTATE, and the `uq_`/`fk_`/`ck_`/`excl_` constraint-name prefixes
+(`tests/integration/test_cross_domain.py`); at Stage 3B.12 there were nine such 409s, across
+hotels, rooms, amenities, categories, payments, reviews, bookings and guests.
+
+**No service logs a driver exception** (`test_no_service_logs_a_driver_exception`). `exc_info`
+on an `IntegrityError` writes the driver's rendering of the offending row into the log — guest
+names, review text, amounts, card fragments, invoice references. Four early services (amenity,
+hotel, room, room type) still did this until Stage 3B.12 fixed them; the health probe keeps its
+`exc_info` because a connectivity failure carries no row data and its traceback is what an
+operator needs.
+
 ---
 
 ## 5. Data and intelligence architecture
 
 The platform is an operational system *and* an analytics layer reading the same data.
 
-### What exists at V1
+Three layers read that data, and each is kept apart from the others: **analytics**, which
+defines the figures; the **statistical intelligence layer**, which forecasts and flags from
+analytics' own series; and the **trained demand model** of §5.1–§5.2, fitted offline and served.
+A fourth consumer, V2's copilot, reads all three through read-only tools and is specified in
+[v2-architecture.md](v2-architecture.md).
 
-A **deterministic statistical intelligence layer**, computed on request from the operational
-tables. It is not trained, not learned and not generative:
+**Language models.** Neither analytics nor the statistical layer calls a language model: the
+statistical layer is a deterministic standard-library baseline that uses no LLM — and the
+trained demand model uses none either. The repository's one language-model boundary is V2's
+copilot (`app/llm/`, `app/copilot/`, `app/knowledge/`, Stages 7.5–7.11): off by default, with
+local Ollama or Anthropic as providers, read-only tools, and lexical document retrieval through
+PostgreSQL full-text search. There is no embedding, no vector database and no agent framework
+anywhere in the repository. *(At V1 there was no language-model code at all; Stage 7.5 added the
+boundary with nothing using it, and Stage 7.7 the first route that reaches it.)*
+
+### Analytics (Stage 3B.10)
+
+Read-only, hotel-scoped, deterministic. Every metric names its source table and its date column,
+so a number in a chart can always be traced back to the rows that produced it. Nothing in
+analytics predicts, scores, ranks or recommends: it is the deterministic foundation the
+statistical layer and the demand model are measured against. Since V1 its routes require
+authentication and hotel membership, like every other hotel-scoped route.
+
+**`daily_hotel_metrics` is not used.** Stage 3B.10 found it an empty snapshot table awaiting a
+population job, verified live against PostgreSQL 18.6: zero rows, no function or procedure
+referencing it, no trigger writing it (only `trg_daily_hotel_metrics_set_updated_at`), no
+materialized view behind it. That is still so (Issue H9): it is reserved for a future job that
+is neither implemented nor approved, and the decisions such a job needs first are in
+[the database README](../database/README.md#unresolved-before-any-population-job-issue-h9).
+So analytics does **not** read it (every hotel would report zeros), does **not** write it
+(populating a table from a `GET` would make analytics mutate the business it observes, and a
+request-driven write would produce a partial, non-reproducible series — the property the table
+exists to avoid), and does **not** invent a job to fill it. It is authoritative in one way:
+**its generated columns are the formula definitions**, transcribed rather than re-derived:
+
+```
+occupancy_rate = occupied_rooms  / NULLIF(available_rooms, 0)
+adr            = room_revenue    / NULLIF(occupied_rooms, 0)
+revpar         = room_revenue    / NULLIF(available_rooms, 0)
+total_revenue  = room_revenue + other_revenue
+```
+
+The `NULLIF` guards are reproduced exactly: an undefined rate is reported as **null**, never
+as zero. Zero would drag every downstream average down and poison model training.
+
+**Metric definitions** — the source and date column of every figure:
+
+| Metric | Source | Date column | Notes |
+|---|---|---|---|
+| `bookings_created.*` | `bookings` | `booked_at`, as a hotel-local date | Same column `daily_hotel_metrics.bookings_created` counts; see below |
+| `bookings_by_stay.*` | `bookings` | stay overlap | `check_in_date <= date_to AND check_out_date > date_from`; every status, broken down by status |
+| `stay_flow.arrivals` | `bookings` | `check_in_date` | Only `OCCUPANCY_STATUSES` (confirmed, checked in, checked out): cancelled, no-show and pending bookings never arrived |
+| `stay_flow.departures` | `bookings` | `check_out_date` | A departure day is **not** a room night; same status rule as arrivals |
+| `stay_flow.cancellations` | `bookings` | `cancelled_at`, as a hotel-local date | When the cancellation happened; see below |
+| `occupied_room_nights` | `booking_room_nights` | `stay_date` | Joined to `booking_rooms` for status |
+| `room_nights_sold` | `booking_room_nights` | `stay_date` | Excludes `is_complimentary` |
+| `room_revenue` | `booking_room_nights.rate` | `stay_date` | Currency from the owning booking |
+| `other_revenue` | `revenue` | `revenue_date` | Categories where `is_room_revenue = false` |
+| `ledger_room_revenue` | `revenue` | `revenue_date` | Categories where `is_room_revenue = true` |
+| `total_expenses` | `expenses` | `expense_date` | |
+| `reviews.*` | `reviews` | `review_date` | |
+
+**Booking and cancellation days are the hotel's calendar days (Issue F1).** `booked_at` and
+`cancelled_at` are instants (`TIMESTAMPTZ`); every other date column above is already a `DATE`
+in the hotel's terms. An instant `T` belongs to the hotel-local date
+`(T AT TIME ZONE zone)::date`, where `zone` is the hotel's `hotels.timezone` — the
+authoritative source — when PostgreSQL recognises it as a named zone (`pg_timezone_names`),
+and `UTC` otherwise; a fixed offset such as `+02` is not a named zone. A range of hotel-local
+dates `[date_from, date_to]` is the instants from local midnight of `date_from` (inclusive) to
+local midnight of `date_to + 1` (exclusive); PostgreSQL's IANA rules make a daylight-saving day
+23 or 25 hours long. The database session's `TimeZone` changes nothing. Since R1.5 the API
+refuses a zone the IANA database does not define when a hotel is created or updated; the column
+itself still accepts any text, so a row written earlier is still read as UTC.
+
+**Both range bounds are inclusive.** A `stay_date` equal to `date_to` counts as a night; a
+booking whose `check_out_date` equals `date_to` contributes a departure and no night, because
+`ck_booking_room_nights_stay_date_within_stay` requires `stay_date < check_out_date`. The
+maximum range is **366 days** (`MAX_RANGE_DAYS`); a longer request is `422`, which bounds the
+daily series.
+
+**Why two booking counts.** "How many bookings were made in September" and "how many bookings
+stay in September" are different questions with different answers, and a hotel dashboard asks
+both. Reporting only creation-dated counts makes the headline figure **zero** for any
+forward-looking window — a quietly misleading metric. Both are therefore given, named for their
+date semantics. The stay-overlap predicate treats a stay as half-open `[check_in, check_out)`,
+matching the `daterange(check_in_date, check_out_date, '[)')` the schema's own exclusion
+constraint uses.
+
+**Status is current, not historical.** The schema keeps no status history, so a booking created
+in January and cancelled in March counts as cancelled wherever it appears. This is also why the
+*daily* series carries no status breakdown: attributing today's status to a past day would
+misreport every past day.
+
+**Occupancy** is counted from `booking_room_nights` — one row per room per night, kept gap-free
+by the deferred completeness trigger — never from booking headers. **A booking is not
+occupancy; a night is.** The status filter is
+`OCCUPANCY_STATUSES = (confirmed, checked_in, checked_out)`, deliberately **wider** than
+`INVENTORY_HOLDING_STATUSES = (confirmed, checked_in)`: a completed stay no longer blocks a room
+but certainly occupied it. `pending`, `cancelled` and `no_show` are excluded, so an abandoned
+checkout never appears as occupancy.
+
+```
+available_room_nights = COUNT(rooms WHERE is_active) × days_in_range
+occupancy_rate        = occupied_room_nights / NULLIF(available_room_nights, 0)
+room_revenue          = SUM(booking_room_nights.rate)      -- per booking currency
+adr                   = room_revenue / NULLIF(room_nights_sold, 0)
+revpar                = room_revenue / NULLIF(available_room_nights, 0)
+```
+
+The ADR and RevPAR numerator is the **night rate**, the only per-night truth in the schema.
+Deliberately *not* used, and asserted so in tests: `bookings.total_amount` (a header figure
+supplied by a client, unrelated to the nights), `room_types.base_price` (a list price, not what
+was sold) and `payments` (money moving, not revenue earned). Complimentary nights count as
+**occupied** (the room was full) but not as **sold** (they earned nothing), so a comp does not
+drag ADR down; `complimentary_room_nights` is reported rather than silently dropped.
+
+**Currency.** `revenue.currency` and `expenses.currency` are per line, and room revenue
+inherits the currency of its booking (`booking_room_nights` carries none — approved decision
+18), so one hotel can hold EUR, USD, JPY and GBP rows in one range. **Every monetary figure in
+every response is a list of per-currency buckets, never a scalar.** There is no FX rate anywhere
+in the codebase (approved decision 14; R3.4 is an open decision), the hotel's own currency is
+never assumed, and `is_multi_currency` flags the case so a consumer must decide rather than be
+handed a misleading headline number. `net_operating_result` is computed **within** each
+currency: a currency present on one side only still appears, with the missing side counted as
+zero *for that currency* — a fact about entry counts, not an FX assumption. A GBP-only expense
+surfaces as a negative GBP result, not folded into EUR.
+
+**The `is_room_revenue` split.** Approved decision 21 makes `booking_room_nights` the single
+source of truth for room revenue. The ledger nonetheless *permits* rows against an
+`is_room_revenue` category (a Stage 3B.9 finding: the flag is an exclusion signal, not a
+constraint). Analytics therefore reports such rows in their **own bucket**,
+`ledger_room_revenue`, and adds them to nothing: folding them into `room_revenue` would
+double-count against the night rows, and folding them into `other_revenue` would defeat the
+flag's purpose. They are excluded from `net_operating_result` for the same reason, and visible
+so nothing is silently dropped.
+
+**Join multiplication.** A booking fans out to allocations, allocations to nights, and
+independently to revenue lines and reviews; aggregating any two grains in one statement
+multiplies both. **Every repository method aggregates exactly one grain**, and the service
+composes the results. `tests/integration/test_analytics_api.py` builds the fixture that would
+expose the bug — 1 booking, 2 rooms, 4 nights each, 3 revenue lines, 2 expenses, 1 review — and
+asserts each KPI independently against a hand-computed number:
+
+| Metric | Correct | A wrong join would give |
+|---|---|---|
+| room nights | 8 | — |
+| room revenue | 800.00 | 2400.00 |
+| ledger revenue | 60.00 | 480.00 |
+| expenses | 40.00 | 320.00 |
+| reviews | 1 | 8 |
+
+`tests/backend/test_analytics_layering.py` enforces the same rule structurally, by walking every
+repository method's AST and asserting it references at most one fan-out model.
+
+**Routes.** All under `/api/v1/hotels/{hotel_public_id}/analytics/`, GET only. `date_from` and
+`date_to` are required on every route — a default window would make two identical-looking
+requests mean different things on different days.
+
+| Route | Returns |
+|---|---|
+| `/overview` | KPI snapshot: both booking counts, stay flow, occupancy, room + ledger revenue, expenses, net result, reviews |
+| `/daily` | Gap-free chronological daily series |
+| `/revenue-by-category` | Ledger revenue by category × currency |
+| `/expenses-by-category` | Ledger expenses by category × currency |
+| `/reviews` | Totals, 5-band rating distribution, source mix |
+
+There is no flat `/api/v1/analytics`, no `/reports`, no `/dashboard` and no portfolio-wide
+route; the hotel segment is where tenant isolation is established. Rating buckets are an
+**analytics-layer presentation** of the generated `rating_normalized`, not a schema concept:
+bucket *n* covers `((n-1)/5, n/5]`, with `0.0` placed in bucket 1. All five are always emitted,
+including empty ones, so a chart has a stable x axis.
+
+**Limitations.** Point-in-time room inventory is not derivable: `rooms.status` (available /
+occupied / cleaning / maintenance / out_of_order) and `rooms.is_active` are **current** columns
+with no history, so capacity for a past range uses the hotel's inventory *as it stands now*. The
+response says so in the payload — `available_room_nights_basis: "current_active_rooms"` —
+rather than only in this document. `rooms.status` is deliberately excluded from the denominator:
+applying today's housekeeping state to a past date would be wrong. `daily_hotel_metrics` takes
+the same view — its `occupancy_rate` divides by `available_rooms` and tracks
+`out_of_order_rooms` as a separate figure. Room-status history is roadmap R3.1, an open decision
+(decision 6). Room-type performance was considered at Stage 3B.10 and not built: it is cleanly
+derivable (`nights → booking_rooms → rooms → room_types`, all many-to-one) but adds a fourth
+join level with no consumer.
+
+### The statistical intelligence layer (Stage 3B.11)
+
+A **deterministic statistical layer**, computed on request from analytics' own series. It is
+not trained, not learned and not generative. Read-only, hotel-scoped, nothing persisted:
 
 | Capability | Method |
 |---|---|
@@ -276,24 +697,189 @@ tables. It is not trained, not learned and not generative:
 | Insights | deterministic templates over the figures above |
 
 It lives in `backend/app/ml/timeseries.py` and `backend/app/services/intelligence.py`, is
-implemented in the **Python standard library** — no NumPy, pandas or scikit-learn — and carries
-`MODEL_VERSION = "1.0.0"`. Every response is a pure function of the hotel, the requested dates
-and the model version, so the same question always returns the same answer.
+implemented in the **Python standard library** (`statistics` and `decimal`) — a test asserts that
+`numpy`, `pandas`, `sklearn`, `scipy`, `torch`, `tensorflow` and `prophet` appear nowhere in
+`timeseries.py` — and carries `MODEL_VERSION = "1.0.0"`. Every response is a pure function of
+the hotel, the requested dates and the model version. Stage 7.12's attention list ranks its
+outputs; see [attention-list.md](attention-list.md).
 
-Two properties are deliberate. The forecast method is **returned per point** rather than hidden
-behind one header, so a caller can see which points fell back to the window median. And the
-trend response returns both window medians *and* the threshold, so its classification can be
-recomputed by hand.
+**Why a statistical baseline (Stage 3B.11).** Inspected before choosing a model: there was no
+labelled training corpus, only an operational database; `daily_hotel_metrics` held 0 rows; the
+derivable series (daily occupancy, room revenue, booking counts) were weeks to months long per
+hotel, dominated by day-of-week seasonality plus legitimate zeros. A gradient-boosted or neural
+forecaster fitted to a few dozen daily points would overfit, be unable to state why it said
+anything, and lose to a seasonal baseline on accuracy. So the stage built a transparent
+statistical baseline and documented the decision. Where a window has no usable history, the
+response says `insufficient_data` and carries no number: no training data is ever fabricated.
+*(The trained demand model of §5.1–§5.2 came later, from a published dataset rather than this
+database, and sits beside this layer without changing it.)*
 
-**No language model is ever called, and there is no embedding, no vector database, no
-retrieval-augmented generation and no agent framework anywhere in this repository.** There *is*
-one trained model, fitted offline and served: §5.1c. See also §5.3.
+**Two observation axes: stay dates and booking intake.** Two kinds of series feed this layer,
+and each answers to its own evidence:
 
-*(Stage 7.5 added `app/llm/` — the boundary a future language-model call would pass through,
-and nothing that uses it. No endpoint, no tool, no service and no router reaches it; the
-provider SDK is an optional dependency neither CI nor the image installs; and the feature is
-off by default. So no external AI service is contacted, which is what the sentence above is
-about. See `docs/v2-roadmap.md` Stage 7.5.)*
+| Axis | Series | A day is in the series when | A day with nothing on it |
+|---|---|---|---|
+| **Stay date** | occupied room nights, room revenue — the forecasts, their anomaly scans and the occupancy outlook | it lies inside a period declared in `demand_observation_periods` (migration 0016, both ends inclusive) | inside a period: **0**. Outside every period: left out — unknown, never 0 |
+| **Booking intake** | bookings created, by `booked_at` on the hotel's own calendar day — the demand trend and its anomaly scan | always: every calendar day of the window | **0**: no booking was taken through the platform that day |
+
+They are kept apart on purpose. A declared period says the hotel's booking record is complete
+for those **stay dates**; it says nothing about which bookings were **taken** on a day. So it is
+never applied to the intake series — **do not use `demand_observation_periods` as a proxy for
+booking-intake observation** — and the intake series is never read as observed stay-date demand.
+The trend measures bookings taken through the platform: a hotel that started (or stopped) taking
+bookings here inside the window shows that as rising (or falling) intake, which is exactly what
+the series measures. Declaring booking-intake observation would need a declaration of its own;
+none exists. What the responses report:
+
+* `training_window.observations` — the observed stay dates fed to the forecast. **0** means no
+  declared period covers the training window: every point is `insufficient_data` with a null
+  value, and the page says that no observation period has been declared — not that the history
+  is short, and never a 0 forecast.
+* `window.observations` on the trend, anomaly, insight and priority responses — the window's
+  **calendar days**, the length of the intake series. It is not a stay-date count: a stay-date
+  metric that could not be judged reports its own observed days in `metrics_not_assessed`.
+* An empty revenue forecast with `training_window.observations` **0** means room revenue is
+  **unknown**; with observed days, it means no currency was traded on any of them.
+
+**Occupancy forecast — seasonal-naive day-of-week median.** For each horizon date *D*, take
+every training-window observation falling on the same weekday as *D* and use their median:
+
+```
+prediction  = median(same-weekday observations)
+half_width  = MAD(same-weekday observations) × 1.4826 × 1.96
+interval    = [max(0, prediction − half_width), prediction + half_width]
+```
+
+A Saturday resembles other Saturdays far more than the preceding Friday; the median, not the
+mean, because one conference or closure would otherwise drag a short window badly. *1.4826*
+scales a MAD to a standard-deviation equivalent under normality and *1.96* is the two-sided 95%
+quantile: standard constants, not tuned parameters. **Fallback, reported per point:** a weekday
+bucket with fewer than `MIN_BUCKET_OBSERVATIONS` (2) entries uses the whole window's median and
+reports `method: "overall_median"` instead of `"seasonal_dow_median"` — a single observation
+dressed up as a seasonal estimate would be a lie about the evidence.
+
+**Capacity clamp.** A prediction above the hotel's active room count is reduced to it and
+flagged `capacity_clamped: true` — the schema's own
+`ck_daily_hotel_metrics_occupied_rooms_within_available` asserts occupied ≤ available. The
+interval bounds are occupancy figures too and are held to the same capacity, so the published
+interval always contains the published prediction and no bound claims a night the hotel cannot
+sell; `capacity_clamped` still reports the prediction alone. The occupancy-outlook finding sums
+the days as published, so its rate never exceeds 100%. This is the statistical **occupancy**
+forecast; the learned **demand** model is the opposite case — its output is unconstrained demand,
+never capped, with `exceeds_capacity` reported beside it ([ml-serving.md](ml-serving.md) §9).
+
+**Revenue forecast.** The same model applied to daily room revenue, **independently per
+currency**, from `booking_room_nights.rate`. Payments, `room_types.base_price` and ledger revenue
+lines are asserted not to reach the calculation. Its days are the training window's observed
+stay dates, and its currencies are those earned on at least one of them: a currency seen only
+on unobserved days is not forecast, and a currency with no history is **absent**, not forecast
+at zero. No cross-currency total appears in any response; a test asserts there is no `total`,
+`combined` or `grand_total` field.
+
+**Demand trend — split-window median comparison.** Split the window in half (the odd day goes
+to the recent half) and compare medians:
+
+```
+relative_change = (recent_median − earlier_median) / |earlier_median|
+increasing  if relative_change >  0.10
+decreasing  if relative_change < −0.10
+stable      otherwise
+```
+
+Counted by `bookings.booked_at`, bucketed in the hotel's own time zone as analytics does:
+demand is about bookings being **taken**, and stay-dated counts would call a quiet booking month
+with a busy stay month "increasing". A least-squares slope was rejected because one outlying day
+drags it and it is harder to check by hand; both medians and the threshold are returned, so the
+classification is recomputable. A relative change from a zero baseline is undefined, so
+`relative_change` is then null and the direction follows the absolute move. What each outcome
+guarantees, and nothing more:
+
+| `direction` | Meaning |
+|---|---|
+| `insufficient_data` | fewer than 7 days in the window; nothing compared |
+| `no_activity` | no booking taken on any day |
+| `sparse_activity` | bookings were taken, but both halves' medians are zero; no direction |
+| `increasing` | earlier median zero and recent median above zero, or a relative rise above the threshold |
+| `decreasing` | a relative fall beyond the threshold (a recent median of zero after a non-zero earlier one is a fall of 1) |
+| `stable` | a relative change within the threshold, which requires a non-zero median in both halves |
+
+`sparse_activity` exists because the daily values are non-negative counts: a zero median means
+more than half the days of that half had no bookings, so the median is blind to every booking
+the window holds. Two zero medians used to compare as `stable`, describing a steadiness the
+method never observed. The attention list reports only `increasing` and `decreasing`.
+
+**Anomaly detection — modified z-score on the MAD.**
+
+```
+score = 0.6745 × (value − median) / MAD        flag when |score| > 3.5
+```
+
+Iglewicz & Hoaglin's formulation and cut-off; mean and standard deviation would let the outlier
+inflate the very statistic used to judge it. Scanned metrics: `occupied_room_nights`,
+`bookings_created`, and `room_revenue[<CCY>]` for each currency earned on an observed stay date.
+When the window holds fewer observed stay dates than the scan needs, a currency earned only on
+unobserved days is listed in `metrics_not_assessed` as `too_few_observations` with the
+observed-day count (**0** when nothing is observed) — its revenue is unknown, which is not the
+same as a currency never traded. `metrics_scanned` names every metric looked at, and
+`metrics_not_assessed` those that could not be judged, with a reason: `too_few_observations` or
+`no_variation`. An empty `anomalies` list means "nothing was unusual" only for the metrics that
+were assessed. Every flag carries metric, date, value, window median, MAD, score, threshold and
+direction — the whole basis, not a verdict. **MAD = 0 yields no verdict:** at least half the days
+share the median exactly (a window of zeros with one busy day has a MAD of zero too), so no day
+can be judged unusual *or* usual, and the metric is reported as `no_variation`.
+
+**Insights** are deterministic assembly from the outputs above — `demand_trend`, `anomaly`,
+`occupancy_outlook`, `data_sufficiency` — each with `type`, `severity`, `title`, `explanation`,
+`supporting_metrics`, `date_from`, `date_to` and, where a model stated one, `confidence`.
+Explanations are templates filled from the numbers the insight already carries, so the same data
+always produces the same sentence. Ordered by severity, then type, then date.
+
+**Predictions are never mixed with facts.** A hotel already knows part of its future. Every
+forecast day carries both, side by side and never blended: `on_the_books_room_nights` /
+`on_the_books_room_revenue` (**actual**, counted from the same tables analytics counts) and
+`predicted_room_nights` / `predicted_room_revenue` (**predicted**, from history only).
+
+**Temporal leakage is prevented by signature.** `training_window.date_to = horizon.date_from −
+1 day`, and every repository call in a forecast path is bounded by that window. The only forward
+read is `on_the_books`, reported as a labelled fact and never handed to a model:
+`forecast_series` takes horizon **dates**, never horizon values. The live test books a full house
+*inside the horizon* and takes the forecast again: the prediction must be byte-identical while the
+on-the-books figure moves. A symmetric test inserts data *before* the training window.
+
+**Uncertainty and reproducibility.** Intervals are reported as `interval_lower`,
+`interval_upper` and `confidence_level: 0.95`; a zero-width interval is meaningful (a series
+that never varied has no spread to project). `predicted_*`, `interval_*` and `confidence_level`
+are all nullable, so insufficient data is representable without inventing a value. Every
+response carries `model_name`, `model_version`, `methodology`, `generated_at`, the training
+window, the horizon, and per-point `method` and `observations`; `generated_at` is the only field
+that changes between two identical requests, and the tests compare whole responses with it
+removed. No route has a today-relative default: `training_days` and `horizon_days` are fixed
+counts relative to the supplied dates, bounded [14, 365] and [1, 90].
+
+**Limitations of this layer.**
+
+- **The baseline is a baseline.** It extrapolates the recent past by weekday. It knows nothing
+  about holidays, local events, lead-time booking curves, competitor rates or weather, and it
+  will miss a step change until the step is inside the training window.
+- **Accuracy degrades with horizon.** A seasonal-naive model repeats the same weekly profile
+  indefinitely, so day 90 is no better informed than day 8. The 90-day cap acknowledges this
+  rather than fixing it.
+- **No backtest or validation metric is computed for this layer.** Rolling-origin backtesting
+  exists for the trained demand model (§5.1b), not for these forecasts.
+- **Occupancy capacity is current inventory**, as in analytics.
+- **Booking-curve / pickup modelling is not implemented.** `bookings.booked_at` and
+  `booking_room_nights.stay_date` together would support it.
+- **Anomaly scanning is univariate.** A drop in occupancy and a drop in revenue on the same day
+  appear as two independent flags.
+- **Nothing is persisted.** These forecasts are computed and returned; the stored predictions of
+  §5.1c are the demand model's, not this layer's.
+
+Stage 3B.11 left to later stages: booking-curve modelling, rolling-origin backtesting, holiday
+and event calendars, multivariate anomaly detection and forecast persistence. The demand model
+has since brought backtesting and persistence for itself (§5.1b, §5.1c); for this layer, none of
+the five exists. Its tests still assert that the layer's modules hold no pricing, no automatic
+rate or allocation change, no background job or queue, and no LLM, embedding, vector store or
+external AI call.
 
 ### 5.1 The V2 demand dataset (Stage 6.1) — a dataset, not a model
 
@@ -613,3 +1199,62 @@ have read and taken elsewhere.
 session design changes that; the content security policy (`script-src 'self'`, no inline script,
 no `eval`) is what narrows it. The bearer login stays for API clients, which keep their own
 token and need no CSRF token, because a header is never sent on another site's behalf.
+
+---
+
+## 8. Known limitations, open requirements and deliberate absences
+
+The production-readiness gaps of the whole project, with their decisions, are in
+[project-closure-audit.md](project-closure-audit.md) §8. This section keeps the backend's own.
+
+### 8.1 Known limitations of the backend
+
+- **Point-in-time room inventory is not derivable.** `rooms.is_active` and `rooms.status` have
+  no history, so a past range's occupancy denominator is current inventory, stated in the
+  payload as `available_room_nights_basis: "current_active_rooms"` (§5). R3.1, decision 6.
+- **Booking status has no history**, so a status count is always "as it stands now".
+- **The statistical forecasts are a seasonal baseline**, with no holidays, events, lead-time
+  curves or backtest (§5).
+- **A guest email's format check is basic, not RFC 5322.** Since Issue H7 (migration
+  `0020_guest_email_rules`) it must match `^[^@\s]+@[^@\s]+\.[^@\s]+$` — the rule `users.email`
+  already had — in the schema (a 422) and in the database (`ck_guests_email_format`), and it is
+  stored lower case with a case-insensitive per-hotel key. Nothing verifies that the address
+  exists. `lower()` in the index follows the database's collation, so for a few non-ASCII
+  characters it may fold differently from the API's lower-casing; uniqueness is still enforced,
+  by the database's reading.
+- **Pagination is OFFSET-based**, with `page_size` capped at 100. Deep pages are
+  correspondingly expensive; cursor pagination was explicitly out of scope.
+
+### 8.2 The production requirements Stage 3B.12 listed, and where each stands
+
+Stage 3B.12 ended with seven requirements before the backend could be deployed, in priority
+order. The left column is what they were then; the right column is their state now.
+
+| Requirement at Stage 3B.12 | Where it stands |
+|---|---|
+| **Authentication and authorization — the largest blocker.** None existed: every endpoint was open, and tenant isolation rested entirely on knowing a hotel's `public_id`. The isolation *mechanism* was sound, so authorization was to slot in above it — bind a principal to a set of hotel ids and check it before the hotel is resolved | Done in V1: Argon2id passwords, access tokens, four hotel roles with membership-checked tenant isolation, and platform administration; the browser's cookie session in R1.1 (§7.1). Password reset, email and deactivation are not built — R1.2, an open decision |
+| Email format validation on guests | Done by Issue H7, as a deliberate contract tightening: a malformed guest email is a 422 (it was stored as written), every address is stored lower case, and migration `0020_guest_email_rules` adds `ck_guests_email_format` and makes the per-hotel key case-insensitive. Its upgrade refuses, naming hotels and guest ids but never an address, if existing rows would break either rule; it repairs nothing |
+| The three composite `SET NULL` corrections | Done by migration `0018_composite_set_null_columns` (Issue H3); see [the database README](../database/README.md#4-relationships-and-cardinality) |
+| Optimistic concurrency | Done by an optional `If-Match` on `updated_at`: the hotel, guest, room type, room and booking PATCHes (Issue H6) and the three global catalogues (R3.3) — §2.3 |
+| A `daily_hotel_metrics` population job | Reserved, not approved (Issue H9). The table exists and stays empty; analytics computes on demand and the ML dataset pipeline reads its own approved sources, so nothing depends on it. Forecast evaluation relies on the accuracy protocol's settlement lag and on committed, versioned training datasets, not on snapshots. What a job would have to decide first is in [the database README](../database/README.md#unresolved-before-any-population-job-issue-h9) |
+| Rate limiting and request size limits — then only `page_size` (100) and the analytics range (366 days) were capped | Login is rate-limited per client address, the copilot and knowledge routes have their own limits and budgets, and every limited route declares 429 (R1.4c); request bodies are capped at 2 MiB (R1.4b, §4). The limits are kept per process, and nothing bounds overall request volume — a shared limiter is R1.4a, an open decision |
+| Structured request logging with correlation ids — then a request could not be traced end to end | Done: a request id is assigned and bound to the logging context (§4, step 1) |
+
+### 8.3 What is deliberately absent
+
+At Stage 3B.12 the backend had no frontend, no authentication or authorization, no Docker,
+Kubernetes or deployment tooling, no Redis, Celery or Kafka, no background jobs or schedulers, no
+external AI APIs, LLMs, embeddings, vector stores or agents, no dynamic pricing and no endpoint
+that changes a rate, moves a booking, allocates a room or posts revenue by itself — each asserted
+absent by tests. Where each stands now:
+
+| Absent at Stage 3B.12 | Now |
+|---|---|
+| Frontend | Exists since V1 (§7) |
+| Authentication and authorization | Exist since V1 (§8.2) |
+| Docker, Kubernetes, deployment tooling | A single-host Docker Compose stack since V1 (§6); no Kubernetes and no orchestration |
+| Redis, Celery, Kafka | Still absent: `tests/backend/test_architecture_audit.py` asserts that no router, repository or service imports `celery`, `redis` or `kafka` |
+| Background jobs and schedulers | Operator commands under `app/jobs/` run the retention purges, the audit archival and the observation declarations, and an opt-in scheduler service (R4.2) can run the purges and the archival every 24 hours; it is its own service, not part of the API process. The statistical layer still has no job or queue (a test asserts it) |
+| External AI APIs and LLMs | V2's copilot (Stage 7.7 on), off by default, reaches a language model only through `app/llm/`; no router, repository or service imports a provider SDK, `openai`, `langchain` or `httpx` (the same audit) |
+| Embeddings, vector stores, agents | Still absent. The copilot's tool loop is bounded and read-only, with no agent framework; Stage 7.15, vector retrieval, has not been triggered |
+| Dynamic pricing; an endpoint that changes a rate, moves a booking, allocates a room or posts revenue by itself | Still absent: no path contains `pricing`, `recommend`, `optimi`, `auto`, `apply` or `execute` (`test_no_operational_action_endpoint_exists`). Rates, stays and postings change only when a user asks |

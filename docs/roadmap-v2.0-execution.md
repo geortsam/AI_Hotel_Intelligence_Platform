@@ -1,10 +1,15 @@
-# v2.0 roadmap — execution matrix and decision briefs
+# v2.0 roadmap — the proposal, its execution matrix and decision briefs
 
 > **Status (2026-11-19).** Written at `2da02f0` (branch `r2.10c3c-adjudication`, CI run
-> 44524291097 green) under your standing instruction to work through
-> [roadmap-v2.0.md](roadmap-v2.0.md) R0–R6 without routine approval. This file says, for every
-> task there, what is done, what is done now, and what waits for a decision only you can make.
-> The rows are updated as each stage lands; §3 holds the decision briefs.
+> 44524291097 green) under your standing instruction to work through the v2.0 roadmap's stages
+> R0–R6 without routine approval. This file says, for every task there, what is done, what is
+> done now, and what waits for a decision only you can make. The rows are updated as each stage
+> lands; §3 holds the decision briefs.
+>
+> **The proposal itself** (written 2026-10-10 as `docs/roadmap-v2.0.md`) is kept in
+> [§5](#5-the-proposal-as-written-on-2026-10-10), as it was proposed, with a note on each
+> limitation saying where it now stands. It was moved here on 2026-11-25 (R6.1); the old path is
+> a redirect.
 
 ## 1. Constraints every row is held to
 
@@ -197,3 +202,170 @@ you would have to do.
 | A2 | dependency vulnerability scanning in CI: a new job runs `npm audit --omit=dev --audit-level=high` and pip-audit 2.10.1 (hash-locked, its own venv) on every entry of both Python locks and its own, after two positive controls; outages fail after 3 attempts. Found first and fixed: PyJWT 2.13.0 → 2.15.1 (15 advisories, 1 critical, 6 high) and certifi 2026.7.22 → 2026.10.23 (1 critical, dev only); mutation stage A2, 9 recorded: 922 in all. Re-pinned by §12.6 (measured sections unchanged) | `6a91858`, re-pin `fda8718` + `9fec999` | [45390743636](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45390743636): red only on the pin gate, as expected; [45398092718](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45398092718): all 8 green, 922/922 |
 | A2 fix, A3, A5, A9 | **A2 correction:** the dependency scan moved to its own workflow, `dependency-audit.yml`, on every push to any branch and on pull requests to `main` (it had run only on `main` and pull requests, so A2's "every push" was not met until now); trigger tests and 4 mutations. **A3:** Syft 1.57.1 CycloneDX 1.6 SBOMs of both builds of both images, schema-validated, checked against the lock and nginx pin, identical across builds, no host path or credential, artifact `sbom-<run>-<attempt>`. **A5:** internal `GET /metrics` (request counts and latencies, route templates only), unreachable through nginx. **A9:** CI job `responsive-audit` runs UI-10's 51 checks in a digest-pinned Playwright Chromium on the seeded stack; the Analytics expenses-table clipping is reported separately, still open. Mutation stages A2 +4, A3 12, A5 12, A9 13: 963 in all. Re-pinned once by §12.6 (measured sections unchanged; A5's metrics modules fingerprinted, 55 sources) | `7858c27`, re-pin `133c5be` + `f4503e4` | [45463427755](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45463427755): red only on the pin gate, as expected; [45476887432](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476887432): all 8 green, 963/963, 51/51; scan [45476878966](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476878966) (`push`) and [45476887470](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476887470) green |
 | A8 | R6.1: the documentation index `docs/README.md` (one entry and one status per document); `scripts/doc_links.py`, an offline checker of every relative link, anchor and the index's reach; 8 contradictions resolved (README project structure and V2 heading, `architecture.md`, `database-design.md`, `database-implementation.md`, `ml-design.md`, `tests/README.md`) and guarded by tests; mutation stage A8, 24 recorded: 987 in all. No fingerprinted source changed, so no re-pin | `305f50c`, `b6c6c65` | [45509617278](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45509617278): all 8 green, 987/987, 51/51; scan [45509613321](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45509613321) (`push`) and [45509617354](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45509617354) green |
+
+## 5. The proposal as written on 2026-10-10
+
+The v2.0 line as it was proposed, before any of it was approved or built. It was written against
+commit `be96736` (the `v1.0.0` tag is `4dae239`; `be96736` adds only the README count fix) as a
+proposal: nothing in it was implemented, scheduled or approved, and each stage was to need its
+own authorization. Work started on 2026-11-19 under your standing instruction; §2 above is what
+became of each task.
+
+**Naming.** [v2-roadmap.md](v2-roadmap.md) already used "V2" for Stages 7.2–7.14 (the copilot,
+knowledge documents and multi-horizon models), which shipped **inside** `v1.0.0`. To avoid two
+meanings of "V2", the proposal called the next major line **v2.0** and numbered its stages
+**R0–R6**. That naming was kept.
+
+### 5.1 What the platform did at v1.0.0
+
+Figures verified at `be96736` (CI run 38046070392, all five jobs green) and true **then**, not
+now: 65 API paths / 101 operations (96 require authentication), 28 application tables,
+migration head `0020_guest_email_rules`, 7,984 backend tests (6 skipped), 1,346 frontend tests,
+312 recorded mutations all killed. The current figures are in the root
+[README](../README.md), where a test computes each from the code.
+
+| Area | Capability at v1.0.0 |
+|---|---|
+| **Property management** | Hotels, room types, rooms, amenities; guests (format-checked, case-insensitive unique email); bookings with per-night pricing and a database-enforced non-overlap calendar; the full lifecycle — modify, extend, early departure, check-in/out, cancel, no-show; payments and refunds with a refund cap; a revenue and expense ledger; reviews; availability search; optional `If-Match` on PATCH |
+| **Security** | Argon2id passwords; HS256 access tokens, revoked by a password change; login rate limiting; four hotel roles plus a separate platform-administrator capability; hotel-scoped tenant isolation that answers 404 to non-members; an append-only audit trail with archival |
+| **Analytics** | Occupancy, ADR, RevPAR, revenue by category, expenses and reviews, computed on demand, per currency, on the hotel's own calendar |
+| **Intelligence** | A deterministic statistical layer — day-of-week forecasts with prediction intervals, anomaly detection, demand trend and an attention list — and, separately, one served demand model whose predictions are stored (730 days by target date) with read, accuracy, drift and forecast-performance endpoints |
+| **Copilot** | Read-only, seven tools, checked figures, citations from the hotel's documents (PostgreSQL full-text search), per-owner conversations with retention, budgets and a circuit breaker |
+| **Frontend** | React + TypeScript single-page app, thirteen navigation areas |
+| **Deployment** | TLS-terminated Docker Compose stack whose runtime, backup/restore and image reproducibility are exercised on real containers in CI |
+
+### 5.2 The limitations it named, and where each stands
+
+The left column is the proposal's text, as written on 2026-10-10. The right column is added, as
+of 2026-11-25; the matrix in §2 and the briefs in §3 hold the detail.
+
+**The intelligence claims are unproven — the proposal called this the largest gap.**
+
+| Limitation at v1.0.0 | Where it stands |
+|---|---|
+| The served model's production accuracy, reliability and generalisation are **not established** ([ml-model-card.md](ml-model-card.md)). The demo data is small and synthetic, and the model returns roughly the same figure for any hotel at or below about 40 room nights a night | Unchanged. Waits on R2.1, a data source (§3.7) |
+| **No real language model has been evaluated** behind the copilot | Unchanged. Local Ollama pilots only; a paid run is excluded (R2.3, §3.8) |
+| Stage 7.15 (vector retrieval) **cannot be assessed**: no real hotel documents exist | Unchanged (R2.3, §3.8) |
+
+**Security gaps before any real deployment.**
+
+| Limitation at v1.0.0 | Where it stands |
+|---|---|
+| The access token lives in `sessionStorage`, readable by script; there is no `HttpOnly` cookie session and no refresh token ([architecture.md](architecture.md) §7.1) | Done: R1.1, cookie sessions with refresh rotation and CSRF (E8) |
+| No password reset, no email delivery, no account deactivation | Open: R1.2 waits on §3.4 |
+| Granting platform administration is an out-of-band database write | Done as an audited operator command (R1.3a, E4); an API is §3.5 |
+| Rate limits and copilot budgets are kept per worker process, not globally; 429 is not declared in OpenAPI; nothing bounds overall request volume | 429 declared on every limited route (R1.4c, E2) and a request-body cap added (R1.4b); limits are still per process and overall volume is still unbounded — R1.4a, §3.6 |
+| `hotels.timezone` accepts any text (unknown zones fall back to UTC) | The API refuses an unknown zone on create and update (R1.5, E2); the column still accepts any text, so a row written earlier still reads as UTC |
+
+**Data-model gaps.**
+
+| Limitation at v1.0.0 | Where it stands |
+|---|---|
+| No history of room status or of which rooms were active, so past occupancy is measured against **today's** active rooms (it can exceed 100%) and out-of-order rooms cannot be reconstructed | Open: R3.1, decision 6 (§3.9) |
+| No FX conversion (approved decision 14): a multi-currency hotel has no single total | Open: R3.4 (§3.10) |
+| `daily_hotel_metrics` is reserved and empty, with five open decisions ([database README](../database/README.md#unresolved-before-any-population-job-issue-h9)) | Unchanged; settling it is R2.4, blocked by R2.2 |
+| The three global catalogues have no `updated_at`, so same-field edits are last-write-wins | Done: R3.3, migration `0022_catalogue_versions` (E7) |
+| `pending` bookings hold no inventory; there is no checkout or hold-expiry flow | Unchanged; R3.2 is blocked until a checkout flow exists (R5) |
+
+**Operations.**
+
+| Limitation at v1.0.0 | Where it stands |
+|---|---|
+| Certificates are replaced by hand; no off-site or point-in-time backups; no zero-downtime deploy | Unchanged: R4.1 (§3.11); zero-downtime deploy is on no roadmap row |
+| The retention purges and audit archival are operator commands; nothing schedules them | An opt-in scheduler runs them (R4.2, E6) |
+| No metrics exporter or alerting; no Dependabot or Renovate; no SBOM or image signing; transitive Python dependencies are resolved at build time | An internal `/metrics` (A5); Dependabot configured, inert until `main` (E5, §3.3); SBOMs in CI (A3); hash-locked transitive pins (R0.4b). Alerting and signing are §3.12 |
+
+**Engineering.**
+
+| Limitation at v1.0.0 | Where it stands |
+|---|---|
+| The backend CI job takes about 45 minutes, and a local full run is split into nine groups | Three parallel shards (R0.3) |
+| CI pulls images from Docker Hub unauthenticated, so a Docker Hub rate limit or outage can block it (it did once, during H11) | A mirror for the two Docker jobs (R0.2, E8); the `services:` containers still come from Docker Hub (§3.2) |
+| The frontend suite times out on a heavily loaded machine (`--maxWorkers=2` works around it) | `maxWorkers: '50%'` in the Vitest configuration (§2.5, E3) |
+| 34 documents under `docs/`, many of them unmaintained stage snapshots; README counts are maintained by hand | An index with a status for every document (A8) and the six stage snapshots consolidated into maintained documents (R6.1); README counts computed by a test (R6.2) |
+
+### 5.3 The stages, as proposed
+
+Size: **S** ≈ a day or two, **M** ≈ a week, **L** = several weeks. **★** marks the stages the
+proposal valued most. Each task's outcome is its row in §2.
+
+**R0 — Release hygiene · S · do first**
+
+- Cut `v1.0.1` so the released README carries the corrected counts.
+- Make CI independent of unauthenticated Docker Hub pulls: a pull-through mirror (for example
+  `mirror.gcr.io`) or authenticated pulls. Digests stay pinned either way.
+- Shard the backend CI job so it runs in parallel.
+- Dependabot, and transitive Python pinning (a hash-locked file).
+
+**R1 — Production security ★ · M–L · needs decisions**
+
+1. `HttpOnly; Secure; SameSite` cookie sessions with refresh tokens and CSRF protection.
+2. An email channel, password reset and account deactivation. **Decision needed:** `users` is
+   global across hotels, so who may deactivate an account.
+3. A platform-administrator bootstrap and API.
+4. A shared rate limiter (Redis or PostgreSQL), request-size limits, and 429 declared in OpenAPI.
+5. Validate `hotels.timezone` against IANA zone names (deferred item D2).
+
+**R2 — Evidence for the intelligence claims ★★ · L · the main credibility gap**
+
+1. **A real or realistic data source** — a public hotel-booking dataset loaded through the existing
+   declared-observation contract, or a pilot property. Without it, no accuracy question can be
+   answered.
+2. **Measure before adding models:** run the existing accuracy and drift protocols on that data,
+   after aligning the accuracy protocol with declared observation (a protocol version bump).
+3. **The live copilot evaluation** (`scripts/copilot_live_eval.py`: paid, on the owner's key), and
+   only then decide Stage 7.15 on real documents.
+4. **Only if the evidence supports it:** serve the 7/14/28-day horizon models with their own
+   capacity rule, and settle `daily_hotel_metrics` — build its job or retire the table — on the
+   basis of a measured need.
+
+**R3 — Data-model correctness · M–L · migrations required**
+
+1. **Room-status and active-room history** — a `room_blocks` table (deferred decision 6). It fixes
+   historical occupancy, gives `out_of_order_rooms` a source, and unblocks the daily-metrics
+   availability decision.
+2. **Pending holds with expiry**, ahead of any booking-engine or checkout flow.
+3. **`updated_at` and `If-Match` on the global catalogues.**
+4. **FX rates** — a rate table and a rule for which day's rate applies. Only worth building for
+   multi-currency properties.
+
+**R4 — Operations · M**
+
+- ACME certificate automation; off-site encrypted backups with point-in-time recovery.
+- A scheduler for the conversation, invocation and prediction purges and the audit archival.
+- A metrics exporter with basic alerts; SBOM and image signing.
+
+**R5 — Product reach · L each · choose by audience**
+
+- A portfolio view across the hotels a user belongs to.
+- CSV/PDF report export.
+- A payment-provider integration (payments are recorded today, not taken).
+- Channel-manager / OTA booking import.
+- Review sentiment.
+- A housekeeping workflow, on top of R3's room history.
+
+**R6 — Documentation · S–M**
+
+- Consolidate the stage-snapshot documents into a small set of maintained current-state documents.
+- Generate the README counts in CI so they cannot go stale.
+
+### 5.4 The recommended order, as proposed
+
+1. **R0**, because every later stage pays the CI cost.
+2. **R2 — prove the intelligence.** The engineering is careful and heavily tested, but the AI half
+   rests on synthetic data, an unmeasured model and an unevaluated copilot. Real data plus the
+   measurement machinery already built would turn "implemented" into "shown to work" — or show,
+   honestly, that it does not.
+3. **R1 — security fit for a real deployment**, if the platform is to serve a real hotel.
+4. **R3 room history** — one schema addition that resolves several documented analytics caveats.
+5. **Hold off** on new models and features (more horizons, vector search, agents,
+   recommendations) until R2 shows the existing ones are worth extending.
+
+### 5.5 The decisions it asked for before any stage started
+
+- **Audience:** a portfolio or academic project, or a real pilot hotel? This sets how far R1 and
+  R5 go. *Still open: §3.13.*
+- **Data:** is a real data source available for R2, and is a paid LLM evaluation acceptable?
+  *Still open: §3.7 and §3.8; your evaluation constraints exclude paid runs.*
+- **Naming:** keep "v2.0 / R-stages" as above, or extend the existing "V2" stage numbering.
+  *Kept as v2.0 / R-stages throughout.*

@@ -58,4 +58,4 @@ job can also be run on its own by name.
 - No lock. Run a single scheduler per database. Nothing prevents a second one, and two running at
   once would contend for the same batches.
 - `daily_hotel_metrics` is not populated by anything, this scheduler included
-  ([../database-design.md](../database-design.md) §8).
+  ([the database README §8](../../database/README.md#8-daily-metrics-strategy)).

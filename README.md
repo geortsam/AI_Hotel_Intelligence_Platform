@@ -392,7 +392,7 @@ docker-compose.yml  db → migrate → api → frontend, each gated on the last
 | If you want to see… | Read |
 |---|---|
 | How a request becomes a row | [`docs/architecture.md`](docs/architecture.md) §2 and §4 |
-| Why the schema is shaped this way | [`docs/database-design.md`](docs/database-design.md) |
+| Why the schema is shaped this way | [`database/README.md`](database/README.md#schema-design), the schema's design and how it was built |
 | What the model is, and is not | [`docs/ml-model-card.md`](docs/ml-model-card.md) |
 | How the model reaches production | [`docs/ml-production-runtime.md`](docs/ml-production-runtime.md) |
 | What was built, stage by stage | [`docs/development-roadmap.md`](docs/development-roadmap.md) |
@@ -637,8 +637,8 @@ Then, with `TEST_DATABASE_URL` set to that database:
 ```
 
 If the target is not disposable the suite stops before any SQL runs and prints what it found,
-what it refused to do, and how to proceed. See `tests/db_safety.py` and
-`docs/database-implementation.md`.
+what it refused to do, and how to proceed. See `tests/db_safety.py` and the database README's
+[Testing](database/README.md#testing) section.
 
 Tests live at the repository root and import `app` via `pythonpath = ["backend"]` in
 `pyproject.toml`.
