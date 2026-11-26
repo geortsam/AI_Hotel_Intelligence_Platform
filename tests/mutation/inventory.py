@@ -11000,6 +11000,54 @@ STAGE_R5 = [
 ]
 
 
+# --- R0.1 audit follow-up: the README's evaluation wording, open items and stage table ---------
+
+_R01D_TESTS = "tests/backend/test_readme_disclosures.py::"
+
+
+def _r01d(number: int, breaks: str, old: str, new: str, killer: str) -> Mutation:
+    """The README misstates what R2.2 ran on, hides an open item, or drops a completed stage."""
+    return Mutation(
+        f"R0.1-docs-M{number}",
+        "R0.1-docs",
+        breaks,
+        one("README.md", old, new),
+        (_R01D_TESTS + killer,),
+    )
+
+
+STAGE_R0_1_DOCS = [
+    _r01d(
+        1,
+        "the stage table says again that R2.2 ran on the synthetic demo data",
+        "it was trained on, not on the synthetic demo data; no generalisation",
+        "it was trained on, on the synthetic demo data; no generalisation",
+        "test_the_r22_row_names_the_dataset_the_frozen_record_names",
+    ),
+    _r01d(
+        2,
+        "the README claims the expenses-table clipping is fixed",
+        "**The Analytics expenses table is clipped at 1440px. Open, not fixed.**",
+        "**The Analytics expenses table was clipped at 1440px. Fixed.**",
+        "test_known_limitations_lists_the_open_defect_and_the_missing_walkthrough",
+    ),
+    _r01d(
+        3,
+        "the missing demo walkthrough is no longer disclosed",
+        "- **There is no scripted end-to-end demo walkthrough.** Installation",
+        "- Installation",
+        "test_known_limitations_lists_the_open_defect_and_the_missing_walkthrough",
+    ),
+    _r01d(
+        4,
+        "the stage table drops a completed audit task",
+        "| A8 | The documentation index",
+        "| The documentation index",
+        "test_the_stage_table_lists_the_completed_audit_tasks_r61_and_the_r5_decision",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -11061,4 +11109,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_A8,
     *STAGE_R6_1,
     *STAGE_R5,
+    *STAGE_R0_1_DOCS,
 )

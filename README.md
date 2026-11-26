@@ -425,11 +425,21 @@ one began.
 | 7.14 | Three **offline** demand models at 7, 14 and 28 days, each measured beside its own baseline; none is served | **done** |
 | 7.15 | Vector retrieval (pgvector) — conditional, not triggered: it cannot be assessed without real hotel documents | not started — waits on decision R2.3 |
 | R0, R1 | Sharded CI, hashed Python locks, a Docker Hub mirror for the Docker jobs, Dependabot configuration (inert until it reaches `main`); `HttpOnly` cookie sessions with refresh rotation and CSRF, an audited platform-administrator command, request-size limits, 429 declared on every limited route, IANA time zones | **done** (the rest waits on decisions) |
-| R2.2, R2.2b | Frozen hold-out evaluation of the served model and a hotel-transfer diagnostic, on the synthetic demo data — no generalisation or production accuracy claimed | **done** |
+| R2.2, R2.2b | Frozen hold-out evaluation of the served model on the validation and test partitions it was never fitted on, and same-hotel controls for the cross-hotel experiment — both on the published hotel-booking dataset of the same two Portuguese hotels (2015–2017) it was trained on, not on the synthetic demo data; no generalisation to other hotels or production accuracy claimed — [docs/ml-frozen-holdout-evaluation.md](docs/ml-frozen-holdout-evaluation.md), [docs/ml-hotel-transfer-diagnostic.md](docs/ml-hotel-transfer-diagnostic.md) | **done** |
 | R2.7–R2.10 | Copilot evaluation: a local Ollama provider, live-evaluation scoring, and the layered retrieval evaluation (Decision F, C.1–C.7) with its pinned baseline | **done** |
 | R3.3, R4.2, R6.2 | `If-Match` on the global catalogues; an opt-in retention scheduler and audit archival; README counts computed by a test | **done** |
 | UI-1–UI-10 | The UI redesign: design tokens, self-hosted Inter and Source Serif 4, shared form, data-table and status-rail styles, cards below 1024px, sticky side panels — [docs/ui-redesign.md](docs/ui-redesign.md) | **done** |
 | A1 | Frontend dev-toolchain advisories fixed, 6 → 0 | **done** |
+| A2 | Dependency vulnerability scan: `npm audit` and pip-audit on every lock entry, its own workflow on every push since `7858c27`; PyJWT and certifi upgraded first | **done** |
+| A3 | CycloneDX 1.6 SBOMs (Syft) of both builds of both images, schema-validated and checked against the locks, kept as CI artifacts | **done** |
+| A4 | Automated accessibility checks (axe-core) on every route and state; the violations found were fixed | **done** |
+| A5 | An internal `GET /metrics` (request counts and latencies), unreachable through nginx; nothing scrapes it and no alert is sent | **done** |
+| A6 | Stale and contradictory documentation corrected, with regression tests | **done** |
+| A7 | The dead placeholder-route scaffolding removed; the navigation-to-route guarantee is a test | **done** |
+| A8 | The documentation index ([docs/README.md](docs/README.md)) and an offline link, anchor and reachability checker in CI | **done** |
+| A9 | The CI responsive audit: UI-10's 51 checks in a pinned Playwright Chromium against the seeded stack; it also reports the open expenses-table clipping ([Known limitations](#known-defects-and-gaps)) | **done** |
+| R6.1 | The six stage-snapshot documents consolidated into maintained documents ([docs/architecture.md](docs/architecture.md), [database/README.md](database/README.md), [docs/roadmap-v2.0-execution.md](docs/roadmap-v2.0-execution.md) §5); their old paths are redirects | **done** |
+| R5 | Product reach: **decided** by the project owner, 2026-11-25 — Academic / Professional Portfolio. A scope decision, not a build: none of R5's features is built, and the pilot- and production-only items are deferred ([decision record](docs/roadmap-v2.0-execution.md#313-product-reach-r5)) | decided |
 
 What remains — the autonomous tasks and the decisions only the owner can make — is counted in
 [docs/project-completion-audit.md](docs/project-completion-audit.md).
@@ -661,7 +671,7 @@ scanned.
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 | `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical; then catalogues both builds of each image with Syft 1.57.1 (checksum-verified) into a **CycloneDX 1.6 SBOM**, validates it against the schema, requires every locked backend package at its exact version and the pinned nginx, requires the two builds' SBOMs to list the same components, rejects any host path or credential in them, and keeps one SBOM per image as the `sbom-<run>-<attempt>` artifact ([`scripts/sbom_check.py`](scripts/sbom_check.py)) |
-| `Mutation checks` | re-applies the 1003 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Mutation checks` | re-applies the 1007 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
 | `Responsive audit` | builds and starts the Compose stack, seeds it with the synthetic demo data, and runs UI-10's **51 checks** (17 routes at 375, 768 and 1440px: no sideways scroll, no escaping element, exactly one `h1`) in the pinned Playwright image's Chromium; any failing check fails the run and is named. It also reports, without counting it, whether the known Analytics expenses-table clipping still reproduces ([`frontend/e2e/`](frontend/e2e/)) |
 
 | Workflow | Job | What it runs |
@@ -1009,6 +1019,19 @@ What remains genuinely missing is operational rather than functional:
 - **No platform-administrator API.** Platform administration is granted and revoked by an
   audited operator command; see [First run](#first-run). Who may do it through an API is an
   open decision (R1.3b), so there is none.
+
+### Known defects and gaps
+
+These are not done, and nothing in this README claims otherwise.
+
+- **The Analytics expenses table is clipped at 1440px. Open, not fixed.** At a 1440px viewport
+  the "Ledger expenses" table on the Analytics page is 525px wide inside a 482px container, so
+  its last column is cut off. Every CI run's responsive audit reproduces and reports it
+  ([`frontend/e2e/`](frontend/e2e/)); it is not one of the audit's 51 checks, so the audit still
+  passes while it stands.
+- **There is no scripted end-to-end demo walkthrough.** Installation ([How to run](#how-to-run)),
+  the first run ([First run](#first-run)) and seeding the synthetic demo data are documented,
+  but a complete, step-by-step demo scenario through the application is not yet provided.
 
 The V1 intelligence layer remains a transparent statistical baseline. The trained demand model
 sits beside it — served, but **not scientifically validated**, and shown on the Analytics page
