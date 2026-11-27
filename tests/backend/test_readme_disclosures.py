@@ -14,8 +14,10 @@ Known limitations section (and the defect to the closure audit, which must agree
 open), and the stage table to the completed audit tasks, R6.1 and the R5 decision.
 
 The expenses-table clipping was fixed on 2026-11-27. The README and the closure audit now both
-say so, and this file holds them to it: neither may call the defect open, and the walkthrough
-stays listed as missing.
+say so, and this file holds them to it: neither may call the defect open.
+
+The walkthrough was added the same day, as `docs/demo-walkthrough.md`. The README must now point
+to it and must no longer call it missing; `test_demo_walkthrough.py` holds the walkthrough itself.
 """
 
 from __future__ import annotations
@@ -69,10 +71,16 @@ def test_the_r22_row_names_the_dataset_the_frozen_record_names() -> None:
 
 
 def test_known_limitations_lists_the_walkthrough_and_the_fixed_clipping() -> None:
-    """The walkthrough is still missing; the clipping was fixed on 2026-11-27 and says so."""
+    """The walkthrough exists and is linked; the clipping was fixed on 2026-11-27 and says so."""
     section = known_limitations()
     assert "### Known defects and gaps" in section
-    assert "**There is no scripted end-to-end demo walkthrough.**" in section
+    walkthrough = (
+        "**The scripted demo walkthrough is [docs/demo-walkthrough.md](docs/demo-walkthrough.md).**"
+    )
+    assert walkthrough in section
+    assert (REPOSITORY_ROOT / "docs" / "demo-walkthrough.md").is_file()
+    assert "There is no scripted end-to-end demo walkthrough" not in section
+    assert "walkthrough below is not done" not in section
     assert "**The Analytics expenses-table clipping is fixed.** Until 2026-11-27" in section
     assert "was 525px wide inside a 482px container" in section
     assert "Open, not fixed" not in section
@@ -83,6 +91,13 @@ def test_the_closure_audit_agrees_that_the_defect_is_fixed() -> None:
     audit = flat(CLOSURE_AUDIT.read_text(encoding="utf-8"))
     assert "**Analytics expenses table, clipped at 1440px. Fixed on 2026-11-27 (§14).**" in audit
     assert "Open, not fixed" not in audit
+
+
+def test_the_closure_audit_records_the_walkthrough_as_added() -> None:
+    audit = flat(CLOSURE_AUDIT.read_text(encoding="utf-8"))
+    assert "## 15. Addendum: the scripted demo walkthrough (2026-11-27)" in audit
+    assert "a single scripted demo walkthrough, added since (§15)" in audit
+    assert "which the README does not have" not in audit
 
 
 def test_the_stage_table_lists_the_completed_audit_tasks_r61_and_the_r5_decision() -> None:

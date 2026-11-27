@@ -18,6 +18,7 @@ in the [model card](ml-model-card.md).
 ## Contents
 
 - [Who reads what](#who-reads-what)
+- [Demonstrating the platform](#demonstrating-the-platform)
 - [Status of a document](#status-of-a-document)
 - [Operators and deployment](#operators-and-deployment)
 - [Machine learning and evaluation](#machine-learning-and-evaluation)
@@ -37,7 +38,14 @@ in the [model card](ml-model-card.md).
 | Assessing the machine-learning claims | [ml-model-card.md](ml-model-card.md), then [ml-serving.md](ml-serving.md) §9 |
 | Assessing the copilot's evaluation | [copilot-evaluation.md](copilot-evaluation.md), then [retrieval-evaluation-decision.md](retrieval-evaluation-decision.md) |
 | Working on the front end | [../frontend/README.md](../frontend/README.md), then [ui-redesign.md](ui-redesign.md) |
+| Demonstrating the platform end to end | [demo-walkthrough.md](demo-walkthrough.md) |
 | Checking what is done and what is left | [project-closure-audit.md](project-closure-audit.md), then [project-completion-audit.md](project-completion-audit.md) and [roadmap-v2.0-execution.md](roadmap-v2.0-execution.md) |
+
+## Demonstrating the platform
+
+| Document | What it covers | Status |
+|---|---|---|
+| [demo-walkthrough.md](demo-walkthrough.md) | The scripted demo: setting up the local or Docker stack with the synthetic demo data, signing in, every screen in order, the technical evidence, and resetting it safely | Current |
 
 ## Status of a document
 

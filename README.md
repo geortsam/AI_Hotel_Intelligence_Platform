@@ -98,7 +98,9 @@ listing them instead of a sum, because the platform never converts between them.
 13. [Known limitations](#known-limitations)
 
 The rest of the documentation, with the status of each document, is indexed in
-[docs/README.md](docs/README.md).
+[docs/README.md](docs/README.md). To demonstrate the platform end to end, from a fresh clone to
+every screen and the evidence behind it, follow the scripted
+[demo walkthrough](docs/demo-walkthrough.md).
 
 ---
 
@@ -596,6 +598,8 @@ The data is for looking at the screens, not evidence of anything:
 
 See [database/README.md](database/README.md#demo-data) for creating the database, the
 `DEMO_OWNER_PASSWORD` variable, `--seed` and the other options, and how to refresh it safely.
+The [demo walkthrough](docs/demo-walkthrough.md) puts these steps in order and continues
+through every screen.
 
 ## Testing and quality checks
 
@@ -671,7 +675,7 @@ scanned.
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 | `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical; then catalogues both builds of each image with Syft 1.57.1 (checksum-verified) into a **CycloneDX 1.6 SBOM**, validates it against the schema, requires every locked backend package at its exact version and the pinned nginx, requires the two builds' SBOMs to list the same components, rejects any host path or credential in them, and keeps one SBOM per image as the `sbom-<run>-<attempt>` artifact ([`scripts/sbom_check.py`](scripts/sbom_check.py)) |
-| `Mutation checks` | re-applies the 1023 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Mutation checks` | re-applies the 1043 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
 | `Responsive audit` | builds and starts the Compose stack, seeds it with the synthetic demo data, and runs UI-10's **51 checks** (17 routes at 375, 768 and 1440px: no sideways scroll, no escaping element, exactly one `h1`) in the pinned Playwright image's Chromium; any failing check fails the run and is named. Five **table checks** fail it too: the Analytics breakdown tables at 375, 768, 1024, 1280 and 1440px must fit their cards from 768px, and on a phone may scroll only in a focusable region that the keyboard scrolls to the last column ([`frontend/e2e/`](frontend/e2e/)) |
 
 | Workflow | Job | What it runs |
@@ -1022,7 +1026,7 @@ What remains genuinely missing is operational rather than functional:
 
 ### Known defects and gaps
 
-The walkthrough below is not done, and nothing in this README claims otherwise.
+The two items the R0.1 audit found here are both resolved.
 
 - **The Analytics expenses-table clipping is fixed.** Until 2026-11-27, at a 1440px viewport
   the "Ledger expenses" table on the Analytics page was 525px wide inside a 482px container, so
@@ -1030,9 +1034,11 @@ The walkthrough below is not done, and nothing in this README claims otherwise.
   from 768px up. On a phone they scroll inside a box that the keyboard can focus and scroll.
   Five table checks in CI's responsive audit fail the run if this regresses
   ([`frontend/e2e/`](frontend/e2e/)).
-- **There is no scripted end-to-end demo walkthrough.** Installation ([How to run](#how-to-run)),
-  the first run ([First run](#first-run)) and seeding the synthetic demo data are documented,
-  but a complete, step-by-step demo scenario through the application is not yet provided.
+- **The scripted demo walkthrough is [docs/demo-walkthrough.md](docs/demo-walkthrough.md).**
+  Added on 2026-11-27. It goes from a fresh clone to every screen, step by step, on the synthetic
+  demo data, then into the API documentation, the schema, the tests and the evaluation records.
+  Its local route was run end to end when it was written. Its Docker route uses the commands
+  CI's responsive audit runs. It shows only what exists, and it states the limitations above.
 
 The V1 intelligence layer remains a transparent statistical baseline. The trained demand model
 sits beside it — served, but **not scientifically validated**, and shown on the Analytics page

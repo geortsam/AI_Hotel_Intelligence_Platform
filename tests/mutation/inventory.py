@@ -11040,12 +11040,21 @@ STAGE_R0_1_DOCS = [
             "README now states the fix and the mutation restores the old open claim instead."
         ),
     ),
-    _r01d(
-        3,
-        "the missing demo walkthrough is no longer disclosed",
-        "- **There is no scripted end-to-end demo walkthrough.** Installation",
-        "- Installation",
-        "test_known_limitations_lists_the_walkthrough_and_the_fixed_clipping",
+    Mutation(
+        "R0.1-docs-M3",
+        "R0.1-docs",
+        "the README no longer points to the demo walkthrough",
+        one(
+            "README.md",
+            "- **The scripted demo walkthrough is"
+            " [docs/demo-walkthrough.md](docs/demo-walkthrough.md).**",
+            "- **The scripted demo walkthrough is not yet written.**",
+        ),
+        (_R01D_TESTS + "test_known_limitations_lists_the_walkthrough_and_the_fixed_clipping",),
+        note=(
+            "Re-pinned by the demo walkthrough (2026-11-27): the walkthrough this mutation hid the "
+            "absence of now exists, so the README links it and the mutation removes the link."
+        ),
     ),
     _r01d(
         4,
@@ -11222,6 +11231,193 @@ STAGE_A9_FIX = [
 ]
 
 
+# --- The scripted demo walkthrough (2026-11-27): held to the repository it describes ---------
+
+_DW = "docs/demo-walkthrough.md"
+_DW_TESTS = "tests/backend/test_demo_walkthrough.py::"
+
+
+def _dw(number: int, breaks: str, path: str, old: str, new: str, killer: str) -> Mutation:
+    """The walkthrough loses a part, names what does not exist, or claims what is not so."""
+    return Mutation(
+        f"DW-M{number}",
+        "DW",
+        breaks,
+        one(path, old, new),
+        (_DW_TESTS + killer,),
+    )
+
+
+STAGE_WALKTHROUGH = [
+    _dw(
+        1,
+        "the reset-and-cleanup part is renamed away",
+        _DW,
+        "\n## E. Reset and cleanup\n",
+        "\n## E. Cleanup\n",
+        "test_the_walkthrough_has_every_required_part_in_order",
+    ),
+    _dw(
+        2,
+        "a core step no longer says what it demonstrates",
+        _DW,
+        "- **Demonstrates:** the answer comes from the database.",
+        "The answer comes from the database.",
+        "test_every_core_step_says_where_what_to_expect_and_what_it_demonstrates",
+    ),
+    _dw(
+        3,
+        "it names a test file that does not exist",
+        _DW,
+        "the test CI runs to reproduce it: `tests/ml/test_frozen_holdout_record.py`;",
+        "the test CI runs to reproduce it: `tests/ml/test_frozen_holdout_records.py`;",
+        "test_every_repository_path_it_names_exists",
+    ),
+    _dw(
+        4,
+        "it runs an operator module that does not exist",
+        _DW,
+        "PYTHONPATH=backend .venv/Scripts/python.exe -m app.jobs.platform_admin grant",
+        "PYTHONPATH=backend .venv/Scripts/python.exe -m app.jobs.platform_administration grant",
+        "test_every_python_module_it_runs_exists",
+    ),
+    _dw(
+        5,
+        "it runs a script that does not exist",
+        _DW,
+        "`.venv/Scripts/python.exe scripts/testdb.py create walkthrough_scratch_test`",
+        "`.venv/Scripts/python.exe scripts/test_db.py create walkthrough_scratch_test`",
+        "test_every_script_it_runs_exists",
+    ),
+    _dw(
+        6,
+        "it sends the reader to a screen route the application does not have",
+        _DW,
+        "**Operations → Availability** (`/availability`)",
+        "**Operations → Availability** (`/availability-search`)",
+        "test_every_screen_route_it_names_is_a_route_of_the_application",
+    ),
+    _dw(
+        7,
+        "it names an API route that does not exist",
+        _DW,
+        "(`GET …/ml/demand-forecast`)",
+        "(`GET …/ml/demand-forecasts`)",
+        "test_every_api_route_it_names_exists",
+    ),
+    _dw(
+        8,
+        "it states an operation count the API does not have",
+        _DW,
+        "68 paths and 104 operations",
+        "68 paths and 103 operations",
+        "test_the_api_counts_and_migration_head_it_states_are_the_codes",
+    ),
+    _dw(
+        9,
+        "it writes a demo password down",
+        _DW,
+        "   - **Password:** the value you set in `DEMO_OWNER_PASSWORD`.",
+        "   - **Password:** `DEMO_OWNER_PASSWORD=demo-owner-2026`.",
+        "test_the_demo_account_is_the_seeds_own_and_no_password_is_written_down",
+    ),
+    _dw(
+        10,
+        "it quotes a room type the seed does not create",
+        _DW,
+        "`SEA` Superior Sea View",
+        "`SEA` Sea View",
+        "test_the_seeded_facts_it_quotes_are_the_seeds",
+    ),
+    _dw(
+        11,
+        "its Docker seeding command drifts from the one CI runs",
+        _DW,
+        '-e DEMO_OWNER_PASSWORD -v "$PWD/scripts:/app/scripts:ro" migrate',
+        '-e DEMO_OWNER_PASSWORD -v "$PWD/scripts:/app/scripts" migrate',
+        "test_the_docker_seed_command_is_the_one_ci_runs",
+    ),
+    _dw(
+        12,
+        "it tells the reader to create a demo database the integration suite would accept",
+        _DW,
+        'psql -U postgres -c "CREATE DATABASE hotel_intelligence_demo"',
+        'psql -U postgres -c "CREATE DATABASE hotel_intelligence_demo_test"',
+        "test_it_never_points_the_test_suite_at_the_demo_database",
+    ),
+    _dw(
+        13,
+        "it says the synthetic demo data is used to evaluate the model",
+        _DW,
+        "It is never used to train, evaluate or measure anything",
+        "It is used to evaluate the model",
+        "test_it_keeps_the_synthetic_demo_data_apart_from_the_published_dataset",
+    ),
+    _dw(
+        14,
+        "it claims the platform is production ready",
+        _DW,
+        "**demo ready and not production ready**",
+        "**demo ready and production ready**",
+        "test_it_states_the_portfolio_scope_and_never_claims_production_readiness",
+    ),
+    _dw(
+        15,
+        "it no longer says the optional copilot path was not verified",
+        _DW,
+        "**Optional, Route A only, not verified for this walkthrough:**",
+        "**Optional, Route A only:**",
+        "test_it_says_the_copilot_is_off_and_the_optional_path_unverified",
+    ),
+    _dw(
+        16,
+        "it calls the fixed expenses-table clipping open",
+        _DW,
+        "- **Fixed:** the Analytics expenses-table clipping, since 2026-11-27 (C10).",
+        "- **Open:** the Analytics expenses-table clipping (C10).",
+        "test_it_describes_the_clipping_as_fixed",
+    ),
+    _dw(
+        17,
+        "the documentation index no longer lists the walkthrough",
+        "docs/README.md",
+        "| [demo-walkthrough.md](demo-walkthrough.md) | The scripted demo:",
+        "| demo-walkthrough.md | The scripted demo:",
+        "test_the_readme_and_the_index_lead_to_the_walkthrough",
+    ),
+    _dw(
+        18,
+        "the README's pointer beside the documentation index is dropped",
+        "README.md",
+        "follow the scripted\n[demo walkthrough](docs/demo-walkthrough.md).",
+        "follow the scripted\ndemo walkthrough.",
+        "test_the_readme_and_the_index_lead_to_the_walkthrough",
+    ),
+    _dw(
+        19,
+        "it says a generated file is committed, and .gitignore stops ignoring it",
+        ".gitignore",
+        "\ncerts/\n",
+        "\ncertificates/\n",
+        "test_the_paths_it_says_are_not_committed_are_git_ignored",
+    ),
+    Mutation(
+        "DW-M20",
+        "DW",
+        "the closure audit says the walkthrough is still missing",
+        one(
+            "docs/project-closure-audit.md",
+            "a single scripted demo walkthrough, added\n  since (§15).",
+            "a single scripted demo walkthrough, which\n  the README does not have.",
+        ),
+        (
+            "tests/backend/test_readme_disclosures.py::"
+            "test_the_closure_audit_records_the_walkthrough_as_added",
+        ),
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -11285,4 +11481,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R5,
     *STAGE_R0_1_DOCS,
     *STAGE_A9_FIX,
+    *STAGE_WALKTHROUGH,
 )

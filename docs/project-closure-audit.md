@@ -23,6 +23,10 @@
 > **The Analytics expenses-table clipping was fixed on 2026-11-27,
 > [§14](#14-addendum-the-expenses-table-clipping-fixed-2026-11-27).** Where the sections below
 > describe it as open, §14 is the current state.
+>
+> **The scripted demo walkthrough was added on 2026-11-27,
+> [§15](#15-addendum-the-scripted-demo-walkthrough-2026-11-27).** Where the sections below say
+> it is missing, §15 is the current state.
 
 ## 1. Executive summary
 
@@ -634,8 +638,8 @@ register. It is a scope decision: it implements nothing, and none of the twelve 
 - **Deferred rows:** R1.2, R1.4a, R2.1, R2.2, R2.3, R2.4, R3.1, R3.2, R3.4, R4.1, R4.3a, R4.3b and
   R5's own features. Each keeps its ID, row and brief.
 - **Still asked of the repository by this target**, as engineering, not decisions: the Analytics
-  expenses-table clipping (§9), fixed since (§14), and a single scripted demo walkthrough, which
-  the README does not have.
+  expenses-table clipping (§9), fixed since (§14), and a single scripted demo walkthrough, added
+  since (§15).
 
 **Completion accounting:** unchanged. 56 / 71 = 78.9% overall, strict 54 / 71 = 76.1%,
 decision-free 56 / 56 = 100%, v2.0 matrix 14 / 29 = 48.3%. R5 was never counted as done; its
@@ -681,3 +685,42 @@ tasks), the decision register, and the scripted-walkthrough gap. The workflow co
 `responsive-audit` job in `ci.yml` still describes the old report-only probe. That file is a
 fingerprinted retrieval source, and the comment is not worth a re-pin on its own, so it stays
 as it is until the next §12.6 re-pin.
+
+## 15. Addendum: the scripted demo walkthrough (2026-11-27)
+
+The second item §13 still asked of the repository is done:
+[demo-walkthrough.md](demo-walkthrough.md). It is documentation and its tests only. No application
+code, migration, CI workflow, fingerprinted source or frozen record changed, and nothing was
+merged, released or published.
+
+**What it is.** One script for an examiner, an interviewer or a first-time developer, in five
+parts:
+- **A. Preparation:** the local and the Docker routes;
+- **B. Authentication:** signing in as the seed's demo owner, whose password the reader chooses
+  and the repository never holds;
+- **C. The core walkthrough:** fourteen steps, one per screen. Each says where to go, what to do,
+  what to expect and what it demonstrates;
+- **D. The technical evidence:** API documentation, schema, architecture, tests, the retrieval
+  evaluation and frozen records, and the security and supply-chain controls;
+- **E. Reset and cleanup:** separating disposable demo and test data from user data.
+
+**How it was verified.**
+- The local route was run end to end against a new, empty database on 2026-11-27: migrate, seed,
+  start, the readiness checks, signing in through the API, and every endpoint each screen reads.
+- The Docker route was not run for it. It reuses the commands CI's responsive-audit job runs on
+  every push.
+- `tests/backend/test_demo_walkthrough.py` holds it to the code: its structure; that every path,
+  module, script, screen route and API route it names exists; the seed's demo account and facts;
+  the CI seeding command; the split between synthetic demo data and the published dataset; the
+  scope and limitations; and the fixed clipping. Mutation stage `DW` records the breaks
+  those tests must catch.
+
+**It found two things the walkthrough states rather than hides.**
+- Signing in needs `SECRET_KEY` even in development. The API starts without one and refuses the
+  first token operation; that is designed, not a defect.
+- On a fresh clone the served model's payload is absent, so the Analytics demand panel shows its
+  designed refusal until the payload is generated offline. The Docker image builds it.
+
+**Not changed by this addendum:** the completion accounting (the walkthrough was never one of the
+71 tasks), the decision register, readiness, and the limitations. A separate presentation summary
+is still not written; the walkthrough's limitations section is what a presenter should say.

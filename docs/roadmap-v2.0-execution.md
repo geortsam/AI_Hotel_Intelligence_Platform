@@ -233,8 +233,9 @@ none, so it is deferred outside the target; R2.2 and R2.4 wait on R2.1 and are d
 this record: the Analytics expenses-table clipping at 1440px is a defect in "a professional,
 responsive UI" and should be fixed and verified; and the README has screenshots and run
 instructions but no single scripted demo walkthrough or presentation summary. (The clipping was
-fixed and verified on 2026-11-27: the "A9 fix" row of the stage log. The walkthrough is still
-missing.)
+fixed and verified on 2026-11-27: the "A9 fix" row of the stage log. The walkthrough was added
+the same day: [demo-walkthrough.md](demo-walkthrough.md), the "Demo walkthrough" row. A separate
+presentation summary is not written.)
 
 ## 4. Stage log
 
@@ -265,6 +266,7 @@ missing.)
 | R6.1 | R6.1 read literally: the six superseded stage snapshots consolidated into `architecture.md` (§2.1–§2.6, §4.1, §5, §8), the database README (schema design §1–§13 with a "Now" column and a numbering key for the decision register; the implementation and its Stage 2C verification) and §5 of this file; each old path a redirect; the index's statuses are now Current, Frozen record and Redirect; `scripts/doc_links.py` also checks the database README; A8-M17 and M21–M23 re-pinned to where their statements moved; mutation stage R6.1, 12 recorded: 999 in all. No fingerprinted source changed, so no re-pin | `a3d996f`, `03c58de` | [45649328024](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45649328024): all 8 green, 999/999, 51/51, the C.4 report re-measured byte-identical to the pin; scan [45649324135](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45649324135) (`push`) and [45649327867](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45649327867) green |
 | R5 decision | R5 decided by the project owner: **Academic / Professional Portfolio** (§3.13). Recorded with its scope, what it does not authorise and how it bears on the twelve open briefs; R5 and the twelve deferred rows marked in §2, none deleted. A scope decision: no implementation, no other decision taken; documentation and its tests only, no fingerprinted source | the commit that adds this row | that commit's own CI run |
 | A9 fix | the Analytics expenses-table clipping fixed (an in-scope R5 engineering item). Root cause: an unbreakable category cell (code + "Fixed cost" tag, ~175px) and a 340px grid minimum unrelated to the tables, so the table overflowed its card from 768 to 1440px (525px in 482px at 1440px on CI's data). Fix: the tag may wrap under its code; the cards share a line only when both tables fit (a wrapping flex row, no hard-coded width); on a phone the table scrolls in a focusable region named by its caption. The responsive audit's report-only probe became five gated table checks (375, 768, 1024, 1280, 1440px; fit from 768px, keyboard-scrolled below); mutation stage A9-fix, 16 recorded. Frontend and tests only, no fingerprinted source, no re-pin | the commit that adds this row | that commit's own CI run |
+| Demo walkthrough | the scripted end-to-end demo (an in-scope R5 documentation item): [demo-walkthrough.md](demo-walkthrough.md), from a fresh clone through the local or Docker stack and the synthetic demo seed, signing in, fourteen screens each with where, what, expected result and what it demonstrates, the technical evidence, and a safe reset. The local route was run end to end on 2026-11-27; the Docker route reuses CI's commands. Held to the code by `tests/backend/test_demo_walkthrough.py` and mutation stage `DW`. Documentation and tests only, no fingerprinted source, no re-pin | the commit that adds this row | that commit's own CI run |
 
 ## 5. The proposal as written on 2026-10-10
 
