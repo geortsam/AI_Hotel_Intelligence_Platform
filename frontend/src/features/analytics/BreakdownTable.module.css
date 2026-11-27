@@ -1,5 +1,7 @@
 /* Horizontal scroll rather than a squeezed table: five columns of figures do not reflow into a
-   phone, and a table that wraps its own numbers is harder to read than one that scrolls. */
+   phone, and a table that wraps its own numbers is harder to read than one that scrolls.
+   Above a phone the table fits (see `.categoryLabel` and the page's `.breakdownGrid`), so this
+   box scrolls only where the screen is narrower than the table can become. */
 .scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -59,16 +61,34 @@
   color: var(--color-text);
 }
 
+/* The one cell that may wrap: `.table th` makes every cell `nowrap`, and that is right for
+   figures, but it made a long code and its tag (MAINTENANCE + "Fixed cost") one unbreakable
+   line, the widest thing in the table. The code and the tag each stay whole; when the column
+   is narrow, the tag moves under the code instead of pushing the last column out of the box.
+   Specificity matches `.table th`, and this rule comes after it. */
+.table .category {
+  white-space: normal;
+}
+
+.categoryLabel {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+
 .code {
   font-family: var(--font-mono, monospace);
   font-size: var(--text-xs);
   letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
+/* Spaced from the code by `.categoryLabel`'s gap, which also spaces it when it wraps. */
 .tag {
   display: inline-block;
-  margin-left: var(--space-2);
   padding: 0 var(--space-2);
+  white-space: nowrap;
   border-radius: var(--radius-full);
   background: var(--color-info-soft);
   color: var(--color-info-text);

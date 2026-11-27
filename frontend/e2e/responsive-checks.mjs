@@ -25,6 +25,13 @@
  * The measurement is UI-10's, unchanged in what it measures: the same selectors, the same
  * clipping rule and the same 0.5px tolerance, after the same readiness wait (a `main h1` and no
  * `main [aria-busy="true"]`, polled every 250ms for up to 6s, then the fonts, then 300ms).
+ *
+ * **The table checks** are five more, kept apart from the 51 because they ask something the 51
+ * cannot: whether a table fits *inside its own box*. A table that scrolls in a box never moves
+ * the page, so the 51 pass while its last column sits out of sight. That is how the Analytics
+ * expenses table was clipped at 1440px from UI-10 until 2026-11-27, reported by this audit on
+ * every run but never failing it. Now the two Analytics breakdown tables are checked at five
+ * widths, and a run fails unless all five checks pass (`TABLE_WIDTHS`, `evaluateTables`).
  */
 
 /** The viewport widths, in CSS pixels. */
@@ -71,18 +78,25 @@ export const READY_POLL_MS = 250
 export const READY_POLLS = 24
 export const SETTLE_MS = 300
 
+/** The page whose breakdown tables the table checks measure. */
+export const TABLE_ROUTE = '/analytics'
+
+/** UI-10's three widths, and the two desktop widths between its tablet and its largest. */
+export const TABLE_WIDTHS = Object.freeze([375, 768, 1024, 1280, 1440])
+
+/** One table check per width. The runner refuses to report a different number. */
+export const TABLE_CHECK_COUNT = 5
+
+/** The breakdown tables, by the start of their captions, and the columns each must have. */
+export const BREAKDOWN_TABLES = Object.freeze(['Ledger revenue', 'Ledger expenses'])
+export const BREAKDOWN_COLUMNS = Object.freeze(['Category', 'Currency', 'Amount', 'Tax', 'Entries'])
+
 /**
- * The known defect the project-completion audit recorded after UI-10 and that the 51 checks do
- * not catch: the Analytics expenses table is wider than its box at 1440px, so its last column
- * is cut off inside its scroll container. Reported by the runner on every run, never counted,
- * never hidden; see docs/project-completion-audit.md.
+ * From this width up, a breakdown table must fit its box: nothing scrolls, nothing is out of
+ * sight. Below it (a phone), a table may scroll inside its box, but only in a box a keyboard
+ * can reach and scroll, and that is named after the table.
  */
-export const KNOWN_DEFECT = Object.freeze({
-  route: '/analytics',
-  width: 1440,
-  caption: 'Ledger expenses',
-  description: 'the Analytics expenses table is wider than its box at 1440px (last column clipped)',
-})
+export const FIT_FROM_PX = 768
 
 /** Every check to run: each route at each width, its `:name` segments resolved from `ids`. */
 export function plan(ids) {
@@ -141,13 +155,99 @@ export function measure(tolerance) {
   }
 }
 
-/** The known defect's in-page probe: every table on the page, its width against its box. */
+/**
+ * The table checks' in-page measurement: the document's width, and for every table in `<main>`
+ * its caption, its columns, its empty cells, its width against its box's, and what the box is
+ * to a keyboard. Self-contained, as `measure` is.
+ */
 export function measureTables() {
-  return [...document.querySelectorAll('main table')].map((table) => ({
-    caption: (table.querySelector('caption')?.textContent ?? '').trim(),
-    tableWidth: table.scrollWidth,
-    boxWidth: table.parentElement ? table.parentElement.clientWidth : 0,
-  }))
+  const d = document
+  return {
+    path: window.location.pathname,
+    clientWidth: d.documentElement.clientWidth,
+    docScrollWidth: d.documentElement.scrollWidth,
+    tables: [...d.querySelectorAll('main table')].map((table) => {
+      const box = table.parentElement
+      const labelledBy = box?.getAttribute('aria-labelledby')
+      const label = labelledBy ? (d.getElementById(labelledBy)?.textContent ?? '') : ''
+      return {
+        caption: (table.querySelector('caption')?.textContent ?? '').trim(),
+        columns: [...table.querySelectorAll('thead th')].map((th) => (th.textContent ?? '').trim()),
+        rows: table.querySelectorAll('tbody tr').length,
+        emptyCells: [...table.querySelectorAll('tbody th, tbody td')].filter(
+          (cell) => (cell.textContent ?? '').trim() === '',
+        ).length,
+        tableWidth: table.scrollWidth,
+        boxWidth: box ? box.clientWidth : 0,
+        boxTabIndex: box ? box.tabIndex : -1,
+        boxRole: box?.getAttribute('role') ?? null,
+        boxLabel: label.trim(),
+      }
+    }),
+  }
+}
+
+/**
+ * What is wrong with one table check: an empty list when it passes. `keyboard` is the runner's
+ * account of scrolling each overflowing table by keyboard, keyed by caption prefix:
+ * `{ focused, scrolled, lastColumnVisible }`.
+ */
+export function evaluateTables(width, m, keyboard = {}) {
+  const problems = []
+  if (m.path !== TABLE_ROUTE) {
+    problems.push(`not the page asked for: the browser is at ${m.path}`)
+  }
+  if (m.clientWidth !== m.docScrollWidth) {
+    problems.push(`sideways scroll: the document is ${m.docScrollWidth}px wide in a ${m.clientWidth}px viewport`)
+  }
+  for (const name of BREAKDOWN_TABLES) {
+    const table = m.tables.find((t) => t.caption.startsWith(name))
+    if (!table) {
+      problems.push(`no table captioned "${name}…"`)
+      continue
+    }
+    if (table.columns.join('|') !== BREAKDOWN_COLUMNS.join('|')) {
+      problems.push(`"${name}" has the columns ${table.columns.join(', ') || 'none'}`)
+    }
+    if (table.rows === 0) {
+      problems.push(`"${name}" has no rows to measure`)
+    }
+    if (table.emptyCells > 0) {
+      problems.push(`"${name}" has ${table.emptyCells} empty cells`)
+    }
+    if (table.tableWidth <= table.boxWidth) {
+      continue
+    }
+    const size = `table ${table.tableWidth}px in a ${table.boxWidth}px box`
+    if (width >= FIT_FROM_PX) {
+      problems.push(`"${name}" is clipped at ${width}px: ${size}`)
+      continue
+    }
+    if (table.boxTabIndex !== 0 || table.boxRole !== 'region' || !table.boxLabel.startsWith(name)) {
+      problems.push(`"${name}" scrolls (${size}) in a box that is not a focusable region named after it`)
+    }
+    const k = keyboard[name]
+    if (!k || !k.focused) {
+      problems.push(`"${name}" scrolls (${size}) but the keyboard never reached its box`)
+    } else if (!k.scrolled || !k.lastColumnVisible) {
+      problems.push(`"${name}" scrolls (${size}) but the arrow keys did not bring its last column into view`)
+    }
+  }
+  return problems
+}
+
+/** The table checks' verdict: one per width, every one passing. */
+export function summariseTables(results) {
+  const failed = results.filter((r) => r.problems.length > 0)
+  const ok = results.length === TABLE_CHECK_COUNT && failed.length === 0
+  const lines = results.map(
+    (r) => `${r.problems.length ? 'FAIL' : 'PASS'}  ${String(r.width).padStart(4)}px  ${TABLE_ROUTE} tables${r.problems.length ? `  -- ${r.problems.join('; ')}` : ''}`,
+  )
+  if (results.length !== TABLE_CHECK_COUNT) {
+    lines.push(`FAIL  ${results.length} table checks ran, the specification has ${TABLE_CHECK_COUNT}`)
+  }
+  lines.push(`${results.length - failed.length} of ${TABLE_CHECK_COUNT} table checks passed`)
+  return { ok, passed: results.length - failed.length, failed: failed.length, lines }
 }
 
 /** What is wrong with one check's measurement: an empty list when it passes. */
@@ -169,20 +269,6 @@ export function evaluate(check, m) {
     problems.push(`${m.h1Count} h1 elements, not exactly one`)
   }
   return problems
-}
-
-/** The known defect's state, from the probe's tables. */
-export function knownDefect(tables) {
-  const table = tables.find((t) => t.caption.startsWith(KNOWN_DEFECT.caption))
-  if (!table) {
-    return { found: false, reproduces: false, detail: `no table captioned "${KNOWN_DEFECT.caption}…" on ${KNOWN_DEFECT.route}` }
-  }
-  const reproduces = table.tableWidth > table.boxWidth
-  return {
-    found: true,
-    reproduces,
-    detail: `"${table.caption}": table ${table.tableWidth}px in a ${table.boxWidth}px box`,
-  }
 }
 
 /** The run's verdict: every planned check reported, every one passing. */

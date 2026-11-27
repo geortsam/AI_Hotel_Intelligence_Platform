@@ -19,6 +19,10 @@
 > **R5 decided (2026-11-25), [§13](#13-addendum-r5-decided-2026-11-25).** The project owner chose
 > **Academic / Professional Portfolio**. Twelve decisions remain open; where the sections below
 > count thirteen, §13 is the current state.
+>
+> **The Analytics expenses-table clipping was fixed on 2026-11-27,
+> [§14](#14-addendum-the-expenses-table-clipping-fixed-2026-11-27).** Where the sections below
+> describe it as open, §14 is the current state.
 
 ## 1. Executive summary
 
@@ -36,8 +40,9 @@
   byte-identical to the pinned report.
 - **13 decisions were yours at `15a29d1`** (§7); R5 has since been decided, so 12 are open (§13). Each one commits you to something outside the repository:
   money, an account, a legal permission, a public act, or a change to past figures.
-- **The platform is demo ready and is not production ready** (§8). One known defect is open:
-  the Analytics expenses table is clipped at 1440px (§9).
+- **The platform is demo ready and is not production ready** (§8). One known defect was open
+  at `15a29d1`: the Analytics expenses table was clipped at 1440px (§9). It was fixed on
+  2026-11-27 (§14).
 
 | Metric | Value | Counts |
 |---|---|---|
@@ -249,7 +254,7 @@ Doing it or not is a choice of scope. *Done since (§12).*
 | Backend and API | FastAPI; 68 paths / 104 operations, 96 authenticated (computed by a test); a uniform error envelope; request-ID, body-size and security-header middleware | one API worker |
 | Authentication and authorisation | Argon2id; bearer login for API clients; `HttpOnly` cookie sessions with refresh rotation, replay detection and CSRF; four hotel roles; tenant isolation answering 404; audited operator grant and revoke of platform administration | no password reset, email or deactivation endpoint (R1.2); open registration by design |
 | Database | PostgreSQL 18.6; 29 tables; 23 linear migrations, head `0023_auth_sessions`; the booking non-overlap rule enforced by the database; `If-Match` optimistic concurrency | no room-status history (R3.1); no FX (R3.4) |
-| Hotel operations, bookings, finance, analytics | the full booking lifecycle, availability, payments and refunds, the ledger, occupancy, ADR, RevPAR, per currency and on the hotel's calendar | the expenses table clips at 1440px (§9) |
+| Hotel operations, bookings, finance, analytics | the full booking lifecycle, availability, payments and refunds, the ledger, occupancy, ADR, RevPAR, per currency and on the hotel's calendar | the expenses table clipped at 1440px until 2026-11-27 (§9, §14) |
 | Intelligence and ML | deterministic statistical forecasts, anomalies and an attention list; a served demand model with stored predictions and accuracy, drift and performance endpoints | **no production accuracy is established**. The model learned from a public research dataset, not this platform's data (R2.1) |
 | Copilot | seven read-only tools, checked figures, document citations through PostgreSQL full-text search, conversations, retention, budgets, a circuit breaker; local Ollama or Anthropic, off by default | **no language model's answer quality is established**. Retrieval recall@5 was 0.6957 against a declared 0.90 on an author-written set (R2.3); Stage 7.15 is untriggered |
 | Retrieval evaluation | Decision F complete; the C.4 report is pinned and re-measured byte-identically on every CI run | measures retrieval only, on an author-written dataset |
@@ -513,10 +518,11 @@ The platform is **not production ready**. Each gap is supported by the repositor
 
 ## 9. Known defects
 
-- **Analytics expenses table, clipped at 1440px. Open, not fixed.** The "Ledger expenses" table
-  is 525px wide inside a 482px box, so its last column is clipped. It was found on 2026-11-24.
-  Every responsive-audit run probes and reports it, most recently run 45517429233. It is not one
-  of the 51 checks, so the audit still passes. Severity: low, cosmetic.
+- **Analytics expenses table, clipped at 1440px. Fixed on 2026-11-27 (§14).** As audited, the
+  "Ledger expenses" table was 525px wide inside a 482px box, so its last column was clipped. It
+  was found on 2026-11-24. Every responsive-audit run probed and reported it, last at this audit
+  in run 45517429233. It was not one of the 51 checks, so the audit still passed. Severity: low,
+  cosmetic.
 - **The responsive audit runs Chromium only**, as UI-10 did.
 
 ## 10. What this closure does not claim
@@ -628,9 +634,50 @@ register. It is a scope decision: it implements nothing, and none of the twelve 
 - **Deferred rows:** R1.2, R1.4a, R2.1, R2.2, R2.3, R2.4, R3.1, R3.2, R3.4, R4.1, R4.3a, R4.3b and
   R5's own features. Each keeps its ID, row and brief.
 - **Still asked of the repository by this target**, as engineering, not decisions: the Analytics
-  expenses-table clipping (§9) — still open — and a single scripted demo walkthrough, which the
-  README does not have.
+  expenses-table clipping (§9), fixed since (§14), and a single scripted demo walkthrough, which
+  the README does not have.
 
 **Completion accounting:** unchanged. 56 / 71 = 78.9% overall, strict 54 / 71 = 76.1%,
 decision-free 56 / 56 = 100%, v2.0 matrix 14 / 29 = 48.3%. R5 was never counted as done; its
 decision moves it from waiting to out of scope, and the 71-item denominator stays.
+
+## 14. Addendum: the expenses-table clipping fixed (2026-11-27)
+
+The one known defect of §9 was fixed after this audit, as in-scope engineering for the R5 target
+(§13). The change touched the frontend and its tests only. No backend code, migration, CI
+workflow, fingerprinted source or frozen record changed, and nothing was merged, released or
+published.
+
+**Root cause.** Two layout rules combined:
+- every cell of the breakdown table was `nowrap`, so a long category code and its "Fixed cost"
+  tag made one unbreakable line, about 175px wide, the table's widest column;
+- the page put the two breakdown cards side by side from 340px each, a minimum that had nothing
+  to do with what the tables need.
+
+So the table was wider than its card's box. At 1440px that was 525px in 482px on CI's data
+(533px on another seed). The same overflow, unreported, also happened at every width from 768
+to 1280px. The box scrolls, so the page never moved and the 51 checks passed.
+
+**The fix.**
+- The tag may wrap under its code. Every figure stays on one line.
+- The two cards share a line only when both tables fit, and stack otherwise. This is a wrapping
+  flex row whose cards keep their min-content width, capped at 100%, so no width is hard-coded.
+- On a phone, where no layout fits five columns, the table scrolls inside its box. While it
+  does, the box is a focusable region named by the table's caption, so the keyboard can reach
+  it and scroll it.
+
+**How it is held.** The responsive audit's report-only probe is now five gated **table checks**:
+- the two breakdown tables at 375, 768, 1024, 1280 and 1440px;
+- from 768px each table must fit its box;
+- below 768px a table may scroll only in a focusable, named region that the runner scrolls by
+  keyboard until the last column is in view;
+- every column must be present and no cell empty.
+
+The 51 checks are unchanged. A Vitest test fails on the recorded measurement itself (525px in a
+482px box at 1440px). Mutation stage A9-fix records 16 breaks of the fix and its checks.
+
+**Not changed by this addendum:** the completion accounting (the defect was never one of the 71
+tasks), the decision register, and the scripted-walkthrough gap. The workflow comment above the
+`responsive-audit` job in `ci.yml` still describes the old report-only probe. That file is a
+fingerprinted retrieval source, and the comment is not worth a re-pin on its own, so it stays
+as it is until the next §12.6 re-pin.

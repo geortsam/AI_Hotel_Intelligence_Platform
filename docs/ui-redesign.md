@@ -72,7 +72,7 @@ being reproducible. That happened from `6ac7d44` until `52fde7b` (§6).
   - `<main>` uses `overflow-x: clip` rather than `hidden`, so sticky panels work.
   - UI-10's audit, re-run after the fonts: 17 routes × 375, 768 and 1440px, with no sideways scroll, no escaping element and exactly one `h1` per page.
   - **Automated since A9:** the CI job `responsive-audit` runs the same 51 checks, by the same method, in a digest-pinned Playwright Chromium against the seeded Compose stack (`frontend/e2e/`), and any failing check fails CI.
-  - **Known defect, open:** at 1440px the Analytics expenses table is wider than its box and its last column is clipped. It is not one of the 51 checks (the page itself does not scroll sideways); the job reports it separately on every run. It is not fixed.
+  - **Known defect, fixed on 2026-11-27:** at 1440px the Analytics expenses table was wider than its box and its last column was clipped. It was not one of the 51 checks, because the page itself did not scroll sideways. Now the category tag may wrap under its code, and the breakdown cards share a line only when both tables fit. On a phone the table scrolls in a focusable region named by its caption. Five gated table checks hold it at 375, 768, 1024, 1280 and 1440px ([project-closure-audit.md §14](project-closure-audit.md#14-addendum-the-expenses-table-clipping-fixed-2026-11-27)).
 - **Semantics:**
   - One `h1` per page, and the header title is no longer a heading.
   - Tables carry visually hidden captions.

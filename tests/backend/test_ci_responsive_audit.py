@@ -11,6 +11,11 @@ credentials it generates are masked; the report is uploaded with a pinned action
 specification the runner audits is the one docs/ui-redesign.md states -- 17 routes, each a route
 the application has, at 375, 768 and 1440px. Read from the files, split on indentation (no YAML
 library is a declared test dependency).
+
+Since 2026-11-27 the runner also fails the run on its five table checks, the Analytics breakdown
+tables at 375, 768, 1024, 1280 and 1440px, which replaced the report-only probe of the
+expenses-table clipping when that defect was fixed. The workflow is unchanged: its step still
+runs the same runner.
 """
 
 from __future__ import annotations
@@ -215,8 +220,15 @@ def test_the_runner_signs_in_and_fails_unless_every_check_passed() -> None:
     text = RUNNER.read_text(encoding="utf-8")
     assert "await signIn(context)" in text
     assert "plan({ booking, guest, roomType, roomNumber })" in text
-    assert "if (!verdict.ok) {" in text and "return 1" in text
+    assert "return 1" in text
     assert "process.exit(exitCode)" in text
+    # The five table checks (the 2026-11-27 fix of the expenses-table clipping) fail the run
+    # too, and a scrolling table is scrolled by keyboard, not just measured.
+    assert "if (!verdict.ok || !tableVerdict.ok) {" in text
+    assert "for (const width of TABLE_WIDTHS) {" in text
+    assert "keyboard[name] = await scrollByKeyboard(page, name)" in text
+    assert "evaluateTables(width, m, keyboard)" in text
+    assert "KNOWN_DEFECT" not in text
     # The password is read from the environment and never logged.
     assert "required('AUDIT_PASSWORD')" in text
     assert not re.search(r"console\.\w+\([^)]*password", text)

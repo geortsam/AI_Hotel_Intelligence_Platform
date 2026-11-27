@@ -432,7 +432,7 @@ One batch, one re-pin. Implementation `7858c27`; re-pin `133c5be` (the report an
 - `frontend/e2e/responsive-checks.mjs` holds UI-10's specification unchanged: the 17 routes in its order, 375, 768 and 1440px at a 900px height, and per page no sideways scroll, no element escaping the viewport and exactly one `h1`, measured with UI-10's own method. `frontend/e2e/responsive-audit.mjs` drives it.
 - The CI job `responsive-audit` builds and starts the Compose stack, seeds it with the **synthetic** demo data (`scripts/seed_demo.py`, generated credentials, masked), grants the platform role, and runs the audit in Chromium from `mcr.microsoft.com/playwright:v1.65.0-noble`, pinned by digest, whose version is the `playwright-core` 1.65.0 the lockfile installs. Viewports are set explicitly, so nothing depends on a local display. Any failing check fails the job and is named; the JSON report is uploaded.
 - In run [45476887432](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476887432): **51 of 51 checks passed.**
-- **The known defect stays visible.** The Analytics expenses table at 1440px is not one of the 51 and is not marked fixed: the job probes it separately and reports, without counting it, that it still reproduces ("Ledger expenses": a 525px table in a 482px box).
+- **The known defect stayed visible until it was fixed.** The Analytics expenses table at 1440px was not one of the 51 and was not marked fixed while it stood. The job probed it separately and reported, without counting it, that it still reproduced ("Ledger expenses": a 525px table in a 482px box). **Fixed on 2026-11-27**: the probe became five gated table checks of the breakdown tables at 375, 768, 1024, 1280 and 1440px, with mutation stage A9-fix (16 recorded); see [project-closure-audit.md §14](project-closure-audit.md#14-addendum-the-expenses-table-clipping-fixed-2026-11-27).
 - `frontend/e2e/responsive-checks.test.mjs`, 18 Vitest tests; `tests/backend/test_ci_responsive_audit.py`, 13 tests; mutation stage A9, 13 recorded (9 Vitest, 4 pytest).
 
 **Mutations:** stage A2 13 (9 + 4 for the correction), A3 12, A5 12, A9 13: **963 in all**, every one killed in run [45476887432](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45476887432).
@@ -613,7 +613,7 @@ re-pin under §12.6. Tasks marked F are batched into one re-pin stage.
 | ~~A6~~ | **Done** (§4.2): README, screenshots, frontend README, execution log, `ui-redesign.md`, 12 regression tests, 8 mutations | — | — | — | — |
 | ~~A7~~ | **Done** (§4.4): placeholder scaffolding removed, Not Found styles identical (digests), the navigation-to-route guarantee now a test, 4 mutations; CI 45150368805 green | — | — | — | — |
 | ~~A8~~ | **Done** (§4.7): `docs/README.md` indexes all 43 documents with a status (22 current, 15 frozen records, 6 superseded); `scripts/doc_links.py` checks every relative link and anchor and that every document is reachable; 8 contradictions resolved and guarded; no document merged or moved; 24 mutations; CI 45509617278 green | — | — | — | — |
-| ~~A9~~ | **Done** (§4.6): CI job `responsive-audit`, UI-10's 51 checks in a digest-pinned Playwright 1.65.0 Chromium against the seeded Compose stack; the Analytics expenses-table clipping reported separately and still open; 13 mutations; CI 45476887432 green | — | — | — | — |
+| ~~A9~~ | **Done** (§4.6): CI job `responsive-audit`, UI-10's 51 checks in a digest-pinned Playwright 1.65.0 Chromium against the seeded Compose stack; the Analytics expenses-table clipping reported separately, then fixed on 2026-11-27 and gated by five table checks (closure audit §14); 13 mutations, A9-fix 16 more; CI 45476887432 green | — | — | — | — |
 
 **Dependencies, so no work was done twice:** A6 → A8, which came last so the facts moved only
 once. Nothing here waits on you.
@@ -698,7 +698,7 @@ puts in and out of scope, and how it bears on each of the twelve are in
 | No dependency vulnerability gate; Dependabot inert off `main` | resolved for scanning: every push is scanned (A2, §4.5–§4.6); Dependabot still inert | decision §3.3 |
 | Dev-toolchain advisories (3 high) | resolved: 6 → 0 | A1 done (§4.1) |
 | No runtime metrics or alerts | metrics resolved, internal only (A5, §4.6); no alerts | decision §3.12 |
-| Analytics expenses table clipped at 1440px (last column) | low, cosmetic | **open**: found on 2026-11-24, after A2; reported by every responsive-audit run, not one of the 51 checks and not fixed |
+| Analytics expenses table clipped at 1440px (last column) | low, cosmetic | **fixed** on 2026-11-27 (closure audit §14). It was found on 2026-11-24, after A2, and reported by every responsive-audit run until then; five gated table checks now hold the fix |
 | Per-process rate limiter and copilot budgets | low at one worker | decision §3.6 |
 | Open registration, and hotel creation makes you its owner | by design for self-hosting | documented in the README |
 | Unauthenticated health probes | low (reachable only through nginx, no business data) | documented |

@@ -26,10 +26,10 @@ pytest -q
 
 Stages 7.6–7.14, F2, F16, I4, F1, F2-ADR, M1, M2, F2-COMP, F3, F4, G1, H1–H4, H6–H8, R2.2, R2.2b,
 R2.8AA, R2.8AC, R2.8AE, R2.8AG, R2.8AI, R2.8AK, R2.9B, R2.9K, R2.9X, R2.10A, R2.10B, R2.10C, R1.4,
-R1.5, R6.2, R0.4a, R4.2, R1.3a, R3.3, R1.1, R0.2, A6, A4, A7, A2, A3, A5, A9, A8, R6.1, R5 and
-R0.1-docs each broke their own guarantees on purpose and reported that a test caught every break.
-Those runs are now committed, in `mutation/inventory.py`: 1007 mutations across 61 stages, 913
-with pytest killers and 94 with Vitest killers, each an exact edit plus the named tests (its
+R1.5, R6.2, R0.4a, R4.2, R1.3a, R3.3, R1.1, R0.2, A6, A4, A7, A2, A3, A5, A9, A8, R6.1, R5,
+R0.1-docs and A9-fix each broke their own guarantees on purpose and reported that a test caught every break.
+Those runs are now committed, in `mutation/inventory.py`: 1023 mutations across 62 stages, 915
+with pytest killers and 108 with Vitest killers, each an exact edit plus the named tests (its
 *killers*) that must fail when it is applied. The edits are the ones the stages ran; where one
 had to change since, its `note` says how and why. These are counts of the inventory, not of any
 run: each run reports its own killed, survived, not-run and error counts. Historically, the
@@ -57,8 +57,8 @@ python -m tests.mutation --require-all --database-url postgresql+psycopg://postg
   that into a failure. `TEST_DATABASE_URL` is never inherited, because on a developer machine it
   may point at seeded demo data. These 166 are the mutations flagged `needs_database`, and no
   Vitest mutation is among them, so a local run with `--no-frontend` and no `--database-url`
-  runs 747 mutations and reports the other 260 as *not run* (166 needing a database, 94
-  frontend). CI passes a database and Node, and runs all 1007.
+  runs 749 mutations and reports the other 274 as *not run* (166 needing a database, 108
+  frontend). CI passes a database and Node, and runs all 1023.
 - **Maintenance.** `test_harness.py` fails in the normal suite as soon as a refactor moves an
   anchor or renames a killer. `python -m tests.mutation --discover --only <id>` then lists every
   test that fails under that mutation, to re-pin it.

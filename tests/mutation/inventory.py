@@ -11024,19 +11024,28 @@ STAGE_R0_1_DOCS = [
         "it was trained on, on the synthetic demo data; no generalisation",
         "test_the_r22_row_names_the_dataset_the_frozen_record_names",
     ),
-    _r01d(
-        2,
-        "the README claims the expenses-table clipping is fixed",
-        "**The Analytics expenses table is clipped at 1440px. Open, not fixed.**",
-        "**The Analytics expenses table was clipped at 1440px. Fixed.**",
-        "test_known_limitations_lists_the_open_defect_and_the_missing_walkthrough",
+    Mutation(
+        "R0.1-docs-M2",
+        "R0.1-docs",
+        "the README says again that the fixed expenses-table clipping is open",
+        one(
+            "README.md",
+            "- **The Analytics expenses-table clipping is fixed.** Until 2026-11-27",
+            "- **The Analytics expenses table is clipped at 1440px. Open, not fixed.**"
+            " Until 2026-11-27",
+        ),
+        (_R01D_TESTS + "test_known_limitations_lists_the_walkthrough_and_the_fixed_clipping",),
+        note=(
+            "Re-pinned by the A9 fix (2026-11-27): the defect this mutation hid was fixed, so the "
+            "README now states the fix and the mutation restores the old open claim instead."
+        ),
     ),
     _r01d(
         3,
         "the missing demo walkthrough is no longer disclosed",
         "- **There is no scripted end-to-end demo walkthrough.** Installation",
         "- Installation",
-        "test_known_limitations_lists_the_open_defect_and_the_missing_walkthrough",
+        "test_known_limitations_lists_the_walkthrough_and_the_fixed_clipping",
     ),
     _r01d(
         4,
@@ -11044,6 +11053,171 @@ STAGE_R0_1_DOCS = [
         "| A8 | The documentation index",
         "| The documentation index",
         "test_the_stage_table_lists_the_completed_audit_tasks_r61_and_the_r5_decision",
+    ),
+]
+
+
+# --- A9 fix (2026-11-27): the Analytics breakdown tables fit their cards, held by table checks --
+
+_A9F_CHECKS = "frontend/e2e/responsive-checks.mjs"
+_A9F_RULES = "e2e/responsive-checks.test.mjs::"
+_A9F_TABLE = "frontend/src/features/analytics/BreakdownTable.tsx"
+_A9F_HOOK = "frontend/src/lib/useHorizontalOverflow.ts"
+_A9F_UNIT = "src/features/analytics/BreakdownTable.test.tsx::"
+_A9F_PAGE_CSS = "frontend/src/pages/AnalyticsPage.module.css"
+_A9F_TABLE_CSS = "frontend/src/features/analytics/BreakdownTable.module.css"
+_A9F_CSS = "src/features/analytics/architecture.node.test.ts::"
+_A9F_RUNNER = "frontend/e2e/responsive-audit.mjs"
+_A9F_CI = (
+    "tests/backend/test_ci_responsive_audit.py::"
+    "test_the_runner_signs_in_and_fails_unless_every_check_passed"
+)
+
+
+def _a9f(number: int, breaks: str, path: str, old: str, new: str, killer: str) -> Mutation:
+    """The fix or its table checks are weakened; a Vitest test must fail."""
+    return Mutation(
+        f"A9-fix-M{number}", "A9-fix", breaks, one(path, old, new), (killer,), runner=Runner.VITEST
+    )
+
+
+STAGE_A9_FIX = [
+    _a9f(
+        1,
+        "an overflowing table's box is no longer a focusable, named region",
+        _A9F_TABLE,
+        "      {...(overflowing ? { tabIndex: 0, role: 'region', 'aria-labelledby': captionId }"
+        " : {})}",
+        "      {...(overflowing ? {} : {})}",
+        _A9F_UNIT
+        + "is a focusable region named by its caption while the table is wider than its box",
+    ),
+    _a9f(
+        2,
+        "a table exactly as wide as its box counts as overflowing, adding a useless tab stop",
+        _A9F_HOOK,
+        "      setOverflowing(element.scrollWidth > element.clientWidth)",
+        "      setOverflowing(element.scrollWidth >= element.clientWidth)",
+        _A9F_UNIT + "is a plain container with no tab stop while the table fits its box",
+    ),
+    _a9f(
+        3,
+        "the box is measured once and never again after a resize",
+        _A9F_HOOK,
+        "    const observer = new ResizeObserver(measure)",
+        "    const observer = new ResizeObserver(() => {})",
+        _A9F_UNIT + "follows a resize from scrolling to fitting and back",
+    ),
+    _a9f(
+        4,
+        "the breakdown cards go back to the 340px grid that clipped the expenses table",
+        _A9F_PAGE_CSS,
+        ".breakdownGrid {\n  display: flex;\n  flex-wrap: wrap;\n",
+        ".breakdownGrid {\n  display: grid;\n"
+        "  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));\n",
+        _A9F_CSS + "places the breakdown cards side by side only when both tables fit",
+    ),
+    _a9f(
+        5,
+        "a card's minimum width is no longer capped, so a phone page scrolls sideways",
+        _A9F_PAGE_CSS,
+        "  flex: 1 1 0;\n  max-width: 100%;\n",
+        "  flex: 1 1 0;\n",
+        _A9F_CSS + "places the breakdown cards side by side only when both tables fit",
+    ),
+    _a9f(
+        6,
+        "the category cell is unbreakable again, the widest thing in the table",
+        _A9F_TABLE_CSS,
+        ".table .category {\n  white-space: normal;\n}",
+        ".table .category {\n  white-space: nowrap;\n}",
+        _A9F_CSS + "lets a category tag wrap under its code, and nothing else wrap",
+    ),
+    _a9f(
+        7,
+        "a table wider than its box passes at 1440px, the recorded defect included",
+        _A9F_CHECKS,
+        "    if (width >= FIT_FROM_PX) {",
+        "    if (false) {",
+        _A9F_RULES + "fail the recorded defect: a 525px expenses table in a 482px box at 1440px",
+    ),
+    _a9f(
+        8,
+        "the tables need fit only above 1440px, so no audited width requires it",
+        _A9F_CHECKS,
+        "export const FIT_FROM_PX = 768",
+        "export const FIT_FROM_PX = 1441",
+        _A9F_RULES + "are the Analytics breakdown tables at five widths: 5 checks",
+    ),
+    _a9f(
+        9,
+        "the 1280px width is dropped from the table checks",
+        _A9F_CHECKS,
+        "export const TABLE_WIDTHS = Object.freeze([375, 768, 1024, 1280, 1440])",
+        "export const TABLE_WIDTHS = Object.freeze([375, 768, 1024, 1440])",
+        _A9F_RULES + "are the Analytics breakdown tables at five widths: 5 checks",
+    ),
+    _a9f(
+        10,
+        "a phone-width scroll box need only be focusable, not a region named after its table",
+        _A9F_CHECKS,
+        "    if (table.boxTabIndex !== 0 || table.boxRole !== 'region' || "
+        "!table.boxLabel.startsWith(name)) {",
+        "    if (table.boxTabIndex !== 0) {",
+        _A9F_RULES + "fail a phone-width scroll box that is not a region named after its table",
+    ),
+    _a9f(
+        11,
+        "keyboard scrolling passes without bringing the last column into view",
+        _A9F_CHECKS,
+        "    } else if (!k.scrolled || !k.lastColumnVisible) {",
+        "    } else if (!k.scrolled) {",
+        _A9F_RULES
+        + "fail a phone-width table the keyboard never reached or could not scroll to its end",
+    ),
+    _a9f(
+        12,
+        "a run with fewer than five table checks can pass",
+        _A9F_CHECKS,
+        "  const ok = results.length === TABLE_CHECK_COUNT && failed.length === 0",
+        "  const ok = failed.length === 0",
+        _A9F_RULES + "pass a run only when all 5 table checks ran and passed",
+    ),
+    _a9f(
+        13,
+        "an empty financial cell no longer fails a table check",
+        _A9F_CHECKS,
+        "    if (table.emptyCells > 0) {",
+        "    if (false) {",
+        _A9F_RULES
+        + "fail a missing table, a missing column, an empty cell, no rows and a sideways page",
+    ),
+    _a9f(
+        14,
+        "the measurement reports every box as focusable",
+        _A9F_CHECKS,
+        "        boxTabIndex: box ? box.tabIndex : -1,",
+        "        boxTabIndex: 0,",
+        _A9F_RULES
+        + "reports each table, its columns and cells, its width against its box, and its box",
+    ),
+    Mutation(
+        "A9-fix-M15",
+        "A9-fix",
+        "the runner ignores the table checks' verdict, so a clipped table passes CI",
+        one(_A9F_RUNNER, "    if (!verdict.ok || !tableVerdict.ok) {", "    if (!verdict.ok) {"),
+        (_A9F_CI,),
+    ),
+    Mutation(
+        "A9-fix-M16",
+        "A9-fix",
+        "the runner reports keyboard scrolling as done without pressing a key",
+        one(
+            _A9F_RUNNER,
+            "          keyboard[name] = await scrollByKeyboard(page, name)",
+            "          keyboard[name] = { focused: true, scrolled: true, lastColumnVisible: true }",
+        ),
+        (_A9F_CI,),
     ),
 ]
 
@@ -11110,4 +11284,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R6_1,
     *STAGE_R5,
     *STAGE_R0_1_DOCS,
+    *STAGE_A9_FIX,
 )

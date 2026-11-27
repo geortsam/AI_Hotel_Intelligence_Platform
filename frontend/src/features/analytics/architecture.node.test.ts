@@ -176,3 +176,41 @@ describe('the demand estimate makes no claim the model does not support', () => 
     expect(rendered).toContain('Modelled estimate')
   })
 })
+
+/**
+ * The layout that fixed the A9 audit's recorded defect (2026-11-27), held at its source.
+ *
+ * The CI responsive audit proves the result in a real browser: five table checks, at 375, 768,
+ * 1024, 1280 and 1440px. jsdom has no layout, so a unit test cannot measure the table. This one
+ * pins the two rules the fix consists of, so that reverting either fails here, without waiting
+ * for a browser:
+ *
+ * * the breakdown cards share a line only when both tables fit (a wrapping flex row whose items
+ *   keep their min-content width, capped at 100%), not from a fixed 340px grid column;
+ * * the category cell may wrap its tag under its code, where every other cell stays `nowrap`.
+ */
+describe('the breakdown tables fit their cards', () => {
+  const page = readFileSync(join(ROOT, 'src', 'pages', 'AnalyticsPage.module.css'), 'utf8')
+  const table = readFileSync(join(FEATURE_DIRECTORY, 'BreakdownTable.module.css'), 'utf8')
+
+  /** The declarations of one rule, without comments, whitespace collapsed. */
+  function rule(css: string, selector: string): string {
+    const text = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ')
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\>]/g, '\\$&')
+    const match = new RegExp(`(?:^|\\})\\s*${escaped}\\s*\\{([^}]*)\\}`).exec(text)
+    return match ? match[1].replace(/\s+/g, ' ').trim() : ''
+  }
+
+  it('places the breakdown cards side by side only when both tables fit', () => {
+    expect(rule(page, '.breakdownGrid')).toBe('display: flex; flex-wrap: wrap; gap: var(--space-4);')
+    expect(rule(page, '.breakdownGrid > *')).toBe('flex: 1 1 0; max-width: 100%;')
+  })
+
+  it('lets a category tag wrap under its code, and nothing else wrap', () => {
+    expect(rule(table, '.table .category')).toBe('white-space: normal;')
+    expect(rule(table, '.table th, .table td')).toContain('white-space: nowrap;')
+    expect(rule(table, '.code')).toContain('white-space: nowrap;')
+    expect(rule(table, '.tag')).toContain('white-space: nowrap;')
+    expect(rule(table, '.categoryLabel')).toContain('flex-wrap: wrap;')
+  })
+})

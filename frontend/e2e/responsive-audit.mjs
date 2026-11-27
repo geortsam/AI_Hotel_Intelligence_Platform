@@ -15,8 +15,11 @@
  *     routes;
  *  3. visits each of the 17 routes at each of the 3 widths in a fresh page of one signed-in
  *     context, waits as UI-10 did, measures, and evaluates;
- *  4. probes the known Analytics defect and reports it, without counting it;
- *  5. writes the JSON report and exits 1 unless all 51 checks ran and passed.
+ *  4. runs the five table checks: the Analytics breakdown tables at 375, 768, 1024, 1280 and
+ *     1440px, each fitting its box or, on a phone, scrolling in a box the keyboard reaches and
+ *     scrolls to the last column (the 1440px clipping these replace was fixed on 2026-11-27);
+ *  5. writes the JSON report and exits 1 unless all 51 checks and all 5 table checks ran and
+ *     passed.
  *
  * The browser is headless Chromium at a device scale factor of 1, so the result does not depend
  * on anyone's display: Playwright hides scrollbars, so the viewport's client width is the width
@@ -29,19 +32,22 @@ import { writeFileSync } from 'node:fs'
 import { chromium } from 'playwright-core'
 
 import {
+  BREAKDOWN_TABLES,
   HEIGHT,
-  KNOWN_DEFECT,
   READY_POLL_MS,
   READY_POLLS,
   SETTLE_MS,
+  TABLE_ROUTE,
+  TABLE_WIDTHS,
   TOLERANCE_PX,
   WIDTHS,
   evaluate,
-  knownDefect,
+  evaluateTables,
   measure,
   measureTables,
   plan,
   summarise,
+  summariseTables,
 } from './responsive-checks.mjs'
 
 function required(name) {
@@ -96,6 +102,50 @@ async function firstLink(context, listPath, segments) {
   throw new Error(`${listPath} links to no record (${hrefs.length} links): the seeded data is missing`)
 }
 
+/** Key presses allowed to reach a table's box from the top of the page, and to scroll it. */
+const TAB_LIMIT = 200
+const ARROW_LIMIT = 60
+
+/**
+ * Scroll one breakdown table by keyboard alone, as a person without a pointer would: Tab from
+ * the top of the page until focus is on the table's box, then ArrowRight until it stops
+ * moving. Reports whether focus got there, whether the box scrolled, and whether the last
+ * column header then lies inside the box.
+ */
+async function scrollByKeyboard(page, name) {
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    window.scrollTo(0, 0)
+  })
+  const onTable = (n) => {
+    const table = document.activeElement?.querySelector(':scope > table')
+    return Boolean(table && (table.querySelector('caption')?.textContent ?? '').trim().startsWith(n))
+  }
+  let focused = false
+  for (let i = 0; i < TAB_LIMIT && !focused; i += 1) {
+    await page.keyboard.press('Tab')
+    focused = await page.evaluate(onTable, name)
+  }
+  if (!focused) return { focused, scrolled: false, lastColumnVisible: false }
+  const position = () => document.activeElement.scrollLeft
+  for (let i = 0; i < ARROW_LIMIT; i += 1) {
+    const before = await page.evaluate(position)
+    await page.keyboard.press('ArrowRight')
+    await page.waitForTimeout(60)
+    if ((await page.evaluate(position)) === before) break
+  }
+  return page.evaluate((tolerance) => {
+    const box = document.activeElement
+    const last = [...box.querySelectorAll('thead th')].at(-1).getBoundingClientRect()
+    const edge = box.getBoundingClientRect()
+    return {
+      focused: true,
+      scrolled: box.scrollLeft > 0,
+      lastColumnVisible: last.left >= edge.left - tolerance && last.right <= edge.right + tolerance,
+    }
+  }, TOLERANCE_PX)
+}
+
 async function signIn(context) {
   const page = await context.newPage()
   await page.setViewportSize({ width: Math.max(...WIDTHS), height: HEIGHT })
@@ -135,24 +185,35 @@ const exitCode = await (async () => {
       results.push({ ...check, measurement: m, problems: evaluate(check, m) })
     }
 
-    const probe = await open(context, KNOWN_DEFECT.route, KNOWN_DEFECT.width)
-    const defect = knownDefect(await probe.evaluate(measureTables))
-    await probe.close()
+    const tableResults = []
+    for (const width of TABLE_WIDTHS) {
+      const page = await open(context, TABLE_ROUTE, width)
+      const m = await page.evaluate(measureTables)
+      const keyboard = {}
+      for (const name of BREAKDOWN_TABLES) {
+        const table = m.tables.find((t) => t.caption.startsWith(name))
+        if (table && table.tableWidth > table.boxWidth) {
+          keyboard[name] = await scrollByKeyboard(page, name)
+        }
+      }
+      await page.close()
+      tableResults.push({ width, measurement: m, keyboard, problems: evaluateTables(width, m, keyboard) })
+    }
 
     const verdict = summarise(results)
     for (const line of verdict.lines) console.log(line)
-    console.log(
-      `KNOWN DEFECT (not one of the 51): ${KNOWN_DEFECT.description} -- ` +
-        (defect.reproduces ? 'still reproduces' : defect.found ? 'did NOT reproduce on this data' : 'not measured')
-        + `: ${defect.detail}`,
-    )
+    const tableVerdict = summariseTables(tableResults)
+    for (const line of tableVerdict.lines) console.log(line)
     writeFileSync(
       reportPath,
-      `${JSON.stringify({ base: 'the CI stack', widths: WIDTHS, height: HEIGHT, results, knownDefect: { ...KNOWN_DEFECT, ...defect }, passed: verdict.passed, failed: verdict.failed, ok: verdict.ok }, null, 2)}\n`,
+      `${JSON.stringify({ base: 'the CI stack', widths: WIDTHS, height: HEIGHT, results, passed: verdict.passed, failed: verdict.failed, tableWidths: TABLE_WIDTHS, tableResults, tablesPassed: tableVerdict.passed, tablesFailed: tableVerdict.failed, ok: verdict.ok && tableVerdict.ok }, null, 2)}\n`,
     )
-    if (!verdict.ok) {
+    if (!verdict.ok || !tableVerdict.ok) {
       for (const r of results.filter((x) => x.problems.length)) {
         console.log(`::error::responsive audit: ${r.route} at ${r.width}px -- ${r.problems.join('; ')}`)
+      }
+      for (const r of tableResults.filter((x) => x.problems.length)) {
+        console.log(`::error::responsive audit: ${TABLE_ROUTE} tables at ${r.width}px -- ${r.problems.join('; ')}`)
       }
       return 1
     }

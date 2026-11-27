@@ -437,7 +437,7 @@ one began.
 | A6 | Stale and contradictory documentation corrected, with regression tests | **done** |
 | A7 | The dead placeholder-route scaffolding removed; the navigation-to-route guarantee is a test | **done** |
 | A8 | The documentation index ([docs/README.md](docs/README.md)) and an offline link, anchor and reachability checker in CI | **done** |
-| A9 | The CI responsive audit: UI-10's 51 checks in a pinned Playwright Chromium against the seeded stack; it also reports the open expenses-table clipping ([Known limitations](#known-defects-and-gaps)) | **done** |
+| A9 | The CI responsive audit: UI-10's 51 checks in a pinned Playwright Chromium against the seeded stack, and, since the expenses-table clipping it reported was fixed on 2026-11-27, five table checks of the Analytics breakdown tables ([Known limitations](#known-defects-and-gaps)) | **done** |
 | R6.1 | The six stage-snapshot documents consolidated into maintained documents ([docs/architecture.md](docs/architecture.md), [database/README.md](database/README.md), [docs/roadmap-v2.0-execution.md](docs/roadmap-v2.0-execution.md) §5); their old paths are redirects | **done** |
 | R5 | Product reach: **decided** by the project owner, 2026-11-25 — Academic / Professional Portfolio. A scope decision, not a build: none of R5's features is built, and the pilot- and production-only items are deferred ([decision record](docs/roadmap-v2.0-execution.md#313-product-reach-r5)) | decided |
 
@@ -671,8 +671,8 @@ scanned.
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 | `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical; then catalogues both builds of each image with Syft 1.57.1 (checksum-verified) into a **CycloneDX 1.6 SBOM**, validates it against the schema, requires every locked backend package at its exact version and the pinned nginx, requires the two builds' SBOMs to list the same components, rejects any host path or credential in them, and keeps one SBOM per image as the `sbom-<run>-<attempt>` artifact ([`scripts/sbom_check.py`](scripts/sbom_check.py)) |
-| `Mutation checks` | re-applies the 1007 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
-| `Responsive audit` | builds and starts the Compose stack, seeds it with the synthetic demo data, and runs UI-10's **51 checks** (17 routes at 375, 768 and 1440px: no sideways scroll, no escaping element, exactly one `h1`) in the pinned Playwright image's Chromium; any failing check fails the run and is named. It also reports, without counting it, whether the known Analytics expenses-table clipping still reproduces ([`frontend/e2e/`](frontend/e2e/)) |
+| `Mutation checks` | re-applies the 1023 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Responsive audit` | builds and starts the Compose stack, seeds it with the synthetic demo data, and runs UI-10's **51 checks** (17 routes at 375, 768 and 1440px: no sideways scroll, no escaping element, exactly one `h1`) in the pinned Playwright image's Chromium; any failing check fails the run and is named. Five **table checks** fail it too: the Analytics breakdown tables at 375, 768, 1024, 1280 and 1440px must fit their cards from 768px, and on a phone may scroll only in a focusable region that the keyboard scrolls to the last column ([`frontend/e2e/`](frontend/e2e/)) |
 
 | Workflow | Job | What it runs |
 |---|---|---|
@@ -1022,13 +1022,14 @@ What remains genuinely missing is operational rather than functional:
 
 ### Known defects and gaps
 
-These are not done, and nothing in this README claims otherwise.
+The walkthrough below is not done, and nothing in this README claims otherwise.
 
-- **The Analytics expenses table is clipped at 1440px. Open, not fixed.** At a 1440px viewport
-  the "Ledger expenses" table on the Analytics page is 525px wide inside a 482px container, so
-  its last column is cut off. Every CI run's responsive audit reproduces and reports it
-  ([`frontend/e2e/`](frontend/e2e/)); it is not one of the audit's 51 checks, so the audit still
-  passes while it stands.
+- **The Analytics expenses-table clipping is fixed.** Until 2026-11-27, at a 1440px viewport
+  the "Ledger expenses" table on the Analytics page was 525px wide inside a 482px container, so
+  its last column was cut off. It is no longer an open defect. The tables now fit their cards
+  from 768px up. On a phone they scroll inside a box that the keyboard can focus and scroll.
+  Five table checks in CI's responsive audit fail the run if this regresses
+  ([`frontend/e2e/`](frontend/e2e/)).
 - **There is no scripted end-to-end demo walkthrough.** Installation ([How to run](#how-to-run)),
   the first run ([First run](#first-run)) and seeding the synthetic demo data are documented,
   but a complete, step-by-step demo scenario through the application is not yet provided.

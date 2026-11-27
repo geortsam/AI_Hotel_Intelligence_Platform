@@ -1,3 +1,7 @@
+import { useId, type ReactNode } from 'react'
+
+import { useHorizontalOverflow } from '@/lib/useHorizontalOverflow'
+
 import styles from './BreakdownTable.module.css'
 
 /**
@@ -44,6 +48,20 @@ export interface BreakdownTableProps {
  * Category, currency and amount are three dimensions of one record, which is what a table is
  * for. A `<caption>` names the period so the figures are never read without their window, and
  * amounts are right-aligned through a class rather than an inline style so the column scans.
+ *
+ * ## Why it fits its card, and scrolls only when it cannot
+ *
+ * Until 2026-11-27 the expenses table was wider than its card at 1440px and its last column
+ * sat outside the box (the A9 audit's recorded defect). Two constraints combined. Every cell
+ * was `nowrap`, so a long code with its "Fixed cost" tag made the category column alone
+ * about 175px wide. And the page's breakdown grid put the two cards side by side from 340px
+ * each, a minimum unrelated to what the tables need. Now the tag may wrap under its code, so
+ * the column can narrow to its longest word, and the page sets the cards side by side only
+ * when both tables fit (see `AnalyticsPage.module.css`). Every figure stays on one line.
+ *
+ * Where even the narrowest table is wider than the screen, as on a phone, it scrolls inside
+ * its box. While it does, the box is a focusable region named by the caption, so a keyboard
+ * can reach it and scroll it with the arrow keys (`useHorizontalOverflow`).
  */
 export function BreakdownTable({ caption, rows, flagLabel, emptyMessage }: BreakdownTableProps) {
   if (rows.length === 0) {
@@ -55,41 +73,66 @@ export function BreakdownTable({ caption, rows, flagLabel, emptyMessage }: Break
   }
 
   return (
-    <div className={styles.scroll}>
-      <table className={styles.table}>
-        <caption className={styles.caption}>{caption}</caption>
-        <thead>
-          <tr>
-            <th scope="col">Category</th>
-            <th scope="col">Currency</th>
-            <th scope="col" className={styles.numeric}>
-              Amount
-            </th>
-            <th scope="col" className={styles.numeric}>
-              Tax
-            </th>
-            <th scope="col" className={styles.numeric}>
-              Entries
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={`${row.category_code}-${row.currency}`}>
-              <th scope="row" className={styles.category}>
-                <span className={styles.code}>{row.category_code}</span>
-                {row.flag ? <span className={styles.tag}>{flagLabel}</span> : null}
+    <ScrollBox>
+      {(captionId) => (
+        <table className={styles.table}>
+          <caption id={captionId} className={styles.caption}>
+            {caption}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Category</th>
+              <th scope="col">Currency</th>
+              <th scope="col" className={styles.numeric}>
+                Amount
               </th>
-              <td>{row.currency}</td>
-              <td className={styles.numeric}>
-                {row.currency} {row.amount}
-              </td>
-              <td className={styles.numeric}>{row.tax_amount}</td>
-              <td className={styles.numeric}>{row.entry_count}</td>
+              <th scope="col" className={styles.numeric}>
+                Tax
+              </th>
+              <th scope="col" className={styles.numeric}>
+                Entries
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={`${row.category_code}-${row.currency}`}>
+                <th scope="row" className={styles.category}>
+                  <span className={styles.categoryLabel}>
+                    <span className={styles.code}>{row.category_code}</span>
+                    {row.flag ? <span className={styles.tag}>{flagLabel}</span> : null}
+                  </span>
+                </th>
+                <td>{row.currency}</td>
+                <td className={styles.numeric}>
+                  {row.currency} {row.amount}
+                </td>
+                <td className={styles.numeric}>{row.tax_amount}</td>
+                <td className={styles.numeric}>{row.entry_count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </ScrollBox>
+  )
+}
+
+/**
+ * The box the table scrolls inside. Rendered only with rows, so its overflow is measured from
+ * the moment it mounts. While the table is wider than the box, the box is a focusable region
+ * labelled by the table's caption; otherwise it is a plain container with no tab stop.
+ */
+function ScrollBox({ children }: { readonly children: (captionId: string) => ReactNode }) {
+  const captionId = useId()
+  const [ref, overflowing] = useHorizontalOverflow<HTMLDivElement>()
+  return (
+    <div
+      ref={ref}
+      className={styles.scroll}
+      {...(overflowing ? { tabIndex: 0, role: 'region', 'aria-labelledby': captionId } : {})}
+    >
+      {children(captionId)}
     </div>
   )
 }

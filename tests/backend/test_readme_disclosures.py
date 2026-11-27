@@ -12,6 +12,10 @@ Found by the R0.1 pull-request audit (2026-11-27) and corrected before any merge
 Each is now held: the R2.2 row to the frozen record's own words, the two open items to the
 Known limitations section (and the defect to the closure audit, which must agree that it is
 open), and the stage table to the completed audit tasks, R6.1 and the R5 decision.
+
+The expenses-table clipping was fixed on 2026-11-27. The README and the closure audit now both
+say so, and this file holds them to it: neither may call the defect open, and the walkthrough
+stays listed as missing.
 """
 
 from __future__ import annotations
@@ -64,18 +68,21 @@ def test_the_r22_row_names_the_dataset_the_frozen_record_names() -> None:
     assert re.findall(r"(\w+ )on the synthetic demo data", row) == ["not "]
 
 
-def test_known_limitations_lists_the_open_defect_and_the_missing_walkthrough() -> None:
+def test_known_limitations_lists_the_walkthrough_and_the_fixed_clipping() -> None:
+    """The walkthrough is still missing; the clipping was fixed on 2026-11-27 and says so."""
     section = known_limitations()
     assert "### Known defects and gaps" in section
-    assert "**The Analytics expenses table is clipped at 1440px. Open, not fixed.**" in section
-    assert "is 525px wide inside a 482px container" in section
     assert "**There is no scripted end-to-end demo walkthrough.**" in section
+    assert "**The Analytics expenses-table clipping is fixed.** Until 2026-11-27" in section
+    assert "was 525px wide inside a 482px container" in section
+    assert "Open, not fixed" not in section
 
 
-def test_the_closure_audit_agrees_that_the_defect_is_open() -> None:
-    """If the defect is fixed, both documents must say so; until then both say it is open."""
+def test_the_closure_audit_agrees_that_the_defect_is_fixed() -> None:
+    """Both documents say the same thing: open until 2026-11-27, fixed since."""
     audit = flat(CLOSURE_AUDIT.read_text(encoding="utf-8"))
-    assert "**Analytics expenses table, clipped at 1440px. Open, not fixed.**" in audit
+    assert "**Analytics expenses table, clipped at 1440px. Fixed on 2026-11-27 (§14).**" in audit
+    assert "Open, not fixed" not in audit
 
 
 def test_the_stage_table_lists_the_completed_audit_tasks_r61_and_the_r5_decision() -> None:

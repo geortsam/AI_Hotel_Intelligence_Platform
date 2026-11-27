@@ -452,6 +452,7 @@ RECORDED_PER_STAGE = {
     "R6.1": 12,
     "R5": 4,
     "R0.1-docs": 4,
+    "A9-fix": 16,
 }
 
 
