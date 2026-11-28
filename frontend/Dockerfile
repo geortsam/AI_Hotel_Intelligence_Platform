@@ -19,7 +19,7 @@
 # `node:24-alpine` even though both carry Node 24.21.0 -- the alias tags are rebuilt on
 # different Alpine bases. That is precisely why the digest, and not a tag that looks precise,
 # is what pins this. See docs/deployment/reproducibility.md.
-FROM node:24-alpine@sha256:50c8e8ca1d27439048670df5883f32d57cf81cff6233222c893fd0d9884cbd81 AS build
+FROM node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS build
 
 WORKDIR /app
 
@@ -54,7 +54,7 @@ RUN npm run build
 # ships and terminates TLS, so "some nginx 1.27" is the weakest claim of the three: the digest
 # fixes the OpenSSL it links against, not only the nginx version. Read from the registry; the
 # config blob fetched back by this digest reports NGINX_VERSION=1.27.5.
-FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS runtime
+FROM nginx:1.31-alpine@sha256:7fc0fb4af7bf006aeb31aea88069976060f8f0a0a86b667126742cc17f4e31ae AS runtime
 
 # Replaces the stock server block rather than sitting beside it: the image's own default.conf
 # is what would otherwise serve this directory with no SPA fallback, no cache policy and no
