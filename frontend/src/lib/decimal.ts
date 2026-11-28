@@ -116,3 +116,26 @@ export function isNonNegativeMoneyString(value: string): boolean {
 export function isNegativeMoneyString(value: string): boolean {
   return value.trim().startsWith('-')
 }
+
+const PLAIN_DECIMAL = /^(-?)(\d+)(\.\d+)?$/
+
+/**
+ * A server decimal with its whole part grouped in thousands: `20300.62` becomes `20,300.62`.
+ *
+ * Pure string work, so the value is never a float on the way: every digit and every decimal
+ * place the server sent comes out exactly as it went in, only with separators. That keeps the
+ * Analytics rule that no money field passes through `Number()`, while reading like every other
+ * amount in the application (UI-0 baseline, 2026-11-28: `EUR 20300.62` beside `EUR 2,577.44`).
+ *
+ * Anything that is not a plain decimal -- an exponent, a stray space, an empty string -- is
+ * returned unchanged rather than guessed at: showing the server's string is never wrong.
+ * The separator is the en-GB comma, the locale the rest of the application formats in.
+ */
+export function groupDecimalDigits(value: string): string {
+  const match = PLAIN_DECIMAL.exec(value)
+  if (match === null) {
+    return value
+  }
+  const [, sign = '', whole = '', fraction = ''] = match
+  return `${sign}${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}${fraction}`
+}

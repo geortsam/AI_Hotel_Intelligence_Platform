@@ -510,14 +510,17 @@ export function IntelligencePage() {
             ) : (
               <>
                 <AttentionList items={report.items} />
-                <p className={styles.provenance}>
-                  <span className={styles.modelName}>
-                    {report.method.ranking} v{report.method.ranking_version}
-                  </span>
-                  Upcoming days ranked over the next {formatCount(report.method.horizon_days)}{' '}
-                  days; the ranking is measured offline under {report.method.evaluation_protocol}{' '}
-                  against {report.method.baseline}.
-                </p>
+                <MethodCaption
+                  name={report.method.ranking}
+                  version={report.method.ranking_version}
+                  detail={
+                    <>
+                      Upcoming days ranked over the next {formatCount(report.method.horizon_days)}{' '}
+                      days; the ranking is measured offline under{' '}
+                      {report.method.evaluation_protocol} against {report.method.baseline}.
+                    </>
+                  }
+                />
               </>
             )
           }
@@ -637,13 +640,38 @@ function Gate<T>({
  * model drew it. The methodology sentence is the server's own.
  */
 function Provenance({ model }: { model: ModelMetadata }) {
+  return <MethodCaption name={model.model_name} version={model.model_version} detail={model.methodology} />
+}
+
+/**
+ * One line naming the method -- "Method: seasonal-naive-dow-median v1.0.0" -- with its full
+ * explanation one click away.
+ *
+ * The page printed the whole methodology paragraph under every section, five near-identical
+ * blocks on one screen (UI-0 baseline, 2026-11-28). The name and version stay visible under
+ * each result, so provenance is never a scroll away; the explanation sits in a native
+ * disclosure, keyboard-operable and announced as such, and is still in the document for
+ * search and for assistive technology. Nothing is dropped: every word the server sent is here.
+ */
+function MethodCaption({
+  name,
+  version,
+  detail,
+}: {
+  name: string
+  version: string
+  detail: ReactNode
+}) {
   return (
-    <p className={styles.provenance}>
-      <span className={styles.modelName}>
-        {model.model_name} v{model.model_version}
-      </span>
-      {model.methodology}
-    </p>
+    <div className={styles.provenance}>
+      <p className={styles.methodLine}>
+        Method: <span className={styles.modelName}>{`${name} v${version}`}</span>
+      </p>
+      <details className={styles.methodDetails}>
+        <summary className={styles.methodSummary}>How this is computed</summary>
+        <p className={styles.methodText}>{detail}</p>
+      </details>
+    </div>
   )
 }
 

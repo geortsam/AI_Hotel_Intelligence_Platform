@@ -372,10 +372,11 @@ describe('the figures on screen', () => {
 
     const revenueTable = screen.getByRole('table', { name: /ledger revenue/i })
     expect(within(revenueTable).getByText('FNB')).toBeInTheDocument()
-    expect(within(revenueTable).getByText('EUR 22701.00')).toBeInTheDocument()
-    expect(within(revenueTable).getByText('EUR 9030.00')).toBeInTheDocument()
-    // 22701.00 + 9030.00 = 31731.00. Nothing must add them up.
-    expect(within(revenueTable).queryByText(/31731/)).not.toBeInTheDocument()
+    // The server's strings, digit for digit, grouped in thousands (polish pass P4).
+    expect(within(revenueTable).getByText('EUR 22,701.00')).toBeInTheDocument()
+    expect(within(revenueTable).getByText('EUR 9,030.00')).toBeInTheDocument()
+    // 22701.00 + 9030.00 = 31731.00. Nothing must add them up, grouped or not.
+    expect(within(revenueTable).queryByText(/31,?731/)).not.toBeInTheDocument()
     expect(within(revenueTable).queryByText(/total/i)).not.toBeInTheDocument()
 
     const expenseTable = screen.getByRole('table', { name: /ledger expenses/i })

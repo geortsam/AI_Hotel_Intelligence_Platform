@@ -104,6 +104,19 @@
   cursor: pointer;
 }
 
+/*
+ * An empty date field reads as a placeholder, not as a value.
+ *
+ * Chromium draws an empty date input's "dd/mm/yyyy" prompt in the field's text colour, so the
+ * optional date of birth looked filled in beside muted placeholders (UI-0 baseline,
+ * 2026-11-28). React keeps a controlled input's `value` attribute in step with its value, so
+ * `[value='']` matches exactly while the field is empty. Other engines draw their own prompt
+ * and ignore the pseudo-element; nothing breaks there.
+ */
+.input[type='date'][value='']::-webkit-datetime-edit {
+  color: var(--color-text-subtle);
+}
+
 /* The label wraps the checkbox, so the text is part of the control's hit area and its
  * accessible name -- no `for` needed, though one is supplied anyway. */
 .checkbox {

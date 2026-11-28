@@ -415,11 +415,13 @@
   line-height: var(--leading-relaxed);
 }
 
-/* Where a number came from, printed under the result it explains. */
+/* Where a number came from, printed under the result it explains: one caption line naming
+ * the method, and its explanation behind a disclosure (polish pass P5). */
 .provenance {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
+  align-items: baseline;
+  gap: var(--space-1) var(--space-4);
   margin: var(--space-3) 0 0;
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
@@ -428,9 +430,33 @@
   line-height: var(--leading-normal);
 }
 
+.methodLine {
+  margin: 0;
+}
+
 .modelName {
   font-family: var(--font-mono);
   color: var(--color-text);
+}
+
+/* Opened, the explanation takes the full width under the caption. */
+.methodDetails[open] {
+  flex-basis: 100%;
+}
+
+.methodSummary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--color-primary-text);
+}
+
+.methodSummary:hover {
+  text-decoration: underline;
+}
+
+.methodText {
+  margin: var(--space-2) 0 0;
+  max-width: 75ch;
 }
 
 .training {

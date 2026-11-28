@@ -26,9 +26,11 @@
 /* The KPI grid is a <dl>: each tile is a term and its value. The tiles themselves are the
  * <dt>/<dd> pair inside a Card, so this element only lays them out. */
 
+/* The size every other page's section headings use (`SectionHeader`, 20px). This was 16px,
+ * so "Performance" read a step smaller here than on Analytics (UI-0 baseline, 2026-11-28). */
 .sectionTitle {
   margin: 0 0 var(--space-3);
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
   font-weight: var(--weight-semibold);
   color: var(--color-text);
 }
@@ -81,16 +83,26 @@
   }
 }
 
-.loadingNote {
-  margin: 0;
-  padding: var(--space-8) var(--space-4);
-  text-align: center;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
+/* A trend chart's card while its series loads: a title bar and a plot the chart's height. */
+.chartSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
-.chartCard {
-  margin-bottom: var(--space-6);
+/* The loading status, for assistive technology only. A local rule rather than `composes`
+ * from VisuallyHidden.module.css: reaching one module by two composes paths broke the
+ * reproducible image build once (52fde7b), and this page needs nothing else from it. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .facts {

@@ -169,8 +169,14 @@
   color: var(--color-text-muted);
 }
 
+/*
+ * The server's measure and unit names (`occupancy_outlook`, `room_nights`) are printed as it
+ * sent them, but in the interface face: in monospace they made every attention card read like
+ * a log line (UI-0 baseline, 2026-11-28). The text itself is unchanged.
+ */
 .type {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  letter-spacing: 0.01em;
 }
 
 .metrics {
@@ -189,10 +195,15 @@
   min-width: 0;
 }
 
+/* Set like every other field label in the application -- small, spaced capitals -- rather
+ * than monospace. Only the presentation changes; the name is the server's, letter for letter. */
 .metricName {
   font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
   color: var(--color-text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 
 .metricValue {

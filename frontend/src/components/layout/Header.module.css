@@ -131,6 +131,16 @@
   .hotelContext {
     padding: 0 var(--space-2);
   }
+
+  /*
+   * The area name goes too. With the hotel picker beside it there was room for about four
+   * letters, so 375px showed "Dash..." and "Booki..." (UI-0 baseline, 2026-11-28) -- a
+   * truncated word is noise, not a title. Nothing is lost: the page's own `h1` sits directly
+   * below and names the same area, and the section breadcrumb stays.
+   */
+  .title {
+    display: none;
+  }
 }
 
 /* The authenticated user's identity. A display, not yet a menu -- the menu is a later

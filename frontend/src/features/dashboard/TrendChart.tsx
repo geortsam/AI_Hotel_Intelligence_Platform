@@ -1,5 +1,7 @@
 import { useId } from 'react'
 
+import { useElementWidth } from '@/lib/useElementWidth'
+
 import styles from './TrendChart.module.css'
 
 /** One plotted day. `value` is null where the backend reported the metric as undefined. */
@@ -21,18 +23,23 @@ export interface TrendChartProps {
   readonly emptyMessage: string
 }
 
-/* The drawing area, in user units. The SVG scales to its container through the viewBox, so
- * these are a coordinate system rather than pixels -- the chart is resolution-independent
- * and reflows without JavaScript measuring anything. */
-const WIDTH = 720
+/* The drawing area, in user units. The viewBox is as wide as the chart's own box (measured by
+ * `useElementWidth`), so one unit is one pixel and the 11px axis labels stay 11px in a narrow
+ * column. A fixed 720-unit viewBox scaled them down to about 4.6px in Analytics' three
+ * columns (UI-0 baseline). `FALLBACK_WIDTH` is used until the width is known, and always in
+ * jsdom; `MIN_WIDTH` matches the stylesheet's `min-width`, below which the card scrolls. */
+const FALLBACK_WIDTH = 720
+const MIN_WIDTH = 280
 const HEIGHT = 220
 const PAD_LEFT = 64
 const PAD_RIGHT = 16
 const PAD_TOP = 16
 const PAD_BOTTOM = 32
 
-const PLOT_WIDTH = WIDTH - PAD_LEFT - PAD_RIGHT
 const PLOT_HEIGHT = HEIGHT - PAD_TOP - PAD_BOTTOM
+
+/* About one date label per 72px of plot: enough to read the axis, few enough not to touch. */
+const PX_PER_DATE_LABEL = 72
 
 /** Short day label for the x axis, e.g. `4 Sep`. */
 function axisDate(iso: string): string {
@@ -111,6 +118,9 @@ export function TrendChart({ metric, points, formatValue, unit, emptyMessage }: 
   const descId = useId()
   // A url(#...) fragment cannot carry the colons React puts in its ids.
   const areaId = `trend-area-${useId().replace(/[^A-Za-z0-9_-]/g, '')}`
+  const [wrapperRef, measuredWidth] = useElementWidth<HTMLDivElement>()
+  const WIDTH = Math.max(MIN_WIDTH, measuredWidth ?? FALLBACK_WIDTH)
+  const PLOT_WIDTH = WIDTH - PAD_LEFT - PAD_RIGHT
 
   const plottable = points.filter(
     (point): point is TrendPoint & { value: number } => point.value !== null,
@@ -184,17 +194,24 @@ export function TrendChart({ metric, points, formatValue, unit, emptyMessage }: 
     `latest ${formatValue(latest.value)} on ${axisDate(latest.date)}. ` +
     `Measured in ${unit}. Every value is listed in the table below the chart.`
 
-  // Enough labels to read the axis, few enough not to overlap on a phone.
-  const labelEvery = Math.max(1, Math.ceil(points.length / 6))
+  // Enough labels to read the axis, few enough not to overlap: at most six, and fewer where
+  // the plot is too narrow to space six apart.
+  const maxDateLabels = Math.max(2, Math.min(6, Math.floor(PLOT_WIDTH / PX_PER_DATE_LABEL)))
+  const labelEvery = Math.max(1, Math.ceil(points.length / maxDateLabels))
+
+  // The line and area are keyed by the series, not by their path data: a resize changes every
+  // coordinate, and keying by geometry remounted the paths and replayed the draw-in on each
+  // one. Keyed like this, the draw-in runs when the data arrives or changes, and only then.
+  const series = points.map((point) => `${point.date}=${point.value}`).join(',')
 
   return (
-    <div className={styles.wrapper}>
+    <div className={styles.wrapper} ref={wrapperRef}>
       <svg
         className={styles.chart}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         /* The default (uniform) scaling, not `preserveAspectRatio="none"`: stretching the
-         * viewBox to the container would distort every axis label and stroke. The CSS gives
-         * it `width: 100%; height: auto`, so it scales uniformly with the column. */
+         * viewBox to the container would distort every axis label and stroke. The viewBox is
+         * the box's own width, so with `width: 100%; height: auto` it renders at 1:1. */
         role="img"
         /*
          * The title NAMES the chart and the description EXPLAINS it -- two different
@@ -245,14 +262,14 @@ export function TrendChart({ metric, points, formatValue, unit, emptyMessage }: 
           </linearGradient>
         </defs>
 
-        {areas.map((area) => (
-          <path key={area} className={styles.area} d={area} fill={`url(#${areaId})`} />
+        {areas.map((area, index) => (
+          <path key={`${series}#${index}`} className={styles.area} d={area} fill={`url(#${areaId})`} />
         ))}
 
         {/* `pathLength` normalises every segment to 1, so the draw-in (CSS) needs no
          * measuring: the dash is the whole line and the offset runs from 1 to 0. */}
-        {segments.map((segment) => (
-          <path key={segment} className={styles.line} d={segment} pathLength={1} />
+        {segments.map((segment, index) => (
+          <path key={`${series}#${index}`} className={styles.line} d={segment} pathLength={1} />
         ))}
 
         {/* One measurement is a dot. Drawn for a lone point, and for any point marooned

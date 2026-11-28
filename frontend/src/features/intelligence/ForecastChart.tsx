@@ -1,6 +1,7 @@
 import { useId } from 'react'
 
 import { formatDayAndMonth } from '@/lib/format'
+import { useElementWidth } from '@/lib/useElementWidth'
 
 import styles from './ForecastChart.module.css'
 
@@ -39,16 +40,21 @@ export interface ForecastChartProps {
 }
 
 /* The drawing area in user units, matching the dashboard's chart so the two read as one
- * system. The SVG scales through its viewBox, so these are a coordinate system, not pixels. */
-const WIDTH = 720
+ * system. As there, the viewBox is as wide as the chart's own box (`useElementWidth`), so one
+ * unit is one pixel and the axis labels keep their 11px at every width instead of scaling
+ * with the column. `FALLBACK_WIDTH` applies until the width is known, and always in jsdom. */
+const FALLBACK_WIDTH = 720
+const MIN_WIDTH = 280
 const HEIGHT = 240
 const PAD_LEFT = 64
 const PAD_RIGHT = 16
 const PAD_TOP = 16
 const PAD_BOTTOM = 44
 
-const PLOT_WIDTH = WIDTH - PAD_LEFT - PAD_RIGHT
 const PLOT_HEIGHT = HEIGHT - PAD_TOP - PAD_BOTTOM
+
+/* About one date label per 72px of plot, as on the dashboard's chart. */
+const PX_PER_DATE_LABEL = 72
 
 /** A "nice" domain and tick step, so an axis lands on 1, 2 or 5 times a power of ten. */
 function niceScale(max: number): { upper: number; step: number } {
@@ -114,6 +120,9 @@ export function ForecastChart({
 }: ForecastChartProps) {
   const titleId = useId()
   const descId = useId()
+  const [wrapperRef, measuredWidth] = useElementWidth<HTMLDivElement>()
+  const WIDTH = Math.max(MIN_WIDTH, measuredWidth ?? FALLBACK_WIDTH)
+  const PLOT_WIDTH = WIDTH - PAD_LEFT - PAD_RIGHT
 
   if (points.length === 0) {
     return (
@@ -207,10 +216,11 @@ export function ForecastChart({
       : `${missing} of ${points.length} days have no prediction, because the model had too little history. `) +
     'Every value is listed in the table below the chart.'
 
-  const labelEvery = Math.max(1, Math.ceil(points.length / 6))
+  const maxDateLabels = Math.max(2, Math.min(6, Math.floor(PLOT_WIDTH / PX_PER_DATE_LABEL)))
+  const labelEvery = Math.max(1, Math.ceil(points.length / maxDateLabels))
 
   return (
-    <div className={styles.wrapper}>
+    <div className={styles.wrapper} ref={wrapperRef}>
       <svg
         className={styles.chart}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}

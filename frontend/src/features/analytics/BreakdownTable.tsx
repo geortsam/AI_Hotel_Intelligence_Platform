@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from 'react'
 
+import { groupDecimalDigits } from '@/lib/decimal'
 import { useHorizontalOverflow } from '@/lib/useHorizontalOverflow'
 
 import styles from './BreakdownTable.module.css'
@@ -8,7 +9,8 @@ import styles from './BreakdownTable.module.css'
  * One row exactly as the server grouped it. `amount` stays a string the whole way.
  *
  * The backend returns `NUMERIC(14,2)` as a decimal string precisely so a 64-bit binary float
- * never touches it. This component displays that string and never parses it.
+ * never touches it. This component displays that string and never parses it: the thousands
+ * separators come from `groupDecimalDigits`, which inserts commas into the string itself.
  */
 export interface BreakdownRow {
   readonly category_code: string
@@ -105,9 +107,9 @@ export function BreakdownTable({ caption, rows, flagLabel, emptyMessage }: Break
                 </th>
                 <td>{row.currency}</td>
                 <td className={styles.numeric}>
-                  {row.currency} {row.amount}
+                  {row.currency} {groupDecimalDigits(row.amount)}
                 </td>
-                <td className={styles.numeric}>{row.tax_amount}</td>
+                <td className={styles.numeric}>{groupDecimalDigits(row.tax_amount)}</td>
                 <td className={styles.numeric}>{row.entry_count}</td>
               </tr>
             ))}

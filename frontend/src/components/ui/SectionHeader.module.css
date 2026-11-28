@@ -21,8 +21,11 @@
   font-size: var(--text-2xl);
 }
 
+/* A readable measure. Unbounded, a page description ran about 1,130px at 1440px -- Copilot's
+ * two lines were each a long sentence wide (UI-0 baseline, 2026-11-28). */
 .description {
   margin-top: var(--space-1);
+  max-width: 75ch;
   color: var(--color-text-muted);
   font-size: var(--text-base);
 }

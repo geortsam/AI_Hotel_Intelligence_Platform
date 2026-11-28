@@ -89,6 +89,13 @@
   color: var(--color-text-subtle);
 }
 
+/* The browser's own clear (x) inside a search field duplicated the bar's "Clear" button, in
+ * the browser's styling rather than the application's (UI-0 baseline, 2026-11-28). The bar's
+ * button clears every filter and is keyboard-reachable; Escape still clears the field. */
+.input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
 .clear {
   gap: var(--space-1);
 }

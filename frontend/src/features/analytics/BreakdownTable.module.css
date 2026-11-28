@@ -77,10 +77,14 @@
   gap: var(--space-1) var(--space-2);
 }
 
+/* The category's code, which is all the breakdown endpoints send -- there is no display name
+ * in the response. Set as a label in the interface face rather than bold monospace, which read
+ * as raw data beside the readable figures (UI-0 baseline, 2026-11-28). */
 .code {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-sans);
   font-size: var(--text-xs);
-  letter-spacing: 0.02em;
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-wide);
   white-space: nowrap;
 }
 
