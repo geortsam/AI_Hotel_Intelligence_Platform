@@ -74,7 +74,7 @@ describe('the breakdown table', () => {
     expect(headers).toEqual(['Category', 'Currency', 'Amount', 'Tax', 'Entries'])
     const payroll = within(table).getByRole('rowheader', { name: /PAYROLL/ })
     expect(within(payroll).getByText('Fixed cost')).toBeInTheDocument()
-    for (const figure of ['EUR 49000.00', '0.00', '5', 'EUR 1441.96', '346.07', '2']) {
+    for (const figure of ['EUR 49,000.00', '0.00', '5', 'EUR 1,441.96', '346.07', '2']) {
       expect(within(table).getByText(figure)).toBeInTheDocument()
     }
   })

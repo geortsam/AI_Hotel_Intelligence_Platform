@@ -43,10 +43,25 @@
   color: var(--color-text);
 }
 
+/*
+ * One panel per row until the content is wide enough for two to hold their tables whole.
+ *
+ * It was `repeat(auto-fit, minmax(320px, 1fr))`, which put the panels side by side from about
+ * 700px of content -- and at 768px and 1024px the channel table (four columns) was wider than
+ * its half, so its AVERAGE column sat clipped at the panel edge behind a scroll nothing showed
+ * (UI-0 baseline, 2026-11-28). 1280px is the first canonical breakpoint where each half of the
+ * content area is wider than that table. The panel's own scroll stays as the last resort.
+ */
 .panels {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
+}
+
+@media (min-width: 1280px) {
+  .panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .panel {

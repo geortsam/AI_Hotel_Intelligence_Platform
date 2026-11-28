@@ -1,9 +1,9 @@
 /*
- * The trend chart.
+ * The forecast chart.
  *
- * The SVG scales with its column through the viewBox: `width: 100%` plus `height: auto`
- * keeps the 720x220 aspect ratio, so text and strokes never distort and no JavaScript
- * measures anything on resize.
+ * Drawn, like the dashboard's trend chart, in a viewBox as wide as this wrapper, so
+ * `width: 100%` plus `height: auto` renders it at 1:1 and the axis labels keep their 11px at
+ * every width. Until the width is known -- and always in jsdom -- it draws at 720 units.
  */
 
 .wrapper {

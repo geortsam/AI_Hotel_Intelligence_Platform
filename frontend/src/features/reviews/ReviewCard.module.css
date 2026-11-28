@@ -20,11 +20,18 @@
   height: 100%;
 }
 
+/*
+ * Two columns, always: who and when on the left, the rating and its badges pinned top-right.
+ *
+ * This was a wrapping flex row. When a channel badge made the right-hand group too wide, the
+ * whole group dropped onto its own line, so in one grid some cards showed the rating
+ * top-right and others on a line by itself (UI-0 baseline, 2026-11-28, at 768px). A grid
+ * cannot wrap; the badges wrap inside their own column instead.
+ */
 .header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: var(--space-3);
   padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--color-border);
@@ -54,6 +61,9 @@
   flex-direction: column;
   align-items: flex-end;
   gap: var(--space-2);
+  /* Wide enough for a channel and a status badge side by side; beyond it they stack, so the
+   * reviewer's name keeps the room it needs. */
+  max-width: 14rem;
 }
 
 .rating {

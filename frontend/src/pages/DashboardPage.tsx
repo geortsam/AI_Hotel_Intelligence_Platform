@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
 import { PageContainer } from '@/components/ui/PageContainer'
 import { SectionHeader } from '@/components/ui/SectionHeader'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { describeFailure } from '@/features/dashboard/failures'
 import {
   bucketFor,
@@ -223,11 +224,23 @@ function LoadingBoard() {
           <KpiCard key={label} label={label} value={null} isLoading />
         ))}
       </dl>
-      <Card className={styles.chartCard}>
-        <p className={styles.loadingNote} role="status">
-          Loading analytics…
-        </p>
-      </Card>
+      {/*
+       * The two trend charts as skeletons, in the same grid the real ones use, so the loading
+       * state reads as one language with the tiles above it. It was a plain "Loading
+       * analytics…" panel under skeleton tiles -- two loading styles on one screen (UI-0
+       * baseline, 2026-11-28). The sentence stays, for assistive technology, as the status.
+       */}
+      <div className={styles.charts} aria-hidden="true">
+        {['occupancy', 'revenue'].map((chart) => (
+          <Card key={chart} className={styles.chartSkeleton}>
+            <Skeleton width="40%" height="1.25rem" />
+            <Skeleton width="100%" height="13.75rem" />
+          </Card>
+        ))}
+      </div>
+      <p className={styles.srOnly} role="status">
+        Loading analytics…
+      </p>
     </>
   )
 }

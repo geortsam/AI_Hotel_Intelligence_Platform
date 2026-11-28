@@ -1,9 +1,10 @@
 /*
  * The trend chart.
  *
- * The SVG scales with its column through the viewBox: `width: 100%` plus `height: auto`
- * keeps the 720x220 aspect ratio, so text and strokes never distort and no JavaScript
- * measures anything on resize.
+ * The component draws in a viewBox as wide as this wrapper (measured with a ResizeObserver),
+ * so `width: 100%` plus `height: auto` renders it at 1:1: the 11px axis labels are 11px in a
+ * phone column and in a third of a desktop page alike. Until the width is known -- and always
+ * in jsdom -- it draws at 720 units and scales, as it did before the polish pass.
  */
 
 .wrapper {
