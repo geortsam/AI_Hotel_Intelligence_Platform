@@ -173,10 +173,10 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           # The version this project is developed on. pyproject declares >=3.12 as the floor;
           # CI runs what the developer runs, so a 3.14-only failure cannot hide behind an
@@ -450,7 +450,7 @@ jobs:
         # Pinned by commit SHA (§12.6), named by run id and attempt, and an empty directory is
         # an error. The artifact expires; a report that is pinned is committed byte for byte.
         if: always() && matrix.shard == 1
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: retrieval-eval-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.RETRIEVAL_EVAL_OUT }}
@@ -475,10 +475,10 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           # The line this project is developed on, pinned the same way and for the same reason
           # Python is: CI runs what the developer runs, so a version-specific failure cannot
@@ -566,10 +566,10 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: '3.14.7'
           cache: pip
@@ -583,7 +583,7 @@ jobs:
           python -m pip check
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '24.21.0'
           cache: npm
@@ -653,7 +653,7 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Pull Docker Hub images through a mirror, Docker Hub the fallback
         # R0.2. Every image this job pulls in its steps comes from Docker Hub, unauthenticated,
@@ -3372,7 +3372,7 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Pull Docker Hub images through a mirror, Docker Hub the fallback
         # R0.2. Every image this job pulls in its steps comes from Docker Hub, unauthenticated,
@@ -3711,7 +3711,7 @@ jobs:
       # The steps are tested by tests/backend/test_ci_sbom.py; the checks are
       # scripts/sbom_check.py's.
       - name: Set up Python for the SBOM checker
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           # The interpreter scripts/sbom_lock.txt was resolved for. No cache.
           python-version: '3.14.7'
@@ -3782,7 +3782,7 @@ jobs:
           sha256sum "$out"/*.cdx.json
 
       - name: Upload the SBOMs
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/sbom/
@@ -3873,7 +3873,7 @@ jobs:
 
     steps:
       - name: Check out the repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -3901,7 +3901,7 @@ jobs:
           esac
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '24.21.0'
           cache: npm
@@ -4002,7 +4002,7 @@ jobs:
       - name: Upload the audit report
         # Kept when the audit fails too: the report names every failing check's measurement.
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: responsive-audit-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/audit/
