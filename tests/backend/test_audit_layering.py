@@ -141,6 +141,10 @@ def test_the_action_vocabulary_is_exactly_the_authorised_set() -> None:
         "document.created",
         "document.version_created",
         "document.withdrawn",
+        # R1.3a. A platform-administrator grant and its revocation, by the operator command;
+        # migration 0021 widened the CHECK. Platform-scoped: no hotel holds the authority.
+        "platform_admin.granted",
+        "platform_admin.revoked",
     }
 
 
@@ -227,12 +231,15 @@ def test_the_migration_permits_exactly_the_enum(action: str) -> None:
     tool = (MIGRATIONS / "20260924_0012_audit_tool_invoked.py").read_text(encoding="utf-8")
     # Stage 7.9 widened it again, in 0014, by the three document actions.
     document = (MIGRATIONS / "20260926_0014_hotel_documents.py").read_text(encoding="utf-8")
+    # R1.3a widened it again, in 0021, by the two platform-administrator actions.
+    grants = (MIGRATIONS / "20261119_0021_audit_platform_grants.py").read_text(encoding="utf-8")
 
     assert (
         f"'{action}'" in clause
         or f'"{action}"' in widened
         or f'"{action}"' in tool
         or f'"{action}"' in document
+        or f'"{action}"' in grants
     ), action
 
 
@@ -814,7 +821,7 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     """
     chain = revisions()
 
-    assert len(chain) == 20
+    assert len(chain) == 23
     roots = [rev for rev, down in chain.items() if down is None]
     heads = [rev for rev in chain if rev not in set(chain.values())]
 
@@ -838,7 +845,11 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     # table.
     # Issue H7 added 0020, which replaces one unique index of `guests` and adds a
     # CHECK; no audit table.
-    assert heads == ["0020_guest_email_rules"]
+    # R1.3a added 0021, the sixth audit revision: it widens the action CHECK by the two
+    # platform-administrator actions, exactly as 0009 widened it by one.
+    # R3.3 added 0022, which gives the three catalogues an `updated_at`; no audit table.
+    # R1.1 added 0023, `auth_sessions` for the cookie sessions; no audit table.
+    assert heads == ["0023_auth_sessions"]
     assert chain["0007_audit_events"] == "0006_users_password_changed_at"
     assert chain["0008_audit_retention_archive"] == "0007_audit_events"
     assert chain["0009_audit_booking_deleted"] == "0008_audit_retention_archive"
@@ -851,9 +862,12 @@ def test_the_chain_is_linear_and_ends_at_the_newest_migration() -> None:
     assert chain["0018_composite_set_null_columns"] == "0017_llm_invocation_retention"
     assert chain["0019_review_external_id_scope"] == "0018_composite_set_null_columns"
     assert chain["0020_guest_email_rules"] == "0019_review_external_id_scope"
+    assert chain["0021_audit_platform_grants"] == "0020_guest_email_rules"
+    assert chain["0022_catalogue_versions"] == "0021_audit_platform_grants"
+    assert chain["0023_auth_sessions"] == "0022_catalogue_versions"
     # Every other revision is somebody's parent exactly once: no fork.
     parents = [down for down in chain.values() if down is not None]
-    assert len(parents) == len(set(parents)) == 19
+    assert len(parents) == len(set(parents)) == 22
 
 
 def test_the_audit_table_is_created_by_exactly_one_migration() -> None:
@@ -909,6 +923,8 @@ AUDIT_TABLE_ALTERATIONS = {
     # Stage 7.9: widens the action CHECK by the three `document.*` actions and the resource
     # CHECK by `document`, beside creating the two document tables.
     "20260926_0014_hotel_documents.py",
+    # R1.3a: widens the action CHECK by `platform_admin.granted` and `platform_admin.revoked`.
+    "20261119_0021_audit_platform_grants.py",
 }
 
 
@@ -980,6 +996,33 @@ def test_0012_touches_only_the_two_vocabulary_constraints() -> None:
         assert forbidden not in source, f"0012 contains {forbidden!r}"
     constraints = set(re.findall(r"ck_audit_events_\w+", source))
     assert constraints == {"ck_audit_events_action_valid", "ck_audit_events_resource_type_valid"}
+
+
+def test_0021_touches_only_the_action_constraint() -> None:
+    """0021 widens one CHECK by two values. It adds no column, drops no index, re-creates no
+    trigger, and reaches neither the archive nor the resource-type vocabulary."""
+    source = code_only(
+        (MIGRATIONS / "20261119_0021_audit_platform_grants.py").read_text(encoding="utf-8")
+    )
+
+    for forbidden in [
+        "ADD COLUMN",
+        "DROP COLUMN",
+        "CREATE INDEX",
+        "DROP INDEX",
+        "CREATE TRIGGER",
+        "DROP TRIGGER",
+        "DISABLE TRIGGER",
+        "CREATE TABLE",
+        "DROP TABLE",
+        "audit_events_archive",
+        "append_only",
+        "platform_admins",
+        "UPDATE ",
+        "DELETE ",
+    ]:
+        assert forbidden not in source, f"0021 contains {forbidden!r}"
+    assert set(re.findall(r"ck_audit_events_\w+", source)) == {"ck_audit_events_action_valid"}
 
 
 def test_the_new_migration_alters_no_existing_table() -> None:
@@ -1247,6 +1290,9 @@ def test_the_audit_modules_are_exactly_the_authorised_set() -> None:
     second implementation of the audit READ query. An archive repository is not that -- it
     writes a different table, offers no listing, and shares the source table only as a SELECT
     to copy from.
+
+    R4.2 added ``jobs/archive_audit_events.py``: the operator command that calls the archival
+    service. It holds no query of its own, so it is not a second implementation either.
     """
     modules = {path.relative_to(APP).as_posix() for path in APP.rglob("*audit*.py")}
 
@@ -1258,6 +1304,7 @@ def test_the_audit_modules_are_exactly_the_authorised_set() -> None:
         "services/audit.py",
         "api/v1/endpoints/audit.py",
         "api/v1/endpoints/platform_audit.py",
+        "jobs/archive_audit_events.py",
     }
 
 

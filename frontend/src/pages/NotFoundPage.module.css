@@ -1,0 +1,56 @@
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-10) var(--space-4);
+}
+
+/* A mark in a soft circle (UI-9), the plan's shared state anatomy. */
+.icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  margin-bottom: var(--space-4);
+}
+
+.headline {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.detail {
+  margin-top: var(--space-2);
+  max-width: 46ch;
+  color: var(--color-text-muted);
+}
+
+.action {
+  margin-top: var(--space-5);
+}
+
+/* The way onward, drawn as a secondary button: a link, because it navigates. */
+.actionLink {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.actionLink:hover {
+  background: var(--color-surface-hover);
+  text-decoration: none;
+}

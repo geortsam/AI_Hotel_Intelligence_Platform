@@ -89,6 +89,7 @@ export function BookingsPage() {
     return (
       <Frame>
         <StateMessage
+          level={2}
           icon={Building2}
           tone="status"
           title="No hotel is linked to your account"
@@ -102,6 +103,7 @@ export function BookingsPage() {
     return (
       <Frame>
         <StateMessage
+          level={2}
           icon={WifiOff}
           tone="alert"
           title="Could not load your hotels"
@@ -131,6 +133,7 @@ export function BookingsPage() {
     return (
       <Frame>
         <StateMessage
+          level={2}
           icon={AlertTriangle}
           tone="alert"
           title={notice.title}
@@ -179,6 +182,7 @@ export function BookingsPage() {
       {total === 0 ? (
         // The hotel genuinely has no bookings. Not a failure, and not a filtered result.
         <StateMessage
+          level={2}
           icon={CalendarX2}
           tone="status"
           title="No bookings yet"
@@ -188,6 +192,7 @@ export function BookingsPage() {
         // The page has rows; none matches the filters. The distinction matters, and so does
         // saying that other pages were never searched.
         <StateMessage
+          level={2}
           icon={SearchX}
           tone="status"
           title="No bookings on this page match"
@@ -228,7 +233,7 @@ function Frame({ children }: { readonly children: ReactNode }) {
   return (
     <PageContainer>
       <SectionHeader
-        as="h2"
+        as="h1"
         title="Bookings"
         description="Arrivals, in-house stays and completed bookings for the selected property. Select a reference to open a booking."
       />

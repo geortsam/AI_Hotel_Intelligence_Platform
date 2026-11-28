@@ -23,6 +23,9 @@ repository. :func:`require_secret` raises instead.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import hmac
+import secrets
 import uuid
 from dataclasses import dataclass
 from typing import Any, Final
@@ -37,9 +40,15 @@ from app.core.config import Settings
 ALGORITHM: Final = "HS256"
 #: Marks an access token, so a future refresh token cannot be replayed as one.
 TOKEN_TYPE_ACCESS: Final = "access"
-#: Short by design. A stolen access token is only useful while it lives, and there is no
-#: revocation list in this stage -- the expiry *is* the revocation mechanism.
+#: Short by design. A stolen access token is only useful while it lives. A bearer token is
+#: revoked by a password change; a cookie session's token also by ending its session (R1.1).
 ACCESS_TOKEN_TTL: Final = dt.timedelta(minutes=30)
+#: R1.1. The entropy of a refresh secret, in bytes: 256 bits, so it cannot be guessed and is
+#: stored only as a SHA-256 digest -- a slow hash buys nothing against a random secret.
+REFRESH_SECRET_BYTES: Final = 32
+#: The HMAC domain of a CSRF token, so the same key can never yield a CSRF token that is also
+#: some other value this application computes.
+_CSRF_DOMAIN: Final = b"ahip.csrf.v1:"
 
 #: One hasher, reused. Constructing a PasswordHasher per call is pure overhead, and its
 #: defaults are the tuned Argon2id parameters we want.
@@ -106,6 +115,7 @@ def create_access_token(
     *,
     now: dt.datetime | None = None,
     expires_in: dt.timedelta = ACCESS_TOKEN_TTL,
+    session_id: uuid.UUID | None = None,
 ) -> str:
     """Sign a short-lived access token for *subject*.
 
@@ -116,6 +126,8 @@ def create_access_token(
     ``exp``  expiry
     ``jti``  a unique token id, so a future revocation list has something to name
     ``typ``  ``access``
+    ``sid``  only for a cookie session (R1.1): the ``auth_sessions`` family it belongs to, so
+             ending the session ends the token too, and the key its CSRF token derives from
 
     Nothing else. No email, no name, no permissions, no hotel scope, no mutable state. A JWT
     is signed but **not encrypted** -- anyone holding one can read every claim -- and a claim
@@ -129,6 +141,8 @@ def create_access_token(
         "jti": str(uuid.uuid4()),
         "typ": TOKEN_TYPE_ACCESS,
     }
+    if session_id is not None:
+        payload["sid"] = str(session_id)
     return jwt.encode(payload, require_secret(settings), algorithm=ALGORITHM)
 
 
@@ -139,10 +153,14 @@ class AccessTokenClaims:
     ``issued_at`` is returned alongside the subject from Stage 4.5.2 so the service can ask
     whether the token predates the credential it authenticates. It is a claim that was
     already there; nothing was added to the token to support revocation.
+
+    ``session_id`` is the ``sid`` of a cookie session's token (R1.1), ``None`` for a bearer
+    token from ``POST /auth/login``.
     """
 
     subject: uuid.UUID
     issued_at: int
+    session_id: uuid.UUID | None = None
 
 
 def decode_access_token(settings: Settings, token: str) -> AccessTokenClaims:
@@ -174,24 +192,62 @@ def decode_access_token(settings: Settings, token: str) -> AccessTokenClaims:
         raise TokenError
 
     try:
+        sid = claims.get("sid")
         return AccessTokenClaims(
             subject=uuid.UUID(str(claims["sub"])),
             issued_at=int(claims["iat"]),
+            session_id=None if sid is None else uuid.UUID(str(sid)),
         )
     except (ValueError, KeyError, TypeError) as exc:
         raise TokenError from exc
 
 
+# --- cookie sessions (R1.1) ----------------------------------------------------------------------
+
+
+def new_refresh_secret() -> str:
+    """A fresh refresh secret: 256 random bits, URL-safe, for the ``HttpOnly`` refresh cookie."""
+    return secrets.token_urlsafe(REFRESH_SECRET_BYTES)
+
+
+def hash_refresh_secret(secret: str) -> str:
+    """The SHA-256, lower-case hex, that ``auth_sessions.token_hash`` stores for *secret*."""
+    return hashlib.sha256(secret.encode("utf-8")).hexdigest()
+
+
+def csrf_token(settings: Settings, session_id: uuid.UUID) -> str:
+    """The CSRF token of one cookie session: an HMAC of its ``sid`` under the signing secret.
+
+    Derived, not stored: the server recomputes it from the access token's ``sid`` and needs no
+    lookup, and another site can neither read it (the cookie is same-site, and the response
+    carrying it is same-origin) nor compute it (it has no key).
+    """
+    key = require_secret(settings).encode("utf-8")
+    return hmac.new(key, _CSRF_DOMAIN + str(session_id).encode("ascii"), "sha256").hexdigest()
+
+
+def csrf_matches(settings: Settings, session_id: uuid.UUID, presented: str | None) -> bool:
+    """Whether *presented* is this session's CSRF token, compared in constant time."""
+    if not presented:
+        return False
+    return hmac.compare_digest(presented.encode("utf-8"), csrf_token(settings, session_id).encode())
+
+
 __all__ = [
     "ACCESS_TOKEN_TTL",
     "ALGORITHM",
+    "REFRESH_SECRET_BYTES",
     "TOKEN_TYPE_ACCESS",
     "AccessTokenClaims",
     "SecretNotConfiguredError",
     "TokenError",
     "create_access_token",
+    "csrf_matches",
+    "csrf_token",
     "decode_access_token",
     "hash_password",
+    "hash_refresh_secret",
+    "new_refresh_secret",
     "require_secret",
     "verify_password",
 ]

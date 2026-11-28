@@ -77,6 +77,7 @@ export function DashboardPage() {
     return (
       <Shell period={period} onPeriodChange={setPeriod} hotel={null} rangeLabel={null} disabled>
         <StateMessage
+          level={2}
           icon={Building2}
           tone="status"
           title="No hotel is linked to your account"
@@ -90,6 +91,7 @@ export function DashboardPage() {
     return (
       <Shell period={period} onPeriodChange={setPeriod} hotel={null} rangeLabel={null} disabled>
         <StateMessage
+          level={2}
           icon={WifiOff}
           tone="alert"
           title="Could not load your hotels"
@@ -119,6 +121,7 @@ export function DashboardPage() {
     return (
       <Shell period={period} onPeriodChange={setPeriod} hotel={hotel} rangeLabel={rangeLabel}>
         <StateMessage
+          level={2}
           icon={AlertTriangle}
           tone="alert"
           title={notice.title}
@@ -188,7 +191,7 @@ function Shell({ period, onPeriodChange, hotel, rangeLabel, disabled, children }
   return (
     <PageContainer>
       <SectionHeader
-        as="h2"
+        as="h1"
         title="Overview"
         description={
           hotel
@@ -363,6 +366,7 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
       {empty ? (
         <div className={styles.notice}>
           <StateMessage
+            level={2}
             icon={CalendarOff}
             tone="status"
             title={`No activity in the ${periodLabel.toLowerCase()}`}
@@ -382,7 +386,7 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
         </p>
       ) : null}
 
-      <h3 className={styles.sectionTitle}>Performance</h3>
+      <h2 className={styles.sectionTitle}>Performance</h2>
       <dl className={styles.grid}>
         <KpiCard
           label="Occupancy"
@@ -428,7 +432,7 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
         />
       </dl>
 
-      <h3 className={styles.sectionTitle}>Revenue and result</h3>
+      <h2 className={styles.sectionTitle}>Revenue and result</h2>
       <dl className={styles.grid}>
         <KpiCard
           label="Other revenue"
@@ -476,7 +480,7 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
 
       <div className={styles.charts}>
         <Card padded={false}>
-          <CardHeader title="Occupancy trend" />
+          <CardHeader level={2} title="Occupancy trend" />
           <CardBody>
             <TrendChart
               metric="Occupancy"
@@ -489,7 +493,7 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
         </Card>
 
         <Card padded={false}>
-          <CardHeader title={`Room revenue trend (${currency})`} />
+          <CardHeader level={2} title={`Room revenue trend (${currency})`} />
           <CardBody>
             <TrendChart
               metric="Room revenue"
@@ -509,7 +513,7 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
 
       <div className={styles.charts}>
         <Card padded={false}>
-          <CardHeader title="Stay activity" />
+          <CardHeader level={2} title="Stay activity" />
           <CardBody>
             <dl className={styles.facts}>
               <dt>Arrivals</dt>
@@ -536,7 +540,7 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
         </Card>
 
         <Card padded={false}>
-          <CardHeader title="How these figures are measured" />
+          <CardHeader level={2} title="How these figures are measured" />
           <CardBody>
             <ul className={styles.notes}>
               <li>
@@ -573,7 +577,7 @@ function Board({ hotel, overview, previous, daily, periodLabel }: BoardProps) {
 
       {overview.is_multi_currency ? (
         <Card padded={false}>
-          <CardHeader title="By currency" />
+          <CardHeader level={2} title="By currency" />
           <CardBody>
             <div className={styles.tableScroll}>
               <table className={styles.currencyTable}>

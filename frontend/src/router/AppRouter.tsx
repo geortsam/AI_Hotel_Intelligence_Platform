@@ -6,8 +6,6 @@ import { RouteLoading } from '@/components/layout/RouteLoading'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { NotFoundPage, RouteErrorPage } from '@/pages/NotFoundPage'
-import { PlaceholderPage } from '@/pages/PlaceholderPage'
-import { NAV_ITEMS } from '@/router/navigation'
 import { ProtectedRoute } from '@/router/ProtectedRoute'
 import {
   BOOKING_DETAIL_PATTERN,
@@ -94,29 +92,6 @@ function onDemand(element: ReactNode): ReactNode {
 }
 
 /**
- * What each not-yet-built area will contain, in the platform's own terms.
- *
- * Bookings is absent because Stage 5.5 built it, Financials because Stage 5.8 did, Reviews
- * because Stage 5.9 did, Guests because Stage 5.10 did, Rooms because Stage 5.11 did and
- * Availability because Stage 5.12 did and Property because Stage 5.13 did; their entries
- * were removed rather than left as data nothing reads.
- *
- * Kept beside the routes rather than in the navigation data because it describes a PAGE,
- * not a menu entry. Every string here describes capability the backend already has -- the
- * work outstanding is the interface, not the domain.
- */
-const AREA_DESCRIPTIONS: Readonly<Record<string, string>> = {
-  /*
-   * Empty as of Stage 7.2, and deliberately kept rather than deleted.
-   *
-   * Analytics was the last unbuilt area and now has a page, so there is nothing left to
-   * describe. The mechanism stays because it is what keeps a sidebar entry from pointing at a
-   * route that does not exist: a future area added to `NAV_ITEMS` and not to `BUILT_AREAS`
-   * still renders an honest placeholder rather than a blank screen or a 404.
-   */
-}
-
-/**
  * The route tree, and the only place it is assembled.
  *
  * Two branches, and the split is the security boundary:
@@ -127,55 +102,19 @@ const AREA_DESCRIPTIONS: Readonly<Record<string, string>> = {
  *   session exists. Adding a feature area cannot accidentally expose it, because there is
  *   no route position outside the guard for it to land in.
  *
- * The feature routes are still generated from `NAV_ITEMS`, so a sidebar entry cannot point
- * at a route that does not exist, and a route cannot exist with no way to reach it.
+ * Every sidebar entry (`NAV_ITEMS`) has a real route here, and `navigationRoutes.test.tsx`
+ * resolves each one against this tree to prove it. Until A7 that was enforced by generating
+ * a placeholder page for any area not yet built; every area is built, so the placeholder
+ * machinery -- which had produced no route since Stage 7.2 -- is gone and the test holds the
+ * guarantee instead.
  *
  * `*` stays a child of the shell, so an unknown URL renders the not-found page with the
  * navigation still around it — and, being inside the guard, an unauthenticated visitor to a
  * nonsense URL is sent to sign in rather than shown a 404 that leaks which paths exist.
- */
-/**
- * Areas still awaiting their stage.
  *
- * `dashboard` (Stage 5.4), `bookings` (Stage 5.5), `financials` (Stage 5.8), `reviews`
- * (Stage 5.9), `guests` (Stage 5.10), `rooms` (Stage 5.11) and `availability` (Stage 5.12)
- * and `property` (Stage 5.13) are excluded because they are built: leaving any of them in
- * would render a "not built yet" page over a working feature. The filter is the single place
- * that knows which areas are real, so adding one is a one-line change here rather than a
- * route that has to be remembered.
+ * Exported so that test can resolve against exactly the routes the application mounts.
  */
-const BUILT_AREAS: readonly string[] = [
-  ROUTES.dashboard,
-  ROUTES.analytics,
-  ROUTES.bookings,
-  ROUTES.financials,
-  ROUTES.reviews,
-  ROUTES.guests,
-  ROUTES.rooms,
-  ROUTES.availability,
-  ROUTES.property,
-  ROUTES.administration,
-  ROUTES.platform,
-  ROUTES.intelligence,
-  ROUTES.copilot,
-]
-
-const featureRoutes: RouteObject[] = NAV_ITEMS.filter(
-  (item) => !BUILT_AREAS.includes(item.to),
-).map(
-  (item) => ({
-    path: item.to,
-    element: (
-      <PlaceholderPage
-        title={item.label}
-        description={AREA_DESCRIPTIONS[item.to] ?? ''}
-        plannedStage={item.plannedStage}
-      />
-    ),
-  }),
-)
-
-const router = createBrowserRouter([
+export const APP_ROUTES: RouteObject[] = [
   {
     path: ROUTES.login,
     element: <LoginPage />,
@@ -263,13 +202,14 @@ const router = createBrowserRouter([
            * and is not a deeper view of either.
            */
           { path: ROUTES.copilot, element: onDemand(<CopilotPage />) },
-          ...featureRoutes,
           { path: '*', element: <NotFoundPage /> },
         ],
       },
     ],
   },
-])
+]
+
+const router = createBrowserRouter(APP_ROUTES)
 
 /** Mounts the router. Rendered by `App`, below the session provider. */
 export function AppRouter() {

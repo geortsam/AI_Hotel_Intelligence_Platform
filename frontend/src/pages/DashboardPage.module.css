@@ -1,11 +1,26 @@
+/*
+ * Each KPI grid holds four tiles, so it is laid out in 1, 2 or 4 columns -- never 3, which
+ * `auto-fit` chose between 768 and 1279px and which left the fourth tile alone on a row
+ * (the UI-0 baseline's orphaned "Room revenue" and "Guest rating"). Four columns from 1280px,
+ * where the content column (~984px) gives each tile over 200px; two from 600px.
+ */
 .grid {
   display: grid;
-  /* 200px, not 240: at a 1280px viewport the content column is ~984px, and four
-   * 240px tracks plus three gaps need 1008px -- which wrapped the fourth KPI onto a row
-   * of its own. The four standard figures belong on one line. */
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   margin: 0 0 var(--space-6);
+}
+
+@media (min-width: 600px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 /* The KPI grid is a <dl>: each tile is a term and its value. The tiles themselves are the

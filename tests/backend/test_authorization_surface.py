@@ -47,9 +47,19 @@ PUBLIC_PATHS = frozenset(
     {
         "/health",
         "/health/db",
+        # A5. Request counts and latencies for a scraper on the internal network, which
+        # holds no account. nginx forwards only /api/, the API port is unpublished, and the
+        # route answers a proxied request with the ordinary 404
+        # (tests/backend/test_metrics_endpoint.py).
+        "/metrics",
         "/api/v1/",
         "/api/v1/auth/register",
         "/api/v1/auth/login",
+        # R1.1. Sign-in to a cookie session, and the two routes that renew or end one by their
+        # own refresh cookie and CSRF token rather than an access token.
+        "/api/v1/auth/session",
+        "/api/v1/auth/session/refresh",
+        "/api/v1/auth/session/end",
     }
 )
 

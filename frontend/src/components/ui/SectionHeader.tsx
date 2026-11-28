@@ -27,7 +27,9 @@ export function SectionHeader({ title, description, actions, as = 'h2' }: Sectio
   return (
     <div className={styles.header}>
       <div className={styles.text}>
-        <Heading className={styles.title}>{title}</Heading>
+        <Heading className={as === 'h1' ? `${styles.title} ${styles.pageTitle}` : styles.title}>
+          {title}
+        </Heading>
         {description ? <p className={styles.description}>{description}</p> : null}
       </div>
       {actions ? <div className={styles.actions}>{actions}</div> : null}

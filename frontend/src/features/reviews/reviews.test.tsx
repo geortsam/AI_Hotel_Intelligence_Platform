@@ -14,6 +14,7 @@ import {
   TEST_USER,
   type FetchStub,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 import type { Review, ReviewAnalyticsResponse } from '@/types/review'
 
 /**
@@ -175,7 +176,7 @@ describe('the review list', () => {
     expect([...url.searchParams.keys()].sort()).toEqual(['page', 'page_size'])
     expect(url.searchParams.get('page')).toBe('1')
     expect(url.searchParams.get('page_size')).toBe('20')
-    expect(request!.authorization).toMatch(/^Bearer /)
+    expect(request!.credentials).toBe('include')
   })
 
   it('renders the guest’s words as written', async () => {
@@ -1070,5 +1071,39 @@ describe('accessibility', () => {
     const card = screen.getByRole('heading', { name: 'A. Petrou' }).closest('article')!
     expect(within(card).getByText('Google')).toBeInTheDocument()
     expect(within(card).getByText('Published')).toBeInTheDocument()
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the summary band and the review list have no axe violations', async () => {
+    renderReviews()
+    await screen.findByText('Comfortable and central')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the open review form has no axe violations', async () => {
+    const user = userEvent.setup()
+    renderReviews()
+    await screen.findByText('Comfortable and central')
+    await user.click(screen.getByRole('button', { name: /Record a review/ }))
+
+    await expectNoAxeViolations()
+  })
+
+  it('the loading, empty and failure states have no axe violations', async () => {
+    fetchStub.on('GET', '/reviews?page=', { body: page([], 0, 0) })
+    const first = renderReviews()
+    await expectNoAxeViolations()
+    await screen.findByText('No reviews yet')
+    await expectNoAxeViolations()
+    first.unmount()
+
+    fetchStub.on('GET', '/reviews?page=', { networkError: true })
+    renderReviews()
+    await screen.findByText('Could not reach the server')
+    await expectNoAxeViolations()
   })
 })

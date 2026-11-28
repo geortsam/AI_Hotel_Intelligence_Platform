@@ -15,6 +15,21 @@ does; the other measures describe what the model did.
 
 `python -m tests.evaluation.knowledge_harness --write-reference` regenerates
 `knowledge_reference_report.json` from the reference replays.
+
+## Document search (R2.10C, C.5)
+
+`FixtureKnowledge` serves every search unless a run asks otherwise. `knowledge_source="snapshot"`
+serves them from `copilot_retrieval_snapshot` instead -- what real PostgreSQL search returned for
+these exact searches -- and the report then says so: a `knowledge_source` block and its own
+statement. A search the snapshot does not hold refuses the run. A run with the stand-in is
+unchanged, field for field, so the pinned reference report is too.
+
+## Retrieval failure from the snapshot (R2.10C, C.6)
+
+`snapshot_retrieval_failure=True`, beside `knowledge_diagnostics=True` and with the stand-in
+serving, adds a `snapshot_retrieval_failure` block: R2.10B's `retrieval_failure` judged again on
+what the snapshot holds for the same searches, beside the stand-in's verdict and labelled with both
+sources (`snapshot_retrieval_failure`). It changes nothing else in the report.
 """
 
 from __future__ import annotations
@@ -24,7 +39,7 @@ import json
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Final, cast
 
 from app.copilot.contracts import ToolServices
 from app.copilot.registry import ToolRegistry, build_default_registry
@@ -35,8 +50,10 @@ from app.llm.prompts.registry import COPILOT_ANSWER_V2
 from app.models.enums import HotelRole
 from app.services.copilot import CopilotService
 from app.services.tool_invocation import ToolInvocationService
+from tests.evaluation import copilot_retrieval_snapshot as snapshots
 from tests.evaluation import knowledge_diagnostics as diagnostics
 from tests.evaluation import knowledge_scorers as scorers
+from tests.evaluation import snapshot_retrieval_failure as snapshot_failures
 from tests.evaluation.fixture_documents import FixtureKnowledge
 from tests.evaluation.fixture_hotel import (
     EVAL_HOTEL,
@@ -89,13 +106,39 @@ REFERENCE_STATEMENT = (
 )
 
 
+#: C.5: the reference statement when document search was the pinned snapshot, not the stand-in.
+SNAPSHOT_REFERENCE_STATEMENT = (
+    "Reference exchanges written by hand to exercise the copilot's document path and these "
+    f"scorers, with document search served from {snapshots.SNAPSHOT_ID}: what real PostgreSQL "
+    "search returned for these exact searches when the snapshot was taken, not search itself. "
+    "The exchanges were written against the stand-in, so a measure that differs from the "
+    "reference report shows where real search and the stand-in disagree. No language model was "
+    "evaluated and retrieval quality was not measured here (see knowledge_retrieval_v2)."
+)
+
+FIXTURE: Final = "fixture"
+SNAPSHOT: Final = "snapshot"
+KNOWLEDGE_SOURCES: Final = (FIXTURE, SNAPSHOT)
+
+
 def live_statement(
-    provider: str, model: str, recorded_on: str, size: int, *, prompt: PromptRecord
+    provider: str,
+    model: str,
+    recorded_on: str,
+    size: int,
+    *,
+    prompt: PromptRecord,
+    knowledge_source: str = FIXTURE,
 ) -> str:
+    search = (
+        "a fixed stand-in for document search"
+        if knowledge_source == FIXTURE
+        else f"document search served from the pinned PostgreSQL snapshot {snapshots.SNAPSHOT_ID}"
+    )
     return (
         f"One run of {provider}/{model}, recorded on {recorded_on}, against {size} questions of "
-        f"{COPILOT_KNOWLEDGE_EVAL_V1.identity} under {prompt.identity}, with fixed tool data and a "
-        "fixed stand-in for document search. It describes this set, this prompt and this model on "
+        f"{COPILOT_KNOWLEDGE_EVAL_V1.identity} under {prompt.identity}, with fixed tool data and "
+        f"{search}. It describes this set, this prompt and this model on "
         "that date, and nothing more: no aggregate accuracy is claimed, the set is too small for a "
         "rate to generalise, and retrieval quality is measured elsewhere."
     )
@@ -135,7 +178,11 @@ def run_case(
     model_name: str,
     prompt: PromptRecord,
     observations: list[diagnostics.CaseObservation] | None = None,
+    knowledge: snapshots.SnapshotKnowledge | None = None,
+    search_keys: list[snapshot_failures.CaseSearchKeys] | None = None,
 ) -> KnowledgeCaseResult:
+    """*knowledge* (C.5) replaces the stand-in for this case; `run` checks its misses after.
+    *search_keys* (C.6) collects the (query, limit) of each search the model requested."""
     scope = EvalScope(HotelRole(case.role))
     session = EvalSession()
     services = ToolServices(
@@ -143,7 +190,7 @@ def run_case(
         demand_prediction=cast(Any, FixtureForecasts()),
         forecast_performance=cast(Any, FixtureAccuracy()),
         insight=cast(Any, FixtureInsight()),
-        knowledge=cast(Any, FixtureKnowledge()),
+        knowledge=cast(Any, FixtureKnowledge() if knowledge is None else knowledge),
     )
     invocations = ToolInvocationService(
         cast(Any, session), registry, cast(Any, scope), cast(Any, EvalAudit()), services
@@ -192,6 +239,8 @@ def run_case(
                 shown=diagnostics.shown_in(recorder.requests),
             )
         )
+    if search_keys is not None:  # C.6
+        search_keys.append(snapshot_failures.search_keys(case.case_id, recorder.responses))
     seen = scorers.labels_seen(recorder.requests)
     structured = [
         json.loads(m.content)
@@ -274,31 +323,64 @@ def run(
     prompt: PromptRecord,
     budget: Budget | None = None,
     knowledge_diagnostics: bool = False,
+    knowledge_source: str = FIXTURE,
+    snapshot_retrieval_failure: bool = False,
 ) -> dict[str, Any]:
     """Run every case and return the report. *knowledge_diagnostics* (R2.10A) adds that block,
     beside the report's measures and changing none of them; off by default, so a report without
-    it -- the pinned reference among them -- is exactly what it was."""
+    it -- the pinned reference among them -- is exactly what it was.
+
+    *knowledge_source* (C.5) is `fixture`, the default, or `snapshot`. A snapshot run labels its
+    report and refuses at the first case that made a search the snapshot does not hold.
+
+    *snapshot_retrieval_failure* (C.6) adds that block beside `knowledge_diagnostics`, which it
+    needs, and is computed beside the stand-in's verdict, so the stand-in must serve the run."""
+    if knowledge_source not in KNOWLEDGE_SOURCES:
+        raise ValueError(f"knowledge_source must be one of {KNOWLEDGE_SOURCES}")
+    if snapshot_retrieval_failure and not knowledge_diagnostics:
+        raise ValueError(
+            "snapshot_retrieval_failure sits beside knowledge_diagnostics: enable both"
+        )
+    if snapshot_retrieval_failure and knowledge_source != FIXTURE:
+        raise ValueError("snapshot_retrieval_failure is computed beside the stand-in's verdict")
+    snapshot = snapshots.load() if knowledge_source == SNAPSHOT else None
+    beside = snapshots.load() if snapshot_retrieval_failure else None
+    keys: list[snapshot_failures.CaseSearchKeys] = []
     registry = build_default_registry()
     budget = budget or Budget(timeout_seconds=30.0, max_output_tokens=1024)
     observations: list[diagnostics.CaseObservation] = []
-    results = [
-        run_case(
-            case,
-            model_for(case),
-            registry=registry,
-            budget=budget,
-            provider_name=provider,
-            model_name=model,
-            prompt=prompt,
-            observations=observations if knowledge_diagnostics else None,
+    results = []
+    for case in question_set.cases:
+        knowledge = None if snapshot is None else snapshots.SnapshotKnowledge(snapshot)
+        results.append(
+            run_case(
+                case,
+                model_for(case),
+                registry=registry,
+                budget=budget,
+                provider_name=provider,
+                model_name=model,
+                prompt=prompt,
+                observations=observations if knowledge_diagnostics else None,
+                knowledge=knowledge,
+                search_keys=keys if beside is not None else None,
+            )
         )
-        for case in question_set.cases
-    ]
-    statement = (
-        REFERENCE_STATEMENT
-        if provider == REFERENCE_PROVIDER
-        else live_statement(provider, model, recorded_on, len(question_set.cases), prompt=prompt)
-    )
+        if knowledge is not None and knowledge.misses:
+            raise snapshots.RetrievalSnapshotError(
+                f"{case.case_id}: searches the snapshot does not hold: {knowledge.misses}"
+            )
+    if provider == REFERENCE_PROVIDER:
+        statement = REFERENCE_STATEMENT if snapshot is None else SNAPSHOT_REFERENCE_STATEMENT
+    else:
+        statement = live_statement(
+            provider,
+            model,
+            recorded_on,
+            len(question_set.cases),
+            prompt=prompt,
+            knowledge_source=knowledge_source,
+        )
     report: dict[str, Any] = {
         "harness": HARNESS_VERSION,
         "mode": mode,
@@ -314,9 +396,23 @@ def run(
         "measures": _measures(results),
         "cases": [asdict(result) for result in results],
     }
+    if snapshot is not None:
+        report["knowledge_source"] = {
+            "source": snapshots.SOURCE_LABEL,
+            "snapshot": snapshots.SNAPSHOT_ID,
+            "sha256": snapshot.sha256,
+        }
     if knowledge_diagnostics:
         report["knowledge_diagnostics"] = diagnostics.block(
             question_set.cases, report["cases"], observations
+        )
+    if beside is not None:
+        report[snapshot_failures.BLOCK] = snapshot_failures.block(
+            question_set.cases,
+            observations,
+            keys,
+            report["knowledge_diagnostics"]["cases"],
+            beside,
         )
     return report
 
@@ -326,6 +422,7 @@ def run_replays(
     question_set: KnowledgeQuestionSet = COPILOT_KNOWLEDGE_EVAL_V1,
     *,
     prompt: PromptRecord,
+    knowledge_source: str = FIXTURE,
 ) -> dict[str, Any]:
     return run(
         question_set,
@@ -335,6 +432,7 @@ def run_replays(
         model=replays.model,
         recorded_on=replays.recorded_on,
         prompt=prompt,
+        knowledge_source=knowledge_source,
     )
 
 
@@ -365,11 +463,15 @@ if __name__ == "__main__":  # pragma: no cover
 
 
 __all__ = [
+    "FIXTURE",
     "HARNESS_VERSION",
+    "KNOWLEDGE_SOURCES",
     "MEASURES",
     "REFERENCE_PROMPT",
     "REFERENCE_REPLAYS",
     "REFERENCE_REPORT",
+    "SNAPSHOT",
+    "SNAPSHOT_REFERENCE_STATEMENT",
     "KnowledgeCaseResult",
     "canonical",
     "reference_report",

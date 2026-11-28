@@ -134,13 +134,47 @@ a separate environment). Runtime first, because the dev lock is constrained by i
 
 ```bash
 uv pip compile backend/requirements.txt --universal --python-version 3.14 --generate-hashes --exclude-newer 2026-10-10T22:22:00Z -o backend/requirements-lock.txt
-uv pip compile backend/requirements-dev.txt ml/requirements-ml.txt --constraint backend/requirements-lock.txt --universal --python-version 3.14 --generate-hashes --exclude-newer 2026-10-10T22:22:00Z -o backend/requirements-dev-lock.txt
+uv pip compile backend/requirements-dev.txt ml/requirements-ml.txt --constraint backend/requirements-lock.txt --universal --python-version 3.14 --generate-hashes --exclude-newer 2026-10-10T22:22:00Z --exclude-newer-package certifi=2026-11-10T00:00:00Z -o backend/requirements-dev-lock.txt
 ```
 
 `--exclude-newer` is what makes regeneration reproducible: it ignores anything published after
 that instant. The current locks use the moment of CI run 38091107832's install, so they pinned
 exactly the 55 packages that run resolved — nothing was upgraded by locking. Move the timestamp
 forward only when deliberately taking newer transitive releases, and review the lock diff.
+
+**A2 (dependency vulnerability scanning).** CI's "Dependency vulnerability scan" job audits both
+locks with pip-audit on every run (see `scripts/dependency_audit.py`). Its first measurement
+found two packages to move, each moved alone:
+- `PyJWT` 2.13.0 → 2.15.1, a direct pin in `backend/requirements.txt`, released before the
+  existing cutoff. It had 15 advisories: 1 critical, 6 high, 8 moderate.
+- `certifi` 2026.7.22 → 2026.10.23 (dev lock only, via httpx), for the critical
+  GHSA-6q48-6c7w-9gw2 (fixed in 2026.10.18). It was published after the cutoff, so the dev
+  lock's command carries one per-package exception, `--exclude-newer-package certifi=…`, rather
+  than moving the global timestamp and with it every other package.
+
+The scanner has a lock of its own, `scripts/dependency_audit_lock.txt` (28 packages, generated
+from `scripts/dependency_audit_requirements.txt`). It is installed only into the scan job's own
+venv:
+
+```bash
+uv pip compile scripts/dependency_audit_requirements.txt --universal --python-version 3.14 --generate-hashes --exclude-newer 2026-11-10T00:00:00Z -o scripts/dependency_audit_lock.txt
+```
+
+The scan moved to a workflow of its own, `.github/workflows/dependency-audit.yml`, in the A2
+trigger correction, so it runs on every push to any branch rather than only where `ci.yml` runs.
+
+**A3 (SBOMs).** The image-reproducibility job catalogues both builds of each image with Syft
+1.57.1 (a release archive pinned by version and SHA-256 in `ci.yml`) into CycloneDX 1.6, and
+`scripts/sbom_check.py` validates them and requires the two builds' SBOMs to list the same
+components -- so the SBOM is reproducible wherever the image is; its `serialNumber` and
+`timestamp` differ by design and are not compared. The checker has a lock of its own,
+`scripts/sbom_lock.txt` (27 packages: `cyclonedx-python-lib[json-validation]` 11.12.0, the
+version pip-audit 2.10.1 already uses, and `packaging` 26.3), installed only into that job's
+venv and audited by the dependency scan:
+
+```bash
+uv pip compile scripts/sbom_requirements.txt --universal --python-version 3.14 --generate-hashes --exclude-newer 2026-11-10T00:00:00Z -o scripts/sbom_lock.txt
+```
 
 ### Stage 6.7: the model, and six more transitive packages
 

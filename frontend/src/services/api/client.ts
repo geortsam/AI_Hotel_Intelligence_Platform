@@ -15,22 +15,32 @@ import { ApiError, isErrorResponse } from '@/services/api/ApiError'
  */
 
 /**
- * How the client obtains a bearer token, and what it does when one is rejected.
+ * How the client reaches the session, and what it does when the session is rejected.
  *
  * Injected rather than imported. If this module reached into the session store directly,
  * transport would depend on React state and the session store would depend on transport --
  * a cycle, and one that makes the client impossible to test without mounting a provider.
  * The session registers itself here at start-up instead, so this file keeps knowing only
  * about HTTP.
+ *
+ * ## The cookie session (R1.1)
+ *
+ * The credentials are `HttpOnly` cookies the browser attaches itself (`credentials:
+ * 'include'`); this file never holds one. What it holds is the session's **CSRF token**, which
+ * it sends as `X-CSRF-Token` on every request that changes something -- a request without it
+ * is refused, so another site riding the cookies gets nowhere.
  */
 export interface AuthBridge {
-  /** The current access token, or null when there is no session. */
+  /** The session's CSRF token, or null when this page knows of no session. */
   readonly getToken: () => string | null
+  /** Keep a CSRF token the server has just issued: a new session, or a renewed one. */
+  readonly adoptToken?: (csrfToken: string) => void
   /**
-   * Called once when the server rejects the token (401 on an authenticated request).
+   * Called once when the session is rejected and could not be renewed.
    *
-   * The session uses it to clear itself. It is deliberately NOT a retry hook: the backend
-   * issues no refresh token, so a retry would replay the same rejected credential forever.
+   * The session uses it to clear itself. A 401 is first answered by **one** refresh of the
+   * session and one retry of the request; only if that fails does this run, so an expired
+   * access cookie never signs anyone out while the session itself is alive.
    */
   readonly onUnauthenticated: () => void
 }
@@ -51,6 +61,12 @@ export function resetAuthBridge(): void {
 
 /** The HTTP verbs the API uses. Restated as a union so a typo is a compile error. */
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
+
+/** The header the CSRF token travels in, both ways. */
+export const CSRF_HEADER = 'X-CSRF-Token'
+
+/** The route that renews a cookie session. */
+const REFRESH_PATH = '/auth/session/refresh'
 
 /**
  * Query parameters. `undefined` values are dropped rather than sent as "undefined".
@@ -74,13 +90,19 @@ export interface RequestOptions {
   /** Lets a caller cancel, e.g. when a component unmounts mid-request. */
   readonly signal?: AbortSignal
   /**
-   * Sends no `Authorization` header, and does not treat a 401 as session expiry.
+   * Does not treat a 401 as session expiry, and does not try to renew the session on one.
    *
-   * For the endpoints that establish a session rather than consume one. Logging in with a
-   * stale token attached would be meaningless, and worse, the 401 from a WRONG PASSWORD
-   * would be read as "your session expired" and clear a session the user still had.
+   * For the endpoints that establish or end a session rather than consume one. The 401 from
+   * a WRONG PASSWORD would otherwise be read as "your session expired" and clear a session
+   * the user still had. The cookies still go, so a sign-in can set them and a sign-out can
+   * clear them.
    */
   readonly anonymous?: boolean
+  /**
+   * Sends no cookies at all (`credentials: 'omit'`). For a public route that must not learn
+   * whether, or as whom, the caller is signed in -- the API root's metadata.
+   */
+  readonly withoutCookies?: boolean
   /**
    * Says that a 401 from this route describes a credential in the **body**, not the token in
    * the header -- so the session must not be cleared.
@@ -195,28 +217,59 @@ export async function request<ResponseT>(
     signal,
     anonymous = false,
     credentialInBody = false,
+    withoutCookies = false,
   } = options
 
-  const token = anonymous ? null : bridge.getToken()
-
-  const init: RequestInit = {
-    method,
-    headers: {
-      Accept: 'application/json',
-      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-      // Attached here and nowhere else. No component or service builds this header, so
-      // there is exactly one place a token can reach the wire -- and exactly one place to
-      // change when the backend grows an HttpOnly cookie session.
-      ...(token === null ? {} : { Authorization: `Bearer ${token}` }),
-      ...headers,
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    ...(signal ? { signal } : {}),
+  const send = () => {
+    // Read at send time, so a retry after a refresh carries the token the refresh adopted.
+    const csrf = method === 'GET' ? null : bridge.getToken()
+    const init: RequestInit = {
+      method,
+      // The session's cookies, attached by the browser -- on every request, so a sign-in, a
+      // refresh and a sign-out can set and clear them, and every other call is authenticated.
+      credentials: withoutCookies ? 'omit' : 'include',
+      headers: {
+        Accept: 'application/json',
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        // Attached here and nowhere else, so there is exactly one place the CSRF token
+        // reaches the wire. No component or service builds this header.
+        ...(csrf === null ? {} : { [CSRF_HEADER]: csrf }),
+        ...headers,
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(signal ? { signal } : {}),
+    }
+    return transmit(buildUrl(path, query), init)
   }
 
-  let response: Response
+  let response = await send()
+
+  if (!response.ok) {
+    let error = await toApiError(response)
+    if (error.isUnauthenticated && !anonymous && !credentialInBody) {
+      // The access cookie was rejected -- most often simply expired. Renew the session once
+      // and send this request once more; only a session that cannot be renewed has ended.
+      if (bridge.getToken() !== null && (await refreshSession())) {
+        response = await send()
+        if (response.ok) {
+          return decode<ResponseT>(response)
+        }
+        error = await toApiError(response)
+      }
+      if (error.isUnauthenticated) {
+        bridge.onUnauthenticated()
+      }
+    }
+    throw error
+  }
+
+  return decode<ResponseT>(response)
+}
+
+/** `fetch`, with a rejected promise turned into the network `ApiError`. */
+async function transmit(url: string, init: RequestInit): Promise<Response> {
   try {
-    response = await fetch(buildUrl(path, query), init)
+    return await fetch(url, init)
   } catch (cause) {
     // A rejected fetch means no response existed: DNS, connection refused, CORS, or an
     // abort. Status 0 keeps that distinguishable from every real HTTP status.
@@ -226,17 +279,54 @@ export async function request<ResponseT>(
       cause instanceof Error ? cause.message : 'The request could not be sent.',
     )
   }
+}
 
-  if (!response.ok) {
-    const error = await toApiError(response)
-    if (error.isUnauthenticated && !anonymous && !credentialInBody) {
-      // The token we sent was rejected. Tell the session once and let it clear itself; the
-      // error still propagates so the caller can react. Nothing is retried -- the backend
-      // issues no refresh token, so replaying the same credential would loop forever.
-      bridge.onUnauthenticated()
-    }
-    throw error
+/** The one refresh in flight, shared by every request that met the same expired cookie. */
+let refreshing: Promise<boolean> | null = null
+
+/**
+ * Renew the cookie session: `POST /auth/session/refresh` with the CSRF token. Resolves
+ * whether the session lives on. Concurrent callers share one attempt, because a refresh token
+ * works once -- a second, parallel use of it would read as a replay and end the session.
+ */
+export function refreshSession(): Promise<boolean> {
+  if (refreshing !== null) {
+    return refreshing
   }
+  const csrf = bridge.getToken()
+  if (csrf === null) {
+    return Promise.resolve(false)
+  }
+  refreshing = transmit(buildUrl(REFRESH_PATH), {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Accept: 'application/json', [CSRF_HEADER]: csrf },
+  })
+    .then((response) => {
+      if (!response.ok) {
+        return false
+      }
+      adoptCsrfFrom(response)
+      return true
+    })
+    .catch(() => false)
+    .finally(() => {
+      refreshing = null
+    })
+  return refreshing
+}
+
+/** Keep the CSRF token a response carries, when it carries one (a session was just set). */
+function adoptCsrfFrom(response: Response): void {
+  const issued = response.headers.get(CSRF_HEADER)
+  if (issued !== null && issued !== '') {
+    bridge.adoptToken?.(issued)
+  }
+}
+
+/** A successful response's body: `undefined` for a 204 or an empty body, else its JSON. */
+async function decode<ResponseT>(response: Response): Promise<ResponseT> {
+  adoptCsrfFrom(response)
 
   if (response.status === 204 || response.headers.get('Content-Length') === '0') {
     return undefined as ResponseT

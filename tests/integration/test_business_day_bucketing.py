@@ -446,12 +446,20 @@ def los_angeles_engine() -> Iterator[Engine]:
 def test_the_api_reports_hotel_local_days_whatever_the_server_session_zone(
     engine: Engine, session: Session, los_angeles_engine: Engine
 ) -> None:
-    """``session`` is requested for its teardown, which truncates what this test wrote."""
+    """``session`` is requested for its teardown, which truncates what this test wrote.
+
+    Since R1.5 the API refuses a zone the IANA database does not define, so the unknown-zone
+    hotel is created as UTC and then given ``Mars/Olympus`` directly, as a row stored before
+    R1.5 would hold it; the read path must still fall back to UTC for it.
+    """
     with los_angeles_engine.connect() as probe:
         assert probe.execute(sa.text("SHOW TimeZone")).scalar_one() == "America/Los_Angeles"
     api = authenticated_client(los_angeles_engine, email="f1-api@example.test")
     ids: dict[str, str] = {}
-    for slug, zone in [("api-athens", "Europe/Athens"), ("api-unknown", "Mars/Olympus")]:
+    for slug, zone, created_as in [
+        ("api-athens", "Europe/Athens", "Europe/Athens"),
+        ("api-unknown", "Mars/Olympus", "UTC"),
+    ]:
         response = api.post(
             "/api/v1/hotels",
             json={
@@ -460,7 +468,7 @@ def test_the_api_reports_hotel_local_days_whatever_the_server_session_zone(
                 "address_line1": "1 Street",
                 "city": "Athens",
                 "country_code": "GR",
-                "timezone": zone,
+                "timezone": created_as,
                 "currency": "EUR",
             },
         )
@@ -469,6 +477,11 @@ def test_the_api_reports_hotel_local_days_whatever_the_server_session_zone(
 
     factory = sessionmaker(bind=engine, expire_on_commit=False, future=True)
     with factory() as writer:
+        writer.execute(
+            sa.update(Hotel)
+            .where(Hotel.public_id == ids["Mars/Olympus"])
+            .values(timezone="Mars/Olympus")
+        )
         for public_id in ids.values():
             hotel = writer.scalars(sa.select(Hotel).where(Hotel.public_id == public_id)).one()
             book(writer, hotel, at(2026, 3, 10, 22, 30))

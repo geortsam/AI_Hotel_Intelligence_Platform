@@ -1,0 +1,28 @@
+/*
+ * Status rails (UI-7/UI-8): one colour per Badge tone, set as `--rail` on a row or card.
+ *
+ * The consumer draws the edge itself -- `box-shadow: inset 3px 0 0 var(--rail, transparent)`
+ * on whichever element owns the leading edge (a card, or a table row's first cell, since a
+ * `<tr>` cannot reliably carry a shadow). A rail always REPEATS a status that is already
+ * written out beside it, in a badge; it never carries the meaning alone.
+ */
+
+.neutral {
+  --rail: var(--color-border-strong);
+}
+
+.success {
+  --rail: var(--color-success);
+}
+
+.info {
+  --rail: var(--color-info);
+}
+
+.warning {
+  --rail: var(--color-warning);
+}
+
+.danger {
+  --rail: var(--color-danger);
+}

@@ -14,7 +14,7 @@ since `0011`. This is the contract, and how an operator runs it.
 | **Allowed values** | 28–3650 days. 28 is the accuracy protocol's settlement lag: a shorter period would delete a prediction before its first scorable day. 3650 is a technical guard. A value outside them stops the application and the command from starting. |
 | **After expiry** | The row is **physically deleted** by the purge. Nothing is archived. Until the purge runs an expired row is still in the table and still readable. |
 | **Who runs it** | An operator, or the deployment's scheduler. No HTTP endpoint, no actor, no audit event, no model load. |
-| **Automatic?** | No. The application schedules nothing. |
+| **Automatic?** | Only if the deployment opts in: `python -m app.jobs.scheduler` runs it daily with the other retention jobs ([deployment/retention-scheduler.md](deployment/retention-scheduler.md)). Nothing starts that scheduler by default. |
 
 ## 2. What a purged window looks like
 

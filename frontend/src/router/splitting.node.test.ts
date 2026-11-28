@@ -43,14 +43,13 @@ const ON_DEMAND = [
  * index route -- deferring either adds a round trip to the first screen anyone sees. The
  * error and not-found screens must not need a fetch to explain that a fetch failed.
  */
-const EAGER = ['DashboardPage', 'LoginPage', 'NotFoundPage', 'RouteErrorPage', 'PlaceholderPage']
+const EAGER = ['DashboardPage', 'LoginPage', 'NotFoundPage', 'RouteErrorPage']
 
-/** The exact statements, written out: two of these five share one import. */
+/** The exact statements, written out: two of these four share one import. */
 const EAGER_IMPORTS = [
   "import { DashboardPage } from '@/pages/DashboardPage'",
   "import { LoginPage } from '@/pages/LoginPage'",
   "import { NotFoundPage, RouteErrorPage } from '@/pages/NotFoundPage'",
-  "import { PlaceholderPage } from '@/pages/PlaceholderPage'",
 ]
 
 describe('route splitting', () => {

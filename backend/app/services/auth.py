@@ -47,6 +47,7 @@ from app.core.security import (
 )
 from app.models.enums import AuditAction, AuditResourceType
 from app.models.user import User
+from app.repositories.auth_session import AuthSessionRepository
 from app.repositories.user import UserRepository
 from app.schemas.auth import (
     PasswordChangeRequest,
@@ -77,10 +78,14 @@ class AuthService:
         repository: UserRepository,
         settings: Settings,
         audit: AuditTrail,
+        sessions: AuthSessionRepository,
     ) -> None:
         self._session = session
         self._repository = repository
         self._settings = settings
+        # R1.1. Read on every request whose token names a cookie session (`sid`), and written
+        # by a password change, which ends every sign-in of the account.
+        self._sessions = sessions
         # Stage 4.5.12. Handed in WITHOUT an actor: this service is what resolves a token, so
         # the authenticated user cannot also be one of its dependencies. `change_password`
         # binds the caller it was given; see `AuditTrail.for_actor`.
@@ -116,12 +121,17 @@ class AuthService:
             self._session.rollback()
             raise self._translate(exc) from exc
 
-        return self._to_response(created)
+        return self.to_response(created)
 
     # --- sign-in ------------------------------------------------------------------------
 
     def authenticate(self, email: str, password: str) -> TokenResponse:
-        """Exchange credentials for an access token, or raise the one failure.
+        """Exchange credentials for a bearer access token, or raise the one failure."""
+        return self._issue_token(self.verify_credentials(email, password))
+
+    def verify_credentials(self, email: str, password: str) -> User:
+        """The account these credentials sign in to, its login recorded and committed -- or the
+        one failure. Shared by the bearer login and the cookie session (R1.1).
 
         Three rejections share a single path -- unknown address, wrong password, disabled
         account -- and each does the same amount of work, so neither the response nor the
@@ -150,7 +160,7 @@ class AuthService:
             self._session.rollback()
             raise self._translate(exc) from exc
 
-        return self._issue_token(user)
+        return user
 
     def change_password(self, user: User, payload: PasswordChangeRequest) -> TokenResponse:
         """Replace the authenticated caller's password, and commit.
@@ -183,7 +193,12 @@ class AuthService:
         # part of this request and it has no business happening inside an open write.
         digest = hash_password(payload.new_password)
         try:
-            self._repository.set_password(user, digest, dt.datetime.now(dt.UTC))
+            changed_at = dt.datetime.now(dt.UTC)
+            self._repository.set_password(user, digest, changed_at)
+            # R1.1. Every cookie session of the account ends with it, in the same transaction:
+            # a refresh token must not outlive the password it was signed in with, any more
+            # than an access token does.
+            self._sessions.revoke_all_for_user(user.id, changed_at)
             # Stage 4.5.12. The event carries no hotel: a password belongs to the ACCOUNT,
             # and a user may belong to no property or to several -- attributing the change to
             # one of them would be an invention. It carries no details at all, either. There
@@ -215,6 +230,22 @@ class AuthService:
         working now instead of when its token happens to expire -- which is the whole reason
         the token carries no mutable state.
         """
+        user, _ = self._resolve_claims(token)
+        return user
+
+    def resolve_session_token(self, token: str) -> tuple[User, uuid.UUID]:
+        """The user and session a **cookie** access token names (R1.1), or raise.
+
+        A cookie must carry a session's token: one without a ``sid`` -- a bearer token planted
+        in the cookie -- is refused, because it has no CSRF token to check against.
+        """
+        user, session_id = self._resolve_claims(token)
+        if session_id is None:
+            raise InvalidTokenError
+        return user, session_id
+
+    def _resolve_claims(self, token: str) -> tuple[User, uuid.UUID | None]:
+        """The user a token names, and its session if it has one; every check applied."""
         try:
             claims = decode_access_token(self._settings, token)
         except TokenError as exc:
@@ -239,11 +270,22 @@ class AuthService:
             # account that an expired-token response must not confirm.
             raise InvalidTokenError
 
-        return user
+        # R1.1. A session's token lives only as long as its session: signed out, replayed or
+        # expired, the family has no live refresh token and the access token stops with it.
+        if claims.session_id is not None and not self._sessions.family_is_live(
+            claims.session_id, dt.datetime.now(dt.UTC)
+        ):
+            raise InvalidTokenError
+
+        return user, claims.session_id
+
+    def issue_session_token(self, user: User, session_id: uuid.UUID) -> TokenResponse:
+        """An access token for one cookie session, named by its ``sid`` (R1.1)."""
+        return self._issue_token(user, session_id=session_id)
 
     # --- internals ----------------------------------------------------------------------
 
-    def _issue_token(self, user: User) -> TokenResponse:
+    def _issue_token(self, user: User, *, session_id: uuid.UUID | None = None) -> TokenResponse:
         """Mint an access token this application will actually accept, waiting if it must.
 
         The revocation rule rejects ``iat <= floor(password_changed_at)`` -- the whole second
@@ -271,12 +313,12 @@ class AuthService:
             time.sleep(remaining)
 
         return TokenResponse(
-            access_token=create_access_token(self._settings, user.public_id),
+            access_token=create_access_token(self._settings, user.public_id, session_id=session_id),
             expires_in=int(ACCESS_TOKEN_TTL.total_seconds()),
         )
 
     @staticmethod
-    def _to_response(user: User) -> UserResponse:
+    def to_response(user: User) -> UserResponse:
         """The one place a User row becomes a response. ``password_hash`` is not copied, and
         the response model has no field that could hold it."""
         return UserResponse(

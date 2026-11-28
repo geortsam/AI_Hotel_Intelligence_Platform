@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { RoomDetailPage } from '@/pages/RoomDetailPage'
 import { RoomsPage } from '@/pages/RoomsPage'
@@ -14,7 +14,9 @@ import {
   TEST_HOTEL,
   TEST_USER,
   type FetchStub,
+  stubCompactViewport,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 import type { Room, RoomType } from '@/types/room'
 
 /**
@@ -151,7 +153,7 @@ describe('the room list', () => {
     expect([...url.searchParams.keys()].sort()).toEqual(['page', 'page_size'])
     expect(url.searchParams.get('page')).toBe('1')
     expect(url.searchParams.get('page_size')).toBe('20')
-    expect(request!.authorization).toMatch(/^Bearer /)
+    expect(request!.credentials).toBe('include')
   })
 
   it('fetches the room-type catalogue exactly once, and no type per room', async () => {
@@ -977,5 +979,58 @@ describe('editing a room sends only what changed, against the version loaded', (
     })
     expect(screen.getByLabelText('Status')).toHaveValue('out_of_order')
     expect(requestsFor('/rooms/', 'GET')).toHaveLength(loads + 1)
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('the room table has no axe violations', async () => {
+    renderList()
+    await screen.findByRole('link', { name: '201' })
+
+    await expectNoAxeViolations()
+  })
+
+  it('the compact room cards have no axe violations', async () => {
+    stubCompactViewport()
+    renderList()
+    await screen.findByRole('link', { name: /201/ })
+
+    await expectNoAxeViolations()
+  })
+
+  it('the open create form has no axe violations', async () => {
+    const user = userEvent.setup()
+    renderList()
+    await screen.findByRole('link', { name: '201' })
+    await user.click(screen.getByRole('button', { name: /Add room/ }))
+
+    await expectNoAxeViolations()
+  })
+
+  it('the loading, empty and failure states have no axe violations', async () => {
+    fetchStub.on('GET', '/rooms?page=', { body: page([], 0, 0) })
+    const first = renderList()
+    await expectNoAxeViolations()
+    await screen.findByText('No rooms of this type')
+    await expectNoAxeViolations()
+    first.unmount()
+
+    fetchStub.on('GET', '/rooms?page=', { networkError: true })
+    renderList()
+    await screen.findByText('Could not reach the server')
+    await expectNoAxeViolations()
+  })
+
+  it('the room detail page has no axe violations', async () => {
+    renderDetail()
+    await screen.findByRole('heading', { level: 1, name: 'Room 201' })
+
+    await expectNoAxeViolations()
   })
 })

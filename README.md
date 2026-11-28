@@ -16,25 +16,25 @@ and readable.
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-runtime--verified-2496ED?logo=docker&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-7984%20backend%20%C2%B7%201346%20frontend-success)
-![API](https://img.shields.io/badge/API-65%20paths%20%C2%B7%20101%20operations-informational)
+![Tests](https://img.shields.io/badge/tests-run%20in%20CI-success)
+![API](https://img.shields.io/badge/API-68%20paths%20%C2%B7%20104%20operations-informational)
 
 </div>
 
 ![The dashboard: occupancy, ADR, RevPAR and room revenue for one property over a chosen period](docs/screenshots/dashboard.png)
 
 <div align="center"><sub>The overview screen. Every figure is computed server-side and labelled
-with the window it covers; the multi-currency banner appears because the period holds entries in
-more than one currency and the platform never converts between them.</sub></div>
+with the window it covers; a period holding entries in more than one currency gets a banner
+listing them instead of a sum, because the platform never converts between them.</sub></div>
 
 > ### Current state: **V1 complete and verified; V2 complete through Stage 7.14**
 >
-> Eleven domains over a 28-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
+> Eleven domains over a 29-table PostgreSQL 18.6 schema — hotels, room types, rooms, amenities,
 > guests, bookings, payments, reviews, the financial ledger, analytics and intelligence, plus the
 > stored demand predictions the served model writes and the measurements taken over them, and
 > V2's copilot accounting records, hotel knowledge documents and copilot conversations, and the
 > declared demand observation periods —
-> reachable as **65 API paths / 101 operations**, of which **96 require authentication**.
+> reachable as **68 API paths / 104 operations**, of which **96 require authentication**.
 > Authentication is Argon2id plus HS256
 > access tokens; authorization is a four-level hotel role hierarchy with a separate
 > platform-administrator capability. There is a complete React front end — all thirteen
@@ -42,8 +42,8 @@ more than one currency and the platform never converts between them.</sub></div>
 > trail with verified archival, and a TLS-terminated Docker Compose deployment whose topology,
 > backup/restore and image reproducibility are exercised on real containers by CI on every push.
 >
-> **7984 backend tests and 1346 frontend tests pass in CI.** Schema head is
-> `0020_guest_email_rules` across 20 linear migrations.
+> **The backend and frontend suites run in CI on every push.** Schema head is
+> `0023_auth_sessions` across 23 linear migrations.
 >
 > **Two intelligence layers, deliberately kept apart.** The V1 layer is a transparent statistical
 > baseline — seasonal-naive day-of-week median forecasting, MAD-based intervals and anomaly
@@ -97,13 +97,21 @@ more than one currency and the platform never converts between them.</sub></div>
 12. [What the intelligence layer is, and is not](#what-the-intelligence-layer-is-and-is-not)
 13. [Known limitations](#known-limitations)
 
+The rest of the documentation, with the status of each document, is indexed in
+[docs/README.md](docs/README.md). To demonstrate the platform end to end, from a fresh clone to
+every screen and the evidence behind it, follow the scripted
+[demo walkthrough](docs/demo-walkthrough.md).
+
 ---
 
 ## Screenshots
 
-Captured from the running application — the real React build against the real API against real
-PostgreSQL — on the demo dataset: two properties, 166 bookings, 16 rooms, 55 reviews and a
-populated financial ledger. No mock-ups, and no data invented for the picture.
+Captured at 1440px from the running application — the real React front end against the real
+API against real PostgreSQL — after the UI redesign (UI-1 to UI-10, see
+[docs/ui-redesign.md](docs/ui-redesign.md)), signed in as the seeded demo owner. The data is the
+**synthetic** demo dataset from `scripts/seed_demo.py --reference-date today`: two properties,
+2,483 bookings, 25 rooms, 2,181 guests, 669 reviews and a populated financial ledger. No
+mock-ups, and nothing real: every name and address is generated (`@example.com`).
 
 ### Bookings
 
@@ -115,7 +123,7 @@ server-side search to back them.
 
 ### Availability
 
-![The availability search and its answer: sixteen rooms free across the listed types](docs/screenshots/availability.png)
+![The availability search beside its answer: five rooms free across three room types for a one-night stay](docs/screenshots/availability.png)
 
 What the property could sell for a given stay. The answer comes from the database — a GiST
 exclusion constraint over half-open date ranges is what makes an overlapping allocation
@@ -131,7 +139,7 @@ figure is shown, because adding currencies together would not produce money.
 
 ### Forecasting and demand trend
 
-![The intelligence screen: forecast horizon, training history and an occupancy forecast beside what is already on the books](docs/screenshots/forecasting.png)
+![The forecasting screen: forecast horizon, training history and an occupancy forecast with its interval beside what is already on the books](docs/screenshots/forecasting.png)
 
 The deterministic statistical layer: seasonal-naive day-of-week median forecasting with MAD-based
 intervals, demand trend and anomaly detection. What is already booked is shown *beside* what the
@@ -229,7 +237,7 @@ flowchart LR
         S["<b>React SPA</b><br/>static bundle<br/>route-level code splitting"]
         A["<b>FastAPI</b><br/>api → services → repositories"]
         M["<b>demand_baseline_v1</b><br/>artifact, verified before load<br/>loaded once per process"]
-        D[("<b>PostgreSQL 18.6</b><br/>28 application tables<br/>constraints carry the rules")]
+        D[("<b>PostgreSQL 18.6</b><br/>29 application tables<br/>constraints carry the rules")]
     end
 
     B -- "HTTPS" --> N
@@ -321,9 +329,9 @@ Full detail, including the rules later stages must follow:
 |---|---|---|
 | Backend | Python 3.14, FastAPI, Uvicorn | Async HTTP API, OpenAPI generated from types |
 | Validation | Pydantic v2, pydantic-settings | Request/response schemas, environment config |
-| ORM | SQLAlchemy 2.0 | Data mapping across 15 model modules |
+| ORM | SQLAlchemy 2.0 | Data mapping across 18 model modules |
 | Database | PostgreSQL 18.6 | System of record. No SQLite fallback — the schema needs exclusion constraints, deferred triggers and generated columns |
-| Migrations | Alembic | 20 linear revisions, head `0020_guest_email_rules` |
+| Migrations | Alembic | 23 linear revisions, head `0023_auth_sessions` |
 | Auth | argon2-cffi, PyJWT | Argon2id hashing, HS256 access tokens |
 | Frontend | React 18, TypeScript 5.9, Vite 6 | Dashboard SPA, route-level code splitting |
 | Intelligence (V1) | Python standard library | Deterministic statistical baseline — no NumPy or pandas on its path |
@@ -352,25 +360,31 @@ Five areas at the top level, with one-way dependencies between them.
 |---|---|---|
 | **`backend/`** | The FastAPI application and its Dockerfile | `database/`, and `ml/`'s reading half |
 | **`frontend/`** | React + TypeScript SPA and its nginx production image | the API over HTTP, nothing else |
-| **`database/`** | 11 linear Alembic revisions and the init SQL | — |
+| **`database/`** | Alembic migrations — 23 linear revisions, head `0023_auth_sessions` — and the init SQL | — |
 | **`ml/`** | Offline dataset, backtest, acceptance, artifact. Records committed, payloads never | `app.ml.dataset` only — the Stage 6.1 contract |
-| **`docs/`** | Architecture, roadmap, design records, model card, deployment runbooks | — |
+| **`docs/`** | Architecture, roadmap, design records, model card, deployment runbooks. Start at [`docs/README.md`](docs/README.md) | — |
+
+Each figure is the package's `.py` files, `__init__.py` included:
 
 ```
 backend/app/
-├── api/            29  HTTP layer: v1 routers, dependency wiring
-├── services/       28  domain rules, transaction boundaries
-├── schemas/        24  Pydantic request and response types
-├── repositories/   20  query construction — no commits, ever
-├── models/         15  SQLAlchemy ORM mapping
-├── ml/              9  statistical layer, artifact store, serving,
+├── api/            38  HTTP layer: v1 routers, dependency wiring
+├── services/       41  domain rules, transaction boundaries
+├── schemas/        29  Pydantic request and response types
+├── repositories/   26  query construction — no commits, ever
+├── models/         20  SQLAlchemy ORM mapping
+├── ml/             10  statistical layer, artifact store, serving,
 │                       accuracy and distribution protocols
-├── core/            9  config, errors, security, logging
+├── llm/            12  the provider boundary: providers, circuit breaker, registry
+├── copilot/        16  the copilot's loop, tools, grounding and citations
+├── knowledge/       2  document chunking for full-text search
+├── jobs/            8  operator commands: retention, platform admin, scheduler
+├── core/           10  config, errors, security, logging, rate limits, metrics
 ├── db/              3  engine and request-scoped session
-├── middleware/      3  request id, security headers
+├── middleware/      5  request id, security headers, body size cap, metrics
 └── main.py             app factory
 
-tests/              backend/ and integration/, mirroring the source layout
+tests/              backend/, integration/, evaluation/, ml/ and mutation/ (tests/README.md)
 pyproject.toml      ruff · mypy · pytest · coverage
 docker-compose.yml  db → migrate → api → frontend, each gated on the last
 ```
@@ -380,10 +394,11 @@ docker-compose.yml  db → migrate → api → frontend, each gated on the last
 | If you want to see… | Read |
 |---|---|
 | How a request becomes a row | [`docs/architecture.md`](docs/architecture.md) §2 and §4 |
-| Why the schema is shaped this way | [`docs/database-design.md`](docs/database-design.md) |
+| Why the schema is shaped this way | [`database/README.md`](database/README.md#schema-design), the schema's design and how it was built |
 | What the model is, and is not | [`docs/ml-model-card.md`](docs/ml-model-card.md) |
 | How the model reaches production | [`docs/ml-production-runtime.md`](docs/ml-production-runtime.md) |
 | What was built, stage by stage | [`docs/development-roadmap.md`](docs/development-roadmap.md) |
+| Every other document, and which are current | [`docs/README.md`](docs/README.md), the documentation index |
 
 ## Development stages
 
@@ -406,11 +421,47 @@ one began.
 | 6.1–6.11 | Demand model lifecycle: leakage-safe dataset, versioned training data, offline backtest, metric-blind acceptance, artifact, serving, packaging, prediction persistence, accuracy measurement, distribution observation, stored-prediction read API | **done** |
 | 7.1–7.2 | V2 definition and the analytics reporting view: period KPIs, category breakdowns, activity charts, and the first interface to the served demand model | **done** |
 | 7.3–7.4 | The frozen accuracy and distribution protocols exposed over HTTP, and made legible: forecast against actual, measured error per calibration segment, and the claim boundary on screen | **done** |
+| 7.5–7.8 | The language-model boundary and a read-only copilot: a `ChatModel` protocol with provider adapters, a declared tool boundary, single-turn questions, and an evaluation harness over recorded exchanges | **done** |
+| 7.9–7.10 | Hotel knowledge documents searched with PostgreSQL full-text search, and grounded answers whose every citation is checked against what that request retrieved | **done** |
+| 7.11–7.13 | Copilot conversations (each caller's own, retention-bound), the deterministic attention list, and the copilot screen | **done** |
+| 7.14 | Three **offline** demand models at 7, 14 and 28 days, each measured beside its own baseline; none is served | **done** |
+| 7.15 | Vector retrieval (pgvector) — conditional, not triggered: it cannot be assessed without real hotel documents | not started — waits on decision R2.3 |
+| R0, R1 | Sharded CI, hashed Python locks, a Docker Hub mirror for the Docker jobs, Dependabot configuration (inert until it reaches `main`); `HttpOnly` cookie sessions with refresh rotation and CSRF, an audited platform-administrator command, request-size limits, 429 declared on every limited route, IANA time zones | **done** (the rest waits on decisions) |
+| R2.2, R2.2b | Frozen hold-out evaluation of the served model on the validation and test partitions it was never fitted on, and same-hotel controls for the cross-hotel experiment — both on the published hotel-booking dataset of the same two Portuguese hotels (2015–2017) it was trained on, not on the synthetic demo data; no generalisation to other hotels or production accuracy claimed — [docs/ml-frozen-holdout-evaluation.md](docs/ml-frozen-holdout-evaluation.md), [docs/ml-hotel-transfer-diagnostic.md](docs/ml-hotel-transfer-diagnostic.md) | **done** |
+| R2.7–R2.10 | Copilot evaluation: a local Ollama provider, live-evaluation scoring, and the layered retrieval evaluation (Decision F, C.1–C.7) with its pinned baseline | **done** |
+| R3.3, R4.2, R6.2 | `If-Match` on the global catalogues; an opt-in retention scheduler and audit archival; README counts computed by a test | **done** |
+| UI-1–UI-10 | The UI redesign: design tokens, self-hosted Inter and Source Serif 4, shared form, data-table and status-rail styles, cards below 1024px, sticky side panels — [docs/ui-redesign.md](docs/ui-redesign.md) | **done** |
+| A1 | Frontend dev-toolchain advisories fixed, 6 → 0 | **done** |
+| A2 | Dependency vulnerability scan: `npm audit` and pip-audit on every lock entry, its own workflow on every push since `7858c27`; PyJWT and certifi upgraded first | **done** |
+| A3 | CycloneDX 1.6 SBOMs (Syft) of both builds of both images, schema-validated and checked against the locks, kept as CI artifacts | **done** |
+| A4 | Automated accessibility checks (axe-core) on every route and state; the violations found were fixed | **done** |
+| A5 | An internal `GET /metrics` (request counts and latencies), unreachable through nginx; nothing scrapes it and no alert is sent | **done** |
+| A6 | Stale and contradictory documentation corrected, with regression tests | **done** |
+| A7 | The dead placeholder-route scaffolding removed; the navigation-to-route guarantee is a test | **done** |
+| A8 | The documentation index ([docs/README.md](docs/README.md)) and an offline link, anchor and reachability checker in CI | **done** |
+| A9 | The CI responsive audit: UI-10's 51 checks in a pinned Playwright Chromium against the seeded stack, and, since the expenses-table clipping it reported was fixed on 2026-11-27, five table checks of the Analytics breakdown tables ([Known limitations](#known-defects-and-gaps)) | **done** |
+| R6.1 | The six stage-snapshot documents consolidated into maintained documents ([docs/architecture.md](docs/architecture.md), [database/README.md](database/README.md), [docs/roadmap-v2.0-execution.md](docs/roadmap-v2.0-execution.md) §5); their old paths are redirects | **done** |
+| R5 | Product reach: **decided** by the project owner, 2026-11-25 — Academic / Professional Portfolio. A scope decision, not a build: none of R5's features is built, and the pilot- and production-only items are deferred ([decision record](docs/roadmap-v2.0-execution.md#313-product-reach-r5)) | decided |
 
-What is **not** implemented, and not claimed anywhere in this repository: review sentiment,
-room-image classification, recommendations, any LLM/RAG/agent capability, drift detection,
-retraining, a registry holding more than one model, and the operational items listed under
-[Known limitations](#known-limitations). See
+What remains — the autonomous tasks and the decisions only the owner can make — is counted in
+[docs/project-completion-audit.md](docs/project-completion-audit.md).
+
+**What the language-model side is, exactly.** The copilot (Stages 7.5–7.13) answers questions
+about one hotel through seven read-only tools — `get_hotel_kpis`, `get_daily_series`,
+`get_revenue_breakdown`, `get_demand_forecast`, `get_forecast_accuracy`,
+`search_hotel_knowledge` and `get_hotel_priorities` — and cites the hotel's own documents, found
+by PostgreSQL full-text search. It is off by default (`503 LLM_DISABLED`) and calls a model only
+through the provider the operator configures: a local Ollama model or the Anthropic API. It takes
+no autonomous action and changes no booking, payment, membership or catalogue row; its one
+declared write is that `get_demand_forecast` records the prediction it serves, idempotently, so
+the accuracy protocol can score it later.
+
+What is **not** implemented, and not claimed anywhere in this repository: vector search or
+embeddings (Stage 7.15 is conditional and untriggered), an agent or any autonomous multi-step
+action, a copilot tool that writes business data, review sentiment, room-image classification,
+guest recommendations (Stage 7.12's attention list is manager-facing and deterministic), drift
+*detection* (Stage 6.10 observes and decides nothing), retraining, serving more than one model,
+and the operational items listed under [Known limitations](#known-limitations). See
 [docs/development-roadmap.md](docs/development-roadmap.md) for the split.
 
 Detail and exit criteria: **[docs/development-roadmap.md](docs/development-roadmap.md)**.
@@ -453,7 +504,8 @@ Start the API:
 |---|---|
 | http://localhost:8000/health | `{"status":"ok", ...}` |
 | http://localhost:8000/health/db | `{"status":"ok","database":"reachable", ...}`, or 503 when it is not |
-| http://localhost:8000/docs | Swagger UI — 65 paths, 101 operations. Disabled when `ENVIRONMENT=production` |
+| http://localhost:8000/metrics | request counts and latencies in the Prometheus text format (A5); internal only, see [Security posture](#security-posture) |
+| http://localhost:8000/docs | Swagger UI — 68 paths, 104 operations. Disabled when `ENVIRONMENT=production` |
 
 ### Frontend
 
@@ -516,22 +568,23 @@ POST /api/v1/auth/register  →  POST /api/v1/auth/login  →  POST /api/v1/hote
 ```
 
 **The first platform administrator has no API, by design.** `platform_admins` governs the
-catalogues every hotel shares, so the grant is a deliberate out-of-band database write rather
-than something an endpoint hands out — the same grant the integration suite performs. It
-requires that the intended person has already registered, and it is idempotent:
+catalogues every hotel shares, so the grant is a deliberate operator action rather than
+something an endpoint hands out. It is made with an operator command (R1.3a), which records
+the grant in the audit trail in the same transaction. It requires that the intended person
+has already registered, and repeating it changes nothing:
 
-```sql
-INSERT INTO platform_admins (user_id, role)
-SELECT u.id, 'platform_admin' FROM users u WHERE u.email = lower('ops@example.com')
-ON CONFLICT (user_id) DO NOTHING;
+```bash
+docker compose run --rm api python -m app.jobs.platform_admin grant ops@example.com
 ```
+
+`revoke` removes a grant the same way, and refuses to remove the last one unless told to.
 
 An empty database is not authorization: nothing here creates an administrator because it
 noticed no rows.
 
 **Read [docs/deployment/first-run-bootstrap.md](docs/deployment/first-run-bootstrap.md) before
 running the grant** — it covers the checks to make first, how to verify the result, secret
-handling, what is *not* audited, and what to do if the wrong user was granted.
+handling, what is and is not audited, and what to do if the wrong user was granted.
 
 **Demo data, optionally.** `scripts/seed_demo.py` fills a *new, empty, migrated* database with
 deterministic, synthetic data for two fictional hotels and a demo owner account. The data runs
@@ -545,6 +598,8 @@ The data is for looking at the screens, not evidence of anything:
 
 See [database/README.md](database/README.md#demo-data) for creating the database, the
 `DEMO_OWNER_PASSWORD` variable, `--seed` and the other options, and how to refresh it safely.
+The [demo walkthrough](docs/demo-walkthrough.md) puts these steps in order and continues
+through every screen.
 
 ## Testing and quality checks
 
@@ -596,25 +651,36 @@ Then, with `TEST_DATABASE_URL` set to that database:
 ```
 
 If the target is not disposable the suite stops before any SQL runs and prints what it found,
-what it refused to do, and how to proceed. See `tests/db_safety.py` and
-`docs/database-implementation.md`.
+what it refused to do, and how to proceed. See `tests/db_safety.py` and the database README's
+[Testing](database/README.md#testing) section.
 
 Tests live at the repository root and import `app` via `pythonpath = ["backend"]` in
 `pyproject.toml`.
 
 ### Continuous integration
 
-Every push and pull request to `main` runs five jobs in parallel on `ubuntu-latest`
-(`.github/workflows/ci.yml`). Five job definitions, that is: `quality-gates` is split into three
-shards, so GitHub Actions shows seven job runs per workflow run.
+Every push to `main` and every pull request to `main` runs six jobs in parallel on
+`ubuntu-latest` (`.github/workflows/ci.yml`). Six job definitions, that is: `quality-gates` is
+split into three shards, so GitHub Actions shows eight job runs per workflow run.
+
+The dependency vulnerability scan is a workflow of its own
+(`.github/workflows/dependency-audit.yml`), and it runs on **every push to any branch** as well
+as on pull requests to `main`. Until the A2 trigger correction it was a job inside `ci.yml`,
+whose triggers are restricted to `main`, so a feature branch without a pull request was never
+scanned.
 
 | Job | What it runs |
 |---|---|
 | `quality-gates` | Ruff lint, Ruff format check, mypy, the Alembic chain against a disposable PostgreSQL 18.6, then the full pytest suite |
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
-| `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical |
-| `Mutation checks` | re-applies the 606 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical; then catalogues both builds of each image with Syft 1.57.1 (checksum-verified) into a **CycloneDX 1.6 SBOM**, validates it against the schema, requires every locked backend package at its exact version and the pinned nginx, requires the two builds' SBOMs to list the same components, rejects any host path or credential in them, and keeps one SBOM per image as the `sbom-<run>-<attempt>` artifact ([`scripts/sbom_check.py`](scripts/sbom_check.py)) |
+| `Mutation checks` | re-applies the 1043 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Responsive audit` | builds and starts the Compose stack, seeds it with the synthetic demo data, and runs UI-10's **51 checks** (17 routes at 375, 768 and 1440px: no sideways scroll, no escaping element, exactly one `h1`) in the pinned Playwright image's Chromium; any failing check fails the run and is named. Five **table checks** fail it too: the Analytics breakdown tables at 375, 768, 1024, 1280 and 1440px must fit their cards from 768px, and on a phone may scroll only in a focusable region that the keyboard scrolls to the last column ([`frontend/e2e/`](frontend/e2e/)) |
+
+| Workflow | Job | What it runs |
+|---|---|---|
+| `dependency-audit.yml` | `Dependency vulnerability scan` | `npm audit --omit=dev --audit-level=high` on the shipped frontend tree, and pip-audit 2.10.1 (hash-locked, its own venv) on every entry of both Python locks and the two tool locks. Any finding, or an advisory service still unreachable after 3 attempts, fails the run. Two known-vulnerable fixtures are audited first, so a scanner that reports nothing cannot pass ([`scripts/dependency_audit.py`](scripts/dependency_audit.py)) |
 
 The third job is the one worth knowing about. It is not a lint of the YAML: it starts the
 stack in a disposable, run-scoped Compose project and asserts, among other things, that
@@ -742,7 +808,8 @@ See [docs/ml-training-data.md](docs/ml-training-data.md),
 [docs/ml-forecast-performance-api.md](docs/ml-forecast-performance-api.md).
 
 **No language model is called by CI or by the shipped image.** Stage 7.5 added the seam:
-`app/llm/` holds a `ChatModel` protocol, one provider adapter, versioned checksummed prompts,
+`app/llm/` holds a `ChatModel` protocol, one provider adapter (R2.7O added a second, for a local
+Ollama model), versioned checksummed prompts,
 the six declared failure modes and four test doubles. Stage 7.6 added five read-only copilot
 tools over existing services, Stage 7.7 the single-turn `POST …/copilot/ask`, and Stage 7.8 an
 evaluation harness that replays recorded exchanges. The provider SDK lives in
@@ -764,30 +831,57 @@ recall@5 is 0.6957 against a pgvector threshold of 0.90 declared beforehand: a s
 paraphrased queries miss, not evidence about real documents. See
 [docs/copilot-evaluation.md](docs/copilot-evaluation.md) §8.
 
+**Layered retrieval evaluation (R2.10C).** The copilot evaluation's searches are answered by a
+word-overlap stand-in, so its document results said nothing about production search. A decision
+record declared three layers, their metrics and their thresholds before anything was measured,
+and each is now built. **Real PostgreSQL (C.4):** `knowledge_retrieval_v2` -- 17 documents and
+57 queries, 45 answerable and 12 with no answer, 11 of them queries a model actually sent,
+reviewed and signed off before measurement -- runs through the real upload and search routes in
+CI and is pinned byte for byte with a fingerprint of the database configuration, so any changed
+result fails CI. Measured: Success@5 **23 of 45 (0.51; Wilson 95% 0.37 to 0.65)** against a
+0.90 target that is reported, not gated; all 17 shared-word queries are found, **no paraphrase
+or title-only query is** (0 of 10 and 0 of 5, each returning nothing), multi-idea queries 1 of
+6; and 0 of 57 queries return another hotel's or an inactive document, which is a hard gate.
+**A snapshot (C.5):** real search's results for every search the copilot evaluation makes,
+pinned by checksum and held equal to live search in CI; the evaluation can run on it instead
+of the stand-in. **Side by side (C.6):** an opt-in block judges a run's retrieval twice by the
+same rule; on the six recorded model runs it fails 1 of 10 cases with the stand-in and 4 of 10
+with real search. The corpus and most queries are invented, so this is regression evidence
+about the search as configured, not about real hotels, and it neither triggers nor rules out
+Stage 7.15. See [docs/retrieval-evaluation-decision.md](docs/retrieval-evaluation-decision.md)
+§1.4.
+
 **Conversations (Stage 7.11).** `…/copilot/conversations` holds multi-turn conversations: start,
 list, read, continue, delete. Each belongs to one hotel and its creator -- anyone else gets 404 --
 and expires, turns included, 30 days after it was last used: unreachable at once (enforced in
 every query), then physically deleted by the next purge -- its hotel's next start or continuation,
-or `python -m app.jobs.purge_conversations`, which an operator should schedule (daily is
-recommended; the application schedules nothing). The model is shown at most 6 earlier turns / 12,000 characters as context; figures
+or `python -m app.jobs.purge_conversations`, which the opt-in retention scheduler runs daily
+(or an operator does). The model is shown at most 6 earlier turns / 12,000 characters as context; figures
 and citations must still come from the current turn's own lookups. Question and answer text is
 stored only there -- never in the audit trail or the accounting record. See
 [docs/copilot-conversations.md](docs/copilot-conversations.md).
 
 **Accounting retention (Issue 4).** Each copilot question's content-free accounting record
 (`llm_invocations`) is kept 365 days (`LLM_INVOCATION_RETENTION_DAYS`) and then physically
-deleted by `python -m app.jobs.purge_llm_invocations`, which an operator should schedule (daily
-is recommended; the application schedules nothing). The database still refuses every UPDATE,
+deleted by `python -m app.jobs.purge_llm_invocations`, which the opt-in retention scheduler
+runs daily (or an operator does). The database still refuses every UPDATE,
 and every DELETE except of a record older than the period the purge declares. See
 [docs/copilot-accounting-retention.md](docs/copilot-accounting-retention.md).
 
 **Prediction retention (Issue H8).** A stored demand prediction is kept while its target date is
 within 730 days (`DEMAND_PREDICTION_RETENTION_DAYS`) of its hotel's today, and is then physically
-deleted by `python -m app.jobs.purge_demand_predictions`, which an operator should schedule (daily
-is recommended). A window older than that reads as empty in the prediction, accuracy, drift and
+deleted by `python -m app.jobs.purge_demand_predictions`, which the opt-in retention scheduler
+runs daily (or an operator does). A window older than that reads as empty in the prediction, accuracy, drift and
 performance endpoints. Deleting a hotel removes its predictions in the same transaction; if
 anything else still blocks the delete, nothing is removed. See
 [docs/ml-prediction-retention.md](docs/ml-prediction-retention.md).
+
+**Retention scheduler (R4.2), opt-in.** `python -m app.jobs.scheduler` runs the audit archival
+(`python -m app.jobs.archive_audit_events`, which copies and verifies and never deletes) and the
+three purges every 24 hours. Each failure is reported, and the next cycle tries again.
+`docker compose -f docker-compose.yml -f docker-compose.scheduler.yml up -d` adds it as a
+service. Without that file the stack is unchanged, and `--once` runs one cycle for cron. See
+[docs/deployment/retention-scheduler.md](docs/deployment/retention-scheduler.md).
 
 **The attention list (Stage 7.12).** `…/intelligence/priorities` ranks one hotel's upcoming days by
 the seasonal forecast and lists the busiest three, the strongest anomalies the window saw and a
@@ -821,9 +915,10 @@ R2.2b adds same-hotel controls for that cross-hotel experiment, with signed erro
 prediction ranges, under its own pre-registered protocol; the served model is not involved. See
 [docs/ml-hotel-transfer-diagnostic.md](docs/ml-hotel-transfer-diagnostic.md).
 
-### V2 — NOT IMPLEMENTED
+### Further ML modules — NOT IMPLEMENTED
 
-None of these exists. Each would be built as its own stage, with its dependencies in
+V2's copilot, knowledge search and attention list exist (above). These ML modules, also once
+planned for V2, do not: none of them exists. Each would be built as its own stage, with its dependencies in
 `ml/requirements-ml.txt`, its pipeline in `ml/pipelines/`, and its artifacts plus evaluation
 record in `ml/models/<model_version>/` — which is where Stage 6.3 wrote the first `metrics.json`.
 
@@ -864,14 +959,14 @@ Three things are worth knowing before this is exposed to anyone real. None is a 
 sense of not working as designed; each is a deliberate V1 boundary, recorded here rather than
 left to be discovered.
 
-- **The access token is stored in `sessionStorage`.** The backend authenticates with a bearer
-  JWT and offers no cookie session, so the token must be readable by JavaScript — which means
-  **any cross-site-scripting flaw in the front end could exfiltrate it**. `sessionStorage` is
-  chosen over `localStorage` only for lifetime: it is scoped to the tab and cleared when the tab
-  closes, and the token lives 30 minutes. The content security policy is `script-src 'self'`
-  with no inline script and no `eval`, which narrows the exposure but does not remove it. The
-  real fix is an `HttpOnly; Secure; SameSite` cookie issued by the backend — a backend change,
-  and V2 work. See [docs/architecture.md §7.1](docs/architecture.md#71-session-handling-and-its-limitation).
+- **The browser's session is in `HttpOnly` cookies (R1.1).** `POST /auth/session` sets the
+  access and refresh tokens as `HttpOnly; Secure; SameSite=Strict` cookies that script cannot
+  read, so a cross-site-scripting flaw can act in the page while it runs but can no longer carry
+  the session away. Every request that changes something must echo the session's CSRF token in
+  `X-CSRF-Token`; refresh tokens rotate, and a replayed one ends the session. Signing out, a
+  password change, deactivation and twelve idle hours end it on the server. The bearer login
+  (`POST /auth/login`) remains for API clients, which hold their own token. See
+  [docs/architecture.md §7.1](docs/architecture.md#71-session-handling-and-its-limitation).
 - **Registration is open, and creating a hotel makes you its owner.** `POST /auth/register` is
   unauthenticated by design, and any authenticated user may `POST /hotels` and becomes that
   hotel's `owner`. This is the documented first-run path — see [First run](#first-run) — and it
@@ -879,6 +974,13 @@ left to be discovered.
 - **The two health probes are unauthenticated**, and `/health/db` opens a database connection.
   Neither returns business data; both are reachable only through nginx, since the API has no
   host port.
+- **`GET /metrics` is unauthenticated and internal only (A5).** It serves request counts and
+  latencies (`http_requests_total`, `http_request_duration_seconds`) labelled only by method,
+  route template and status code, so no identifier or personal data can appear in it. nginx
+  forwards only `/api/`, the API has no host port, and a request carrying a forwarding header
+  gets the ordinary 404; CI proves all three on the real stack. It is not in the OpenAPI
+  document. Nothing scrapes it and no alert is sent: where alerts go is an open decision
+  ([docs/roadmap-v2.0-execution.md §3.12](docs/roadmap-v2.0-execution.md)).
 
 ### Operational
 
@@ -913,11 +1015,30 @@ What remains genuinely missing is operational rather than functional:
   locks disagree, but nothing regenerates them automatically, and the optional
   `backend/requirements-llm.txt` is not locked. Base images, the interpreter and the frontend
   tree are pinned too; see [docs/deployment/reproducibility.md](docs/deployment/reproducibility.md).
-- **Nothing updates the pins.** No Renovate, no Dependabot. A pinned digest is a digest that
-  goes stale, and sitting on a base image with a known CVE is the real cost of pinning; bumping
-  one is a deliberate act.
-- **No platform-administrator API.** Granting platform administration is a deliberate
-  out-of-band database write; see [First run](#first-run). That is by design, not an omission.
+- **Nothing updates the pins yet.** `.github/dependabot.yml` (R0.4a) asks for weekly, grouped
+  update pull requests for every manifest, but GitHub reads it only from the default branch,
+  and it has not reached it; until it does, no Renovate and no Dependabot run. A pinned digest
+  is a digest that goes stale, and sitting on a base image with a known CVE is the real cost
+  of pinning; bumping one is a deliberate act, and a Dependabot proposal will be one too.
+- **No platform-administrator API.** Platform administration is granted and revoked by an
+  audited operator command; see [First run](#first-run). Who may do it through an API is an
+  open decision (R1.3b), so there is none.
+
+### Known defects and gaps
+
+The two items the R0.1 audit found here are both resolved.
+
+- **The Analytics expenses-table clipping is fixed.** Until 2026-11-27, at a 1440px viewport
+  the "Ledger expenses" table on the Analytics page was 525px wide inside a 482px container, so
+  its last column was cut off. It is no longer an open defect. The tables now fit their cards
+  from 768px up. On a phone they scroll inside a box that the keyboard can focus and scroll.
+  Five table checks in CI's responsive audit fail the run if this regresses
+  ([`frontend/e2e/`](frontend/e2e/)).
+- **The scripted demo walkthrough is [docs/demo-walkthrough.md](docs/demo-walkthrough.md).**
+  Added on 2026-11-27. It goes from a fresh clone to every screen, step by step, on the synthetic
+  demo data, then into the API documentation, the schema, the tests and the evaluation records.
+  Its local route was run end to end when it was written. Its Docker route uses the commands
+  CI's responsive audit runs. It shows only what exists, and it states the limitations above.
 
 The V1 intelligence layer remains a transparent statistical baseline. The trained demand model
 sits beside it — served, but **not scientifically validated**, and shown on the Analytics page

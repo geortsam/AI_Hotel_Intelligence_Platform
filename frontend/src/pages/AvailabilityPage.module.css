@@ -8,6 +8,26 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  min-width: 0;
+}
+
+/*
+ * From 1280px, the question beside its answer (UI-8): the search form in a 360px panel on
+ * the left that stays in view, the answer filling the rest. In the panel the form's own
+ * auto-fit grid stacks its fields, which is what a side panel wants. Placement only; the
+ * search still comes first in the DOM and on a phone.
+ */
+@media (min-width: 1280px) {
+  .page {
+    display: grid;
+    grid-template-columns: 360px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .page > :first-child {
+    position: sticky;
+    top: calc(var(--header-height) + var(--space-4));
+  }
 }
 
 .blockTitle {

@@ -21,8 +21,6 @@ export interface NavItem {
   readonly label: string
   readonly to: AppRoute
   readonly icon: LucideIcon
-  /** Which stage builds this area. Shown on the placeholder page, not in the sidebar. */
-  readonly plannedStage: string
 }
 
 export interface NavSection {
@@ -51,7 +49,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         label: 'Dashboard',
         to: ROUTES.dashboard,
         icon: LayoutDashboard,
-        plannedStage: 'Stage 5.4',
       },
     ],
   },
@@ -62,13 +59,11 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         label: 'Bookings',
         to: ROUTES.bookings,
         icon: CalendarRange,
-        plannedStage: 'Stage 5.5',
       },
       {
         label: 'Guests',
         to: ROUTES.guests,
         icon: Users,
-        plannedStage: 'Stage 5.10',
       },
       {
         /*
@@ -87,7 +82,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         label: 'Rooms',
         to: ROUTES.rooms,
         icon: BedDouble,
-        plannedStage: 'Stage 5.11',
       },
       {
         /*
@@ -99,7 +93,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         label: 'Availability',
         to: ROUTES.availability,
         icon: CalendarSearch,
-        plannedStage: 'Stage 5.12',
       },
     ],
   },
@@ -110,7 +103,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         label: 'Financials',
         to: ROUTES.financials,
         icon: Wallet,
-        plannedStage: 'Stage 5.7',
       },
     ],
   },
@@ -121,7 +113,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         label: 'Analytics',
         to: ROUTES.analytics,
         icon: BarChart3,
-        plannedStage: 'Stage 5.8',
       },
       {
         /*
@@ -131,13 +122,11 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         label: 'Forecasting',
         to: ROUTES.intelligence,
         icon: Sparkles,
-        plannedStage: 'Stage 5.16',
       },
       {
         label: 'Reviews',
         to: ROUTES.reviews,
         icon: MessageSquareText,
-        plannedStage: 'Stage 5.9',
       },
       {
         /*
@@ -147,7 +136,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         label: 'Copilot',
         to: ROUTES.copilot,
         icon: BotMessageSquare,
-        plannedStage: 'Stage 7.13',
       },
     ],
   },
@@ -163,13 +151,11 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         label: 'Property',
         to: ROUTES.property,
         icon: Hotel,
-        plannedStage: 'Stage 5.13',
       },
       {
         label: 'Administration',
         to: ROUTES.administration,
         icon: Settings,
-        plannedStage: 'Stage 5.10',
       },
       {
         /*
@@ -180,7 +166,6 @@ export const NAV_SECTIONS: readonly NavSection[] = [
         label: 'Platform',
         to: ROUTES.platform,
         icon: Globe,
-        plannedStage: 'Stage 5.15',
       },
     ],
   },

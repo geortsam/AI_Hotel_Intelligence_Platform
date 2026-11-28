@@ -1,5 +1,5 @@
-"""SQLAlchemy ORM models -- the approved 28-table schema (7.7: `llm_invocations`; 7.9: documents;
-7.11: copilot conversations; 0016: declared demand observation).
+"""SQLAlchemy ORM models -- the approved 29-table schema (7.7: `llm_invocations`; 7.9: documents;
+7.11: copilot conversations; 0016: declared demand observation; 0023: cookie sessions).
 
 Importing this package registers every model on ``Base.metadata``, which is what Alembic's
 autogenerate and the test fixtures rely on. Import order matters only in that all models must
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from app.db.base import Base
 from app.models.audit import AuditEvent, AuditEventArchive
+from app.models.auth_session import AuthSession
 from app.models.booking import Booking, BookingRoom, BookingRoomNight
 from app.models.copilot_conversation import CopilotConversation, CopilotMessage
 from app.models.demand_observation import DemandObservationPeriod
@@ -31,6 +32,7 @@ __all__ = [
     "Amenity",
     "AuditEvent",
     "AuditEventArchive",
+    "AuthSession",
     "Base",
     "Booking",
     "BookingRoom",

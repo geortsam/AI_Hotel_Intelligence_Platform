@@ -16,6 +16,7 @@ import {
   TEST_USER,
   type FetchStub,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 
 /**
  * Authentication behaviour, end to end through the real router, provider and API client.
@@ -49,11 +50,22 @@ const routes: RouteObject[] = [
 
 const CREDENTIALS = { email: 'reception@example.test', password: 'not-a-real-password' }
 
+/**
+ * `POST /auth/session`'s answer (R1.1): who signed in, and the session's CSRF token. No
+ * credential -- the access and refresh tokens are `HttpOnly` cookies the page never sees.
+ */
+const SESSION = { user: TEST_USER, csrf_token: TEST_TOKEN, expires_in: 1800, refresh_expires_in: 43200 }
+
 function stubLoginSuccess() {
-  fetchStub.on('POST', '/auth/login', {
-    body: { access_token: TEST_TOKEN, token_type: 'bearer', expires_in: 1800 },
-  })
+  fetchStub.on('POST', '/auth/session', { body: SESSION })
   fetchStub.on('GET', '/auth/me', { body: TEST_USER })
+}
+
+/** The sign-in request, as distinct from the renewal and sign-out the client also sends. */
+function signInCall() {
+  return fetchStub.calls.find(
+    (call) => call.method === 'POST' && new URL(call.url, 'http://localhost').pathname === '/api/v1/auth/session',
+  )
 }
 
 /** Fill and submit the sign-in form. */
@@ -170,15 +182,18 @@ describe('signing in', () => {
     await signIn(user)
     await screen.findByText('dashboard content')
 
-    const loginCall = fetchStub.calls.find((call) => call.url.includes('/auth/login'))
-    expect(loginCall?.method).toBe('POST')
+    const loginCall = signInCall()
+    expect(loginCall).toBeDefined()
     expect(JSON.parse(loginCall?.body ?? '{}')).toEqual(CREDENTIALS)
-    // Signing in must not carry a bearer token: a stale one is meaningless here, and a 401
-    // from a wrong password would otherwise be read as "your session expired".
+    // The cookie session (R1.1): no bearer token, and the request accepts the cookies the
+    // response sets.
     expect(loginCall?.authorization).toBeNull()
+    expect(loginCall?.credentials).toBe('include')
+    // The bearer login is for API clients; the browser never uses it.
+    expect(fetchStub.calls.some((call) => call.url.includes('/auth/login'))).toBe(false)
   })
 
-  it('attaches the bearer token to authenticated requests', async () => {
+  it('keeps the session in cookies, and only its CSRF token in the page', async () => {
     stubLoginSuccess()
     const user = userEvent.setup()
     renderWithAuth(routes, { initialEntries: [ROUTES.login] })
@@ -187,8 +202,10 @@ describe('signing in', () => {
     await signIn(user)
     await screen.findByText('dashboard content')
 
-    const meCall = fetchStub.calls.find((call) => call.url.includes('/auth/me'))
-    expect(meCall?.authorization).toBe(`Bearer ${TEST_TOKEN}`)
+    // No request carries a credential the page could have read; each sends the cookies.
+    expect(fetchStub.calls.every((call) => call.authorization === null)).toBe(true)
+    expect(fetchStub.calls.every((call) => call.credentials === 'include')).toBe(true)
+    expect(window.sessionStorage.getItem('ahip.csrf_token')).toBe(TEST_TOKEN)
   })
 
   it('shows a loading state and blocks resubmission while the request is in flight', async () => {
@@ -200,7 +217,7 @@ describe('signing in', () => {
     })
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.includes('/auth/login')) {
+      if (url.includes('/auth/session')) {
         const result = await pending
         return new Response(JSON.stringify(result.body), {
           status: 200,
@@ -228,9 +245,7 @@ describe('signing in', () => {
     expect(screen.getByLabelText('Email address')).toBeDisabled()
     expect(screen.getByLabelText('Password')).toBeDisabled()
 
-    resolveLogin?.({
-      body: { access_token: TEST_TOKEN, token_type: 'bearer', expires_in: 1800 },
-    })
+    resolveLogin?.({ body: SESSION })
 
     expect(await screen.findByText('dashboard content')).toBeInTheDocument()
   })
@@ -242,7 +257,7 @@ describe('signing in', () => {
 
 describe('failed sign-in', () => {
   async function attemptWith(response: Parameters<FetchStub['on']>[2]) {
-    fetchStub.on('POST', '/auth/login', response)
+    fetchStub.on('POST', '/auth/session', response)
     const user = userEvent.setup()
     renderWithAuth(routes, { initialEntries: [ROUTES.login] })
     await screen.findByRole('heading', { name: 'Sign in' })
@@ -355,8 +370,8 @@ describe('failed sign-in', () => {
   it('handles a malformed response without crashing', async () => {
     await attemptWith({ status: 200, body: { unexpected: 'shape' } })
 
-    // A 200 whose body is not a TokenResponse: the token is undefined, /auth/me is then
-    // rejected, and the half-session is discarded rather than leaving the UI signed in.
+    // A 200 whose body is not a SessionResponse: there is no identity and no CSRF token, so
+    // the half-session is discarded rather than leaving the UI signed in as nobody.
     expect(await screen.findByRole('alert')).toBeInTheDocument()
     expect(screen.queryByText('dashboard content')).not.toBeInTheDocument()
   })
@@ -386,7 +401,38 @@ describe('session restoration', () => {
     renderWithAuth(routes, { initialEntries: [ROUTES.dashboard] })
 
     expect(await screen.findByText('dashboard content')).toBeInTheDocument()
-    expect(fetchStub.calls[0]?.authorization).toBe(`Bearer ${TEST_TOKEN}`)
+    // The session's cookies, not a header the page holds (R1.1).
+    expect(fetchStub.calls[0]?.authorization).toBeNull()
+    expect(fetchStub.calls[0]?.credentials).toBe('include')
+  })
+
+  it('renews an expired access cookie once, retries, and keeps the session', async () => {
+    // R1.1. The access cookie lives thirty minutes; the session lives on. A 401 is answered by
+    // one refresh -- with the CSRF token -- and one retry, and only then would it end anything.
+    let asked = 0
+    fetchStub.on('GET', '/auth/me', () => {
+      asked += 1
+      return asked === 1
+        ? {
+            status: 401,
+            body: { error: { code: 'INVALID_TOKEN', message: 'Not authenticated.', details: [] } },
+          }
+        : { body: TEST_USER }
+    })
+    fetchStub.on('POST', '/auth/session/refresh', {
+      body: SESSION,
+      headers: { 'X-CSRF-Token': 'renewed-csrf-token' },
+    })
+    seedStoredToken()
+
+    renderWithAuth(routes, { initialEntries: [ROUTES.dashboard] })
+
+    expect(await screen.findByText('dashboard content')).toBeInTheDocument()
+    const refreshes = fetchStub.calls.filter((call) => call.url.includes('/auth/session/refresh'))
+    expect(refreshes).toHaveLength(1)
+    expect(refreshes[0]!.csrf).toBe(TEST_TOKEN)
+    expect(asked).toBe(2)
+    expect(window.sessionStorage.getItem('ahip.csrf_token')).toBe('renewed-csrf-token')
   })
 
   it('discards a token the server rejects, and explains why', async () => {
@@ -400,7 +446,7 @@ describe('session restoration', () => {
 
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
     expect(screen.getByText('Your session has ended. Please sign in again.')).toBeInTheDocument()
-    expect(window.sessionStorage.getItem('ahip.access_token')).toBeNull()
+    expect(window.sessionStorage.getItem('ahip.csrf_token')).toBeNull()
   })
 
   it('does not retry a rejected token', async () => {
@@ -466,7 +512,7 @@ describe('signing out', () => {
     await user.click(screen.getByRole('button', { name: `Sign out ${TEST_USER.full_name}` }))
 
     await waitFor(() => {
-      expect(window.sessionStorage.getItem('ahip.access_token')).toBeNull()
+      expect(window.sessionStorage.getItem('ahip.csrf_token')).toBeNull()
     })
   })
 
@@ -480,14 +526,31 @@ describe('signing out', () => {
     expect(screen.queryByRole('navigation', { name: 'Primary' })).not.toBeInTheDocument()
   })
 
-  it('does not call a logout endpoint, because the backend has none', async () => {
+  it('ends the session on the server too, with its CSRF token', async () => {
     const user = await signedIn()
     const before = fetchStub.calls.length
 
     await user.click(screen.getByRole('button', { name: `Sign out ${TEST_USER.full_name}` }))
     await screen.findByRole('heading', { name: 'Sign in' })
 
-    expect(fetchStub.calls).toHaveLength(before)
+    // R1.1: `POST /auth/session/end` revokes the session, so its cookies stop working even in a
+    // copy of them, and clears them from the browser.
+    const after = fetchStub.calls.slice(before)
+    expect(after.map((call) => `${call.method} ${new URL(call.url, 'http://localhost').pathname}`)).toEqual([
+      'POST /api/v1/auth/session/end',
+    ])
+    expect(after[0]!.csrf).toBe(TEST_TOKEN)
+    expect(after[0]!.credentials).toBe('include')
+  })
+
+  it('signs out here even when the server cannot be reached', async () => {
+    const user = await signedIn()
+    fetchStub.on('POST', '/auth/session/end', { networkError: true })
+
+    await user.click(screen.getByRole('button', { name: `Sign out ${TEST_USER.full_name}` }))
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    expect(window.sessionStorage.getItem('ahip.csrf_token')).toBeNull()
   })
 })
 
@@ -523,7 +586,7 @@ describe('a forbidden response', () => {
     expect((failure as InstanceType<typeof ApiError>).isForbidden).toBe(true)
     // Still signed in.
     expect(screen.getByText('dashboard content')).toBeInTheDocument()
-    expect(window.sessionStorage.getItem('ahip.access_token')).toBe(TEST_TOKEN)
+    expect(window.sessionStorage.getItem('ahip.csrf_token')).toBe(TEST_TOKEN)
   })
 })
 
@@ -641,5 +704,37 @@ describe('the sign-in form', () => {
     expect(screen.getByLabelText('Email address')).toHaveAccessibleDescription(
       'Enter your email address.',
     )
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the sign-in page has no axe violations', async () => {
+    renderWithAuth(routes, { initialEntries: [ROUTES.login] })
+    await screen.findByRole('heading', { name: 'Sign in' })
+
+    await expectNoAxeViolations()
+  })
+
+  it('a refused sign-in, with its alert and field errors, has no axe violations', async () => {
+    const user = userEvent.setup()
+    fetchStub.on('POST', '/auth/session', {
+      status: 401,
+      body: {
+        error: { code: 'AUTHENTICATION_FAILED', message: 'Invalid email or password.', details: [] },
+      },
+    })
+    renderWithAuth(routes, { initialEntries: [ROUTES.login] })
+    await screen.findByRole('heading', { name: 'Sign in' })
+    await signIn(user)
+    await screen.findByRole('alert')
+    await expectNoAxeViolations()
+
+    // An empty submission: the per-field errors, wired by aria-describedby.
+    await user.clear(screen.getByLabelText('Email address'))
+    await user.clear(screen.getByLabelText('Password'))
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    await expectNoAxeViolations()
   })
 })

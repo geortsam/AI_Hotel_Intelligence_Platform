@@ -47,7 +47,11 @@ function conversationPath(hotelPublicId: string, conversationPublicId: string): 
 export const copilotService = {
   /** Whether the deployment has the copilot switched on. The server's switch, read as-is. */
   capability(signal?: AbortSignal) {
-    return api.get<ApiMetaResponse>('/', { anonymous: true, ...(signal ? { signal } : {}) })
+    return api.get<ApiMetaResponse>('/', {
+      anonymous: true,
+      withoutCookies: true,
+      ...(signal ? { signal } : {}),
+    })
   },
 
   /** One stateless question. Not stored. */

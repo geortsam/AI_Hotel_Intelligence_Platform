@@ -62,6 +62,9 @@ export function Sidebar({ isOpen, onNavigate }: SidebarProps) {
                     <NavLink
                       to={item.to}
                       end={item.to === ROUTES.dashboard}
+                      // UI-2: a cross-fade of the main region where the browser supports
+                      // View Transitions; elsewhere the router navigates exactly as before.
+                      viewTransition
                       onClick={onNavigate}
                       className={({ isActive }) =>
                         `${styles.link} ${isActive ? styles.linkActive : ''}`

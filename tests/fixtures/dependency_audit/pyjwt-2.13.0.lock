@@ -1,0 +1,8 @@
+# A2 positive control, NOT a dependency of anything. The pyjwt entry backend/requirements-lock.txt
+# carried before A2, hashes included: pip-audit 2.10.1 reports 15 advisories against it, among
+# them GHSA-ffc3-869f-jxw9 (critical). CI audits this file before the real locks and fails unless
+# that advisory is reported, so a scanner that silently finds nothing cannot pass the gate.
+# Named `.lock`, not requirements*.txt, so no dependency scanner mistakes it for a manifest.
+pyjwt==2.13.0 \
+    --hash=sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423 \
+    --hash=sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728

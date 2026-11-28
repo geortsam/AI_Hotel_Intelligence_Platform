@@ -20,12 +20,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import __version__
 from app.api.openapi import document_authorization_errors
 from app.api.routes import health as health_routes
+from app.api.routes import metrics as metrics_routes
 from app.api.v1.router import api_router as api_v1_router
 from app.core.config import Settings, get_settings
 from app.core.errors import document_validation_errors, register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.metrics import RequestMetrics
 from app.core.rate_limit import FixedWindowRateLimiter
 from app.db.session import dispose_engine
+from app.middleware.metrics import RequestMetricsMiddleware
 from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.request_size import RequestSizeLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -77,6 +80,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # between them; per-PROCESS in production, which is the documented limitation --
     # see app.core.rate_limit.
     app.state.rate_limiter = FixedWindowRateLimiter()
+    # A5. Per application instance, like the rate limiter, so each test's app counts alone.
+    app.state.metrics = RequestMetrics()
 
     # Added FIRST, which makes it the INNERMOST middleware: its 413 still passes out through
     # CORS, X-Request-ID and the security headers below, like any other response. It runs
@@ -97,7 +102,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # R1.1. A cross-origin page reads the new session's CSRF token from this header.
+        expose_headers=["X-CSRF-Token"],
     )
+
+    # A5: request counts and latencies for GET /metrics. Just inside the security headers, so
+    # it times everything inward -- the preflights CORSMiddleware answers and the bodies the
+    # size limit refuses included -- while the headers stay the outermost layer below. It only
+    # observes: no header, body or status is changed (app.middleware.metrics).
+    app.add_middleware(RequestMetricsMiddleware, metrics=app.state.metrics)
 
     # Added LAST, so in Starlette it is the OUTERMOST middleware -- `add_middleware` inserts
     # at the front of the list. That placement is the point: every response passes back out
@@ -133,6 +146,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Operational probes sit at the root: an orchestrator's probe URL must not move when a
     # new API version is introduced.
     app.include_router(health_routes.router)
+    # A5. Internal only: nginx forwards /api/ alone, and the route refuses a proxied request.
+    app.include_router(metrics_routes.router)
     app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
 
     # The handler registered above replaces FastAPI's 422 body; this makes /openapi.json say so.

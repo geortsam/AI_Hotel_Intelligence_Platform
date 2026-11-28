@@ -55,5 +55,7 @@ scikit-learn==1.9.1
 #   argon2-cffi's PasswordHasher defaults (t=3, m=64 MiB, p=4) are the tuned parameters.
 #   PyJWT signs and verifies HS256 access tokens. HS256 is symmetric, so `cryptography` is
 #   deliberately NOT pulled in -- it is only needed for the RS/ES algorithm families.
+#   2.15.1 as of A2: pip-audit found 15 advisories against 2.13.0 (1 critical, 6 high), fixed
+#   by 2.14.0 and 2.15.0; GHSA-gvp8-978c-rx2q names 2.13.0 as its last affected version.
 argon2-cffi==25.1.0
-PyJWT==2.13.0
+PyJWT==2.15.1

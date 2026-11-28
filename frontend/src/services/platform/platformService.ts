@@ -1,4 +1,5 @@
 import { api } from '@/services/api/client'
+import { ifMatch } from '@/services/api/preconditions'
 import type { Page } from '@/types/api'
 import type { ExpenseCategory, RevenueCategory } from '@/types/finance'
 import type {
@@ -94,14 +95,22 @@ export const platformService = {
     return api.post<Amenity>('/amenities', { body: payload, ...(signal ? { signal } : {}) })
   },
 
-  /** Update an amenity. `code` is immutable and absent from the body. */
+  /**
+   * Update an amenity. `code` is immutable and absent from the body.
+   *
+   * `version` is the `updated_at` of the entry as it was loaded. Given, the update is
+   * conditional (R3.3): **412** `STALE_UPDATE` and nothing saved if the entry has been written
+   * since. Omitted, the update is applied as it always was.
+   */
   updateAmenity(
     code: string,
     payload: AmenityUpdateRequest,
+    version?: string,
     signal?: AbortSignal,
   ): Promise<Amenity> {
     return api.patch<Amenity>(`/amenities/${encodeURIComponent(code)}`, {
       body: payload,
+      ...(version === undefined ? {} : { headers: ifMatch(version) }),
       ...(signal ? { signal } : {}),
     })
   },
@@ -151,13 +160,22 @@ export const platformService = {
     })
   },
 
+  /**
+   * Update a revenue category. `code` is immutable and absent from the body.
+   *
+   * `version` is the `updated_at` of the entry as it was loaded. Given, the update is
+   * conditional (R3.3): **412** `STALE_UPDATE` and nothing saved if the entry has been written
+   * since. Omitted, the update is applied as it always was.
+   */
   updateRevenueCategory(
     code: string,
     payload: RevenueCategoryUpdateRequest,
+    version?: string,
     signal?: AbortSignal,
   ): Promise<RevenueCategory> {
     return api.patch<RevenueCategory>(`/revenue-categories/${encodeURIComponent(code)}`, {
       body: payload,
+      ...(version === undefined ? {} : { headers: ifMatch(version) }),
       ...(signal ? { signal } : {}),
     })
   },
@@ -200,13 +218,22 @@ export const platformService = {
     })
   },
 
+  /**
+   * Update an expense category. `code` is immutable and absent from the body.
+   *
+   * `version` is the `updated_at` of the entry as it was loaded. Given, the update is
+   * conditional (R3.3): **412** `STALE_UPDATE` and nothing saved if the entry has been written
+   * since. Omitted, the update is applied as it always was.
+   */
   updateExpenseCategory(
     code: string,
     payload: ExpenseCategoryUpdateRequest,
+    version?: string,
     signal?: AbortSignal,
   ): Promise<ExpenseCategory> {
     return api.patch<ExpenseCategory>(`/expense-categories/${encodeURIComponent(code)}`, {
       body: payload,
+      ...(version === undefined ? {} : { headers: ifMatch(version) }),
       ...(signal ? { signal } : {}),
     })
   },

@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { todayInZone } from '@/features/dashboard/period'
 import { FinancialsPage } from '@/pages/FinancialsPage'
@@ -14,7 +14,9 @@ import {
   TEST_HOTEL,
   TEST_USER,
   type FetchStub,
+  stubCompactViewport,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 import type {
   ExpenseBreakdownResponse,
   ExpenseEntry,
@@ -208,7 +210,7 @@ describe('the revenue journal', () => {
     expect(url.searchParams.get('page')).toBe('1')
     expect(url.searchParams.get('page_size')).toBe('20')
     // The Authorization header is assembled in one place; this proves it reached the ledger.
-    expect(request!.authorization).toMatch(/^Bearer /)
+    expect(request!.credentials).toBe('include')
   })
 
   it('prints each amount in the currency of its own line, never converted', async () => {
@@ -907,5 +909,56 @@ describe('the page as a whole', () => {
         expect(segment).not.toMatch(/^\d+$/)
       }
     }
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('the revenue journal and its totals have no axe violations', async () => {
+    renderFinancials()
+    await screen.findByText('Restaurant covers')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the compact journal cards have no axe violations', async () => {
+    stubCompactViewport()
+    renderFinancials()
+    await screen.findByText('Restaurant covers')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the expense journal and the open posting form have no axe violations', async () => {
+    const user = userEvent.setup()
+    renderFinancials()
+    await screen.findByText('Restaurant covers')
+    await user.click(screen.getByRole('radio', { name: 'Expenses' }))
+    await screen.findByRole('table', { name: /Expense lines/ })
+    await expectNoAxeViolations()
+
+    await user.click(screen.getByRole('radio', { name: 'Revenue' }))
+    await screen.findByText('Restaurant covers')
+    await user.click(screen.getByRole('button', { name: /Post revenue line/ }))
+    await expectNoAxeViolations()
+  })
+
+  it('the loading, empty and failure states have no axe violations', async () => {
+    fetchStub.on('GET', '/revenue?', { body: page([], 0, 0) })
+    const first = renderFinancials()
+    await expectNoAxeViolations()
+    await screen.findByText('No revenue was posted in this period')
+    await expectNoAxeViolations()
+    first.unmount()
+
+    fetchStub.on('GET', '/revenue?', { body: { items: null, total: 0 } })
+    renderFinancials()
+    await screen.findByText('Unexpected response')
+    await expectNoAxeViolations()
   })
 })

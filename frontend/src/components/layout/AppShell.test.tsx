@@ -4,6 +4,7 @@ import { type RouteObject } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { AppShell } from '@/components/layout/AppShell'
+import { NotFoundPage } from '@/pages/NotFoundPage'
 import { NAV_ITEMS } from '@/router/navigation'
 import { ROUTES } from '@/router/routes'
 import {
@@ -14,6 +15,7 @@ import {
   TEST_USER,
   type FetchStub,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 
 /**
  * Shell behaviour, not shell appearance.
@@ -142,7 +144,14 @@ describe('the header', () => {
   it('titles the page after the active navigation area', async () => {
     await renderShellAt(ROUTES.financials)
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Financials' })).toBeInTheDocument()
+    expect(within(screen.getByRole('banner')).getByText('Financials')).toBeInTheDocument()
+  })
+
+  it('holds no heading, so each page has exactly one h1 of its own', async () => {
+    // UI-2. The header's title used to be an `h1` beside every page's own.
+    await renderShellAt(ROUTES.financials)
+
+    expect(within(screen.getByRole('banner')).queryAllByRole('heading')).toEqual([])
   })
 
   it('shows the section a route belongs to', async () => {
@@ -233,5 +242,32 @@ describe('unknown routes', () => {
 
     expect(screen.getByText('not found content')).toBeInTheDocument()
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument()
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the shell around the real not-found page has no axe violations, landmarks included', async () => {
+    const routes: RouteObject[] = [
+      {
+        path: ROUTES.dashboard,
+        element: <AppShell />,
+        children: [{ path: '*', element: <NotFoundPage /> }],
+      },
+    ]
+    renderWithAuth(routes, { initialEntries: ['/no-such-page'] })
+    await screen.findByRole('heading', { level: 1, name: 'Page not found' })
+
+    // The shell owns the landmarks, so here `region` and `landmark-one-main` stay on.
+    await expectNoAxeViolations(document.body, { withLandmarks: true })
+  })
+
+  it('the shell with the navigation drawer open has no axe violations', async () => {
+    const user = userEvent.setup()
+    await renderShellAt(ROUTES.bookings)
+    await user.click(screen.getByRole('button', { name: /open navigation/i }))
+
+    await expectNoAxeViolations(document.body, { withLandmarks: true })
   })
 })

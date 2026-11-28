@@ -59,7 +59,16 @@ h4 {
 }
 
 h1 {
+  font-family: var(--font-display);
   font-size: var(--text-2xl);
+  letter-spacing: var(--tracking-tight);
+}
+
+/* Figures line up in columns: tabular numerals wherever numbers are compared (UI-1). */
+.tnum,
+td,
+dd {
+  font-variant-numeric: tabular-nums;
 }
 
 h2 {
@@ -89,6 +98,49 @@ button {
 }
 
 /*
+ * Native selects, one chevron (UI-5). They stay native -- the platform's own list, keyboard
+ * handling and phone picker -- and lose only the browser's arrow, which drew a different
+ * glyph on every platform and a light one on Windows against the dark field. The chevron is
+ * text-muted (#9aa7b8, the token's value: a data URI cannot read a custom property).
+ *
+ * Element-plus-attribute specificity is deliberate: it outranks the single-class
+ * `background:` shorthand every feature module sets, which would otherwise reset the image.
+ * A list box (`multiple` or `size`) has no arrow to replace. Forced-colours mode gets the
+ * system arrow back, since it may not paint background images.
+ */
+select:not([multiple]):not([size]) {
+  appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239aa7b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px 16px;
+}
+
+@media (forced-colors: active) {
+  select:not([multiple]):not([size]) {
+    appearance: auto;
+    background-image: none;
+  }
+}
+
+/*
+ * Page transitions (UI-2). The router starts a View Transition on navigation where the browser
+ * has one; only the main region (`view-transition-name: page`) cross-fades, briefly. The rest
+ * of the document does not animate.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-old(page),
+::view-transition-new(page) {
+  animation-duration: var(--duration-instant);
+  animation-timing-function: var(--ease-standard);
+}
+
+/*
  * Honour the viewer's motion preference.
  *
  * Not a nicety: for people with vestibular disorders, movement they did not ask for can
@@ -102,5 +154,11 @@ button {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

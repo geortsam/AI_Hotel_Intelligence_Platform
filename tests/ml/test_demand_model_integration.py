@@ -436,7 +436,8 @@ def test_the_public_api_gained_only_the_serving_endpoint() -> None:
     # Stage 7.11 added five conversation operations, likewise outside /ml.
     # Stage 7.12 added the attention list, which does not use the demand model.
     # Issue H2 added the early departure and its preview, booking routes outside /ml.
-    assert operations == 101
+    # R1.1 added the cookie session's three routes, reaching no model: 101 -> 104.
+    assert operations == 104
     # Four routes on the ML prefix since Stage 7.3, and only one of them reaches a model. The
     # 503 is what says which: an unavailable artifact is a failure only the serving route can
     # have, so declaring it is the structural difference rather than a naming convention.
@@ -467,8 +468,11 @@ def test_the_migration_chain_is_unchanged() -> None:
     # Issue H3 added 0018 (three foreign keys of `revenue` and `reviews`), which no model reads.
     # Issue H4 added 0019 (the scope of one `reviews` unique index), which no model reads.
     # Issue H7 added 0020 (the guests' email key and format CHECK), which no model reads.
-    assert len(revisions) == 20
-    assert revisions[-1].endswith("20261009_0020_guest_email_rules.py")
+    # R1.3a added 0021 (two audit actions), which no model reads.
+    # R3.3 added 0022 (`updated_at` on the three catalogues), which no demand model reads.
+    # R1.1 added 0023 (`auth_sessions`), which no demand model reads.
+    assert len(revisions) == 23
+    assert revisions[-1].endswith("20261120_0023_auth_sessions.py")
 
 
 #: Committed beside the model: four JSON records. `model.pkl` is the Stage 6.5 payload, which is

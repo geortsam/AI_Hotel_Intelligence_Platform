@@ -12,8 +12,8 @@ it was written, and nothing else deletes it: no request purges this table. Witho
 expired records stay in the database indefinitely.
 
 **It does not schedule itself.** Run it periodically -- daily is the recommended cadence -- from
-cron, a systemd timer or the platform's scheduler. How often it runs bounds how long a record can
-remain after its retention period ended.
+cron, a systemd timer or ``python -m app.jobs.scheduler`` (opt-in, R4.2). How often it runs bounds
+how long a record can remain after its retention period ended.
 
 **What it prints.** Counts and the retention period, and on failure only the exception's type:
 never an identifier, a hotel, an actor or a connection string. It records no audit event, calls

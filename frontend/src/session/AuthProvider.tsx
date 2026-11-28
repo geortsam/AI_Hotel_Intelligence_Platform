@@ -39,20 +39,11 @@ export interface AuthContextValue {
   readonly expiryNotice: string | null
   /** Exchanges credentials for a session. Throws `ApiError`; the caller renders the failure. */
   readonly login: (credentials: LoginRequest) => Promise<void>
-  /** Ends the session locally. See the note on the absent backend endpoint. */
-  readonly logout: () => void
   /**
-   * Replace the session's token with one the server has just issued.
-   *
-   * Added in Stage 5.14, and its only caller is a password change. That endpoint **revokes
-   * every token minted before it, including the one that authorised the request**, and
-   * returns the replacement -- so without adopting it the next call 401s and the user is
-   * signed out by the act of securing their own account.
-   *
-   * Not a sign-in: it does not re-read the identity and does not touch `status`, because the
-   * person is the same and was authenticated a moment ago.
+   * Ends the session: asks the server to end it (`POST /auth/session/end`, which revokes it and
+   * clears its cookies) and forgets it here at once, whether or not that request succeeds.
    */
-  readonly adoptToken: (accessToken: string) => void
+  readonly logout: () => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -124,8 +115,12 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   useEffect(() => {
     setAuthBridge({
       getToken: () => tokenRef.current,
-      // Fires when the server rejects the token on an authenticated request. It clears the
-      // session; it never retries, because there is no refresh token to retry with.
+      // R1.1. A response that starts or renews a session -- a refresh, a password change --
+      // carries its CSRF token; keeping it is what lets the next request through.
+      adoptToken: (csrfToken: string) => {
+        tokenRef.current = csrfToken
+        writeToken(csrfToken)
+      },
       onUnauthenticated: () => {
         if (tokenRef.current !== null) {
           endSession(EXPIRY_NOTICE)
@@ -175,41 +170,44 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   }, [endSession])
 
   const login = useCallback(async (credentials: LoginRequest) => {
-    const token = await authService.login(credentials)
-
-    // Set before fetching the identity: `/auth/me` is an authenticated call and reads the
-    // token through the bridge.
-    tokenRef.current = token.access_token
-    writeToken(token.access_token)
-
-    try {
-      const authenticated = await authService.getCurrentUser()
-      setUser(authenticated)
-      setExpiryNotice(null)
-      setStatus('authenticated')
-    } catch (error: unknown) {
-      // Credentials were accepted but the identity could not be read. Keeping a token we
-      // cannot describe would leave the UI signed in as nobody, so the half-session is
-      // discarded and the caller sees the failure.
-      tokenRef.current = null
-      clearToken()
-      setStatus('unauthenticated')
-      throw error
+    // R1.1. The cookie session: the credentials arrive as `HttpOnly` cookies this code never
+    // sees, and the body says who signed in -- so there is no second request to ask.
+    const session = await authService.login(credentials)
+    // A 200 is not proof of the documented shape. Without an identity and a CSRF token there
+    // is no session to hold, and the UI must not end up signed in as nobody.
+    if (
+      typeof session !== 'object' ||
+      session === null ||
+      typeof session.csrf_token !== 'string' ||
+      session.csrf_token === '' ||
+      typeof session.user !== 'object' ||
+      session.user === null
+    ) {
+      throw new ApiError(
+        200,
+        ApiError.MALFORMED_CODE,
+        'The sign-in response was not in the expected format.',
+      )
     }
+
+    tokenRef.current = session.csrf_token
+    writeToken(session.csrf_token)
+    setUser(session.user)
+    setExpiryNotice(null)
+    setStatus('authenticated')
   }, [])
 
   const logout = useCallback(() => {
+    // Sent before the session is forgotten: the request reads the CSRF token as it goes out.
+    // Its outcome changes nothing here -- the page signs out either way, and a session the
+    // server could not end still expires on its own.
+    authService.logout().catch(() => {})
     endSession(null)
   }, [endSession])
 
-  const adoptToken = useCallback((accessToken: string) => {
-    tokenRef.current = accessToken
-    writeToken(accessToken)
-  }, [])
-
   const value = useMemo<AuthContextValue>(
-    () => ({ status, user, expiryNotice, login, logout, adoptToken }),
-    [status, user, expiryNotice, login, logout, adoptToken],
+    () => ({ status, user, expiryNotice, login, logout }),
+    [status, user, expiryNotice, login, logout],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

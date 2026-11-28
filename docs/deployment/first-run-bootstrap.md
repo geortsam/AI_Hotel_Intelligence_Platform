@@ -7,16 +7,19 @@ Two different problems, and it matters that they are different:
 | | Mechanism | Who performs it |
 |---|---|---|
 | First hotel + its owner | **The existing API.** No manual step. | Anyone who can register |
-| First platform administrator | **A manual database grant.** There is no API. | The operator, deliberately |
+| First platform administrator | **An operator command**, audited. There is no API. | The operator, deliberately |
 
 The second is not an oversight. `platform_admins` governs the catalogues every hotel shares —
 amenities, revenue categories, expense categories — and the schema that introduced it says so
 directly: *"Stage 4.3 exposes no API for granting platform administration, so the grant path in
 practice is an out-of-band INSERT"*
 ([`database/migrations/versions/20260901_0005_platform_administration.py:25`](../../database/migrations/versions/20260901_0005_platform_administration.py)).
-The integration suite performs the same grant the same way, and describes it as *"the test
-suite's instance of the same out-of-band grant a real installation performs"*
-([`tests/integration/conftest.py:415`](../../tests/integration/conftest.py)).
+Since R1.3a that grant is made by `python -m app.jobs.platform_admin`
+([`backend/app/jobs/platform_admin.py`](../../backend/app/jobs/platform_admin.py)), which runs
+inside the application and records each grant and revocation in the audit trail. It is still
+not an API: who may grant through one is an open decision (R1.3b in
+[`docs/roadmap-v2.0-execution.md`](../roadmap-v2.0-execution.md)), so the command is reachable
+only by whoever can run code against the database — the same trust boundary the INSERT had.
 
 **An empty database is not authorization.** Nothing in this platform creates an administrator
 because it noticed no rows. Someone decides who it is, and performs a deliberate grant.
@@ -31,7 +34,7 @@ because it noticed no rows. Someone decides who it is, and performs a deliberate
 3. Start the API and the frontend.
 4. **Register** the intended administrator through the public endpoint.
 5. **Create the first hotel** through the API — the creator becomes its owner.
-6. **Grant platform administration** with the psql procedure below.
+6. **Grant platform administration** with the command below.
 7. Obtain a fresh access token (see [why](#why-a-fresh-token)).
 8. Verify.
 
@@ -48,7 +51,7 @@ Do them in either order, or skip 5 entirely if this deployment has no hotels yet
 Before the grant:
 
 - the stack is running and the API answers `GET /health`;
-- migrations completed successfully and Alembic reports revision **`0020_guest_email_rules`**;
+- migrations completed successfully and Alembic reports revision **`0023_auth_sessions`**;
 - **the intended administrator has already registered**, so their `users` row exists.
 
 Check the revision from inside the running stack:
@@ -60,7 +63,7 @@ docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT v
 The user row is a hard prerequisite, not a convenience. `platform_admins.user_id` is a foreign
 key to `users (id)`
 ([`0005:66-67`](../../database/migrations/versions/20260901_0005_platform_administration.py)),
-so there is nothing to grant to until the account exists.
+so there is nothing to grant to until the account exists. The command creates no account.
 
 ## 2. Register the intended administrator
 
@@ -106,66 +109,42 @@ it manually risks a hotel with no owner, which nothing can then administer.
 
 ## 4. Grant platform administration
 
-Open a session as the operator, using the deployment's existing database credentials:
+Run the command in a one-off container of the API image, which already has the database
+configuration:
+
+```bash
+docker compose run --rm api python -m app.jobs.platform_admin grant ops@example.com
+```
+
+Expect one line:
+
+```
+platform administration: platform administration granted; 1 administrator(s)
+```
+
+What the command does, and why it is safe to run:
+
+- **It finds the account by email, as registration stored it** — trimmed and lower-cased — and
+  grants to that row. It never takes a `user_id`, so a typo grants nothing rather than granting
+  to the wrong person: an email no registered user has is refused, and nothing is created.
+- **It refuses a deactivated account.**
+- **It stores the one role the schema accepts**, `platform_admin` —
+  `CHECK (role = ANY (ARRAY['platform_admin']))`
+  ([`0005:68-69`](../../database/migrations/versions/20260901_0005_platform_administration.py)),
+  matching `PlatformRole.PLATFORM_ADMIN`
+  ([`backend/app/models/enums.py`](../../backend/app/models/enums.py)).
+- **It records the grant in the same transaction as the change:** a `platform_admin.granted`
+  audit event about the `user`, so the grant and its record commit together or not at all.
+- **Repeating it is harmless.** Granting to someone who already holds the role changes nothing,
+  records nothing, and says so (`already a platform administrator; nothing changed`).
+- **It prints no email, identifier or connection string.** On failure it prints the error's
+  type only, and exits `1` with nothing changed; a usage error exits `2`.
+
+Check the current state before and after, read-only, from psql:
 
 ```bash
 docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 ```
-
-### 4a. Identify the user, and confirm there is exactly one
-
-```sql
-SELECT id, email, full_name, is_active
-FROM users
-WHERE email = lower('ops@example.com');
-```
-
-**Stop if this returns zero rows** — the account has not been registered; go back to step 2.
-**Stop if it returns more than one row**, or if you are not certain the row is the right person.
-Do not proceed on an ambiguous match, and do not pick a `user_id` by hand.
-
-### 4b. Look at the current state before changing it
-
-```sql
-SELECT pa.user_id, u.email, pa.role, pa.created_at
-FROM platform_admins pa
-JOIN users u ON u.id = pa.user_id;
-```
-
-On a genuine first run this returns nothing. If it already returns rows, this installation has
-been bootstrapped — decide deliberately whether another administrator is actually wanted.
-
-### 4c. Grant
-
-This is the statement the integration fixture uses
-([`tests/integration/conftest.py:424-431`](../../tests/integration/conftest.py)), unchanged:
-
-```sql
-INSERT INTO platform_admins (user_id, role)
-SELECT u.id, 'platform_admin' FROM users u WHERE u.email = lower('ops@example.com')
-ON CONFLICT (user_id) DO NOTHING;
-```
-
-Why it is written this way:
-
-- **`SELECT … FROM users`** rather than a literal id — the grant is derived from the account,
-  so a typo inserts nothing instead of granting to the wrong person. If the email matches no
-  user, `INSERT 0 0` and nothing happens.
-- **`'platform_admin'`** is the only value the schema accepts:
-  `CHECK (role = ANY (ARRAY['platform_admin']))`
-  ([`0005:68-69`](../../database/migrations/versions/20260901_0005_platform_administration.py)),
-  matching `PlatformRole.PLATFORM_ADMIN`
-  ([`backend/app/models/enums.py:334`](../../backend/app/models/enums.py)). The constraint
-  exists precisely to stop an out-of-band INSERT inventing `superadmin` or `root`.
-- **`ON CONFLICT (user_id) DO NOTHING`** makes it safe to re-run. `user_id` is the primary key
-  ([`0005:65`](../../database/migrations/versions/20260901_0005_platform_administration.py)) —
-  a user holds at most one platform role — so a repeat is a no-op, never a duplicate.
-
-Never disable or defer the foreign key, and never insert an arbitrary `user_id`.
-
-## 5. Verify
-
-Read-only, from psql:
 
 ```sql
 SELECT u.email, pa.role, pa.created_at
@@ -174,7 +153,17 @@ JOIN users u ON u.id = pa.user_id
 ORDER BY pa.created_at;
 ```
 
-Expect exactly one row, naming the intended person, with role `platform_admin`.
+On a genuine first run this returns nothing before the grant. If it already returns rows, this
+installation has been bootstrapped — decide deliberately whether another administrator is
+actually wanted.
+
+**Do not INSERT into `platform_admins` by hand.** It still works for anyone who holds the database
+credentials, and that is exactly why it must not be the procedure: it records nothing.
+
+## 5. Verify
+
+Expect exactly one row from the query above, naming the intended person, with role
+`platform_admin`.
 
 ### Why a fresh token
 
@@ -197,14 +186,20 @@ curl -sS -o /dev/null -w '%{http_code}\n' -X POST http://localhost:5173/api/v1/a
 ```
 
 `201` means the grant is live. `403` means it is not — re-check step 5. Platform audit
-(`/api/v1/platform/audit-events`) is guarded the same way.
+(`/api/v1/platform/audit-events`) is guarded the same way, and it now shows the grant itself:
+
+```bash
+curl -sS 'http://localhost:5173/api/v1/platform/audit-events?action=platform_admin.granted' \
+  -H "Authorization: Bearer $TOKEN"
+```
 
 Verify by using the authorization, never by relaxing it. Do not disable a guard to "test" access.
 
 ## Secret handling
 
 - **Never put `POSTGRES_PASSWORD` on a command line.** `docker compose exec db psql -U "$POSTGRES_USER"`
-  above authenticates over the container's local socket and needs no password.
+  above authenticates over the container's local socket and needs no password, and
+  `docker compose run --rm api` reads the configuration the stack already has.
 - Keep credentials out of shell history. In psql, `\set HISTFILE /dev/null` before typing
   anything sensitive; in the shell, prefer a leading space if your shell is configured to skip
   those lines.
@@ -213,49 +208,59 @@ Verify by using the authorization, never by relaxing it. Do not disable a guard 
   `.env.example` ships empty values on purpose — keep it that way.
 - Supply values through the deployment's existing secret mechanism.
 - Treat database credentials as privileged operational credentials: whoever holds them can
-  perform this grant, which is exactly why this procedure is the trust boundary it is.
+  run this command — or bypass it with an INSERT — which is exactly why it is the trust
+  boundary it is.
 
 ## Audit trail — what is and is not recorded
 
-**The platform-admin grant is not audited, and this document will not pretend otherwise.**
+**A grant or revocation made with the command is audited.** `AuditAction` is a closed vocabulary
+([`backend/app/models/enums.py`](../../backend/app/models/enums.py)) backed by a CHECK
+constraint on `audit_events.action`; migration 0021 (R1.3a) added
+`platform_admin.granted` and `platform_admin.revoked` to it. Each event:
 
-`AuditAction` is a closed vocabulary
-([`backend/app/models/enums.py:337`](../../backend/app/models/enums.py)) backed by a CHECK
-constraint on `audit_events.action`, and it contains no grant action. The grant is a direct
-database write, so no application code runs and no event is written. Registering a user and
-creating a hotel are likewise unaudited; `membership.created` covers members added through the
-members API, not the owner membership created alongside a hotel.
+- is about the `user` (`resource_type`), referenced by the account's public UUID;
+- has **no actor** — `actor_user_id` is NULL, because no authenticated user caused it; the
+  person who ran the command is not known to the application;
+- has **no hotel** — a platform grant belongs to none — so it appears in
+  `/api/v1/platform/audit-events` and never in a hotel's history;
+- carries one detail, `{"role": "platform_admin"}`, and nothing else.
 
-This is an existing architectural property. Recording the grant would need a new action value,
-which means a new migration widening that CHECK — outside this document's scope, and not
-something to do casually, since the migration chain and its pinned head are themselves gated in
-CI.
+What is still **not** recorded:
 
-Until then, the audit trail for a grant is the operational record you keep yourself: who asked,
-who approved, who ran it, and when.
+- **who ran the command.** The event says what changed and when, not by whom. Keep that part of
+  the operational record yourself: who asked, who approved, who ran it.
+- **an out-of-band INSERT or DELETE on `platform_admins`.** No application code runs, so no event
+  is written. That is the reason the procedure above is the command and not SQL.
+- registering a user and creating a hotel; `membership.created` covers members added through the
+  members API, not the owner membership created alongside a hotel.
 
 ## If the wrong user was granted
 
-There is **no revocation API** — the repository exposes no endpoint for granting or revoking
-platform administration in either direction. Correcting a mistaken grant therefore requires the
-same deliberate database intervention, and should be treated with the same care.
+Revoke it with the same command:
 
-The repository does support removing a grant: the integration suite's `revoke_platform_admin`
-deletes the row by email
-([`tests/integration/conftest.py:435-445`](../../tests/integration/conftest.py)), and migration
-0005 states the design intent plainly — *"revoking is deleting the row"*
-([`0005:35`](../../database/migrations/versions/20260901_0005_platform_administration.py)).
-Deleting a `platform_admins` row removes only the grant; the user, their account and every hotel
-membership are untouched, because the row holds no other data.
+```bash
+docker compose run --rm api python -m app.jobs.platform_admin revoke ops@example.com
+```
 
-Confirm precisely which row you mean with the `SELECT` in step 5 before removing anything, and
-keep at least one administrator unless you intend to have none.
+Revocation deletes only the `platform_admins` row — *"revoking is deleting the row"*
+([`0005:35`](../../database/migrations/versions/20260901_0005_platform_administration.py)) —
+and records `platform_admin.revoked` in the same transaction. The user, their account and every
+hotel membership are untouched, because the row holds no other data. Revoking from someone who
+is not an administrator changes nothing and records nothing.
+
+**It keeps at least one administrator.** Revoking the last one is refused unless you say that is
+intended, with `--allow-none`; an installation with none cannot write its shared catalogues until
+someone runs `grant` again. Every grant row is locked before the count, so two revocations run at
+the same moment cannot each see the other administrator and together leave none.
+
+Confirm precisely which account you mean with the `SELECT` in step 4 before revoking.
 
 Note the related direction: `platform_admins.user_id` is `ON DELETE CASCADE`
 ([`0005:67`](../../database/migrations/versions/20260901_0005_platform_administration.py)), so
 deleting a *user* also drops their grant — *"a platform grant without a user is meaningless"*
 ([`0005:32-33`](../../database/migrations/versions/20260901_0005_platform_administration.py)).
-That is not a revocation procedure; it is a consequence to be aware of.
+That is not a revocation procedure, and it records no `platform_admin.revoked`; it is a
+consequence to be aware of.
 
 ## Production, tests, and the disposable-database guard
 
@@ -264,9 +269,11 @@ These are three different things and must not be confused.
 **Production** is this document: a deliberate operator action against the real database.
 
 **Integration tests** call `grant_platform_admin`
-([`tests/integration/conftest.py:415`](../../tests/integration/conftest.py)), which runs the
-same SQL against a throwaway database. It exists because the tests need an administrator and
-there is no API to make one — the same reason this runbook exists.
+([`tests/integration/conftest.py:415`](../../tests/integration/conftest.py)), which inserts the
+grant directly into a throwaway database, because most tests need an administrator and are not
+about how one is made. The command itself is tested end to end, in a fresh process against the
+same throwaway database, by
+[`tests/integration/test_platform_admin_command.py`](../../tests/integration/test_platform_admin_command.py).
 
 **The Stage 5.17 guard** (`tests/db_safety.py`) stands between the test suite and any database
 worth keeping. The integration suite is destructive — `alembic downgrade base`,
@@ -278,5 +285,5 @@ it holds no rows in the sentinel tables, or its database comment carries the mar
 
 **Never point `TEST_DATABASE_URL` at a production or demo database, and never weaken or work
 around the guard.** A `_test` suffix is not sufficient proof and the guard knows it. Nothing in
-this runbook requires touching it: the production grant is a plain SQL statement you run
-yourself, and it goes nowhere near the test suite.
+this runbook requires touching it: the production grant is a command you run against the
+deployment's own database, and it goes nowhere near the test suite.

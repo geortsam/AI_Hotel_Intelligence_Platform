@@ -19,7 +19,7 @@ export interface RoomTypeListProps {
 /**
  * A property's room types.
  *
- * A table above 768px and cards below, the same switch every list in this application makes.
+ * A table above 1024px and cards below, the same switch every list in this application makes.
  * Both render the same fields: a type has nine of them and dropping four on a phone drops
  * the ones somebody needed.
  *
@@ -101,10 +101,10 @@ export function RoomTypeList({
           <tr>
             <th scope="col">Code</th>
             <th scope="col">Name</th>
-            <th scope="col">Sleeps</th>
-            <th scope="col">Beds</th>
-            <th scope="col">Size</th>
-            <th scope="col">Base price</th>
+            <th scope="col" className={styles.numeric}>Sleeps</th>
+            <th scope="col" className={styles.numeric}>Beds</th>
+            <th scope="col" className={styles.numeric}>Size</th>
+            <th scope="col" className={styles.numeric}>Base price</th>
             <th scope="col">Status</th>
             <th scope="col">Updated</th>
             <th scope="col">

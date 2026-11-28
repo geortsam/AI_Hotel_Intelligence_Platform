@@ -156,9 +156,9 @@ export function CatalogueForm({
     const shared = payloadFrom(kind, { name, group, flagValue, active })
     if (editing) {
       // Only what differs from the entry as loaded, both sides normalised alike (Issue H6): a
-      // field this operator did not touch is never sent back over a newer value. No version
-      // goes with it -- these tables carry no `updated_at` -- so two operators changing the
-      // SAME field still leave the later one in place.
+      // field this operator did not touch is never sent back over a newer value. The page
+      // sends the entry's loaded `updated_at` with it as `If-Match` (R3.3), so a save over a
+      // version someone else has since written is refused rather than applied.
       onSubmit(changedFields(payloadFrom(kind, valuesOf(entry)), shared))
       return
     }

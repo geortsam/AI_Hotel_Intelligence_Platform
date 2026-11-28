@@ -26,12 +26,14 @@
 .range {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
+  /* The size every other page's description uses (UI-6). */
+  font-size: var(--text-base);
   line-height: var(--leading-normal);
 }
 
 .range {
   color: var(--color-text-subtle);
+  font-size: var(--text-sm);
 }
 
 .sections {
@@ -54,6 +56,8 @@
 /* Auto-fit rather than fixed columns: four KPIs on a desktop, two on a tablet, one on a phone,
    with no media query to keep in step with the card's own minimum width. */
 .kpiGrid {
+  /* A <dl> since A4: no browser default margin. */
+  margin: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: var(--space-4);
@@ -65,10 +69,30 @@
   gap: var(--space-4);
 }
 
+/* The two breakdown cards sit side by side only when both tables fit, and otherwise stack.
+ *
+ * Until 2026-11-27 this was the grid the charts use, `repeat(auto-fit, minmax(340px, 1fr))`.
+ * 340px said nothing about the tables, so the cards went side by side while the expenses table
+ * was still wider than its card. At 1440px that was a 525px table in a 482px box, with the
+ * last column clipped (the A9 audit's recorded defect), and every width from 768 to 1280px
+ * overflowed the same way.
+ *
+ * A wrapping flex row decides from the content instead. Each card's automatic minimum width
+ * is its min-content width, and that includes its table's narrowest layout. So two cards
+ * share a line only when both tables fit in their halves; otherwise each card takes the full
+ * width. `max-width: 100%` also caps that automatic minimum, so on a phone, where even the
+ * narrowest table is wider than the screen, the card stays inside the page and the table
+ * scrolls in its own box. No width is hard-coded, so a longer category code or a larger
+ * amount moves the breakpoint with it. */
 .breakdownGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-4);
+}
+
+.breakdownGrid > * {
+  flex: 1 1 0;
+  max-width: 100%;
 }
 
 .loading {

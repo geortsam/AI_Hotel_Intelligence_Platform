@@ -75,11 +75,11 @@ export function AnomalyList({ anomalies }: AnomalyListProps) {
             <th scope="col">Date</th>
             <th scope="col">Metric</th>
             <th scope="col">Direction</th>
-            <th scope="col">Value</th>
-            <th scope="col">Window median</th>
-            <th scope="col">MAD</th>
-            <th scope="col">Modified z-score</th>
-            <th scope="col">Threshold</th>
+            <th scope="col" className={styles.numeric}>Value</th>
+            <th scope="col" className={styles.numeric}>Window median</th>
+            <th scope="col" className={styles.numeric}>MAD</th>
+            <th scope="col" className={styles.numeric}>Modified z-score</th>
+            <th scope="col" className={styles.numeric}>Threshold</th>
           </tr>
         </thead>
         <tbody>

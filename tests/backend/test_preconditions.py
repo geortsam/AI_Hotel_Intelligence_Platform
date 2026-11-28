@@ -168,14 +168,18 @@ def test_any_other_instant_is_stale_earlier_or_later(expected: dt.datetime) -> N
 
 # --- the documented contract ----------------------------------------------------------------------
 
-#: The five operations Issue H6 made conditional: the form-backed resources that carry an
-#: ``updated_at``, and the booking's field edits.
+#: The eight conditional operations: the five Issue H6 made conditional -- the form-backed
+#: resources that carry an ``updated_at``, and the booking's field edits -- and the three
+#: global catalogues, once 0022 (R3.3) gave them an ``updated_at``.
 CONDITIONAL = {
     ("patch", "/api/v1/hotels/{public_id}"),
     ("patch", "/api/v1/hotels/{hotel_public_id}/guests/{guest_public_id}"),
     ("patch", "/api/v1/hotels/{hotel_public_id}/room-types/{code}"),
     ("patch", "/api/v1/hotels/{hotel_public_id}/room-types/{room_type_code}/rooms/{room_number}"),
     ("patch", "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}"),
+    ("patch", "/api/v1/amenities/{code}"),
+    ("patch", "/api/v1/revenue-categories/{code}"),
+    ("patch", "/api/v1/expense-categories/{code}"),
 }
 
 
@@ -188,7 +192,7 @@ def operations() -> dict[tuple[str, str], dict[str, Any]]:
     }
 
 
-def test_exactly_the_five_conditional_operations_declare_if_match() -> None:
+def test_exactly_the_conditional_operations_declare_if_match() -> None:
     declaring = {
         key
         for key, operation in operations().items()
@@ -197,7 +201,7 @@ def test_exactly_the_five_conditional_operations_declare_if_match() -> None:
     assert declaring == CONDITIONAL
 
 
-def test_exactly_the_five_conditional_operations_declare_412() -> None:
+def test_exactly_the_conditional_operations_declare_412() -> None:
     declaring = {key for key, operation in operations().items() if "412" in operation["responses"]}
     assert declaring == CONDITIONAL
 
@@ -219,17 +223,14 @@ def test_the_header_is_optional_and_the_412_is_the_shared_error_envelope() -> No
 @pytest.mark.parametrize(
     "excluded",
     [
-        ("patch", "/api/v1/amenities/{code}"),
-        ("patch", "/api/v1/revenue-categories/{code}"),
-        ("patch", "/api/v1/expense-categories/{code}"),
         ("patch", "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/stay"),
         ("patch", "/api/v1/hotels/{hotel_public_id}/members/{user_public_id}"),
         ("patch", "/api/v1/hotels/{hotel_public_id}/bookings/{booking_public_id}/review"),
     ],
 )
-def test_catalogues_and_commands_stay_unconditional(excluded: tuple[str, str]) -> None:
-    """The catalogues carry no ``updated_at``; the commands are already judged against the
-    current state. Neither gains the precondition."""
+def test_the_commands_stay_unconditional(excluded: tuple[str, str]) -> None:
+    """The commands are already judged against the current state, so they do not gain the
+    precondition. (The catalogues did, in R3.3, once 0022 gave them a version.)"""
     operation = operations()[excluded]
     assert all(p["name"] != HEADER for p in operation.get("parameters", []))
     assert "412" not in operation["responses"]

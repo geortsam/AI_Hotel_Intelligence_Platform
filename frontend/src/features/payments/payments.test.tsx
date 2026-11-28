@@ -205,7 +205,7 @@ describe('reading the ledger', () => {
       `/hotels/${TEST_HOTEL.public_id}/bookings/${BOOKING_ID}/payments`,
     )
     expect(call.method).toBe('GET')
-    expect(call.authorization).toMatch(/^Bearer /)
+    expect(call.credentials).toBe('include')
   })
 
   it('shows each posting with its own currency, and totals nothing', async () => {

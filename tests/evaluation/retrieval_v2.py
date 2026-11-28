@@ -11,9 +11,12 @@ written once and never regenerated: `load()` refuses it unless its canonical SHA
 canonical mapping with sorted keys and two-space indentation (`render`); a test holds it to that
 form so it cannot drift into a hand-edited layout either.
 
-**The judgments are the developer's, not yet reviewed.** Every grade, rationale and family was
-written in C.3b from the copied text. They are proposals until C.3c's review and C.3d's sign-off
-(§3.6); nothing here, and no test, stands in for that review.
+**The judgments are the developer's, reviewed by you in C.3c and signed off in C.3d.** Every
+grade, rationale and family was written in C.3b from the copied text; the C.3c review accepted
+them with two revisions, and its adjudication made five more (R1-R5, decision record §11),
+which made this version. The reviewer signed this version off in C.3d (§3.6,
+`datasets/knowledge_retrieval_v2.signoff.json`); nothing here, and no test, stands in for that
+review.
 
 ## Copied documents and drift (decision C)
 
@@ -58,7 +61,7 @@ REPOSITORY_ROOT = HERE.parents[1]
 
 DATASET_PATH: Final = HERE / "datasets" / "knowledge_retrieval_v2.json"
 #: The canonical SHA-256 of `knowledge_retrieval_v2`. Pinned; changing it is a new version.
-DATASET_SHA256: Final = "35a968055c790628c2bd9c20ee48913eca0dcd9b0929df30f140c81370a6d5ed"
+DATASET_SHA256: Final = "7f35b8a473c73f6d318e48ce5cc2667294f0d50816c511cfaf7851585c617031"
 
 #: The R2.9Y capture, as every model-captured query's provenance names it.
 CAPTURE_FILE: Final = "tests/evaluation/fixtures/r29y_knowledge_capture.json"

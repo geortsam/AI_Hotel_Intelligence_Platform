@@ -18,6 +18,7 @@ import {
   TEST_USER,
   type FetchStub,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 
 /**
  * The dashboard's consumption of the analytics API.
@@ -455,7 +456,7 @@ describe('request count', () => {
     await screen.findByText('58.0%')
 
     for (const call of analyticsCalls()) {
-      expect(call.authorization).toMatch(/^Bearer /)
+      expect(call.credentials).toBe('include')
     }
   })
 
@@ -877,7 +878,7 @@ describe('hotel context', () => {
     await screen.findByText('58.0%')
 
     const call = fetchStub.calls.find((c) => c.url.includes('/hotels?page='))!
-    expect(call.authorization).toMatch(/^Bearer /)
+    expect(call.credentials).toBe('include')
   })
 
   it('says an account has no property, instead of showing an empty dashboard', async () => {
@@ -1218,5 +1219,41 @@ describe('the trend charts', () => {
     await screen.findByText('58.0%')
 
     expect(screen.getByText(/Occupancy could not be calculated for any day/i)).toBeInTheDocument()
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the KPI tiles, trend charts and summaries have no axe violations', async () => {
+    stubSession()
+    stubOverview(CURRENT_OVERVIEW)
+    fetchStub.on('GET', 'analytics/daily', { body: DAILY })
+    mount()
+    await screen.findByText('58.0%')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the loading and empty-period states have no axe violations', async () => {
+    stubSession()
+    stubOverview(EMPTY_OVERVIEW, EMPTY_OVERVIEW)
+    fetchStub.on('GET', 'analytics/daily', {
+      body: { ...DAILY, days: DAILY.days.map((day) => dailyRow(day.date, 0, null)) },
+    })
+    mount()
+    await expectNoAxeViolations()
+    await screen.findByText(/No activity in the last 7 days/i)
+    await expectNoAxeViolations()
+  })
+
+  it('the failure state has no axe violations', async () => {
+    stubSession()
+    fetchStub.on('GET', 'analytics/overview', { networkError: true })
+    fetchStub.on('GET', 'analytics/daily', { networkError: true })
+    mount()
+    await screen.findByRole('alert')
+
+    await expectNoAxeViolations()
   })
 })

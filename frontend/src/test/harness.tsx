@@ -28,7 +28,12 @@ export type StubHandler = (request: { url: string; init: RequestInit }) => StubR
 export interface RecordedCall {
   readonly method: string
   readonly url: string
+  /** Always null since R1.1: the browser's credentials are cookies, never a header. */
   readonly authorization: string | null
+  /** The `X-CSRF-Token` the request carried, if any (R1.1). */
+  readonly csrf: string | null
+  /** The request's `credentials` mode; `include` sends the session's cookies (R1.1). */
+  readonly credentials: string | null
   /** The `If-Match` precondition, if the request carried one (Issue H6). */
   readonly ifMatch: string | null
   readonly body: string | null
@@ -56,6 +61,15 @@ export interface FetchStub {
 export function installFetchStub(): FetchStub {
   const handlers = new Map<string, StubResponse | StubHandler>()
   const calls: RecordedCall[] = []
+  // R1.1. Two session routes the client reaches on its own: a renewal after a 401, and the
+  // sign-out request. By default the session cannot be renewed -- so a 401 still ends it, as
+  // every test written before cookie sessions expects -- and signing out succeeds. Registered
+  // first, so a test's own `/auth/session` stub never shadows the renewal.
+  handlers.set('POST /auth/session/refresh', {
+    status: 401,
+    body: { error: { code: 'INVALID_TOKEN', message: 'Not authenticated.', details: [] } },
+  })
+  handlers.set('POST /auth/session/end', { status: 204 })
   const original = globalThis.fetch
 
   const stub = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -67,6 +81,8 @@ export function installFetchStub(): FetchStub {
       method,
       url,
       authorization: headers.Authorization ?? null,
+      csrf: headers['X-CSRF-Token'] ?? null,
+      credentials: init.credentials ?? null,
       ifMatch: headers['If-Match'] ?? null,
       body: typeof init.body === 'string' ? init.body : null,
     })
@@ -125,16 +141,17 @@ export const TEST_USER = {
 } as const
 
 /**
- * A token-shaped string that is not a real credential.
+ * A CSRF-token-shaped string that is not a real one (R1.1).
  *
- * Three dots so it looks like a JWT to anything that inspects its shape, while being
- * obviously synthetic to a reader. No real token is ever committed.
+ * Since cookie sessions the browser's credentials are `HttpOnly` cookies this application
+ * never sees; what a returning browser has is the session's CSRF token. Obviously synthetic,
+ * and no real token is ever committed.
  */
-export const TEST_TOKEN = 'header.payload.signature-test-only'
+export const TEST_TOKEN = 'csrf-token-test-only'
 
-/** Seed a stored session, as a returning user's browser would have. */
+/** Seed a known session, as a returning user's browser would have: its CSRF token. */
 export function seedStoredToken(token: string = TEST_TOKEN): void {
-  window.sessionStorage.setItem('ahip.access_token', token)
+  window.sessionStorage.setItem('ahip.csrf_token', token)
 }
 
 export function clearStoredToken(): void {
@@ -184,6 +201,24 @@ export function renderWithAuth(
         <RouterProvider router={router} />
       </HotelProvider>
     </AuthProvider>,
+  )
+}
+
+/**
+ * Make `useIsCompact` report a compact viewport, so list pages render cards instead of tables.
+ *
+ * jsdom evaluates no media queries, so the breakpoint is stubbed; `vi.unstubAllGlobals()` in the
+ * caller's `afterEach` undoes it. The same stub the feature suites' own compact-layout tests use,
+ * in one place for the accessibility checks (A4).
+ */
+export function stubCompactViewport(): void {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn().mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }),
   )
 }
 

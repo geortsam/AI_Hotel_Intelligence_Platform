@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
  * ## Why this is JavaScript rather than CSS
  *
  * Almost everything responsive in this application is CSS, and should be. This is the
- * exception, because the bookings list does not merely *restyle* below 768px -- it renders a
+ * exception, because the bookings list does not merely *restyle* below 1024px -- it renders a
  * different accessible structure. A seven-column table cannot be made readable on a 375px
  * screen by narrowing it, and the two CSS-only alternatives both cost something real:
  *
@@ -20,14 +20,18 @@ import { useEffect, useState } from 'react'
  *
  * ## The breakpoint
  *
- * 767px is the "mobile" boundary recorded in `tokens.css`, quoted rather than reinvented.
+ * 1023px: below the "desktop" boundary recorded in `tokens.css`, where the sidebar is a drawer.
+ * It was 767px until UI-5, and the UI-0 baseline showed what that cost at 768px: every wide
+ * table (most set a 880-960px minimum width) ran past its card into a 720px content area,
+ * cutting columns and, on the platform catalogues, the row actions. Between 768 and 1023px
+ * the card structure fits and the table does not, so the card structure is what renders.
  *
  * `matchMedia` is feature-detected. It exists in every browser this targets, but jsdom does
  * not evaluate media queries, so the default has to be the one that is safe when nothing can
  * be measured -- the table, which is the fuller structure and the one whose semantics the
  * tests assert. A test that wants the compact path stubs `matchMedia` explicitly.
  */
-export function useIsCompact(maxWidth = 767): boolean {
+export function useIsCompact(maxWidth = 1023): boolean {
   const query = `(max-width: ${maxWidth}px)`
 
   const [isCompact, setIsCompact] = useState(() => {

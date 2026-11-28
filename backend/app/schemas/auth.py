@@ -87,6 +87,23 @@ class UserResponse(BaseModel):
     last_login_at: dt.datetime | None
 
 
+class SessionResponse(BaseModel):
+    """A cookie session, started or refreshed (R1.1).
+
+    **No credential in the body.** The access and refresh tokens travel only in ``HttpOnly``
+    cookies, out of reach of script. ``csrf_token`` is here because the page must send it back
+    in ``X-CSRF-Token`` -- it is also in a readable cookie, for a page that reloads -- and it is
+    no secret from the page itself: it proves only that a request came from it.
+    """
+
+    user: UserResponse
+    csrf_token: str
+    #: Seconds until the access token expires; the page refreshes before then, or on a 401.
+    expires_in: int
+    #: Seconds until the session ends unless it is refreshed (``SESSION_REFRESH_TTL_HOURS``).
+    refresh_expires_in: int
+
+
 class PasswordChangeRequest(BaseModel):
     """Payload for changing the authenticated caller's own password.
 
@@ -113,6 +130,7 @@ __all__ = [
     "PasswordChangeRequest",
     "PasswordField",
     "RegistrationRequest",
+    "SessionResponse",
     "TokenResponse",
     "UserResponse",
 ]

@@ -14,6 +14,7 @@ import {
   TEST_USER,
   type FetchStub,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 import type { AvailabilityResult } from '@/types/availability'
 import type { RoomType } from '@/types/room'
 
@@ -188,7 +189,7 @@ describe('the request', () => {
     expect(url.searchParams.get('check_in')).toBe('2027-05-03')
     expect(url.searchParams.get('check_out')).toBe('2027-05-05')
     expect(url.searchParams.get('rooms_required')).toBe('1')
-    expect(requestsFor('/availability')[0]!.authorization).toMatch(/^Bearer /)
+    expect(requestsFor('/availability')[0]!.credentials).toBe('include')
   })
 
   it('omits the room type when any type will do', async () => {
@@ -740,5 +741,46 @@ describe('accessibility', () => {
     expect(
       screen.getByRole('heading', { level: 4, name: 'Rooms free for the whole stay' }),
     ).toBeInTheDocument()
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the search form before a search has no axe violations', async () => {
+    renderPage()
+    await screen.findByLabelText('Check-in')
+
+    await expectNoAxeViolations()
+  })
+
+  it('an answer with free rooms has no axe violations', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByLabelText('Check-in')
+    await runSearch(user)
+    await screen.findByText(/can be accommodated/)
+
+    await expectNoAxeViolations()
+  })
+
+  it('the empty answer and the failure have no axe violations', async () => {
+    const user = userEvent.setup()
+    fetchStub.on('GET', '/availability', {
+      body: result({ sufficient: false, available_rooms: 0, room_types: [] }),
+    })
+    const first = renderPage()
+    await screen.findByLabelText('Check-in')
+    await runSearch(user)
+    await screen.findByText(/cannot be accommodated/)
+    await expectNoAxeViolations()
+    first.unmount()
+
+    fetchStub.on('GET', '/availability', { networkError: true })
+    renderPage()
+    await screen.findByLabelText('Check-in')
+    await runSearch(user)
+    await screen.findByText('Could not reach the server')
+    await expectNoAxeViolations()
   })
 })

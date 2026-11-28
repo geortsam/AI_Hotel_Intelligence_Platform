@@ -14,7 +14,9 @@ import {
   TEST_TOKEN,
   TEST_USER,
   type FetchStub,
+  stubCompactViewport,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 import type {
   AnomalyReport,
   DemandTrend,
@@ -1302,7 +1304,7 @@ describe('accessibility', () => {
     renderPage()
     await screen.findByText('Booking demand is increasing')
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Intelligence' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Forecasting' })).toBeInTheDocument()
     expect(
       screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent),
     ).toEqual([
@@ -1349,5 +1351,39 @@ describe('the compact layout', () => {
     expect(within(card).getByText('3.5')).toBeInTheDocument()
     expect(within(card).getByText('1.5')).toBeInTheDocument()
     expect(within(card).getByText('16')).toBeInTheDocument()
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the forecast, trend, anomaly, insight and attention sections have no axe violations', async () => {
+    renderPage()
+    await screen.findByText('Booking demand is increasing')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the revenue tab has no axe violations', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Booking demand is increasing')
+    await user.click(screen.getByRole('tab', { name: 'Revenue' }))
+
+    await expectNoAxeViolations()
+  })
+
+  it('the compact anomaly cards have no axe violations', async () => {
+    stubCompactViewport()
+    renderPage()
+    await screen.findByText('Booking demand is increasing')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the loading state has no axe violations', async () => {
+    renderPage()
+
+    await expectNoAxeViolations()
   })
 })

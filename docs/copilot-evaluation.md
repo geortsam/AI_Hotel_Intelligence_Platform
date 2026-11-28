@@ -1390,7 +1390,9 @@ What it cannot assess:
   to ignore all previous instructions" could itself follow them. `tool_selection` observes the calls.
 - **Why a search came back empty**, and whether a query was a good one.
 - **Production retrieval.** Every search here is the stand-in. `inadequate` says that stand-in,
-  asked that query, did not return the document.
+  asked that query, did not return the document. The opt-in `snapshot_retrieval_failure` block
+  (R2.10C.6, §8.5) judges the same searches again, by this same rule, on real PostgreSQL search's
+  recorded results.
 - **Times with no am or pm.** A right answer with the document's own `07:30` and no whole range is
   not credited.
 - **What a sentence means.** The link between a time and its subject, and what a negation reaches,
@@ -1438,7 +1440,7 @@ before an image change and an embedding cost.
 - Whether a cited excerpt actually supports the sentence citing it, beyond its figures.
 - Any real model's citation behaviour: that takes a live capture of §8.1.
 - Retrieval on real documents: none exist in this repository. §8.4 is the procedure for measuring
-  an operator-supplied corpus.
+  an operator-supplied corpus. §8.5's larger invented set does not change this.
 
 ```bash
 python -m tests.evaluation.knowledge_harness --write-reference   # after an INTENDED change
@@ -1541,3 +1543,30 @@ nothing. `tests/evaluation/test_real_retrieval.py` tests every refusal and the a
 `tests/integration/test_real_retrieval_run.py` runs the upload-and-search path on PostgreSQL with
 two placeholder strings that are attested as not qualifying -- machinery, not evidence. Retention
 of the operator's documents is the operator's and the hotel's to decide; this repository sets none.
+
+### 8.5 The layered retrieval evaluation (R2.10C)
+
+§8.1 judges answers against the stand-in's search and §8.2 measures real search on a small set;
+neither connects the two. R2.10C does, under a decision record written before anything was
+measured: [retrieval-evaluation-decision.md](retrieval-evaluation-decision.md). It changes no
+retrieval, prompt or measure above, and `FixtureKnowledge` stays the default, so every R2.9Y
+and R2.10B result and the reference report stay exactly as recorded.
+
+- **`knowledge_retrieval_v2` (C.4).** 57 queries over 17 invented documents, reviewed and
+  signed off before measurement, with the 11 queries the model sent in R2.9Y among them;
+  measured on real PostgreSQL in CI and pinned with a fingerprint of the search configuration.
+  Success@5 is 23 of 45 answerable queries; every paraphrase and title-only query returns
+  nothing; nothing leaks. The full table is the record's §1.4. Like §8.2's, it is regression
+  evidence on invented text, not the evidence §8.2's criterion names.
+- **The copilot corpus's snapshot (C.5).** `copilot_retrieval_snapshot_v1` records what real
+  search returned for each of the 17 searches this evaluation makes, and CI holds it equal to
+  live search. `knowledge_harness.run(..., knowledge_source="snapshot")` serves the
+  evaluation from it instead of the stand-in, labelled as such; a search it does not hold
+  refuses the run.
+- **`retrieval_failure` from the snapshot (C.6).** `knowledge_harness.run(...,
+  knowledge_diagnostics=True, snapshot_retrieval_failure=True)` judges each stand-in run's
+  searches twice by §8.1's rule, each verdict labelled with its source. On the six R2.9Y
+  attempts: 1 of 10 judged cases with the stand-in (`dog_fee`), 4 of 10 with real search
+  (`pool_hours`, `pool_closing_changed` and `guest_faq_injected` added). The model saw the
+  stand-in's results, so the second verdict describes real search for the searches this
+  model made, not what it would have done.

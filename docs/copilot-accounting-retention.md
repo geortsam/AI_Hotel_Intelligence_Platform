@@ -17,7 +17,7 @@ how an operator runs it.
 | **Hotel / user deletion** | Unchanged: `ON DELETE RESTRICT`. An unexpired record still blocks deleting its hotel or its actor; once the purge has removed the last one, this table no longer blocks it (`audit_events` still may). |
 | **Conversations** | Independent. The conversation purge never touches this table; this purge never touches conversations, turns or the audit trail. |
 | **Who runs it** | An operator, or the deployment's scheduler. No HTTP endpoint, no actor, no audit event, no model call, no copilot allowance. |
-| **Automatic?** | No. The application schedules nothing. |
+| **Automatic?** | Only if the deployment opts in: `python -m app.jobs.scheduler` runs it daily with the other retention jobs ([deployment/retention-scheduler.md](deployment/retention-scheduler.md)). Nothing starts that scheduler by default. |
 
 This is a deliberate difference from `audit_events`, which nothing deletes
 (`app.services.retention`): an audit event is evidence of a business change; an accounting record

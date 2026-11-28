@@ -60,12 +60,20 @@ src/
   components/
     layout/     the application shell: AppShell, Sidebar, Header
     ui/         reusable primitives: Button, Card, Badge, PageContainer,
-                SectionHeader, Skeleton
+                SectionHeader, Skeleton; shared style modules (Form, DataTable,
+                Rail, VisuallyHidden)
+  assets/fonts/ self-hosted Inter and Source Serif 4 (woff2) and their OFL licences
   config/       the only module that reads import.meta.env
+  features/     one folder per area (bookings, finance, intelligence, ...): its
+                components, hooks, styles and tests
+  lib/          shared helpers: formatting, decimal arithmetic, useIsCompact
   pages/        route targets
   router/       route table, path constants, navigation structure
-  services/     API client (transport only, no endpoints yet)
-  styles/       tokens.css (design tokens), base.css (element defaults)
+  services/     api/ is the transport (client, errors, preconditions); one folder per
+                API area holds that area's endpoint calls
+  session/      authentication and the selected hotel (AuthProvider, HotelProvider)
+  styles/       fonts.css (@font-face), tokens.css (design tokens), base.css (element
+                defaults)
   test/         vitest setup
   types/        shared API envelope types, mirroring the backend
 ```
@@ -77,9 +85,43 @@ property, and is the only place a raw colour or pixel value may appear. Componen
 live in a `.module.css` beside the component that uses it, so a style can be found from the
 markup that renders it and deleted with it.
 
-Breakpoints are `< 768px` (mobile), `>= 768px` (tablet) and `>= 1024px` (desktop, where the
-sidebar becomes permanent). They cannot be custom properties -- a media query cannot read
-`var()` -- so they are recorded at the foot of `tokens.css` and quoted consistently.
+**Type.** Two self-hosted faces, in `src/styles/fonts.css` (imported first by `index.css`):
+Inter, the interface face, and Source Serif 4, used only through `--font-display` for page
+titles and headline figures. The woff2 files are in `src/assets/fonts/` -- latin, latin-ext and
+greek subsets, each with the `unicode-range` that keeps a page to the scripts it renders -- beside
+their SIL Open Font License files (`LICENSE-Inter.txt`, `LICENSE-SourceSerif4.txt`). Vite hashes
+them into `/assets/`, which satisfies the server's `font-src 'self'`; no font CDN is used, and
+the system stack shows until a face has loaded (`font-display: swap`).
+
+**Shared style modules.** `src/components/ui/` holds the anatomy that many features share, and a
+feature's module takes it with CSS Modules' `composes` rather than restating it:
+
+| Module | What it holds | Used by |
+|---|---|---|
+| `Form.module.css` | the field anatomy: form column, grid, label, control, hint, error, actions | composed by 8 form modules |
+| `DataTable.module.css` | the scroll box, table and header rules, cell vocabulary (link, code, timestamp, numeric, absent) and the card layout | composed by 12 list modules |
+| `VisuallyHidden.module.css` | `srOnly`, text for assistive technology only | composed by 12 modules |
+| `Rail.module.css` | a `--rail` colour per Badge tone; the consumer draws the edge | imported by 3 components |
+
+**One `composes` path per shared module.** A module must not reach the same shared module by two
+routes -- for example composing `srOnly` directly *and* composing a class that itself composes
+`srOnly`. Vite then places that rule at a different point in a chunk from build to build, and the
+bundle stops being reproducible: CI's image-reproducibility job caught exactly this (fixed in
+`52fde7b`). DataTable's `caption` therefore states the clip rule itself.
+
+**Breakpoints.** A media query cannot read `var()`, so breakpoints are numbers, documented at the
+foot of `tokens.css` as 600 / 768 / 1024 / 1280 and used as:
+
+| Width | What changes |
+|---|---|
+| below 600px | phone layouts: single-column grids, the period selector as a 2 x 2 grid, KPI tiles one per row |
+| below 768px | tighter page padding (`PageContainer`), and three pages' own compact layouts |
+| 1024px and up | the sidebar is permanent; list pages show tables instead of cards (`useIsCompact`, default `max-width: 1023px`) |
+| 1280px and up | KPI rows four across; booking detail and availability gain a sticky side panel |
+
+Below 1024px every list renders as cards, so no table has to survive a phone or a tablet. A few
+older modules still use one-off widths (480, 640, 899 and 1100px, among others); moving them onto
+the documented set is open work, not a second scale.
 
 Import with the `@/` alias (`@/config/env`), which maps to `src/`. It is declared in both
 `vite.config.ts` (for the bundler) and `tsconfig.json` (for the compiler); changing one
@@ -99,4 +141,10 @@ the `/api/v1` prefix, JSON encoding, and the conversion of any non-2xx response 
 `ApiError` carrying the backend's own `code` and `message`. A failed request always throws
 `ApiError`; `status` is `0` when no response arrived at all.
 
-It defines no endpoints. Domain calls belong with the features that need them.
+The session is two `HttpOnly` cookies the browser attaches itself (`credentials: 'include'`), so
+no script -- this client included -- ever holds a credential. What the client holds is the
+session's CSRF token, sent as `X-CSRF-Token` on every request that changes something; a 401 is
+answered by one refresh (`POST /auth/session/refresh`) before the session is treated as ended.
+
+The client defines no endpoints. Domain calls live in `src/services/<area>/`, one module per API
+area, and the features call those.

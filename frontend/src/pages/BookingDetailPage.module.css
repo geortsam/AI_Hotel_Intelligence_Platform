@@ -35,6 +35,37 @@
   gap: var(--space-4);
 }
 
+/*
+ * From 1280px, two columns (UI-8): the record on the left, and Operations -- the status and
+ * every action on it -- in a 320px panel on the right that stays in view while the record
+ * scrolls. Placement only: the DOM order is untouched, so Operations is still the first
+ * section in the heading order and on a phone.
+ *
+ * Operations spans every row the left column could need; the rows are spaced by margins,
+ * not `row-gap`, so the unused spanned rows add no height.
+ */
+@media (min-width: 1280px) {
+  .sections {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    column-gap: var(--space-4);
+    row-gap: 0;
+    align-items: start;
+  }
+
+  .sections > * {
+    grid-column: 1;
+    margin-bottom: var(--space-4);
+  }
+
+  .sections > :first-child {
+    grid-column: 2;
+    grid-row: 1 / span 12;
+    position: sticky;
+    top: calc(var(--header-height) + var(--space-4));
+  }
+}
+
 .loading {
   display: flex;
   flex-direction: column;
@@ -202,6 +233,12 @@
 }
 
 .numeric {
+  text-align: right;
+}
+
+/* `.nightsTable th, .nightsTable td` outrank a bare class; without this the rate column was
+ * never right-aligned (found in UI-5). */
+.nightsTable .numeric {
   text-align: right;
 }
 

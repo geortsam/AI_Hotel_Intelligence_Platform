@@ -1,0 +1,13 @@
+# The dependency vulnerability scanner CI runs (A2), and nothing else. It is installed into a
+# venv of its own, never into the environment it audits, so the scanner's dependencies can
+# neither change what the tests run against nor hide among the packages being scanned.
+#
+# Every package this pulls in is pinned with sha256 hashes in scripts/dependency_audit_lock.txt,
+# generated from this file with uv 0.12.24 (the command is in the lock's header) and installed
+# with `pip install --no-deps --require-hashes`. scripts/dependency_audit.py's
+# PIP_AUDIT_VERSION must equal the pin below; a test asserts it.
+#
+# pip-audit is the Python Packaging Authority's scanner (https://github.com/pypa/pip-audit,
+# Apache-2.0). It queries PyPI's vulnerability data, which comes from the PyPA advisory
+# database and OSV.
+pip-audit==2.10.1

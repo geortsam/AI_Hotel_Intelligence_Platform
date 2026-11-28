@@ -162,9 +162,11 @@ configuration, so it runs from the API image as it is.
   copilot allowance charged. There is no HTTP endpoint for it.
 - **Safe to repeat:** a second run finds nothing and deletes nothing.
 
-**Scheduling is a deployment responsibility, and the application does not do it.** Run the
-command periodically — **daily is the recommended cadence** — from the host's cron, a systemd
-timer or the platform's scheduler; for example, a crontab line:
+**Scheduling is a deployment choice.** Run the command periodically — **daily is the
+recommended cadence** — with the opt-in retention scheduler (`python -m app.jobs.scheduler`,
+R4.2; see [deployment/retention-scheduler.md](deployment/retention-scheduler.md)), which runs
+it daily with the other retention jobs, or from the host's cron or a systemd timer. For
+example, a crontab line:
 
 ```
 15 3 * * *  cd /srv/hotel-intelligence && docker compose run --rm api python -m app.jobs.purge_conversations

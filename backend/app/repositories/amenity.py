@@ -68,6 +68,23 @@ class AmenityRepository:
             ).all()
         )
 
+    def lock_for_update(self, amenity: Amenity) -> Amenity:
+        """Re-read this entry under ``FOR NO KEY UPDATE``, refreshing it in place (R3.3).
+
+        Taken before an ``If-Match`` precondition is compared, so no other write can land
+        between the comparison and the update -- the hotel resources' rule (Issue H6).
+        ``NO KEY``: the update changes no key, so the foreign-key checks of the rows that
+        reference a catalogue entry (``FOR KEY SHARE``) need not wait behind an edit of its
+        name. ``populate_existing``, because the instance is already in the identity map and
+        would otherwise keep the ``updated_at`` it was first loaded with.
+        """
+        return self._session.scalars(
+            select(Amenity)
+            .where(Amenity.id == amenity.id)
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        ).one()
+
     def apply_changes(self, amenity: Amenity, changes: dict[str, Any]) -> Amenity:
         """Apply a partial update to a managed instance and flush it."""
         for field, value in changes.items():

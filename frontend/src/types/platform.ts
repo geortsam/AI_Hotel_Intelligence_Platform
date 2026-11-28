@@ -20,10 +20,10 @@
 /**
  * `GET|POST|PATCH /amenities[/{code}]` response. Mirrors `AmenityResponse`.
  *
- * Exactly the three business columns the table has. **No timestamps**: unlike every other
- * resource in this application `amenities` does not use the timestamp mixin and the table has
- * no `created_at` or `updated_at`, so none is typed. `amenities.id` is a sequential BIGINT
- * and never leaves the server.
+ * The three business columns and the version. `amenities` does not use the timestamp mixin:
+ * migration 0022 (R3.3) gave it `updated_at` alone, the value an `If-Match` names, and there
+ * is still no `created_at`, so none is typed. `amenities.id` is a sequential BIGINT and never
+ * leaves the server.
  */
 export interface Amenity {
   /** Globally unique, upper-case, and the URL identity. */
@@ -31,6 +31,8 @@ export interface Amenity {
   readonly name: string
   /** A free-text grouping, e.g. "Bathroom". Optional in the schema and often absent. */
   readonly category: string | null
+  /** The version a conditional update names (R3.3). Sent back verbatim, never compared here. */
+  readonly updated_at: string
 }
 
 /**

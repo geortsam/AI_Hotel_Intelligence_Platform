@@ -13,7 +13,7 @@ export interface GuestCardsProps {
 }
 
 /**
- * The guest list below 768px, as cards.
+ * The guest list below 1024px, as cards.
  *
  * The same guests and the same fields, not a subset: a seven-column table on a phone is
  * either a horizontal scroll nobody finds or four columns silently dropped, and the dropped
@@ -30,11 +30,12 @@ export function GuestCards({ guests, timeZone }: GuestCardsProps) {
       {guests.map((guest) => (
         <li key={guest.public_id} className={styles.card}>
           <div className={styles.header}>
-            <h3 className={styles.name}>
+            {/* h2, not h3: on the list page these sit directly under the page h1 (A4). */}
+            <h2 className={styles.name}>
               <Link className={styles.link} to={guestPath(guest.public_id)}>
                 {guest.last_name}, {guest.first_name}
               </Link>
-            </h3>
+            </h2>
             <Badge tone={guest.marketing_opt_in ? 'success' : 'neutral'}>
               {guest.marketing_opt_in ? 'Opted in' : 'No consent'}
             </Badge>

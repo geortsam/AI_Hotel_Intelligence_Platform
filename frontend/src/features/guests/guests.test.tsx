@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { GuestDetailPage } from '@/pages/GuestDetailPage'
 import { GuestsPage } from '@/pages/GuestsPage'
@@ -14,7 +14,9 @@ import {
   TEST_HOTEL,
   TEST_USER,
   type FetchStub,
+  stubCompactViewport,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 import type { Guest } from '@/types/guest'
 
 /**
@@ -142,7 +144,7 @@ describe('the guest list', () => {
     expect([...url.searchParams.keys()].sort()).toEqual(['page', 'page_size'])
     expect(url.searchParams.get('page')).toBe('1')
     expect(url.searchParams.get('page_size')).toBe('20')
-    expect(request!.authorization).toMatch(/^Bearer /)
+    expect(request!.credentials).toBe('include')
   })
 
   it('renders each guest’s own fields', async () => {
@@ -1051,5 +1053,58 @@ describe('updating a guest sends only what changed, against the version loaded',
     const alert = await screen.findByRole('alert')
     expect(within(alert).queryByRole('button', { name: 'Reload the current version' })).toBeNull()
     expect(within(alert).queryByText(STALE_COPY)).toBeNull()
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('the guest table has no axe violations', async () => {
+    renderList()
+    await screen.findByText(/Papadakis/)
+
+    await expectNoAxeViolations()
+  })
+
+  it('the compact guest cards have no axe violations', async () => {
+    stubCompactViewport()
+    renderList()
+    await screen.findByText(/Papadakis/)
+
+    await expectNoAxeViolations()
+  })
+
+  it('the open create form has no axe violations', async () => {
+    const user = userEvent.setup()
+    renderList()
+    await screen.findByText(/Papadakis/)
+    await user.click(screen.getByRole('button', { name: /Add guest/ }))
+
+    await expectNoAxeViolations()
+  })
+
+  it('the loading, empty and failure states have no axe violations', async () => {
+    fetchStub.on('GET', '/guests?page=', { body: page([], 0, 0) })
+    const first = renderList()
+    await expectNoAxeViolations()
+    await screen.findByText('No guests on file')
+    await expectNoAxeViolations()
+    first.unmount()
+
+    fetchStub.on('GET', '/guests?page=', { networkError: true })
+    renderList()
+    await screen.findByRole('alert')
+    await expectNoAxeViolations()
+  })
+
+  it('the guest detail page has no axe violations', async () => {
+    renderDetail()
+    await screen.findByRole('heading', { level: 1, name: /Papadakis/ })
+
+    await expectNoAxeViolations()
   })
 })

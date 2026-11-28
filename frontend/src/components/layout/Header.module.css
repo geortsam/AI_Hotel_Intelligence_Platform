@@ -11,6 +11,15 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+/* Translucent where the browser can blur behind it (UI-2); solid otherwise, never see-through
+ * without the blur, which would put scrolled text under the title. */
+@supports (backdrop-filter: blur(1px)) {
+  .header {
+    background: color-mix(in srgb, var(--color-bg) 78%, transparent);
+    backdrop-filter: blur(12px) saturate(1.2);
+  }
+}
+
 .titleGroup {
   min-width: 0;
   flex: 1;
@@ -50,8 +59,8 @@
   height: 30px;
   padding: 0 var(--space-3);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-raised);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   white-space: nowrap;
@@ -75,6 +84,13 @@
   padding: 0 var(--space-1) 0 0;
   max-width: 22ch;
   cursor: pointer;
+}
+
+/* The base chevron (UI-5), tucked to the chip's own padding: it is what says the name is a
+ * switch and not a label. Two classes, to outrank the base rule's element selector. */
+.hotelContext .hotelSelect {
+  padding-right: 20px;
+  background-position: right 0 center;
 }
 
 .hotelSelect:focus-visible {
@@ -127,6 +143,8 @@
 }
 
 .accountName {
+  padding-inline-start: var(--space-3);
+  border-inline-start: 1px solid var(--color-border);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   white-space: nowrap;

@@ -12,6 +12,7 @@ import {
   TEST_USER,
   type FetchStub,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 import type { Hotel } from '@/types/hotel'
 
 /**
@@ -784,5 +785,18 @@ describe('tenant isolation and the request surface', () => {
     await screen.findByRole('region', { name: /forecast against what actually happened/i })
 
     expect(screen.getByText(/showing 2 of 250 stored predictions/i)).toBeInTheDocument()
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the loading state and the three measured panels have no axe violations', async () => {
+    stubAll()
+    renderSection()
+    await expectNoAxeViolations()
+    await screen.findByRole('region', { name: /forecast against what actually happened/i })
+
+    await expectNoAxeViolations()
   })
 })

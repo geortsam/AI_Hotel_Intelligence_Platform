@@ -14,7 +14,9 @@ import {
   TEST_TOKEN,
   TEST_USER,
   type FetchStub,
+  stubCompactViewport,
 } from '@/test/harness'
+import { expectNoAxeViolations } from '@/test/axe'
 import type { PlatformAuditEvent } from '@/types/platform'
 
 /**
@@ -42,20 +44,41 @@ function errorBody(code: string, message: string) {
   return { error: { code, message, details: [] } }
 }
 
+/** The version every fixture entry was loaded at (R3.3). Sent back verbatim as `If-Match`. */
+const LOADED = '2026-11-20T09:00:00.123456Z'
+
 const AMENITIES = [
-  { code: 'SEA_VIEW', name: 'Sea view', category: 'Outlook' },
-  { code: 'WIFI', name: 'Wireless internet', category: null },
+  { code: 'SEA_VIEW', name: 'Sea view', category: 'Outlook', updated_at: LOADED },
+  { code: 'WIFI', name: 'Wireless internet', category: null, updated_at: LOADED },
 ]
 
 const REVENUE_CATEGORIES = [
-  { code: 'FNB', name: 'Food and beverage', is_room_revenue: false, is_active: true },
-  { code: 'ROOM_LEDGER', name: 'Room ledger', is_room_revenue: true, is_active: true },
-  { code: 'SPA', name: 'Spa', is_room_revenue: false, is_active: false },
+  {
+    code: 'FNB',
+    name: 'Food and beverage',
+    is_room_revenue: false,
+    is_active: true,
+    updated_at: LOADED,
+  },
+  {
+    code: 'ROOM_LEDGER',
+    name: 'Room ledger',
+    is_room_revenue: true,
+    is_active: true,
+    updated_at: LOADED,
+  },
+  { code: 'SPA', name: 'Spa', is_room_revenue: false, is_active: false, updated_at: LOADED },
 ]
 
 const EXPENSE_CATEGORIES = [
-  { code: 'PAYROLL', name: 'Payroll', is_fixed_cost: true, is_active: true },
-  { code: 'SUPPLIES', name: 'Supplies', is_fixed_cost: false, is_active: true },
+  { code: 'PAYROLL', name: 'Payroll', is_fixed_cost: true, is_active: true, updated_at: LOADED },
+  {
+    code: 'SUPPLIES',
+    name: 'Supplies',
+    is_fixed_cost: false,
+    is_active: true,
+    updated_at: LOADED,
+  },
 ]
 
 function auditEvent(overrides: Partial<PlatformAuditEvent> = {}): PlatformAuditEvent {
@@ -916,13 +939,13 @@ describe('the compact layout', () => {
   })
 })
 
-/* --- diff-only updates (Issue H6) -------------------------------------------------------- */
+/* --- diff-only, conditional updates (Issue H6, R3.3) ------------------------------------- */
 
-describe('editing a catalogue entry sends only what changed', () => {
-  // The catalogues carry no `updated_at`, so no version goes with an update: what the form
-  // can still guarantee is never to send back a field the operator did not touch.
+describe('editing a catalogue entry sends only what changed, conditionally', () => {
+  // Never a field the operator did not touch; and, since 0022 gave the catalogues an
+  // `updated_at`, the version the entry was loaded at as `If-Match`.
 
-  it('sends a cleared amenity group as null, and no If-Match', async () => {
+  it('sends a cleared amenity group as null, with the loaded version', async () => {
     const user = userEvent.setup()
     fetchStub.on('PATCH', '/amenities/', {
       body: { code: 'SEA_VIEW', name: 'Sea view', category: null },
@@ -938,7 +961,7 @@ describe('editing a catalogue entry sends only what changed', () => {
       expect(requestsFor('/amenities/', 'PATCH')).toHaveLength(1)
     })
     expect(bodyOf('/amenities/', 'PATCH')).toEqual({ category: null })
-    expect(requestsFor('/amenities/', 'PATCH')[0]!.ifMatch).toBeNull()
+    expect(requestsFor('/amenities/', 'PATCH')[0]!.ifMatch).toBe(`"${LOADED}"`)
   })
 
   it('sends a retired revenue category as is_active alone', async () => {
@@ -960,7 +983,7 @@ describe('editing a catalogue entry sends only what changed', () => {
     })
     // Neither the name nor the room-revenue flag rides along.
     expect(bodyOf('/revenue-categories/', 'PATCH')).toEqual({ is_active: false })
-    expect(requestsFor('/revenue-categories/', 'PATCH')[0]!.ifMatch).toBeNull()
+    expect(requestsFor('/revenue-categories/', 'PATCH')[0]!.ifMatch).toBe(`"${LOADED}"`)
   })
 
   it('sends a flipped expense flag and a renamed entry, and nothing else', async () => {
@@ -986,5 +1009,100 @@ describe('editing a catalogue entry sends only what changed', () => {
       name: 'Staff payroll',
       is_fixed_cost: false,
     })
+    expect(requestsFor('/expense-categories/', 'PATCH')[0]!.ifMatch).toBe(`"${LOADED}"`)
+  })
+
+  it('keeps the draft on a stale save, and reloads only when asked', async () => {
+    const user = userEvent.setup()
+    const NEWER = '2026-11-20T10:30:00.654321Z'
+    fetchStub.on('PATCH', '/amenities/', {
+      status: 412,
+      body: { error: { code: 'STALE_UPDATE', message: 'server words, never shown' } },
+    })
+    renderPage()
+    await screen.findByText('Sea view')
+    const loads = requestsFor('/amenities?page=').length
+
+    await user.click(screen.getByRole('button', { name: 'Edit SEA_VIEW' }))
+    await user.clear(screen.getByLabelText('Name'))
+    await user.type(screen.getByLabelText('Name'), 'Sea outlook')
+    await user.click(screen.getByRole('button', { name: 'Save entry' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(within(alert).getByText(/Someone else changed this entry/)).toBeInTheDocument()
+    expect(within(alert).queryByText(/server words/)).toBeNull()
+    // The draft survives, and nothing is re-read behind the reader's back.
+    expect(screen.getByLabelText('Name')).toHaveValue('Sea outlook')
+    expect(requestsFor('/amenities?page=')).toHaveLength(loads)
+
+    fetchStub.on('GET', '/amenities?page=', {
+      body: page([
+        { code: 'SEA_VIEW', name: 'Sea view (renamed)', category: 'Outlook', updated_at: NEWER },
+        AMENITIES[1],
+      ]),
+    })
+    await user.click(within(alert).getByRole('button', { name: 'Reload the current version' }))
+
+    // The reload replaces the baseline and the draft with the server's copy.
+    await waitFor(() => {
+      expect(screen.getByLabelText('Name')).toHaveValue('Sea view (renamed)')
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
+
+    fetchStub.on('PATCH', '/amenities/', {
+      body: { code: 'SEA_VIEW', name: 'Sea outlook', category: 'Outlook', updated_at: NEWER },
+    })
+    await user.clear(screen.getByLabelText('Name'))
+    await user.type(screen.getByLabelText('Name'), 'Sea outlook')
+    await user.click(screen.getByRole('button', { name: 'Save entry' }))
+
+    await waitFor(() => {
+      expect(requestsFor('/amenities/', 'PATCH')).toHaveLength(2)
+    })
+    // The resubmission names the version it was reloaded at.
+    expect(requestsFor('/amenities/', 'PATCH')[1]!.ifMatch).toBe(`"${NEWER}"`)
+    expect(bodyOf('/amenities/', 'PATCH')).toEqual({ name: 'Sea outlook' })
+  })
+})
+
+/* --- accessibility (A4) ------------------------------------------------------------------ */
+
+describe('accessibility (A4)', () => {
+  it('the catalogue tabs and the amenity table have no axe violations', async () => {
+    renderPage()
+    await screen.findByText('Sea view')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the other catalogue tabs, the open form and the audit trail have no axe violations', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Sea view')
+    await openTab(user, 'Revenue categories')
+    await screen.findByText('Food and beverage')
+    await expectNoAxeViolations()
+
+    await openTab(user, 'Amenities')
+    await screen.findByText('Sea view')
+    await user.click(screen.getByRole('button', { name: /Add amenity/ }))
+    await user.click(screen.getByRole('button', { name: /Load audit trail/ }))
+    await expectNoAxeViolations()
+  })
+
+  it('the compact catalogue cards have no axe violations', async () => {
+    stubCompactViewport()
+    renderPage()
+    await screen.findByText('Sea view')
+
+    await expectNoAxeViolations()
+  })
+
+  it('the loading and failure states have no axe violations', async () => {
+    fetchStub.on('GET', '/amenities?page=', { networkError: true })
+    renderPage()
+    await expectNoAxeViolations()
+    await screen.findByText('Could not reach the server')
+    await expectNoAxeViolations()
   })
 })

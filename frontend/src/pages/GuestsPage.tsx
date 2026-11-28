@@ -108,6 +108,7 @@ export function GuestsPage() {
     return (
       <Frame>
         <StateMessage
+          level={2}
           icon={Building2}
           tone="status"
           title="No hotel is linked to your account"
@@ -121,6 +122,7 @@ export function GuestsPage() {
     return (
       <Frame>
         <StateMessage
+          level={2}
           icon={WifiOff}
           tone="alert"
           title="Could not load your hotels"
@@ -196,6 +198,7 @@ export function GuestsPage() {
 
       {listFailure ? (
         <StateMessage
+          level={2}
           icon={guests.error?.code === ApiError.NETWORK_CODE ? WifiOff : AlertTriangle}
           tone="alert"
           title={listFailure.title}
@@ -208,6 +211,7 @@ export function GuestsPage() {
         </div>
       ) : guests.guests.length === 0 ? (
         <StateMessage
+          level={2}
           icon={UserX}
           tone="status"
           title="No guests on file"
