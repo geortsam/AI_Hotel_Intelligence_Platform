@@ -7,6 +7,10 @@
 > from the repository, the CI logs or a command run for this audit. None is copied from an
 > earlier report unless the report was checked against the code first, and where an earlier
 > report disagreed with the code it is corrected here (§7.2).
+>
+> **Since 2026-11-28:** PR #1 is merged as `eb0a54b`, and Dependabot (R0.4a) is active on
+> `main`. The repository state in §2 is as audited; §5 and §8 count the decision and
+> the strict figure as they stand now.
 
 ---
 
@@ -26,7 +30,7 @@
 - **Latest CI:** run [45649328024](https://github.com/geortsam/AI_Hotel_Intelligence_Platform/actions/runs/45649328024) on `03c58de` (R6.1, the literal consolidation) passed all 8 jobs, with 999 of 999 mutations killed (§4.7). The run above is the audit's own evidence and stays as recorded.
 - **Overall completion:** 78.9% of all tracked work (56 of 71 items, §8; 66.2% at the audit, 67.6% after A1, 69.0% after A6, 70.4% after A4, 71.8% after A7, 73.2% after A2, 77.5% after the A2 correction, A3, A5 and A9). For work that needs no decision from you, the figure is 100% (56 of 56).
 - **Remaining autonomous work:** none (§4; A1–A9 are all done, A2 with the trigger correction of §4.6, A8 in §4.7). What remains waits on your decisions.
-- **Remaining user decisions:** 12 open decision briefs (§5). Three of them have a do-nothing default. A thirteenth, R5, was decided by the project owner on 2026-11-25: **Academic / Professional Portfolio** ([roadmap-v2.0-execution.md §3.13](roadmap-v2.0-execution.md#313-product-reach-r5)).
+- **Remaining user decisions:** 11 open decision briefs (§5). Three of them have a do-nothing default. R0.4a, Dependabot, was decided by the project owner and activated by the merge of PR #1 (`eb0a54b`) on 2026-11-28. R5 was decided by the project owner on 2026-11-25: **Academic / Professional Portfolio** ([roadmap-v2.0-execution.md §3.13](roadmap-v2.0-execution.md#313-product-reach-r5)).
 - **Readiness:** the platform is demo ready. It is not production ready, and §7 says exactly why.
 
 ---
@@ -620,7 +624,7 @@ once. Nothing here waits on you.
 
 ---
 
-## 5. Remaining user decisions — 12 open briefs, R5 decided
+## 5. Remaining user decisions — 11 open briefs, R5 and R0.4a decided
 
 The briefs are in [roadmap-v2.0-execution.md §3](roadmap-v2.0-execution.md#3-decision-briefs).
 None can be inferred safely, because each one commits you to something outside the repository:
@@ -628,9 +632,9 @@ money, an account, a legal permission, a public act, or a change to past publish
 
 | Brief | Decision | Why it cannot be inferred | Default if you say nothing |
 |---|---|---|---|
-| §3.1 R0.1 | which release tag, on which commit (recommended: merge PR #1, tag the merge `v1.1.0`) | a tag is public and permanent, and merging PR #1 is reserved to you | no release |
+| §3.1 R0.1 | which release tag, on which commit (recommended: merge PR #1, tag the merge `v1.1.0`; PR #1 was merged on 2026-11-28 as `eb0a54b`, the tag is still open) | a tag is public and permanent, and merging PR #1 is reserved to you | no release |
 | §3.2 R0.2 | authenticated Docker Hub pulls for the `services:` containers | needs your Docker Hub account and two repository secrets | **keep the mirror (no action)** |
-| §3.3 R0.4a | activate Dependabot | GitHub reads it only from `main`; it arrives with PR #1 | inert |
+| §3.3 R0.4a | ~~activate Dependabot~~ **Decided by the project owner: activate. Activated by the merge of PR #1 (`eb0a54b`, 2026-11-28)** | — | — |
 | §3.4 R1.2 | who may deactivate a global user; which email provider | `users` is shared across hotels, so the rule decides cross-tenant power; email needs your provider account and domain | no reset or deactivation flow |
 | §3.5 R1.3b | a platform-administrator API, or the operator command only | an API lets a compromised administrator create more | **operator command (no action)** |
 | §3.6 R1.4a | when the deployment scales past one worker (then PostgreSQL limiter) | the per-process limiter is correct for one worker; this depends on your deployment | per-process |
@@ -644,6 +648,11 @@ money, an account, a legal permission, a public act, or a change to past publish
 
 **Rows blocked by these, not decisions themselves:** R2.2 (waits on R2.1), R2.4 (waits on R2.2)
 and R3.2 (waits on a checkout flow, R5). Under the R5 decision all three are deferred, outside the current target.
+
+**R0.4a, decided and activated 2026-11-28:** the project owner accepted activation on merge before
+merging PR #1. GitHub reads `.github/dependabot.yml` only from `main`, so the merge activated it:
+its seven update jobs ran successfully and opened grouped pull requests #2 to #6. It decides
+nothing else; in particular R0.1's tag is still open.
 
 **Decisions already made (2026-11-20):** Inter + Source Serif 4, and "Forecasting". Both are
 implemented and green (§3).
@@ -695,7 +704,7 @@ puts in and out of scope, and how it bears on each of the twelve are in
 |---|---|---|
 | No password reset; deactivation only by setting `is_active` directly (enforced at login, refresh and session lookup, but there is no endpoint) | high for production | decision §3.4 |
 | Certificates replaced by hand; backups local, unencrypted, unscheduled; no PITR | high for production | decision §3.11 |
-| No dependency vulnerability gate; Dependabot inert off `main` | resolved for scanning: every push is scanned (A2, §4.5–§4.6); Dependabot still inert | decision §3.3 |
+| No dependency vulnerability gate; Dependabot inert off `main` | resolved for scanning: every push is scanned (A2, §4.5–§4.6); Dependabot active on `main` since the merge of 2026-11-28 | decided, §3.3 |
 | Dev-toolchain advisories (3 high) | resolved: 6 → 0 | A1 done (§4.1) |
 | No runtime metrics or alerts | metrics resolved, internal only (A5, §4.6); no alerts | decision §3.12 |
 | Analytics expenses table clipped at 1440px (last column) | low, cosmetic | **fixed** on 2026-11-27 (closure audit §14). It was found on 2026-11-24, after A2, and reported by every responsive-audit run until then; five gated table checks now hold the fix |
@@ -714,8 +723,8 @@ puts in and out of scope, and how it bears on each of the twelve are in
 
 | Class | Rows | Count |
 |---|---|---|
-| 1. Implemented and verified | R0.3, R0.4b, R1.1, R1.3a, R1.4b, R1.4c, R1.5, R3.3, R4.2, R6.1 (A8 as an index, then the snapshots merged — §4.7), R6.2, §2.5 | **12** |
-| 2. Implemented, the rest awaiting verification on `main` or a decision | R0.2 (the mirror covers the Docker jobs; `services:` containers still pull from Docker Hub — §3.2), R0.4a (config tested; inert until on `main` — §3.3) | **2** |
+| 1. Implemented and verified | R0.3, R0.4a (active on `main` since the merge of 2026-11-28 — §3.3), R0.4b, R1.1, R1.3a, R1.4b, R1.4c, R1.5, R3.3, R4.2, R6.1 (A8 as an index, then the snapshots merged — §4.7), R6.2, §2.5 | **13** |
+| 2. Implemented, the rest awaiting verification on `main` or a decision | R0.2 (the mirror covers the Docker jobs; `services:` containers still pull from Docker Hub — §3.2) | **1** |
 | 3. Autonomous engineering | none: R6.1 (A8) is done | **0** |
 | 4. Blocked by a decision, or by a row that is | decisions: R0.1, R1.2, R1.3b, R1.4a, R2.1, R2.3, R3.1, R3.4, R4.1, R4.3a, R4.3b; dependent: R2.2, R2.4, R3.2 | **14** |
 | 5. Explicitly out of scope | R5 — decided 2026-11-25: Academic / Professional Portfolio, so none of R5's features is required (§3.13) | **1** |
@@ -756,10 +765,10 @@ implemented and its CI is green.
 
 - **Within the decided scope** (the 15 rows removed that wait on a decision or are out of scope — 14 and R5 since its decision): 56 of 56 = **100%**. Nothing decision-free is left, under either reading of R6.1.
 - **R5 decided (2026-11-25).** The decision moves R5 from waiting to out of scope and leaves every figure above unchanged: R5 was never counted as done, and the denominator stays 71. Open decisions fall from 13 to 12.
-- **Strict** (R0.2 and R0.4a not counted as done): 54 of 71 = 76.1%.
+- **Strict** (R0.2 not counted as done): 55 of 71 = 77.5% since 2026-11-28, when the merge of PR #1 put R0.4a into effect. Before it, R0.4a was not counted either: 54 of 71 = 76.1%.
 - **With R6.1 read literally** (the stage snapshots merged into current-state documents): the same figures, since the merge was done on 2026-11-25 (§4.7, last part). Before it, the literal reading gave 55 of 71 = 77.5%, 55 of 56 = 98.2%, strict 53 of 71 = 74.6%, and the v2.0 matrix 13 of 29 = 44.8%.
 - A3 and A5 are the local halves of R4.3b and R4.3a. They count as audit findings; the two roadmap rows stay decision-blocked, because signing and alert destinations still need §3.12.
-- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. After A6 (`485dd15`, CI 45046381883 green): 49 / 71 = 69.0%. After A4 (`4c9a2a0`, CI 45063664775 green): 50 / 71 = 70.4%. After A7 (`5125b5b`, CI 45150368805 green): 51 / 71 = 71.8%. After A2 (`6a91858`, re-pinned in `fda8718` and `9fec999`, CI 45398092718 green): 52 / 71 = 73.2%. After the A2 correction, A3, A5 and A9 (`7858c27`, re-pinned in `133c5be` and `f4503e4`, CI 45476887432 green): 55 / 71 = 77.5%. After A8 (`305f50c` and `b6c6c65`, no re-pin, CI 45509617278 green): 56 / 71 = 78.9%, 56 / 56 = 100%, strict 54 / 71 = 76.1%. After R6.1's literal merge (`a3d996f` and `03c58de`, no re-pin, CI 45649328024 green): unchanged, now under either reading.
+- At the audit (`f2b8d50`): 47 / 71 = 66.2%, 47 / 56 = 83.9%, strict 45 / 71 = 63.4%. After A1 (`044df52`, CI 45035486687 green): 48 / 71 = 67.6%. After A6 (`485dd15`, CI 45046381883 green): 49 / 71 = 69.0%. After A4 (`4c9a2a0`, CI 45063664775 green): 50 / 71 = 70.4%. After A7 (`5125b5b`, CI 45150368805 green): 51 / 71 = 71.8%. After A2 (`6a91858`, re-pinned in `fda8718` and `9fec999`, CI 45398092718 green): 52 / 71 = 73.2%. After the A2 correction, A3, A5 and A9 (`7858c27`, re-pinned in `133c5be` and `f4503e4`, CI 45476887432 green): 55 / 71 = 77.5%. After A8 (`305f50c` and `b6c6c65`, no re-pin, CI 45509617278 green): 56 / 71 = 78.9%, 56 / 56 = 100%, strict 54 / 71 = 76.1%. After R6.1's literal merge (`a3d996f` and `03c58de`, no re-pin, CI 45649328024 green): unchanged, now under either reading. After the merge of PR #1 (`eb0a54b`, 2026-11-28, CI 46152479820 green on `main`): 56 / 71 = 78.9%, 56 / 56 = 100%, strict 55 / 71 = 77.5%; open decisions 11.
 
 ---
 

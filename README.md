@@ -426,7 +426,7 @@ one began.
 | 7.11–7.13 | Copilot conversations (each caller's own, retention-bound), the deterministic attention list, and the copilot screen | **done** |
 | 7.14 | Three **offline** demand models at 7, 14 and 28 days, each measured beside its own baseline; none is served | **done** |
 | 7.15 | Vector retrieval (pgvector) — conditional, not triggered: it cannot be assessed without real hotel documents | not started — waits on decision R2.3 |
-| R0, R1 | Sharded CI, hashed Python locks, a Docker Hub mirror for the Docker jobs, Dependabot configuration (inert until it reaches `main`); `HttpOnly` cookie sessions with refresh rotation and CSRF, an audited platform-administrator command, request-size limits, 429 declared on every limited route, IANA time zones | **done** (the rest waits on decisions) |
+| R0, R1 | Sharded CI, hashed Python locks, a Docker Hub mirror for the Docker jobs, Dependabot configuration (active on `main` since the merge of 2026-11-28); `HttpOnly` cookie sessions with refresh rotation and CSRF, an audited platform-administrator command, request-size limits, 429 declared on every limited route, IANA time zones | **done** (the rest waits on decisions) |
 | R2.2, R2.2b | Frozen hold-out evaluation of the served model on the validation and test partitions it was never fitted on, and same-hotel controls for the cross-hotel experiment — both on the published hotel-booking dataset of the same two Portuguese hotels (2015–2017) it was trained on, not on the synthetic demo data; no generalisation to other hotels or production accuracy claimed — [docs/ml-frozen-holdout-evaluation.md](docs/ml-frozen-holdout-evaluation.md), [docs/ml-hotel-transfer-diagnostic.md](docs/ml-hotel-transfer-diagnostic.md) | **done** |
 | R2.7–R2.10 | Copilot evaluation: a local Ollama provider, live-evaluation scoring, and the layered retrieval evaluation (Decision F, C.1–C.7) with its pinned baseline | **done** |
 | R3.3, R4.2, R6.2 | `If-Match` on the global catalogues; an opt-in retention scheduler and audit archival; README counts computed by a test | **done** |
@@ -675,7 +675,7 @@ scanned.
 | `Frontend quality gates` | `npm ci`, the Vitest suite, both TypeScript projects, the production build |
 | `Docker runtime verification` | builds both images, **runs the real Compose stack**, and **backs it up and restores it** |
 | `Image reproducibility` | builds each image **twice with `--no-cache`** and requires every shipped file to be byte-identical; then catalogues both builds of each image with Syft 1.57.1 (checksum-verified) into a **CycloneDX 1.6 SBOM**, validates it against the schema, requires every locked backend package at its exact version and the pinned nginx, requires the two builds' SBOMs to list the same components, rejects any host path or credential in them, and keeps one SBOM per image as the `sbom-<run>-<attempt>` artifact ([`scripts/sbom_check.py`](scripts/sbom_check.py)) |
-| `Mutation checks` | re-applies the 1043 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
+| `Mutation checks` | re-applies the 1053 deliberate breaks the V2 stage reports recorded, in a throwaway copy, and requires each to fail its named tests (`python -m tests.mutation`; see [tests/README.md](tests/README.md#mutation-checks)) |
 | `Responsive audit` | builds and starts the Compose stack, seeds it with the synthetic demo data, and runs UI-10's **51 checks** (17 routes at 375, 768 and 1440px: no sideways scroll, no escaping element, exactly one `h1`) in the pinned Playwright image's Chromium; any failing check fails the run and is named. Five **table checks** fail it too: the Analytics breakdown tables at 375, 768, 1024, 1280 and 1440px must fit their cards from 768px, and on a phone may scroll only in a focusable region that the keyboard scrolls to the last column ([`frontend/e2e/`](frontend/e2e/)) |
 
 | Workflow | Job | What it runs |
@@ -1015,11 +1015,14 @@ What remains genuinely missing is operational rather than functional:
   locks disagree, but nothing regenerates them automatically, and the optional
   `backend/requirements-llm.txt` is not locked. Base images, the interpreter and the frontend
   tree are pinned too; see [docs/deployment/reproducibility.md](docs/deployment/reproducibility.md).
-- **Nothing updates the pins yet.** `.github/dependabot.yml` (R0.4a) asks for weekly, grouped
-  update pull requests for every manifest, but GitHub reads it only from the default branch,
-  and it has not reached it; until it does, no Renovate and no Dependabot run. A pinned digest
-  is a digest that goes stale, and sitting on a base image with a known CVE is the real cost
-  of pinning; bumping one is a deliberate act, and a Dependabot proposal will be one too.
+- **Dependabot proposes pin updates; nothing applies them.** `.github/dependabot.yml`
+  (R0.4a) asks for weekly, grouped update pull requests for every manifest. GitHub reads it
+  only from the default branch, so it became active when PR #1 was merged on 2026-11-28; its
+  first run opened grouped pull requests #2 to #6. A pinned digest is a digest that goes
+  stale, and sitting on a base image with a known CVE is the real cost of pinning; each
+  proposal is reviewed and merged deliberately, and one that touches `pyproject.toml`, a lock
+  file or `ci.yml` fails the retrieval-pin gate until it is re-measured and re-pinned (§12.6
+  of [the retrieval decision record](docs/retrieval-evaluation-decision.md)).
 - **No platform-administrator API.** Platform administration is granted and revoked by an
   audited operator command; see [First run](#first-run). Who may do it through an API is an
   open decision (R1.3b), so there is none.

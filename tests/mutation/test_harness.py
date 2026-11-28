@@ -454,6 +454,7 @@ RECORDED_PER_STAGE = {
     "R0.1-docs": 4,
     "A9-fix": 16,
     "DW": 20,
+    "PM": 10,
 }
 
 

@@ -2,13 +2,17 @@
 
 The register is §3 of ``docs/roadmap-v2.0-execution.md``: thirteen briefs, §3.1-§3.13. On
 2026-11-25 the project owner decided one of them, R5 (§3.13): Academic / Professional Portfolio.
-These tests hold that record in place:
+On 2026-11-28 the project owner merged PR #1 (``eb0a54b``), having accepted Dependabot's
+activation on merge; the merge activated it, so R0.4a (§3.3) is decided too. These tests hold
+those records in place:
 
 * §3.13 carries the decision, its status, its authority and its scope, and keeps its ID;
-* no other brief is marked decided -- R5 decides none of them, and R0.1 in particular still needs
-  a separate authorization to merge PR #1 or release;
+* §3.3 carries its decision, status, authority and the merge that activated it;
+* no other brief is marked decided -- R5 decides none of them, and R0.1 in particular is still
+  open: the merge made no tag and implies none;
 * the rows the decision defers keep their place in the matrix, marked, not deleted;
-* the completion and closure audits count the open decisions as the register does.
+* the completion and closure audits count the open decisions as the register does, and the
+  closure audit's earlier count stays as it was recorded.
 """
 
 from __future__ import annotations
@@ -73,10 +77,30 @@ def test_r5_is_recorded_as_decided_by_the_project_owner() -> None:
         assert flat(field) in body, field
 
 
+def test_r04a_is_recorded_as_decided_and_activated_by_the_merge() -> None:
+    body = flat(briefs()["3.3"])
+    assert briefs()["3.3"].startswith("Dependabot activation (R0.4a)")
+    for field in (
+        "- **Decision:** Activate, as prepared.",
+        DECIDED_STATUS,
+        "- **Decision authority:** Project owner, who accepted activation on merge before PR #1 "
+        "was merged.",
+        "- **Activated:** by the merge of PR #1, `eb0a54b`, on 2026-11-28.",
+        "fails the retrieval-pin gate until it is re-measured and re-pinned under §12.6.",
+    ):
+        assert flat(field) in body, field
+
+
 def test_r5_decides_no_other_brief() -> None:
-    assert decided() == ["3.13"]
-    # R0.1 in particular: merging PR #1 or releasing still needs its own authorization.
+    """R5 decided only itself. The one other decided brief, §3.3, the owner decided separately."""
+    assert decided() == ["3.13", "3.3"]
+    # R0.1 in particular: the merge of PR #1 made no tag, and the tag is still the owner's choice.
     assert "Decided" not in briefs()["3.1"]
+    assert flat(
+        "- **Since 2026-11-28:** the project owner merged PR #1 as `eb0a54b`, a merge commit whose "
+        "parents are `2a14dc6` and the tested head `9102904`. No tag was made, and none is "
+        "implied: which tag, and on which commit, is still this brief's open choice."
+    ) in flat(briefs()["3.1"])
 
 
 def test_the_rows_the_decision_defers_stay_in_the_matrix_marked() -> None:
@@ -91,10 +115,13 @@ def test_the_rows_the_decision_defers_stay_in_the_matrix_marked() -> None:
 
 def test_the_audits_count_the_open_decisions_as_the_register_does() -> None:
     open_count = len(briefs()) - len(decided())
-    assert open_count == 12
+    assert open_count == 11
     completion = flat((DOCS / "project-completion-audit.md").read_text(encoding="utf-8"))
-    assert f"## 5. Remaining user decisions — {open_count} open briefs, R5 decided" in completion
+    heading = f"## 5. Remaining user decisions — {open_count} open briefs, R5 and R0.4a decided"
+    assert heading in completion
     assert f"**Remaining user decisions:** {open_count} open decision briefs" in completion
     closure = flat((DOCS / "project-closure-audit.md").read_text(encoding="utf-8"))
     assert f"| Open user decisions | **{open_count}** " in closure
-    assert f"**Open decisions: {open_count}**, not 13." in closure
+    assert f"**Open decisions: {open_count}**, not 12." in closure
+    # §13's count is history: what was true when R5 was decided, kept as it was recorded.
+    assert "**Open decisions: 12**, not 13." in closure

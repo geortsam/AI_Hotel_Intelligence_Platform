@@ -39,7 +39,7 @@ policy, Ext = external service, Rel = release.
 | **R0.1** cut `v1.0.1` | proposed (R0.1 audit `fae39f3`), never cut | no: publishing a release | Rel | your decision | tag points at a green commit | **decision** — §3.1 |
 | **R0.2** CI independent of unauthenticated Docker Hub | partly: the restore image no longer pulls from Docker Hub (`e2abcf6`) | partly | CI, F | — | all 7 jobs green through the mirror; re-pin | **done in E8** for the two jobs that pull in their steps (`docker-runtime`, `image-reproducibility`): the daemon tries `mirror.gcr.io` first and falls back to Docker Hub; digests still pinned. The `services:` containers are pulled before any step runs, so they still come from Docker Hub; authenticated pulls would need a secret — §3.2 |
 | **R0.3** shard the backend CI job | **done** (`c1cdf3e`, 3 shards) | — | — | — | — | done |
-| **R0.4a** Dependabot | none | config yes; activation no | Ext (on `main`) | merging to `main` | config parses; it is inert off the default branch | **config done in E5** (`.github/dependabot.yml`: pip, npm, Docker, Compose and Actions, weekly, grouped, 3 open at most; a test checks every manifest is covered); activation is the §3.3 decision |
+| **R0.4a** Dependabot | none | config yes; activation no | Ext (on `main`) | merging to `main` | config parses; it is inert off the default branch | **config done in E5** (`.github/dependabot.yml`: pip, npm, Docker, Compose and Actions, weekly, grouped, 3 open at most; a test checks every manifest is covered); **activated on 2026-11-28** by the merge of PR #1 (`eb0a54b`), as decided in §3.3 |
 | **R0.4b** transitive Python pinning | **done** (`53fdd0e`, hashed universal locks) | — | — | — | — | done |
 | **R1.1** `HttpOnly; Secure; SameSite` cookie session, refresh, CSRF | none; token in `sessionStorage` (architecture §7.1) | yes | Sec, F (`deps.py`) | — | backend and frontend suites, CSRF and revocation tests, mutations; re-pin | **done in E8**: `POST /auth/session`, `/session/refresh`, `/session/end`; `HttpOnly` access and refresh cookies, a CSRF token derived from the session; `auth_sessions` (migration 0023) with rotation and replay detection; a password change ends every session; the browser no longer holds a credential |
 | **R1.2** email channel, password reset, deactivation | none | no | Sec, Ext, M | who may deactivate a global `users` row; an email provider | — | **decision** — §3.4; **deferred, outside the current R5 target** (§3.13) |
@@ -79,6 +79,9 @@ you would have to do.
 - **Recommended:** merge PR #1 first, then tag the merge commit as `v1.1.0` (it adds features
   beyond a patch), not `v1.0.1`.
 - **Your action:** say which tag and on which commit; the tag itself is one command.
+- **Since 2026-11-28:** the project owner merged PR #1 as `eb0a54b`, a merge commit whose
+  parents are `2a14dc6` and the tested head `9102904`. No tag was made, and none is
+  implied: which tag, and on which commit, is still this brief's open choice.
 
 ### 3.2 Docker Hub (R0.2)
 
@@ -97,6 +100,16 @@ you would have to do.
   the retrieval fingerprint and needs a C.4 re-measure and re-pin before it can merge.
 - **Recommended:** activate, weekly, grouped, as prepared.
 - **Your action:** merge it to `main` (it arrives with PR #1).
+- **Decision:** Activate, as prepared.
+- **Status:** Decided.
+- **Decision authority:** Project owner, who accepted activation on merge before PR #1
+  was merged.
+- **Activated:** by the merge of PR #1, `eb0a54b`, on 2026-11-28. Right after it, GitHub ran
+  Dependabot's seven update jobs on `main` (pip in `/backend` and `/ml`, npm, Docker
+  in `/backend` and `/frontend`, Compose, Actions), all successful, and they opened grouped
+  pull requests #2 to #6. Each is a proposal to review, not a change to `main`; one that
+  touches `pyproject.toml`, a lock file or `ci.yml` fails the retrieval-pin gate until it
+  is re-measured and re-pinned under §12.6.
 
 ### 3.4 Password reset, email and deactivation (R1.2)
 
@@ -208,14 +221,15 @@ expenses-table clipping stays listed until it is fixed and verified); changing t
 retrieval evaluation artifacts; re-pinning the retrieval evaluation outside §12.6. It is a scope
 decision: it starts no implementation, and it decides none of the twelve briefs below.
 
-**Consequences for the other twelve briefs.** Each stays open; this classifies how the portfolio
-target bears on it, and decides nothing.
+**Consequences for the other twelve briefs.** Each stayed open; this classifies how the portfolio
+target bears on it, and decides nothing. Since then §3.3 has been decided, and PR #1
+merged (2026-11-28); §3.1's tag is still open.
 
 | Brief | Bearing on the portfolio target | Why |
 |---|---|---|
 | §3.1 R0.1 release | **Recommended for portfolio quality** | The GitHub showcase presents `main`, which is `2a14dc6` and lacks everything on PR #1. Merging PR #1 and tagging still need your separate, explicit authorization |
 | §3.2 R0.2 Docker Hub | **Independent of R5** | CI reliability. The default (keep the mirror) suffices |
-| §3.3 R0.4a Dependabot | **Recommended for portfolio quality** | Visible dependency hygiene on a showcase repository; the dependency scan already runs on every push. Activates only on `main`, so it follows §3.1 |
+| §3.3 R0.4a Dependabot | **Recommended for portfolio quality** | Visible dependency hygiene on a showcase repository; the dependency scan already runs on every push. Activates only on `main`, so it follows §3.1. *Decided and activated on 2026-11-28 (§3.3)* |
 | §3.4 R1.2 reset, email, deactivation | **Deferred: pilot/production only** | Needs a commercial email provider, which this target excludes. The gap stays disclosed (README, closure audit G1) |
 | §3.5 R1.3b administrator API | **Independent of R5** | A security-policy choice; the default (the audited operator command) suffices |
 | §3.6 R1.4a shared limiter | **Deferred: pilot/production only** | Matters only past one API worker; the demo stack runs one |
@@ -338,7 +352,7 @@ of 2026-11-25; the matrix in §2 and the briefs in §3 hold the detail.
 |---|---|
 | Certificates are replaced by hand; no off-site or point-in-time backups; no zero-downtime deploy | Unchanged: R4.1 (§3.11); zero-downtime deploy is on no roadmap row |
 | The retention purges and audit archival are operator commands; nothing schedules them | An opt-in scheduler runs them (R4.2, E6) |
-| No metrics exporter or alerting; no Dependabot or Renovate; no SBOM or image signing; transitive Python dependencies are resolved at build time | An internal `/metrics` (A5); Dependabot configured, inert until `main` (E5, §3.3); SBOMs in CI (A3); hash-locked transitive pins (R0.4b). Alerting and signing are §3.12 |
+| No metrics exporter or alerting; no Dependabot or Renovate; no SBOM or image signing; transitive Python dependencies are resolved at build time | An internal `/metrics` (A5); Dependabot configured (E5) and active on `main` since the merge of 2026-11-28 (§3.3); SBOMs in CI (A3); hash-locked transitive pins (R0.4b). Alerting and signing are §3.12 |
 
 **Engineering.**
 
