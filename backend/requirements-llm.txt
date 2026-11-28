@@ -40,4 +40,4 @@
 #       --generate-hashes --constraint backend/requirements-dev-lock.txt \
 #       --exclude-newer <timestamp> -o backend/requirements-llm-lock.txt
 
-anthropic==0.125.0
+anthropic==2.14.0
