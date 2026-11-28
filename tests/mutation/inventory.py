@@ -10967,8 +10967,8 @@ STAGE_R5 = [
         1,
         "R5 is recorded as proposed rather than decided",
         _R5_REGISTER,
-        "- **Status:** Decided.",
-        "- **Status:** Proposed.",
+        "- **Status:** Decided.\n- **Decision authority:** Project owner.\n",
+        "- **Status:** Proposed.\n- **Decision authority:** Project owner.\n",
         "test_r5_is_recorded_as_decided_by_the_project_owner",
         "test_r5_decides_no_other_brief",
     ),
@@ -10991,10 +10991,10 @@ STAGE_R5 = [
     ),
     _r5(
         4,
-        "the completion audit counts thirteen open decisions again",
+        "the completion audit drops a recorded decision and counts one more open brief",
         "docs/project-completion-audit.md",
+        "## 5. Remaining user decisions — 11 open briefs, R5 and R0.4a decided",
         "## 5. Remaining user decisions — 12 open briefs, R5 decided",
-        "## 5. Remaining user decisions — 13 open briefs",
         "test_the_audits_count_the_open_decisions_as_the_register_does",
     ),
 ]
@@ -11418,6 +11418,104 @@ STAGE_WALKTHROUGH = [
 ]
 
 
+# --- PM (2026-11-28): after PR #1's merge, current documents say so and dated ones keep history --
+
+_PM_STATE = "tests/backend/test_post_merge_state.py::"
+_PM_RECORDS = "tests/backend/test_decision_records.py::"
+
+
+def _pm(number: int, breaks: str, path: str, old: str, new: str, killer: str) -> Mutation:
+    """A document calls Dependabot inert or PR #1 open again, or rewrites a recorded figure."""
+    return Mutation(f"PM-M{number}", "PM", breaks, one(path, old, new), (killer,))
+
+
+STAGE_POST_MERGE = [
+    _pm(
+        1,
+        "the README's stage table calls Dependabot inert again",
+        "README.md",
+        "Dependabot configuration (active on `main` since the merge of 2026-11-28);",
+        "Dependabot configuration (inert until it reaches `main`);",
+        _PM_STATE + "test_no_current_document_calls_dependabot_inert_or_absent",
+    ),
+    _pm(
+        2,
+        "the README says again that nothing updates the pins",
+        "README.md",
+        "- **Dependabot proposes pin updates; nothing applies them.**",
+        "- **Nothing updates the pins yet.**",
+        _PM_STATE + "test_the_readme_says_dependabot_proposes_and_nothing_applies",
+    ),
+    _pm(
+        3,
+        "the walkthrough calls Dependabot inert again",
+        "docs/demo-walkthrough.md",
+        "`.github/dependabot.yml` is active on `main` since PR #1 was merged on 2026-11-28:",
+        "`.github/dependabot.yml` exists but is inert:",
+        _PM_STATE + "test_no_current_document_calls_dependabot_inert_or_absent",
+    ),
+    _pm(
+        4,
+        "the reproducibility guide says again that no SBOM is generated",
+        "docs/deployment/reproducibility.md",
+        "CI generates CycloneDX SBOMs of both builds of each image\n  (A3, §4), but nothing",
+        "No SBOM is generated,\n  nothing",
+        _PM_STATE + "test_the_reproducibility_guide_states_what_it_does_not_claim_as_it_now_is",
+    ),
+    _pm(
+        5,
+        "the closure audit's gap register calls PR #1 unmerged again",
+        "docs/project-closure-audit.md",
+        "| G16 | Nothing is released: PR #1 is merged (`main` is `eb0a54b` since 2026-11-28, "
+        "§16), but the last tag is still `v1.0.0` |",
+        "| G16 | Nothing is released: `main` is `2a14dc6`, PR #1 is unmerged, and the last tag "
+        "is `v1.0.0` |",
+        _PM_STATE + "test_the_closure_audit_records_the_merge_in_an_addendum",
+    ),
+    _pm(
+        6,
+        "the closure audit's summary drops the audited strict figure for the current one",
+        "docs/project-closure-audit.md",
+        "**55 / 71 = 77.5%** (54 / 71 = 76.1% at `15a29d1`; R0.4a in effect since the merge, §16)",
+        "**55 / 71 = 77.5%**",
+        _PM_STATE + "test_the_closure_audit_records_the_merge_in_an_addendum",
+    ),
+    _pm(
+        7,
+        "the completion audit stops counting R0.4a as in effect",
+        "docs/project-completion-audit.md",
+        "- **Strict** (R0.2 not counted as done): 55 of 71 = 77.5% since 2026-11-28",
+        "- **Strict** (R0.2 and R0.4a not counted as done): 54 of 71 = 76.1% since 2026-11-28",
+        _PM_STATE + "test_the_completion_audit_counts_r04a_as_in_effect",
+    ),
+    _pm(
+        8,
+        "the register loses R0.4a's decided status",
+        "docs/roadmap-v2.0-execution.md",
+        "- **Status:** Decided.\n- **Decision authority:** Project owner, who accepted",
+        "- **Decision authority:** Project owner, who accepted",
+        _PM_RECORDS + "test_r04a_is_recorded_as_decided_and_activated_by_the_merge",
+    ),
+    _pm(
+        9,
+        "R0.1 is marked decided, as if the merge had chosen a tag",
+        "docs/roadmap-v2.0-execution.md",
+        "  implied: which tag, and on which commit, is still this brief's open choice.\n",
+        "  implied: which tag, and on which commit, is still this brief's open choice.\n"
+        "- **Status:** Decided.\n",
+        _PM_RECORDS + "test_r5_decides_no_other_brief",
+    ),
+    _pm(
+        10,
+        "the closure audit's R5 addendum is rewritten with the later count",
+        "docs/project-closure-audit.md",
+        "- **Open decisions: 12**, not 13.",
+        "- **Open decisions: 11**, not 13.",
+        _PM_RECORDS + "test_the_audits_count_the_open_decisions_as_the_register_does",
+    ),
+]
+
+
 MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_7_6,
     *STAGE_7_7,
@@ -11482,4 +11580,5 @@ MUTATIONS: tuple[Mutation, ...] = (
     *STAGE_R0_1_DOCS,
     *STAGE_A9_FIX,
     *STAGE_WALKTHROUGH,
+    *STAGE_POST_MERGE,
 )

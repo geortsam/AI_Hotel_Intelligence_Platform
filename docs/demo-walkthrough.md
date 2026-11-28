@@ -596,8 +596,8 @@ CI runs everything above on every push, in eight job runs
 | CycloneDX SBOMs of both images, checked against the locks | `scripts/sbom_check.py`, CI's `Image reproducibility` job |
 | Request-size limits, rate limits, `429` declared | [README: Security posture](../README.md#security-posture) |
 
-`.github/dependabot.yml` exists but is inert: GitHub reads it only from the default branch, and it
-has not reached it.
+`.github/dependabot.yml` is active on `main` since PR #1 was merged on 2026-11-28: Dependabot opens
+weekly, grouped update pull requests, each reviewed like any other change.
 
 ## E. Reset and cleanup
 

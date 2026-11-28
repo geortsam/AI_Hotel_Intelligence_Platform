@@ -302,10 +302,13 @@ Both contexts are checked against the real tree before anything is built:
   that its output matches an amd64 build's — nor would anyone expect it to.
 - **Not reproducible against a different Docker version.** Two builds are compared on one
   runner, at one moment. A BuildKit upgrade is an input like any other.
-- **Not a supply-chain attestation.** No SBOM is generated, nothing is signed, and there is no
-  provenance record. Pinning by digest is a prerequisite for those, not a substitute.
-- **Transitive Python dependencies still float** (§4).
-- **The pins do not update themselves.** There is no Renovate, no Dependabot, no automation of
-  any kind. A pinned digest is a digest that goes stale, and staying on a base image with a
+- **Not a supply-chain attestation.** CI generates CycloneDX SBOMs of both builds of each image
+  (A3, §4), but nothing is signed, and there is no provenance record. Pinning by digest is a
+  prerequisite for those, not a substitute.
+- **Transitive Python dependencies no longer float** (R0.4, §4); the optional
+  `backend/requirements-llm.txt` is not locked.
+- **The pins do not update themselves.** Since PR #1 was merged on 2026-11-28, Dependabot
+  (`.github/dependabot.yml`) opens weekly, grouped update pull requests; nothing merges them
+  automatically, and there is no Renovate. A pinned digest is a digest that goes stale, and staying on a base image with a
   known CVE is a real cost of pinning. Bumping it is a deliberate act: re-resolve (§2), update
   the comment's version claim, and let CI prove the result.
