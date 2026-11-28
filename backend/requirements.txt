@@ -12,17 +12,17 @@
 #   email-validator, python-multipart.
 #   ML libraries live in ml/requirements-ml.txt so the API image stays small.
 
-fastapi==0.141.1
-starlette==1.6.0
-uvicorn[standard]==0.52.4
-pydantic==2.13.4
-pydantic-settings==2.15.0
+fastapi==0.165.0
+starlette==1.10.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.4
+pydantic-settings==2.16.3
 
 # Stage 2B: the database layer. SQLAlchemy and psycopg were declared in Stage 1;
 # alembic is added here because migrations are part of this stage.
-SQLAlchemy==2.0.52
-psycopg[binary]==3.3.4
-alembic==1.19.1
+SQLAlchemy==2.1.9
+psycopg[binary]==3.3.9
+alembic==1.20.1
 
 # Stage 6.7: the production ML runtime.
 #
